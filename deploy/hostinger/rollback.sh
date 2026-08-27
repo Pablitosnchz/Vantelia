@@ -16,16 +16,24 @@
 # mv dejaba la base de datos viva fuera de produccion: la red de seguridad
 # empeorando el incidente en vez de arreglarlo.
 #
-# Uso:  bash rollback.sh /srv/vantelia
+# Uso:  bash rollback.sh [PROYECTO] [COMPOSE] [IMAGEN] [CONTENEDOR] [PUERTO]
+#
+# Todos los argumentos tienen por defecto los de PRODUCCION, asi que la llamada
+# de siempre -sin argumentos, o solo con la ruta- se comporta exactamente igual
+# que antes de existir el entorno de pruebas.
 set -euo pipefail
 
 REMOTE_PROJECT="${1:-/srv/vantelia}"
+COMPOSE_FILE="${2:-deploy/hostinger/docker-compose.yml}"
+IMAGE_BASE="${3:-vantelia}"
+CONTENEDOR="${4:-vantelia-app}"
+PUERTO="${5:-8000}"
+
 PREV_DIR="${REMOTE_PROJECT}_prev"
 TS="$(date +%Y%m%d-%H%M%S)"
 FAILED_DIR="${REMOTE_PROJECT}_failed-${TS}"
-COMPOSE_FILE="deploy/hostinger/docker-compose.yml"
-IMAGE_CURRENT="vantelia:current"
-IMAGE_PREV="vantelia:prev"
+IMAGE_CURRENT="${IMAGE_BASE}:current"
+IMAGE_PREV="${IMAGE_BASE}:prev"
 
 # Lo que pertenece al negocio y jamas se revierte con el codigo.
 ESTADO_DIRS="storage data secrets client_sites"
@@ -99,7 +107,7 @@ fi
 # 6. Verificar que la version restaurada responde de verdad.
 attempt=1
 while true; do
-  if health_response="$(curl --fail --silent --max-time 5 http://127.0.0.1:8000/health 2>/dev/null)"; then
+  if health_response="$(curl --fail --silent --max-time 5 http://127.0.0.1:${PUERTO}/health 2>/dev/null)"; then
     echo "$health_response"
     echo "==> Rollback completado: la version anterior responde."
     exit 0
@@ -107,7 +115,7 @@ while true; do
   if [ "$attempt" -ge 40 ]; then
     echo "" >&2
     echo "!! LA VERSION ANTERIOR TAMPOCO RESPONDE. Ultimos logs:" >&2
-    docker logs vantelia-app --tail 120 >&2 || true
+    docker logs "$CONTENEDOR" --tail 120 >&2 || true
     exit 1
   fi
   echo "    esperando a la version anterior... intento $attempt/40"

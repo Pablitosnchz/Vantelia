@@ -1,0 +1,35 @@
+# Entorno de PRUEBAS, en el mismo VPS que produccion pero sin tocarla.
+#
+# Existe para poder construir y probar lo de un cliente nuevo sin que los
+# clientes reales se enteren. El aislamiento es total en las cuatro cosas que
+# importan: contenedor propio, puerto propio, imagen propia y -sobre todo- su
+# PROPIO directorio de proyecto, con su .env, su config.json y su base de datos.
+#
+# Se despliega con:  .\deploy\deploy.ps1 -Entorno staging
+#
+# REGLA: el .env de pruebas NUNCA lleva credenciales reales. El deploy se niega a
+# subir aqui una clave de Stripe en vivo o el token de WhatsApp de produccion,
+# porque un mensaje de pruebas enviado a una clienta de verdad no tiene vuelta
+# atras.
+services:
+  vantelia:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    # Imagen propia: asi el rollback de pruebas nunca puede pisar la etiqueta de
+    # produccion (vantelia:current), que es lo que la mantiene arrancable.
+    image: vantelia-staging:current
+    container_name: vantelia-staging
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    ports:
+      # Fuera 8001, dentro 8000: la imagen es la misma que en produccion, no hay
+      # una version "de pruebas" del codigo que luego se comporte distinto.
+      - "8001:8000"
+    volumes:
+      - ../../data:/app/data
+      - ../../storage:/app/storage
+      - ../../config.json:/app/config.json
+      - ../../secrets:/app/secrets
+      - ../../client_sites:/app/client_sites

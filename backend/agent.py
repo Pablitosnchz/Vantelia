@@ -868,6 +868,12 @@ def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "") ->
     )
 
 
+# Cuantos turnos sigue viva una pregunta de duracion sin contestar. Tres da para
+# preguntar el largo y para quien es, sin quedarse insistiendo si la conversacion
+# se fue a otra cosa.
+TURNOS_QUE_DURA_LA_PREGUNTA = 3
+
+
 def _pregunta_por_otra_cosa(cliente_id: str, servicio: str, mensaje: str) -> bool:
     """¿La pregunta va de una familia que el servicio elegido NO cubre?"""
     familias = catalog_pick.familias_pedidas(cliente_id, mensaje)
@@ -890,15 +896,40 @@ def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
     y en todo caso preguntar cual es tu largo para que la informacion que le
     hemos metido le sirva".
     """
-    if not _pregunta_cuanto_dura(mensaje):
+    # La pregunta sigue viva aunque este mensaje no la repita. Paso de verdad:
+    #
+    #   ELLA: cuanto tarda un corte y secado?
+    #     IA: ¿como tienes el pelo? ¿de hombre, de senyora o de ninyo?
+    #   ELLA: medio largo y es para mi, soy un hombre
+    #     IA: [le ofrece horas para reservar]
+    #
+    # Nunca le dijo el tiempo. La guia solo se armaba si el mensaje DE ESE TURNO
+    # llevaba "cuanto tarda", y el segundo no lo llevaba: solo traia la respuesta.
+    # Preguntar lo que falta esta bien; olvidarse de para que se preguntaba, no.
+    pendiente = int(getattr(estado, "duracion_pendiente", 0) or 0)
+    if not (_pregunta_cuanto_dura(mensaje) or pendiente > 0):
         return ""
+
+    def _recordar(guia: str) -> str:
+        """Deja la pregunta viva mientras siga sin contestarse."""
+        contestada = "EXACTAMENTE" in guia or not guia
+        try:
+            if contestada:
+                estado.duracion_pendiente = 0
+            elif _pregunta_cuanto_dura(mensaje):
+                estado.duracion_pendiente = TURNOS_QUE_DURA_LA_PREGUNTA
+            else:
+                estado.duracion_pendiente = max(0, pendiente - 1)
+        except Exception:  # noqa: BLE001 - un estado de prueba puede no tener el campo
+            pass
+        return guia
 
     # Si ha pedido VARIAS cosas, la respuesta es la SUMA. Va antes que nada: con
     # un servicio ya elegido se contestaba solo por ese, y a quien pedia "corte y
     # secado" se le daba el tiempo del corte.
     juntos = _cuanto_duran_juntos(cliente_id, pedido or mensaje, location_id)
     if juntos:
-        return juntos
+        return _recordar(juntos)
 
     servicio = getattr(estado, "servicio_exacto", "") or getattr(estado, "servicio", "")
     # ¿Esta preguntando por OTRA cosa distinta de la que hay elegida? Entonces la
@@ -909,7 +940,7 @@ def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
     if servicio and _pregunta_por_otra_cosa(cliente_id, servicio, mensaje):
         servicio = ""
     if not servicio:
-        return (
+        return _recordar(
             "TE HA PREGUNTADO CUANTO DURA y todavia no hay un servicio elegido. "
             "Usa `buscar_servicio` con lo que ha dicho ANTES de contestar: la "
             "duracion sale del catalogo de este negocio, nunca de tu criterio. Si "
@@ -920,12 +951,12 @@ def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
     minutos = _duracion_del_catalogo(cliente_id, servicio)
     publico = textnorm.nombre_de_servicio_publico(servicio)
     if not minutos:
-        return (
+        return _recordar(
             "TE HA PREGUNTADO CUANTO DURA y '%s' no tiene duracion configurada en "
             "el catalogo. NO te inventes una cifra ni la aproximes: dile que se lo "
             "confirman en el salon." % publico
         )
-    return (
+    return _recordar(
         "TE HA PREGUNTADO CUANTO DURA. Son EXACTAMENTE %d minutos: es lo que el "
         "catalogo dice de '%s' y lo que la agenda le va a apartar. Dile ese "
         "numero. No lo redondees, no lo estimes, no digas 'aproximadamente' otra "

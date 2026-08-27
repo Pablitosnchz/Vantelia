@@ -65,6 +65,10 @@ class Estado:
     # que a veces es "reprogramar" -cancelo la vieja y hay que crear la nueva- y
     # a veces no la ha declarado nadie porque la clienta escribio en su idioma.
     esperando_confirmacion: bool = False
+    # Turnos que le quedan a un "¿cuanto tarda?" sin contestar. Preguntar es
+    # correcto -"¿como tienes el pelo?"-, pero al llegar la respuesta hay que
+    # VOLVER a la pregunta: si no, la duracion no se dice nunca.
+    duracion_pendiente: int = 0
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez

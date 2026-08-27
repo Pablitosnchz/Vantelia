@@ -12,7 +12,13 @@ param(
     # Vuelve a la version anterior del VPS sin desplegar nada. La imagen anterior
     # queda etiquetada en cada despliegue, asi que volver son segundos y no una
     # reconstruccion entera con la app caida.
-    [switch]$Rollback
+    [switch]$Rollback,
+    # Que entorno se despliega. "produccion" es lo de siempre, con exactamente
+    # los mismos valores que antes de que este parametro existiera; "staging" es
+    # el entorno de pruebas del mismo VPS, aislado en contenedor, puerto, imagen
+    # y directorio propio.
+    [ValidateSet("produccion", "staging")]
+    [string]$Entorno = "produccion"
 )
 
 Set-StrictMode -Version Latest
@@ -133,6 +139,57 @@ if (-not $PSBoundParameters.ContainsKey("DemoClient") -and $DotEnvValues.Contain
     $DemoClient = $DotEnvValues["DEPLOY_DEMO_CLIENT"]
 }
 
+# Todo lo que cambia entre entornos vive AQUI y en ningun otro sitio. Los de
+# produccion son identicos a los de siempre, asi que ese camino no cambia.
+$EntornoConfig = @{
+    "produccion" = @{
+        Proyecto    = "/srv/vantelia"
+        Archivo     = "vantelia-deploy.tar.gz"
+        Compose     = "deploy/hostinger/docker-compose.yml"
+        Imagen      = "vantelia"
+        Contenedor  = "vantelia-app"
+        Puerto      = 8000
+        Backups     = "/srv/vantelia-backups"
+        UrlPublica  = "https://app.vantelia.es/health"
+    }
+    "staging" = @{
+        Proyecto    = "/srv/vantelia-staging"
+        Archivo     = "vantelia-staging-deploy.tar.gz"
+        Compose     = "deploy/hostinger/docker-compose.staging.yml"
+        Imagen      = "vantelia-staging"
+        Contenedor  = "vantelia-staging"
+        Puerto      = 8001
+        Backups     = "/srv/vantelia-staging-backups"
+        # Vacia hasta que exista el vhost de nginx. Sin ella se omite la
+        # comprobacion publica en vez de dar por fallido un despliegue bueno.
+        UrlPublica  = ""
+    }
+}
+$Actual = $EntornoConfig[$Entorno]
+
+# Los parametros explicitos del usuario mandan sobre el preset del entorno; si no
+# los da, el entorno decide. Asi `-RemoteProject` sigue funcionando como siempre.
+if (-not $PSBoundParameters.ContainsKey("RemoteProject") -and -not $DotEnvValues.ContainsKey("DEPLOY_REMOTE_PROJECT")) {
+    $RemoteProject = $Actual.Proyecto
+}
+if (-not $PSBoundParameters.ContainsKey("ArchiveName") -and -not $DotEnvValues.ContainsKey("DEPLOY_ARCHIVE_NAME")) {
+    $ArchiveName = $Actual.Archivo
+}
+if ($Entorno -ne "produccion") {
+    # Un preset de produccion heredado del .env apuntaria las pruebas al
+    # directorio real: se corta antes de tocar nada.
+    if ($RemoteProject -eq $EntornoConfig["produccion"].Proyecto) {
+        throw "El entorno de pruebas no puede desplegarse sobre $($RemoteProject): revisa DEPLOY_REMOTE_PROJECT en tu .env."
+    }
+    if ($ArchiveName -eq $EntornoConfig["produccion"].Archivo) {
+        $ArchiveName = $Actual.Archivo
+    }
+}
+$UrlPublica = $Actual.UrlPublica
+if ($DotEnvValues.ContainsKey("DEPLOY_STAGING_PUBLIC_URL") -and $Entorno -eq "staging") {
+    $UrlPublica = $DotEnvValues["DEPLOY_STAGING_PUBLIC_URL"]
+}
+
 $ArchivePath = Join-Path ([System.IO.Path]::GetTempPath()) $ArchiveName
 $scpArgsBase = @()
 $sshArgsBase = @()
@@ -168,7 +225,9 @@ ollback.sh"
     # remoto quedo a medias, el suyo puede faltar o ser justo el que esta roto.
     $rollbackSource = (Get-Content -LiteralPath $rollbackScriptPath -Raw) -replace "`r`n", "`n"
     $rollbackB64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($rollbackSource))
-    $rollbackCommand = "echo $rollbackB64 | base64 -d | bash -s -- '$RemoteProject'"
+    $rollbackArgs = ("'$RemoteProject' '$($Actual.Compose)' '$($Actual.Imagen)' " +
+                     "'$($Actual.Contenedor)' '$($Actual.Puerto)'")
+    $rollbackCommand = "echo $rollbackB64 | base64 -d | bash -s -- $rollbackArgs"
 
     $ErrorActionPreference = "Continue"
     & ssh.exe @sshArgsBase $ServerHost $rollbackCommand
@@ -257,17 +316,59 @@ set -euo pipefail
 REMOTE_BASE="$1"
 REMOTE_PROJECT="$2"
 ARCHIVE_NAME="$3"
+# Lo que distingue un entorno de otro. Sin argumentos serian los de produccion,
+# pero el que llama los pasa siempre explicitos para que no haya dudas.
+COMPOSE_FILE="${4:-deploy/hostinger/docker-compose.yml}"
+IMAGE_BASE="${5:-vantelia}"
+CONTENEDOR="${6:-vantelia-app}"
+PUERTO="${7:-8000}"
+ENTORNO="${8:-produccion}"
+BACKUP_DIR="${9:-/srv/vantelia-backups}"
+# Contra que .env se compara para no repetir credenciales. Es un argumento y no
+# una ruta fija para poder probar de verdad este guardia.
+ENV_PRODUCCION="${10:-/srv/vantelia/.env}"
 
 ARCHIVE_PATH="${REMOTE_BASE}/${ARCHIVE_NAME}"
 NEW_DIR="${REMOTE_PROJECT}_new"
 PREV_DIR="${REMOTE_PROJECT}_prev"
-BACKUP_DIR="/srv/vantelia-backups"
-IMAGE_CURRENT="vantelia:current"
-IMAGE_PREV="vantelia:prev"
+IMAGE_CURRENT="${IMAGE_BASE}:current"
+IMAGE_PREV="${IMAGE_BASE}:prev"
+
+echo "Entorno: ${ENTORNO}  (${REMOTE_PROJECT}, contenedor ${CONTENEDOR}, puerto ${PUERTO})"
 
 if [ ! -f "$ARCHIVE_PATH" ]; then
   echo "No se encuentra el paquete de despliegue: $ARCHIVE_PATH" >&2
   exit 1
+fi
+
+# --- El entorno de pruebas no puede hablar con clientes de verdad -------------
+# Es el riesgo real de tener los dos en la misma maquina: un WhatsApp de pruebas
+# a una clienta del salon, o un cobro con la clave de Stripe en vivo, no tienen
+# vuelta atras. Asi que se comprueba ANTES de arrancar nada, no se confia.
+if [ "$ENTORNO" != "produccion" ]; then
+  ENV_PRUEBAS="${REMOTE_PROJECT}/.env"
+  if [ ! -f "$ENV_PRUEBAS" ]; then
+    echo "El entorno de pruebas no tiene su propio .env en ${ENV_PRUEBAS}." >&2
+    echo "Crealo a mano con credenciales de PRUEBA (Stripe test, SMTP falso, sin" >&2
+    echo "token de WhatsApp real). No se copia el de produccion a proposito." >&2
+    exit 1
+  fi
+  if grep -q "sk_live_" "$ENV_PRUEBAS" 2>/dev/null && true; then
+    echo "El .env de pruebas lleva una clave de Stripe EN VIVO (sk_live_)." >&2
+    echo "Cambiala por una de test antes de desplegar aqui." >&2
+    exit 1
+  fi
+  # OJO al `|| true`: con `pipefail`, un grep que no encuentra nada devuelve 1 y
+  # tumbaba el despliegue entero SIN decir por que. Un .env de pruebas sin linea
+  # de WhatsApp es lo normal, no un error.
+  token_pruebas="$( (grep -E '^WHATSAPP_ACCESS_TOKEN=' "$ENV_PRUEBAS" 2>/dev/null || true) | head -1 | cut -d= -f2-)"
+  token_prod="$( (grep -E '^WHATSAPP_ACCESS_TOKEN=' "$ENV_PRODUCCION" 2>/dev/null || true) | head -1 | cut -d= -f2-)"
+  if [ -n "$token_pruebas" ] && [ "$token_pruebas" = "$token_prod" ]; then
+    echo "El .env de pruebas usa el MISMO token de WhatsApp que produccion." >&2
+    echo "Con el, una prueba puede escribir a una clienta real. Vacialo o pon uno" >&2
+    echo "de un numero de pruebas." >&2
+    exit 1
+  fi
 fi
 
 # --- Red de seguridad 1: foto de la base de datos ANTES de tocar nada ---------
@@ -282,9 +383,9 @@ if [ -f "$DB_PATH" ]; then
   # copia puede no abrir siquiera.
   if command -v sqlite3 >/dev/null 2>&1; then
     sqlite3 "$DB_PATH" ".backup '$SNAPSHOT'"
-  elif docker exec vantelia-app python3 -c "import sqlite3; o=sqlite3.connect('/app/storage/vantelia.db'); d=sqlite3.connect('/tmp/pre-deploy.db'); o.backup(d); d.close(); o.close()" >/dev/null 2>&1; then
-    docker cp vantelia-app:/tmp/pre-deploy.db "$SNAPSHOT" >/dev/null
-    docker exec vantelia-app rm -f /tmp/pre-deploy.db >/dev/null 2>&1 || true
+  elif docker exec "$CONTENEDOR" python3 -c "import sqlite3; o=sqlite3.connect('/app/storage/vantelia.db'); d=sqlite3.connect('/tmp/pre-deploy.db'); o.backup(d); d.close(); o.close()" >/dev/null 2>&1; then
+    docker cp "$CONTENEDOR":/tmp/pre-deploy.db "$SNAPSHOT" >/dev/null
+    docker exec "$CONTENEDOR" rm -f /tmp/pre-deploy.db >/dev/null 2>&1 || true
   else
     echo "No se pudo hacer la foto de la base de datos: se aborta el despliegue." >&2
     echo "Sin copia previa, un fallo de migracion no tendria vuelta atras." >&2
@@ -301,7 +402,7 @@ fi
 if docker image inspect "$IMAGE_CURRENT" >/dev/null 2>&1; then
   docker tag "$IMAGE_CURRENT" "$IMAGE_PREV"
   echo "Imagen actual etiquetada como $IMAGE_PREV"
-elif running_image="$(docker inspect -f '{{.Image}}' vantelia-app 2>/dev/null)"; then
+elif running_image="$(docker inspect -f '{{.Image}}' "$CONTENEDOR" 2>/dev/null)"; then
   # Primer despliegue con este esquema: la imagen viva aun no tiene nombre fijo.
   docker tag "$running_image" "$IMAGE_PREV"
   echo "Imagen en ejecucion etiquetada como $IMAGE_PREV"
@@ -350,13 +451,13 @@ cd "$REMOTE_PROJECT"
 
 # El script de rollback se aparta a /tmp porque vive dentro del arbol que el
 # propio rollback va a mover: leerlo desde su sitio a mitad de faena no es fiable.
-cp deploy/hostinger/rollback.sh /tmp/vantelia-rollback.sh 2>/dev/null || true
+cp deploy/hostinger/rollback.sh "/tmp/vantelia-rollback-${ENTORNO}.sh" 2>/dev/null || true
 
 volver_atras() {
   echo "" >&2
   echo "!! $1" >&2
-  if [ -f /tmp/vantelia-rollback.sh ]; then
-    bash /tmp/vantelia-rollback.sh "$REMOTE_PROJECT" >&2 ||       echo "!! El rollback automatico tambien ha fallado: entra por SSH." >&2
+  if [ -f "/tmp/vantelia-rollback-${ENTORNO}.sh" ]; then
+    bash "/tmp/vantelia-rollback-${ENTORNO}.sh" "$REMOTE_PROJECT" "$COMPOSE_FILE" \n      "$IMAGE_BASE" "$CONTENEDOR" "$PUERTO" >&2 ||       echo "!! El rollback automatico tambien ha fallado: entra por SSH." >&2
   else
     echo "!! Sin script de rollback. La version anterior sigue en ${PREV_DIR}." >&2
   fi
@@ -365,7 +466,7 @@ volver_atras() {
 
 # Compose escribe el progreso por stderr; lo unificamos con stdout para que
 # PowerShell conserve el orden y no muestre mensajes atrasados tras el exito.
-if ! docker compose -f deploy/hostinger/docker-compose.yml up -d --build 2>&1; then
+if ! docker compose -f "$COMPOSE_FILE" up -d --build 2>&1; then
   volver_atras "La construccion o el arranque han fallado."
 fi
 docker ps
@@ -375,14 +476,14 @@ docker ps
 # invita a relanzarlo encima. 40 intentos = 2 minutos de margen.
 attempt=1
 while true; do
-  if health_response="$(curl --fail --silent --max-time 5 http://127.0.0.1:8000/health 2>/dev/null)"; then
+  if health_response="$(curl --fail --silent --max-time 5 http://127.0.0.1:${PUERTO}/health 2>/dev/null)"; then
     echo "$health_response"
     break
   fi
   if [ "$attempt" -ge 40 ]; then
     echo ""
-    echo "Healthcheck fallido tras varios intentos. Ultimos logs de vantelia-app:" >&2
-    docker logs vantelia-app --tail 120 >&2 || true
+    echo "Healthcheck fallido tras varios intentos. Ultimos logs de $CONTENEDOR:" >&2
+    docker logs "$CONTENEDOR" --tail 120 >&2 || true
     volver_atras "La version desplegada no responde al healthcheck."
   fi
   echo "Esperando a que la app responda... intento $attempt/40"
@@ -401,7 +502,11 @@ Write-Step "Actualizando el VPS y reconstruyendo Docker"
 # fail-fast. GetBytes() de UTF8 nunca emite preambulo, asi que el base64 es limpio.
 $remoteScriptUnix = $remoteScript -replace "`r`n", "`n"
 $remoteScriptB64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScriptUnix))
-$remoteCommand = "echo $remoteScriptB64 | base64 -d | bash -s -- '$RemoteBase' '$RemoteProject' '$ArchiveName'"
+$remoteArgs = ("'$RemoteBase' '$RemoteProject' '$ArchiveName' " +
+               "'$($Actual.Compose)' '$($Actual.Imagen)' '$($Actual.Contenedor)' " +
+               "'$($Actual.Puerto)' '$Entorno' '$($Actual.Backups)' " +
+               "'$($EntornoConfig[""produccion""].Proyecto)/.env'")
+$remoteCommand = "echo $remoteScriptB64 | base64 -d | bash -s -- $remoteArgs"
 $ErrorActionPreference = "Continue"
 & ssh.exe @sshArgsBase $ServerHost $remoteCommand
 $sshExit = $LASTEXITCODE
@@ -410,26 +515,32 @@ if ($sshExit -ne 0) {
     throw "La actualizacion remota ha fallado (exit $sshExit)."
 }
 
-Write-Step "Verificando produccion publica"
-$PublicHealthUrl = "https://app.vantelia.es/health"
-$publicHealth = $null
-for ($attempt = 1; $attempt -le 6; $attempt++) {
-    try {
-        $publicHealth = Invoke-RestMethod -Uri $PublicHealthUrl -TimeoutSec 15
-        if ($publicHealth.status -eq "ok") {
-            break
+if ($UrlPublica) {
+    Write-Step "Verificando el acceso publico ($Entorno)"
+    $publicHealth = $null
+    for ($attempt = 1; $attempt -le 6; $attempt++) {
+        try {
+            $publicHealth = Invoke-RestMethod -Uri $UrlPublica -TimeoutSec 15
+            if ($publicHealth.status -eq "ok") {
+                break
+            }
+        } catch {
+            if ($attempt -eq 6) {
+                throw "El VPS responde, pero el healthcheck publico ha fallado: $($_.Exception.Message)"
+            }
+            Start-Sleep -Seconds 3
         }
-    } catch {
-        if ($attempt -eq 6) {
-            throw "El VPS responde, pero el healthcheck publico ha fallado: $($_.Exception.Message)"
-        }
-        Start-Sleep -Seconds 3
     }
+    if (-not $publicHealth -or $publicHealth.status -ne "ok") {
+        throw "El healthcheck publico no devolvio status=ok."
+    }
+    Write-Host "Acceso publico: OK" -ForegroundColor Green
+} else {
+    # El entorno de pruebas puede no tener aun vhost de nginx. La app ya ha
+    # respondido dentro del VPS: dar el despliegue por fallido aqui seria mentir.
+    Write-Step "Sin URL publica configurada para '$Entorno': se omite esa comprobacion"
+    Write-Host "  (la app responde en el VPS, puerto $($Actual.Puerto))" -ForegroundColor DarkGray
 }
-if (-not $publicHealth -or $publicHealth.status -ne "ok") {
-    throw "El healthcheck publico no devolvio status=ok."
-}
-Write-Host "Produccion publica: OK" -ForegroundColor Green
 
 # Cinco conversaciones enteras contra una COPIA de la base de datos. Existe porque
 # el 26-ago-2026 se colaron dos regresiones que pasaron los 1.373 tests: los tests
@@ -437,7 +548,7 @@ Write-Host "Produccion publica: OK" -ForegroundColor Green
 # cita. Se salta con -SinHumo cuando el cambio no toca al asistente.
 if (-not $SinHumo) {
     Write-Step "Humo: cinco conversaciones de principio a fin"
-    $humo = & ssh.exe @sshArgsBase $ServerHost "docker exec vantelia-app sh -c 'cd /app && timeout 900 python scripts/humo.py 2>/dev/null'"
+    $humo = & ssh.exe @sshArgsBase $ServerHost "docker exec $($Actual.Contenedor) sh -c 'cd /app && timeout 900 python scripts/humo.py 2>/dev/null'"
     $humoExit = $LASTEXITCODE
     $humo | ForEach-Object { Write-Host $_ }
     if ($humoExit -ne 0) {
@@ -456,7 +567,17 @@ if (-not $SinHumo) {
     }
 }
 
-Write-Step "Despliegue completado"
-Write-Host "Panel:   https://app.vantelia.es/dashboard" -ForegroundColor Green
-Write-Host "Health:  $PublicHealthUrl" -ForegroundColor Green
-Write-Host "Demo:    https://app.vantelia.es/demo/$DemoClient" -ForegroundColor Green
+Write-Step "Despliegue completado ($Entorno)"
+if ($Entorno -eq "produccion") {
+    Write-Host "Panel:   https://app.vantelia.es/dashboard" -ForegroundColor Green
+    Write-Host "Health:  $UrlPublica" -ForegroundColor Green
+    Write-Host "Demo:    https://app.vantelia.es/demo/$DemoClient" -ForegroundColor Green
+} else {
+    Write-Host "Entorno de pruebas en $RemoteProject (contenedor $($Actual.Contenedor))" -ForegroundColor Green
+    if ($UrlPublica) {
+        Write-Host "Health:  $UrlPublica" -ForegroundColor Green
+    } else {
+        Write-Host "Health:  desde el VPS -> curl http://127.0.0.1:$($Actual.Puerto)/health" -ForegroundColor Green
+    }
+    Write-Host "Produccion NO se ha tocado." -ForegroundColor Green
+}

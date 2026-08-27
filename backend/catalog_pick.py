@@ -235,7 +235,8 @@ def _familias_hermanas(cliente_id: str, familia: str) -> List[str]:
     return []
 
 
-def _tecnicas_de_la_familia(cliente_id: str, familia: str, location_id: str = "") -> List[str]:
+def _tecnicas_de_la_familia(cliente_id: str, familia: str, location_id: str = "",
+                            servicios: Optional[List[Dict[str, Any]]] = None) -> List[str]:
     """Como se llaman las tecnicas de esa familia EN ESTE catalogo.
 
     Se sacan de los servicios que ya estan en la familia: de "Acido lactico bio
@@ -251,7 +252,9 @@ def _tecnicas_de_la_familia(cliente_id: str, familia: str, location_id: str = ""
     if not limpia:
         return []
     tecnicas = set()
-    for servicio in _servicios(cliente_id, location_id):
+    # Leer el catalogo cuesta cerca de un segundo, asi que si quien llama ya lo
+    # tiene cargado se reusa: si no, cada eleccion de servicio lo leia DOS veces.
+    for servicio in (servicios if servicios is not None else _servicios(cliente_id, location_id)):
         nombre = _norm(_nombre(servicio))
         categoria = _norm(servicio.get("category"))
         if not (limpia in categoria or categoria.startswith(limpia[:6])):
@@ -286,6 +289,11 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
     #    Blending no llevan la palabra "mechas" en el nombre, asi que a quien
     #    pedia mechas no se le ofrecian nunca.
     hermanas = _familias_hermanas(cliente_id, familia) if familia else []
+    # UNA vez, no una por servicio: `_encaja` se ejecuta para cada linea del
+    # catalogo, y calcular esto ahi dentro releia los 175 servicios 175 veces.
+    # Con el catalogo de un salon real eso pasa de milisegundos a minutos.
+    tecnicas_familia = (_tecnicas_de_la_familia(cliente_id, familia, location_id,
+                                               servicios=servicios) if familia else [])
 
     def _encaja(servicio: Dict[str, Any]) -> bool:
         nombre = _norm(_nombre(servicio))
@@ -302,7 +310,7 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         # sin ver los packs de 150 a 335, que es el servicio de verdad. Las
         # tecnicas de cada familia salen del CATALOGO del negocio, no de una lista
         # escrita a mano.
-        if familia and any(tec in nombre for tec in _tecnicas_de_la_familia(cliente_id, familia, location_id)):
+        if any(tec in nombre for tec in tecnicas_familia):
             return True
         # Las hermanas solo valen a nombre COMPLETO ("grey blending"), no por
         # trozos: "color" casaria con medio catalogo.

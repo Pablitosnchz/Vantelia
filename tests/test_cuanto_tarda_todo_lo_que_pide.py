@@ -155,3 +155,79 @@ def test_para_quien_solo_si_lo_dice(api_module):  # noqa: F811
     assert agent._para_quien_dice("un corte para mi hijo") == "nino"
     assert agent._para_quien_dice("corte de caballero") == "hombre"
     assert agent._para_quien_dice("quiero un corte") == ""
+
+
+def test_la_pregunta_sigue_viva_cuando_llega_la_respuesta(salon):
+    """Preguntar lo que falta esta bien; olvidarse de PARA QUE se preguntaba, no.
+
+    Conversacion real por WhatsApp:
+
+        ELLA: cuanto tarda un corte y secado?
+          IA: ¿como tienes el pelo de largo? ¿de hombre, de senyora o de ninyo?
+        ELLA: medio largo y es para mi, soy un hombre
+          IA: [le ofrece horas para reservar]
+
+    Nunca le dijo el tiempo. La guia solo se armaba si el mensaje DE ESE TURNO
+    llevaba "cuanto tarda", y el segundo no lo llevaba: solo traia la respuesta.
+    """
+    from backend import agent, reserva
+
+    estado = reserva.Estado()
+    primera = "cuanto tarda un corte y secado?"
+    assert agent._duracion_si_la_pregunta(salon, primera, estado, pedido=primera)
+    assert estado.duracion_pendiente > 0, "la pregunta no se ha quedado apuntada"
+
+    respuesta = "es para mi, soy un hombre"
+    assert not agent._pregunta_cuanto_dura(respuesta), (
+        "si este mensaje ya pidiera la duracion, el test no probaria nada"
+    )
+    guia = agent._duracion_si_la_pregunta(
+        salon, respuesta, estado, pedido=primera + " " + respuesta)
+    assert guia, "se ha olvidado de que le habian preguntado cuanto tarda"
+    assert "CUANTO TARDA" in guia
+
+
+def test_cuando_se_contesta_la_pregunta_se_cierra(salon):
+    """Si no se cerrara, seguiria dando la duracion en cada mensaje."""
+    from backend import agent, reserva
+
+    estado = reserva.Estado()
+    dicho = "corte de senora y secado, lo tengo largo, cuanto tarda?"
+    guia = agent._duracion_si_la_pregunta(salon, dicho, estado, pedido=dicho)
+    assert "EXACTAMENTE" in guia
+    assert estado.duracion_pendiente == 0
+
+
+def test_no_se_queda_preguntando_para_siempre(salon):
+    """Si la conversacion se fue a otra cosa, se deja de insistir."""
+    from backend import agent, reserva
+
+    estado = reserva.Estado()
+    primera = "cuanto tarda un corte y secado?"
+    agent._duracion_si_la_pregunta(salon, primera, estado, pedido=primera)
+    for _ in range(agent.TURNOS_QUE_DURA_LA_PREGUNTA + 1):
+        agent._duracion_si_la_pregunta(salon, "vale", estado, pedido=primera + " vale")
+    assert estado.duracion_pendiente == 0
+    assert agent._duracion_si_la_pregunta(salon, "vale", estado, pedido="vale") == ""
+
+
+def test_el_catalogo_se_lee_una_vez_por_eleccion(api_module):  # noqa: F811
+    """Calcular las tecnicas dentro del bucle releia los 175 servicios 175 veces.
+
+    Con el catalogo de un salon real eso pasaba de milisegundos a MINUTOS, y se
+    colo hasta produccion. La comprobacion es de forma, no de reloj: los tests no
+    pueden depender de lo rapido que vaya la maquina.
+    """
+    import inspect
+
+    from backend import catalog_pick
+
+    fuente = inspect.getsource(catalog_pick.elegir)
+    dentro = fuente[fuente.index("def _encaja("):]
+    dentro = dentro[:dentro.index("candidatos = [")]
+    assert "_tecnicas_de_la_familia(" not in dentro, (
+        "se ha vuelto a meter la lectura del catalogo dentro del bucle"
+    )
+    assert "servicios=servicios" in fuente, (
+        "se relee el catalogo en vez de reusar el que ya esta cargado"
+    )

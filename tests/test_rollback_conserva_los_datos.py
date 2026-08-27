@@ -143,3 +143,42 @@ def test_sin_version_anterior_no_toca_nada(tmp_path):
     # Produccion sigue exactamente como estaba: rota, pero entera y con sus datos.
     assert _leer(proyecto, "marcador.txt") == "CODIGO ROTO"
     assert _leer(proyecto, "storage", "vantelia.db") == "CITA DE HOY"
+
+
+def test_el_rollback_de_pruebas_no_toca_la_imagen_de_produccion(tmp_path):
+    """Cada entorno vuelve atras con SU imagen.
+
+    Si el rollback de pruebas reetiquetara `vantelia:current`, produccion
+    arrancaria con el codigo de pruebas en el siguiente reinicio del VPS. El
+    script recibe los nombres por argumento justamente para que no pueda pasar.
+    """
+    base, proyecto, copia, stubs = _preparar(tmp_path)
+    registro = os.path.join(base, "docker.log")
+
+    # Un docker que apunta lo que se le pide, para poder afirmarlo despues.
+    with open(os.path.join(stubs, "docker"), "w", encoding="utf-8", newline="\n") as fichero:
+        fichero.write(
+            "#!/bin/bash\n"
+            'echo "$*" >> "%s"\n'
+            'case "$1 $2" in\n'
+            '  "image inspect") exit 0 ;;\n'
+            "esac\n"
+            "exit 0\n" % _ruta_posix(registro)
+        )
+    os.chmod(os.path.join(stubs, "docker"), 0o755)
+
+    entorno = dict(os.environ)
+    entorno["PATH"] = stubs + os.pathsep + entorno.get("PATH", "")
+    resultado = subprocess.run(
+        [_bash(), _ruta_posix(copia), _ruta_posix(proyecto),
+         "deploy/hostinger/docker-compose.staging.yml", "vantelia-staging",
+         "vantelia-staging", "8001"],
+        capture_output=True, text=True, env=entorno,
+    )
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    with open(registro, encoding="utf-8") as fichero:
+        ordenes = fichero.read()
+    assert "tag vantelia-staging:prev vantelia-staging:current" in ordenes
+    assert "vantelia:current" not in ordenes
+    assert "docker-compose.staging.yml" in ordenes

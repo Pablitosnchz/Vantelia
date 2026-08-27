@@ -190,3 +190,76 @@ seguridad empeorando el incidente.
 
 Solo se guarda **una** generacion hacia atras (`_prev`). Para ir mas atras, el
 backup nocturno de `/srv/vantelia-backups`.
+
+## Entorno de pruebas (staging) en el mismo VPS
+
+Para construir lo de un cliente nuevo sin que los clientes reales se enteren.
+Mismo servidor, aislado en las cinco cosas que pueden pisarse:
+
+| | Produccion | Pruebas |
+| --- | --- | --- |
+| Directorio | `/srv/vantelia` | `/srv/vantelia-staging` |
+| Contenedor | `vantelia-app` | `vantelia-staging` |
+| Imagen | `vantelia:current` | `vantelia-staging:current` |
+| Puerto (fuera) | 8000 | 8001 |
+| Paquete | `vantelia-deploy.tar.gz` | `vantelia-staging-deploy.tar.gz` |
+| Backups | `/srv/vantelia-backups` | `/srv/vantelia-staging-backups` |
+
+Dentro del contenedor los dos escuchan en el 8000: la imagen es la MISMA, no hay
+una version "de pruebas" del codigo que luego se comporte distinto.
+
+```powershell
+.\deploy\deploy.ps1 -Entorno staging            # desplegar pruebas
+.\deploy\deploy.ps1 -Entorno staging -Rollback  # volver atras SOLO pruebas
+.\deploy\deploy.ps1                             # produccion, igual que siempre
+```
+
+Produccion sigue siendo el valor por defecto de todo: sin `-Entorno` no cambia
+absolutamente nada respecto a antes.
+
+### Lo que hay que preparar una vez (es en el servidor, no en el repo)
+
+**1. El `.env` de pruebas**, a mano, en `/srv/vantelia-staging/.env`. No se copia
+el de produccion **a proposito**, y el deploy se NIEGA a arrancar si huele a
+credenciales reales:
+
+- sin `.env` propio -> aborta;
+- con una clave `sk_live_` de Stripe -> aborta;
+- con el MISMO `WHATSAPP_ACCESS_TOKEN` que produccion -> aborta.
+
+Ese ultimo es el que de verdad importa: con el token bueno, una prueba le escribe
+por WhatsApp a una clienta del salon, y eso no tiene vuelta atras. Lo vigila
+`tests/test_entorno_de_pruebas_aislado.py`.
+
+**2. DNS**: un registro A de `staging.vantelia.es` a la IP del VPS.
+
+**3. Vhost de nginx** al puerto 8001, y con `noindex` para que no acabe en Google:
+
+```nginx
+server {
+    server_name staging.vantelia.es;
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    location / {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # La voz y el chat en vivo van por WebSocket.
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+Despues, `DEPLOY_STAGING_PUBLIC_URL=https://staging.vantelia.es/health` en tu
+`.env` local activa tambien la comprobacion publica al desplegar pruebas. Sin esa
+variable se omite y se avisa, en vez de dar por fallido un despliegue bueno.
+
+### Sembrar datos
+
+El entorno arranca con su base de datos vacia. Si quieres probar con el catalogo
+de un cliente, copia a mano su `config.json` y su `data/<cliente>/` — pero **no**
+su base de datos de produccion sin pensarlo: lleva datos personales de clientas
+reales.
