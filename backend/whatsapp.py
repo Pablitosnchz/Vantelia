@@ -1817,10 +1817,15 @@ async def _wa_resumen_para_confirmar(
     # viene a REPROGRAMAR y acaba necesitando una cita nueva. En los dos casos el
     # agente juntaba todos los datos, frenaba la creacion esperando el resumen, y
     # el resumen se negaba a salir: "parece que no puedo reservar la cita".
-    if estado.hecho:
-        return False
-    if estado.intencion != "reservar" and not estado.esperando_confirmacion:
-        return False
+    if not estado.esperando_confirmacion:
+        # `hecho` lo pone tambien CANCELAR, y ahi estaba la otra mitad del
+        # callejon: la clienta pedia cambiar de dia, el asistente cancelaba la
+        # vieja -y con eso marcaba la gestion por hecha- y el resumen de la nueva
+        # ya no salia nunca. Confirmo CUATRO veces y se quedo sin ninguna cita.
+        if estado.hecho:
+            return False
+        if estado.intencion != "reservar":
+            return False
     if reserva.que_falta(estado, conocido):
         return False
     if not (estado.servicio and estado.fecha and estado.hora):

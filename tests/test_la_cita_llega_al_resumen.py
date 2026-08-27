@@ -127,3 +127,44 @@ def test_el_resumen_de_whatsapp_mira_esa_senyal(api_module):  # noqa: F811
 
     fuente = inspect.getsource(whatsapp._wa_resumen_para_confirmar)
     assert "esperando_confirmacion" in fuente
+
+
+def test_cancelar_no_cierra_la_puerta_a_la_cita_nueva(api_module):  # noqa: F811
+    """La otra mitad del callejon, y la que dejo a una clienta con CERO citas.
+
+    Transcripcion real: pide cambiar de dia, el asistente cancela la vieja -y con
+    eso marca la gestion por `hecho`-, y el resumen de la nueva ya no sale nunca.
+    Ella escribio "Confirmo" CUATRO veces y acabo con "llama al salon".
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "cancelar_cita", {}, {"ok": True, "codigo_reserva": "R-1"})
+    assert estado.hecho is True
+
+    reserva.anotar_resultado(
+        estado, "crear_cita",
+        {"servicio": "Corte senora", "fecha": "2026-09-03", "hora": "16:00",
+         "nombre": "Laura"},
+        {"ok": False, "pendiente_de_confirmacion": True},
+    )
+    assert estado.esperando_confirmacion is True, (
+        "sin esta senyal el resumen no sale y la clienta se queda sin cita ninguna"
+    )
+
+
+def test_hecha_la_cita_el_resumen_deja_de_salir(api_module):  # noqa: F811
+    """La mitad que protege: si siguiera saliendo, naceria una SEGUNDA cita.
+
+    Medido cuando paso: cinco citas duplicadas y "repite la misma pregunta"
+    disparado de 14 a 38 de cada 100.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    estado.esperando_confirmacion = True
+    reserva.marcar_hecha("demo_test_resumen", "34600000000")
+    # Y sobre el estado guardado, que es el que lee el canal:
+    guardado = reserva.cargar("demo_test_resumen", "34600000000")
+    assert guardado.hecho is True
+    assert guardado.esperando_confirmacion is False
