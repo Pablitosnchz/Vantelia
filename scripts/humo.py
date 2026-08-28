@@ -60,8 +60,14 @@ CASOS: List[Dict[str, Any]] = [
     {
         "id": "corte-acaba-en-cita",
         "por_que": "El camino mas simple que existe. Si este falla, no se despliega nada.",
+        # NADA de "manana": la agenda de un negocio real cambia sola. El 28-ago-2026
+        # este caso se puso rojo dos veces seguidas -y provoco una vuelta atras de
+        # produccion- porque ese dia el sabado estaba lleno para ese servicio. No
+        # habia ninguna regresion: el guion pedia un dia concreto y ese dia no
+        # habia hueco. Un caso de prueba que depende del calendario acusa al codigo
+        # de lo que hace la agenda.
         "mensajes": ["hola, quiero cita para un corte de senora",
-                     "manana", "la primera que tengas", "me llamo Ana Ruiz", "si, confirmo"],
+                     "la primera que tengas", "me llamo Ana Ruiz", "si, confirmo"],
         "espera": "cita_viva",
     },
     {

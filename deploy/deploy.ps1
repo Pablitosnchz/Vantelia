@@ -210,8 +210,7 @@ Assert-Command "ssh.exe"
 function Invoke-RemoteRollback {
     param([string]$Motivo = "")
 
-    $rollbackScriptPath = Join-Path $ProjectRoot "deploy\hostinger
-ollback.sh"
+    $rollbackScriptPath = Join-Path $ProjectRoot "deploy/hostinger/rollback.sh"
     if (-not (Test-Path -LiteralPath $rollbackScriptPath)) {
         throw "No se encuentra deploy/hostinger/rollback.sh: no hay vuelta atras automatica."
     }
@@ -230,14 +229,20 @@ ollback.sh"
     $rollbackCommand = "echo $rollbackB64 | base64 -d | bash -s -- $rollbackArgs"
 
     $ErrorActionPreference = "Continue"
-    & ssh.exe @sshArgsBase $ServerHost $rollbackCommand
+    # `| Out-Host` es imprescindible: sin el, todo lo que escupe el ssh se mezcla
+    # con el valor que devuelve la funcion, y quien la llama recibe el LOG ENTERO
+    # en vez del codigo de salida. Paso de verdad el 28-ago-2026: el rollback se
+    # hizo bien -"la version anterior responde"- y justo despues el script grito
+    # "El rollback ha fallado", porque comparaba un array de texto con 0.
+    & ssh.exe @sshArgsBase $ServerHost $rollbackCommand | Out-Host
     $rollbackExit = $LASTEXITCODE
     $ErrorActionPreference = "Stop"
     return $rollbackExit
 }
 
 if ($Rollback) {
-    $rollbackOnlyExit = Invoke-RemoteRollback
+    # Y por si acaso, del valor devuelto se coge SOLO lo ultimo: el codigo.
+    $rollbackOnlyExit = @(Invoke-RemoteRollback)[-1]
     if ($rollbackOnlyExit -ne 0) {
         throw "El rollback ha fallado (exit $rollbackOnlyExit). Mira los logs de arriba."
     }
@@ -557,7 +562,7 @@ if (-not $SinHumo) {
         Write-Host "   Mira arriba cual y por que." -ForegroundColor Yellow
         # El health decia que si y la conversacion se rompe igual: es justo el
         # fallo que no se ve hasta que lo sufre un cliente. Se vuelve atras solo.
-        $humoRollbackExit = Invoke-RemoteRollback -Motivo "El humo ha fallado: la conversacion no llega al final."
+        $humoRollbackExit = @(Invoke-RemoteRollback -Motivo "El humo ha fallado: la conversacion no llega al final.")[-1]
         if ($humoRollbackExit -ne 0) {
             throw "El humo ha fallado Y el rollback tambien (exit $humoRollbackExit). Entra por SSH: produccion esta rota."
         }
