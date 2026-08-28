@@ -231,3 +231,32 @@ def test_el_catalogo_se_lee_una_vez_por_eleccion(api_module):  # noqa: F811
     assert "servicios=servicios" in fuente, (
         "se relee el catalogo en vez de reusar el que ya esta cargado"
     )
+
+
+def test_dos_alternativas_no_se_suman(salon):
+    """"¿Y si me hago el otro?" es elegir, no anyadir.
+
+    Conversacion real del salon: pregunto por la keratina y despues "y si me quiero
+    hacer el acido lactico bio premium, ¿que tardo?". Se le contesto "en total
+    serian 555 minutos" -sumando los dos tratamientos-, y a partir de ahi ya no
+    hubo forma de cerrar la cita: no cabian juntos en ningun hueco.
+
+    Se suma lo que pide EN EL MISMO mensaje ("corte y secado"), que es como se
+    piden las cosas que van juntas.
+    """
+    from backend import agent, reserva
+
+    estado = reserva.Estado()
+    acumulado = "quiero una keratina que tarda. Y si me hago un corte que tardo?"
+    ultimo = "Y si me hago un corte que tardo?"
+    guia = agent._duracion_si_la_pregunta(salon, ultimo, estado, pedido=acumulado)
+    assert "en total" not in (guia or "").lower(), guia
+
+
+def test_lo_pedido_junto_se_sigue_sumando(salon):
+    """La otra mitad: "corte y secado" en un mensaje sigue siendo una suma."""
+    from backend import agent, reserva
+
+    dicho = "quiero un corte de senora y un secado, lo tengo largo, cuanto tarda?"
+    guia = agent._duracion_si_la_pregunta(salon, dicho, reserva.Estado(), pedido=dicho)
+    assert "EXACTAMENTE 35 minutos" in guia, guia

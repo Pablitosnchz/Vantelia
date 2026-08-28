@@ -796,7 +796,8 @@ def _para_quien_dice(texto: str) -> str:
     return ""
 
 
-def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "") -> str:
+def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "",
+                         mensaje: str = "") -> str:
     """Cuanto tarda TODO lo que ha pedido, sumado desde el catalogo.
 
     La duenya del salon, palabra por palabra: *"le pregunte que queria corte y
@@ -812,6 +813,17 @@ def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "") ->
     y se pide: preguntarlo es lo que hace util la informacion que el negocio
     metio. Lo que nunca es respuesta a "¿cuanto tarda?" es una cita de valoracion.
     """
+    # Si en ESTE mensaje nombra UNA sola cosa, esta preguntando por esa cosa, no
+    # sumandola a lo de antes. Paso de verdad: pregunto por la keratina, luego "¿y
+    # si me hago el acido lactico, que tardo?" -que son ALTERNATIVAS- y se le
+    # contesto "en total serian 555 minutos", sumando las dos. Despues ya no habia
+    # forma de cerrar la cita: no cabian juntas en ningun hueco.
+    #
+    # Se suma cuando pide varias cosas EN EL MISMO mensaje ("corte y secado"), que
+    # es como se piden de verdad las cosas que van juntas.
+    del_turno = catalog_pick.familias_pedidas(cliente_id, mensaje) if mensaje else []
+    if len(del_turno) == 1:
+        return ""
     familias = catalog_pick.familias_pedidas(cliente_id, pedido)
     if len(familias) < 2:
         return ""
@@ -927,7 +939,7 @@ def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
     # Si ha pedido VARIAS cosas, la respuesta es la SUMA. Va antes que nada: con
     # un servicio ya elegido se contestaba solo por ese, y a quien pedia "corte y
     # secado" se le daba el tiempo del corte.
-    juntos = _cuanto_duran_juntos(cliente_id, pedido or mensaje, location_id)
+    juntos = _cuanto_duran_juntos(cliente_id, pedido or mensaje, location_id, mensaje=mensaje)
     if juntos:
         return _recordar(juntos)
 
