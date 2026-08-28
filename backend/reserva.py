@@ -350,6 +350,19 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         estado.esperando_confirmacion = True
         return
     if not resultado.get("ok"):
+        # Una llamada RECHAZADA puede traer datos buenos. Pasa cuando se frena por
+        # haber pedido varias cosas: la cita no se crea -y bien-, pero el nombre, el
+        # dia y la hora son los que ella acaba de dar. Tirarlos obligaba a
+        # preguntarselo todo otra vez justo en el ultimo paso, y ahi se iba.
+        #
+        # Solo se rellena lo que este VACIO: un rechazo no puede pisar lo que ya se
+        # sabia. Y no se enciende `esperando_confirmacion`: no hay nada que
+        # confirmar todavia.
+        if resultado.get("conserva_los_datos"):
+            for clave in ("fecha", "hora", "nombre", "profesional"):
+                valor = str(argumentos.get(clave) or "").strip()
+                if valor and not getattr(estado, clave, ""):
+                    setattr(estado, clave, valor)
         return
 
     if tool == "buscar_servicio" and resultado.get("servicio"):

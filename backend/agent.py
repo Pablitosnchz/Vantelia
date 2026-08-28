@@ -1089,6 +1089,10 @@ def _freno_de_varios_servicios(
     if packs:
         return {
             "ok": False,
+            # La cita no se crea, pero el nombre, el dia y la hora que traia la
+            # llamada SI valen: son los que ella acaba de dar. Tirarlos hacia que la
+            # conversacion tuviera que empezar de cero justo en el ultimo paso.
+            "conserva_los_datos": True,
             "error": ("Ha pedido varias cosas (%s) y el servicio que ibas a reservar "
                       "solo cubre una parte. Esa cita apartaria menos tiempo del que "
                       "hace falta." % ", ".join(familias)),
@@ -1102,6 +1106,7 @@ def _freno_de_varios_servicios(
     telefono = clients.call_us_line(cliente_id)
     return {
         "ok": False,
+        "conserva_los_datos": True,
         "error": ("Ha pedido varias cosas (%s) y en el catalogo no hay un servicio "
                   "que las cubra juntas. Reservar solo una apartaria muchisimo menos "
                   "tiempo del que hace falta." % ", ".join(familias)),

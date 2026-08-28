@@ -343,3 +343,56 @@ def test_no_dice_nada_si_no_le_han_preguntado_por_el_tiempo(salon, api_module):
     assert agent._duracion_si_la_pregunta(
         CLIENTE, "quiero pedir cita para un corte", _EstadoFalso(servicio_exacto="Corte senora")
     ) == ""
+
+
+def test_frenar_la_cita_no_tira_lo_que_ella_ya_ha_dado(salon, api_module):
+    """La cita no se crea -y bien-, pero su nombre y su hora siguen valiendo.
+
+    Conversacion real: la clienta comparo dos alisados, y al dar su nombre el freno
+    rechazo la llamada. Con ella se fueron el nombre, el dia y la hora que traia
+    dentro, asi que la conversacion tenia que empezar de cero justo en el ultimo
+    paso. Ahi se fue.
+
+    Rechazar la reserva y perder los datos son dos cosas distintas.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(
+        estado, "crear_cita",
+        {"servicio": "Pack keratina premium medio", "fecha": "2026-09-08",
+         "hora": "14:00", "nombre": "Alicia Rincon Espinosa"},
+        {"ok": False, "conserva_los_datos": True,
+         "error": "Ha pedido varias cosas y no hay un servicio que las cubra juntas."},
+    )
+    assert estado.nombre == "Alicia Rincon Espinosa"
+    assert estado.fecha == "2026-09-08"
+    assert estado.hora == "14:00"
+    # Pero NO se da por lista para confirmar: no hay nada que confirmar.
+    assert estado.esperando_confirmacion is False
+
+
+def test_un_rechazo_normal_sigue_sin_tocar_el_estado(salon, api_module):
+    """Solo se conservan los datos cuando quien rechaza dice que son buenos."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(
+        estado, "crear_cita", {"nombre": "Inventado", "hora": "23:00"},
+        {"ok": False, "error": "Ese horario ya no esta disponible."},
+    )
+    assert estado.nombre == "" and estado.hora == ""
+
+
+def test_un_rechazo_no_pisa_lo_que_ya_se_sabia(salon, api_module):
+    """Lo que ella dijo antes manda sobre lo que traiga una llamada rechazada."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    estado.nombre = "Laura"
+    reserva.anotar_resultado(
+        estado, "crear_cita", {"nombre": "Otra cosa", "hora": "14:00"},
+        {"ok": False, "conserva_los_datos": True, "error": "..."},
+    )
+    assert estado.nombre == "Laura"
+    assert estado.hora == "14:00"
