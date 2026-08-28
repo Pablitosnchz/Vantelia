@@ -165,6 +165,11 @@ PERSONAS: List[Dict[str, Any]] = [
             "cita para un corte, pero SOLO te viene bien un dia que esta cerrado o "
             "muy tarde; rechazas las dos primeras horas que te ofrezcan"
         ),
+        # Esta clienta NO puede acabar con cita: quiere venir cuando el salon esta
+        # cerrado. Exigirsela era castigar la respuesta correcta. Lo que se le pide
+        # al asistente aqui es que no la deje tirada: horas reales de otros dias, o
+        # el telefono para que el salon cuadre lo que el sistema no puede.
+        "acepta_sin_cita": True,
         "estilos": ["insiste", "normal"],
     },
 ]

@@ -32,6 +32,7 @@ EXIGE --db-copia: las clientas reservan y cancelan de verdad.
 from __future__ import annotations
 
 import argparse
+import re
 import asyncio
 import io
 import json
@@ -221,8 +222,14 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
     if objetivo == "reservar":
         nuevas = [c for c in vivas if not previa or c["booking_code"] != previa["booking_code"]]
         if not nuevas:
-            resultado["veredicto"] = "atascada"
-            resultado["motivo"] = "se fue sin cita"
+            if persona.get("acepta_sin_cita") and _ofrecio_una_salida(cliente_id, dichos):
+                # Hay clientas que NO pueden acabar con cita -quieren venir cuando
+                # el salon esta cerrado-. Ahi lo que se juzga es que no se la deje
+                # tirada, no que aparezca una cita imposible.
+                resultado["veredicto"] = "bien"
+            else:
+                resultado["veredicto"] = "atascada"
+                resultado["motivo"] = "se fue sin cita"
         elif len(nuevas) > 1:
             resultado["veredicto"] = "fallo"
             resultado["motivo"] = "le ha cogido %d citas" % len(nuevas)
@@ -292,6 +299,25 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
     return resultado
 
 
+def _ofrecio_una_salida(cliente_id: str, dichos: List[str]) -> bool:
+    """¿Le dio horas concretas de otro dia, o el telefono del salon?
+
+    Es lo que se le pide cuando la cita es imposible: cualquiera de las dos vale,
+    lo que no vale es despedirla sin nada.
+    """
+    from backend import clients
+
+    texto = " ".join(dichos)
+    if re.search("[0-9]{1,2}:[0-9]{2}", texto):
+        return True
+    telefono = clients.call_us_line(cliente_id)
+    if telefono:
+        digitos = "".join(c for c in telefono if c.isdigit())[:6]
+        if digitos and digitos in "".join(c for c in texto if c.isdigit()):
+            return True
+    return any(p in _norm(texto) for p in ("llamanos", "llamar al", "que llames"))
+
+
 def _es_diagnostico(cita: Dict[str, Any]) -> bool:
     """La cita de valoracion que este negocio ofrece en vez de dar un precio."""
     nombre = _norm(str(cita.get("servicio") or ""))
@@ -326,8 +352,17 @@ def _mentiras(cliente_id: str, dichos: List[str], vivas: List[Dict[str, Any]]) -
     # Un precio para algo que este negocio NO presupuesta por mensaje.
     from backend import rules
 
-    plano = _norm(texto)
-    if ("€" in texto or " euros" in plano) and _habla_de(plano, ("mecha", "balayage", "balay")):
+    # La FIANZA no es un precio. El negocio EXIGE que se diga -"para reservar se
+    # abona una fianza de 50 €"- y llevaba a marcar como mentira justo lo que la
+    # duenya pidio. Medido: 14 de 100 conversaciones dadas por malas por esto, y
+    # las 14 estaban bien. Se quitan las frases de fianza antes de buscar cifras.
+    sin_fianza = " ".join(
+        trozo for trozo in re.split("(?<=[.!?" + chr(10) + "])", texto)
+        if "fianza" not in _norm(trozo) and "senal" not in _norm(trozo)
+    )
+    plano_sin_fianza = _norm(sin_fianza)
+    if (("€" in sin_fianza or " euros" in plano_sin_fianza)
+            and _habla_de(plano_sin_fianza, ("mecha", "balayage", "balay"))):
         regla = rules.match(cliente_id, {"intencion": "precio", "familia": "mechas"})
         if regla is not None:
             fallos.append("da_un_precio_que_no_debe")
@@ -348,7 +383,11 @@ def _se_repite(dichos: List[str]) -> bool:
     Visto de verdad: a una clienta que insistio cuatro veces le solto CUATRO veces
     la misma respuesta palabra por palabra. Para quien escribe, eso es un muro.
     """
-    vistas = [_norm(t)[:80] for t in dichos if t.strip()]
+    # El RESUMEN con botones no cuenta. Es un formulario, no una respuesta: cuando
+    # ella corrige un dato hay que volver a ensenyarselo, y eso es lo correcto.
+    # Contarlo como repetirse marcaba conversaciones bien llevadas.
+    vistas = [_norm(t)[:80] for t in dichos
+              if t.strip() and "resumen de tu cita" not in _norm(t)]
     return any(a == b for a, b in zip(vistas, vistas[1:])) or (
         len(vistas) >= 3 and len(set(vistas)) <= len(vistas) - 2
     )
