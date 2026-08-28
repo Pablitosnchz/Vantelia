@@ -1,6 +1,6 @@
 # La suite: qué cubre cada fichero
 
-48 ficheros, ~775 tests, unos 8-10 minutos enteros. Casi ninguno necesita red:
+102 ficheros, ~1580 tests, unos 8-10 minutos enteros. Casi ninguno necesita red:
 el entorno se monta aislado en un `tmp_path` con su propio `config.json`,
 `storage/` y `data/`.
 
@@ -64,6 +64,26 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   devuelto la decisión al modelo y volverá la variación entre ejecuciones.
 - `test_agente_de_citas.py` — el modelo lleva la conversación, pero las tools no
   le dejan inventarse un servicio, un hueco ni una cita.
+- `test_varios_servicios_una_cita.py` — una cita no puede apartar MENOS tiempo del
+  que hace falta. Nació de una cita de 20 minutos para cuatro servicios (corte +
+  secado + elumen + alisado) en la agenda de un salón real. Vigila las tres
+  formas: reservar uno habiendo pedido varios, bajar a la variante corta de lo que
+  se pidió por su nombre largo, y decir una duración que no está en el catálogo.
+  La duración se lee con el MISMO resolutor que aparta el hueco, y si el negocio
+  trabaja por packs es la del pack.
+- `test_precio_oculto_no_pregunta_el_largo.py` — dos instrucciones del código no
+  pueden contradecirse en el mismo turno. Un salón que no da precios acababa
+  preguntando el largo del pelo como paso previo a decir una cifra que no debe
+  decir, porque la nota del catálogo invitaba a darla y ganaba por ir después.
+- `test_rollback_conserva_los_datos.py` — la vuelta atrás del VPS revierte el
+  CÓDIGO y NUNCA los datos. La primera versión del script movía el estado vivo
+  antes de intercambiar los árboles y un `mv` fallido dejaba la base de datos
+  fuera de producción: la red de seguridad empeorando el incidente.
+- `test_entorno_de_pruebas_aislado.py` — pruebas y producción comparten VPS, así
+  que el peligro es un descuido: copiar el `.env` "para que arranque". El deploy
+  de pruebas se niega si no tiene `.env` propio, si lleva una clave `sk_live_` o
+  si usa el mismo token de WhatsApp que producción. Se ejecuta el MISMO script
+  que se sube al servidor, extraído de `deploy/deploy.ps1`.
 - `test_whatsapp_mismo_cerebro.py` — WhatsApp tiene recorrido PROPIO y solo
   delegaba en el cerebro al final: que algo funcione en el widget no demuestra
   nada allí. Compara los dos canales con el webhook de verdad. Si este falla,

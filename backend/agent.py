@@ -1070,7 +1070,7 @@ def _tool_buscar_servicio(
     cliente_id: str, argumentos: Dict[str, Any], *, location_id: str = "",
 ) -> Dict[str, Any]:
     """El catalogo real, filtrado con lo que ha dicho. Nunca inventa un nombre."""
-    from backend import intents
+    from backend import booking, intents
 
     descripcion = str(argumentos.get("descripcion") or "").strip()
     if not descripcion:
@@ -1178,6 +1178,15 @@ def _tool_buscar_servicio(
                 % (duracion_min, duracion_max,
                    catalog_pick.sobre_que_preguntar(eleccion) or "la opcion",
                    catalog_pick.sobre_que_preguntar(eleccion) or "lo que falta")
+            )
+        elif booking.precios_ocultos(cliente_id):
+            # Este negocio no da precios. Invitar aqui a "contestar con estos
+            # datos" chocaba de frente con la instruccion de no darlos, y el
+            # modelo se quedaba con esta: acababa preguntando el largo para
+            # poder decir un precio que no debe decir.
+            aviso_duracion = (
+                " Y si solo pregunta cuanto dura, contestale con estos datos sin "
+                "obligarla a concretar. Del PRECIO no digas nada: aqui no se dan."
             )
         else:
             aviso_duracion = (
@@ -1716,7 +1725,10 @@ def _salida_para_quien_pregunta_el_precio(cliente_id: str, estado: Any, mensaje:
             "AQUI NO SE DAN PRECIOS. Diselo en UNA frase, sin rodeos y sin cifras, y "
             "en el mismo mensaje ofrecele la salida: cogerle una cita de valoracion "
             "(corta y sin compromiso, ahi le dan el presupuesto).%s No te quedes en "
-            "la explicacion: termina proponiendo algo concreto." % si_llama
+            "la explicacion: termina proponiendo algo concreto. Y NO le preguntes el "
+            "largo del pelo -ni ningun otro dato- para poder darle un precio: por ahi "
+            "se escapaba, preguntando el largo como paso previo a decir una cifra que "
+            "este negocio no da." % si_llama
         )
     return (
         "YA se lo has explicado %d veces y sigue preguntando. NO se lo vuelvas a "
@@ -2215,8 +2227,12 @@ async def responder(
             cuanto_dura = _duracion_si_la_pregunta(
                 cliente_id, mensaje, estado,
                 pedido=_lo_que_ha_escrito(mensajes), location_id=location_id)
-            guia = [t for t in (reserva.resumen(estado, conocido), aviso, sin_precio,
-                                cuanto_dura,
+            # OJO al orden: `sin_precio` va el ULTIMO de las restricciones. Estaba
+            # antes y competia con la nota del catalogo ("preguntale el largo"),
+            # que ganaba por ir despues: el asistente pedia el largo para dar un
+            # precio que este negocio no da.
+            guia = [t for t in (reserva.resumen(estado, conocido), aviso,
+                                cuanto_dura, sin_precio,
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:

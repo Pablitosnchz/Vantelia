@@ -386,6 +386,40 @@ verdad: creo una cita con nombre "clienta" inventado, creo dos citas seguidas, d
 "el jueves 29" siendo el 27, afirmo que un dia estaba cerrado sin mirar la agenda y
 nego un servicio que si hacen. Los cinco estan arreglados en las tools.
 
+**Apartar MENOS tiempo del que hace falta (ago 2026, incidente del salon piloto).**
+Tres formas, las tres arregladas en el codigo y con test propio en
+`tests/test_varios_servicios_una_cita.py`:
+
+- **Varios servicios en una cita.** Fue sumando por WhatsApp corte + secado +
+  elumen + alisado y la cita creada fue `corte_senora`, de 14:00 a **14:20**. Los
+  otros tres desaparecieron sin aviso (`estado.servicio_texto` deja de acumular en
+  cuanto hay un servicio elegido). Freno: `agent._freno_de_varios_servicios` mira
+  lo que ha ESCRITO, y si el servicio elegido no cubre todas las familias pedidas
+  no deja crear la cita: ofrece el pack real que las cubra
+  (`catalog_pick.servicios_que_cubren`) o manda a llamar. Se prefiere pasarse
+  frenando: molestar preguntando es barato, romper la agenda no.
+- **Bajar de gama sin preguntar.** A quien pedia "acido lactico bio premium" (de 30
+  a 180 min segun el largo) se le asignaba "Acido lactico chico o corto", de
+  QUINCE. `catalog_pick.elegir` colapsaba la tecnica larga en la corta aunque ella
+  hubiera dicho lo que las distingue; ahora solo colapsa si NO lo ha nombrado.
+- **Duracion inventada.** A "que suele tardar?" respondia mandando a una cita de
+  valoracion, y despues "unos 30 minutos" a tres tratamientos distintos (los 30 son
+  el hueco por DEFECTO del sistema, no dato del negocio). Ahora
+  `agent._duracion_si_la_pregunta` calcula la cifra ANTES de que hable, con el
+  MISMO resolutor que aparta el hueco (`agenda._service_duration_minutes`), asi que
+  lo que oye la clienta y lo que se le guarda no pueden discrepar; si el negocio
+  trabaja por packs sale la duracion del PACK; si varia por largo se da el abanico
+  o se pregunta el largo; y sin duracion configurada no se da cifra ninguna.
+
+**Dos instrucciones del codigo no pueden contradecirse en el mismo turno**
+(`tests/test_precio_oculto_no_pregunta_el_largo.py`). Con `mostrar_precios: False`,
+a "cuanto cuestan unas mechas?" contestaba *"necesito saber como tienes el pelo de
+largo"*: preguntaba el largo como paso previo a decir una cifra que ese negocio no
+da. No era despiste del modelo: la nota del catalogo decia "si pregunta cuanto
+cuesta, contestale con estos datos" y ganaba por ir DESPUES de la instruccion de no
+dar precios. La nota ya no invita a dar precio cuando el negocio los oculta, la
+instruccion prohibe ese rodeo, y `sin_precio` va la ULTIMA de la guia.
+
 Un caso del banco puede exigir un EFECTO en la agenda (`agenda`: crea/no_crea/
 cancela/cambia), no solo palabras: "listo, te he apuntado" sin cita es el fallo que
 mas caro sale. `con_cita: True` le deja una cita cogida antes de empezar y `{codigo}`
@@ -759,7 +793,7 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
   como se lee, el historial de mediciones y las trampas que ya han costado tiempo
   (poner el freno en la capa equivocada, medir con el instrumento roto, desplegar en
   mitad de una tirada).
-- `tests/README.md`: que cubre cada uno de los 48 ficheros de test, que correr segun lo que toques, y los tests que vigilan REGLAS (si uno de esos falla, leelo antes de "arreglarlo").
+- `tests/README.md`: que cubre cada uno de los 102 ficheros de test, que correr segun lo que toques, y los tests que vigilan REGLAS (si uno de esos falla, leelo antes de "arreglarlo").
 - `docs/MAPA_DEL_CODIGO.md`: **empieza por aqui si no sabes que fichero abrir.** Por flujo: entrada de cada canal, nucleo comun, donde vive cada texto que lee el cliente, y las trampas que ya han costado un incidente.
 - `README.md`: instalacion, endpoints y operacion general.
 - `docs/Funcionalidades.md`: resumen funcional.
