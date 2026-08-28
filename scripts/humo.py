@@ -66,8 +66,14 @@ CASOS: List[Dict[str, Any]] = [
         # habia ninguna regresion: el guion pedia un dia concreto y ese dia no
         # habia hueco. Un caso de prueba que depende del calendario acusa al codigo
         # de lo que hace la agenda.
+        # Un mensaje de mas al final A PROPOSITO. Con el guion justo, que el modelo
+        # gaste un turno preguntando algo razonable -"¿es para ti?"- dejaba la
+        # conversacion sin margen para confirmar, y el caso salia rojo sin haber
+        # nada roto. Se comprobo: fallaba igual en la version anterior. Una clienta
+        # de verdad aguanta una pregunta mas; el guion tambien debe.
         "mensajes": ["hola, quiero cita para un corte de senora",
-                     "la primera que tengas", "me llamo Ana Ruiz", "si, confirmo"],
+                     "la primera que tengas", "me llamo Ana Ruiz",
+                     "si, confirmo", "si, confirmo"],
         "espera": "cita_viva",
     },
     {
