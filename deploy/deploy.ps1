@@ -340,6 +340,10 @@ IMAGE_CURRENT="${IMAGE_BASE}:current"
 IMAGE_PREV="${IMAGE_BASE}:prev"
 
 echo "Entorno: ${ENTORNO}  (${REMOTE_PROJECT}, contenedor ${CONTENEDOR}, puerto ${PUERTO})"
+# Prueba de que este script ha corrido de verdad. Quien llama la comprueba: si el
+# comando llega truncado, el shell remoto imprime el texto y no ejecuta nada, y
+# sin esta marca eso pasaba por un despliegue correcto.
+date -u +%Y-%m-%dT%H:%M:%SZ > /srv/vantelia_marca_despliegue 2>/dev/null || true
 
 if [ ! -f "$ARCHIVE_PATH" ]; then
   echo "No se encuentra el paquete de despliegue: $ARCHIVE_PATH" >&2
@@ -506,18 +510,42 @@ Write-Step "Actualizando el VPS y reconstruyendo Docker"
 # linea en bash ("set: command not found") y desactivaba el modo estricto
 # fail-fast. GetBytes() de UTF8 nunca emite preambulo, asi que el base64 es limpio.
 $remoteScriptUnix = $remoteScript -replace "`r`n", "`n"
-$remoteScriptB64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScriptUnix))
 $remoteArgs = ("'$RemoteBase' '$RemoteProject' '$ArchiveName' " +
                "'$($Actual.Compose)' '$($Actual.Imagen)' '$($Actual.Contenedor)' " +
                "'$($Actual.Puerto)' '$Entorno' '$($Actual.Backups)' " +
                "'$($EntornoConfig[""produccion""].Proyecto)/.env'")
-$remoteCommand = "echo $remoteScriptB64 | base64 -d | bash -s -- $remoteArgs"
+# El script viaja como FICHERO, no metido en el comando de ssh.
+#
+# Antes se mandaba el script entero en base64 dentro del propio comando. Funciono
+# meses y un dia dejo de funcionar sin tocar nada de la logica: al crecer el
+# script unos cientos de bytes, el comando paso del limite de longitud, se
+# TRUNCO, y el VPS recibio algo partido por la mitad. El resultado no fue un
+# error: el shell remoto escupio el base64 por pantalla y siguio como si nada, asi
+# que el despliegue decia "OK" y el servidor no se actualizaba. Se creyo que
+# fallaba el codigo y hasta se volvio atras en produccion por eso.
+#
+# Con scp no hay limite y se ve enseguida si algo falla.
+$remoteScriptLocal = Join-Path ([System.IO.Path]::GetTempPath()) ("vantelia-remote-" + [System.Guid]::NewGuid().ToString("N") + ".sh")
+[System.IO.File]::WriteAllText($remoteScriptLocal, $remoteScriptUnix, (New-Object System.Text.UTF8Encoding($false)))
+$remoteScriptRemoto = "/tmp/vantelia-deploy-$Entorno.sh"
+Invoke-Checked -FilePath "scp.exe" -Arguments ($scpArgsBase + @($remoteScriptLocal, "${ServerHost}:${remoteScriptRemoto}"))
+Remove-Item -LiteralPath $remoteScriptLocal -Force -ErrorAction SilentlyContinue
+$remoteCommand = "bash $remoteScriptRemoto $remoteArgs"
 $ErrorActionPreference = "Continue"
 & ssh.exe @sshArgsBase $ServerHost $remoteCommand
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = "Stop"
 if ($sshExit -ne 0) {
     throw "La actualizacion remota ha fallado (exit $sshExit)."
+}
+# El script remoto empieza diciendo en que entorno esta. Si esa linea no ha
+# salido, es que NO se ha ejecutado -paso: el comando llego truncado y el shell
+# se limito a imprimirlo-, y seguir adelante seria dar por desplegado algo que
+# sigue igual que estaba.
+$marcaRemota = "/srv/vantelia_marca_despliegue"
+$sello = & ssh.exe @sshArgsBase $ServerHost "cat $marcaRemota 2>/dev/null || true"
+if (-not ("$sello".Trim())) {
+    throw "El VPS no ha ejecutado el script de despliegue (no hay marca). Nada se ha actualizado."
 }
 
 if ($UrlPublica) {
