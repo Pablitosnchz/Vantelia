@@ -3116,10 +3116,16 @@ async def _handle_whatsapp_message(
 
                 reserva.marcar_hecha(cliente_id, from_number)
             if not ok:
-                await _wa_send_main_menu(
-                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                    nombre_empresa=nombre_empresa, booking_enabled=booking_enabled,
-                )
+                # NO se le suelta el menu principal. `_wa_create_booking` ya le ha
+                # dicho lo que pasa y le ha ofrecido horas reales de ese mismo dia;
+                # encima de eso, el menu la manda a empezar de cero y borra la
+                # conversacion de la cabeza. Visto en una tirada: "ese hueco se
+                # acaba de ocupar, tengo 10:15, 11:00, 11:15" e inmediatamente
+                # despues "elige una opcion del menu". La clienta se fue.
+                #
+                # El flujo queda suelto, asi que lo siguiente que escriba lo coge
+                # el agente con el hilo puesto.
+                pass
             return
         if iid == "confirm_no" or text_norm in ("no", "cancelar", "cancela"):
             _wa_clear_flow(cliente_id, from_number)

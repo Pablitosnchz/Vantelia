@@ -193,3 +193,52 @@ def test_se_escriba_como_se_escriba_es_la_misma_familia(salon, dicho, esperado):
     from backend import catalog_pick
 
     assert esperado in catalog_pick.familias_pedidas(salon, dicho)
+
+
+def test_el_dia_y_la_hora_tambien_son_los_ultimos_dichos(api_module):  # noqa: F811
+    """Conversacion real: pidio "el martes 2 a las 11:15" TRES veces y el resumen
+    decia "martes 1 de septiembre, 10:00" -el primer dia que se habia consultado-.
+    Al confirmar, ese hueco ya estaba cogido y la conversacion se fue al garete.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    estado.fecha = "2026-09-01"      # el primer dia que se miro
+    estado.hora = "10:00"
+    reserva.anotar_resultado(
+        estado, "crear_cita",
+        {"servicio": "Mechas o balayage medio", "fecha": "2026-09-02",
+         "hora": "11:15", "nombre": "Laura"},
+        {"ok": False, "pendiente_de_confirmacion": True},
+    )
+    assert estado.fecha == "2026-09-02", "el resumen le ensenyaria otro dia"
+    assert estado.hora == "11:15"
+
+
+def test_si_la_llamada_no_trae_dia_se_conserva_el_que_habia(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado()
+    estado.fecha = "2026-09-01"
+    estado.hora = "10:00"
+    reserva.anotar_resultado(
+        estado, "crear_cita", {"servicio": "Corte senora", "nombre": "Laura"},
+        {"ok": False, "pendiente_de_confirmacion": True},
+    )
+    assert estado.fecha == "2026-09-01" and estado.hora == "10:00"
+
+
+def test_el_hueco_ocupado_no_acaba_en_el_menu_principal(api_module):  # noqa: F811
+    """"Ese hueco se acaba de ocupar, tengo 10:15, 11:00, 11:15" e inmediatamente
+    despues el menu principal. Es mandarla a empezar de cero justo cuando se le
+    acaban de dar alternativas buenas."""
+    import inspect
+
+    from backend import whatsapp
+
+    fuente = inspect.getsource(whatsapp._handle_whatsapp_message)
+    trozo = fuente[fuente.index("if iid == \"confirm_yes\""):]
+    trozo = trozo[:trozo.index("confirm_no")]
+    assert "_wa_send_main_menu" not in trozo, (
+        "vuelve a soltarle el menu despues de ofrecerle horas reales"
+    )

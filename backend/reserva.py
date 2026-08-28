@@ -324,6 +324,18 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             # para que se vuelva a resolver con el nuevo.
             estado.servicio_exacto = ""
             estado.duracion = 0
+        # El DIA y la HORA de la llamada mandan igual que el servicio, y por lo
+        # mismo: es lo que ella va a leer en el resumen y confirmar.
+        #
+        # Medido: la clienta pidio "el martes 2 a las 11:15" TRES veces y el resumen
+        # decia "martes 1 de septiembre, 10:00" -el primer dia que se habia
+        # consultado-. Al confirmar, ese hueco ya estaba ocupado y la conversacion
+        # se fue al garete. Rellenar solo los huecos hace que gane siempre lo
+        # primero que se miro, no lo ultimo que ella dijo.
+        for clave in ("fecha", "hora"):
+            valor = str(argumentos.get(clave) or "").strip()
+            if valor:
+                setattr(estado, clave, valor)
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if valor and not getattr(estado, clave, ""):
