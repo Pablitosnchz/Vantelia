@@ -18,7 +18,9 @@ param(
     # el entorno de pruebas del mismo VPS, aislado en contenedor, puerto, imagen
     # y directorio propio.
     [ValidateSet("produccion", "staging")]
-    [string]$Entorno = "produccion"
+    [string]$Entorno = "produccion",
+    # Muestra contra que entorno se desplegaria y sale sin hacer nada.
+    [switch]$MostrarEntorno
 )
 
 Set-StrictMode -Version Latest
@@ -167,22 +169,35 @@ $EntornoConfig = @{
 }
 $Actual = $EntornoConfig[$Entorno]
 
-# Los parametros explicitos del usuario mandan sobre el preset del entorno; si no
-# los da, el entorno decide. Asi `-RemoteProject` sigue funcionando como siempre.
-if (-not $PSBoundParameters.ContainsKey("RemoteProject") -and -not $DotEnvValues.ContainsKey("DEPLOY_REMOTE_PROJECT")) {
-    $RemoteProject = $Actual.Proyecto
-}
-if (-not $PSBoundParameters.ContainsKey("ArchiveName") -and -not $DotEnvValues.ContainsKey("DEPLOY_ARCHIVE_NAME")) {
-    $ArchiveName = $Actual.Archivo
-}
-if ($Entorno -ne "produccion") {
-    # Un preset de produccion heredado del .env apuntaria las pruebas al
-    # directorio real: se corta antes de tocar nada.
-    if ($RemoteProject -eq $EntornoConfig["produccion"].Proyecto) {
-        throw "El entorno de pruebas no puede desplegarse sobre $($RemoteProject): revisa DEPLOY_REMOTE_PROJECT en tu .env."
+# Quien manda sobre estos dos valores, y en que orden.
+#
+# En PRODUCCION, lo de siempre: si no se pasa el parametro, decide el .env, y si
+# tampoco esta ahi, el preset.
+#
+# En PRUEBAS es al reves con el .env, y a proposito: las variables DEPLOY_* del
+# .env describen PRODUCCION (`DEPLOY_REMOTE_PROJECT=/srv/vantelia`). Si se
+# dejaran ganar, `-Entorno staging` intentaria desplegar encima de produccion. Se
+# probo: el guardia de mas abajo lo cortaba, pero dejaba el entorno de pruebas
+# inservible para cualquiera que tenga ese .env, que es todo el mundo. Aqui solo
+# gana lo que se escriba EXPLICITAMENTE en la linea de comandos.
+if ($Entorno -eq "produccion") {
+    if (-not $PSBoundParameters.ContainsKey("RemoteProject") -and -not $DotEnvValues.ContainsKey("DEPLOY_REMOTE_PROJECT")) {
+        $RemoteProject = $Actual.Proyecto
     }
-    if ($ArchiveName -eq $EntornoConfig["produccion"].Archivo) {
+    if (-not $PSBoundParameters.ContainsKey("ArchiveName") -and -not $DotEnvValues.ContainsKey("DEPLOY_ARCHIVE_NAME")) {
         $ArchiveName = $Actual.Archivo
+    }
+} else {
+    if (-not $PSBoundParameters.ContainsKey("RemoteProject")) {
+        $RemoteProject = $Actual.Proyecto
+    }
+    if (-not $PSBoundParameters.ContainsKey("ArchiveName")) {
+        $ArchiveName = $Actual.Archivo
+    }
+    # Ultimo cortafuegos: pase lo que pase, pruebas no se despliega sobre el
+    # arbol de produccion.
+    if ($RemoteProject -eq $EntornoConfig["produccion"].Proyecto) {
+        throw "El entorno de pruebas no puede desplegarse sobre $RemoteProject."
     }
 }
 $UrlPublica = $Actual.UrlPublica
@@ -191,6 +206,22 @@ if ($DotEnvValues.ContainsKey("DEPLOY_STAGING_PUBLIC_URL") -and $Entorno -eq "st
 }
 
 $ArchivePath = Join-Path ([System.IO.Path]::GetTempPath()) $ArchiveName
+
+# Enseña contra que se va a desplegar y termina, sin tocar nada. Existe para
+# poder comprobar la resolucion del entorno -que es donde estuvo el fallo- sin
+# necesidad de un VPS delante.
+if ($MostrarEntorno) {
+    Write-Output "Entorno=$Entorno"
+    Write-Output "Proyecto=$RemoteProject"
+    Write-Output "Archivo=$ArchiveName"
+    Write-Output "Compose=$($Actual.Compose)"
+    Write-Output "Imagen=$($Actual.Imagen)"
+    Write-Output "Contenedor=$($Actual.Contenedor)"
+    Write-Output "Puerto=$($Actual.Puerto)"
+    Write-Output "Backups=$($Actual.Backups)"
+    Write-Output "UrlPublica=$UrlPublica"
+    exit 0
+}
 $scpArgsBase = @()
 $sshArgsBase = @()
 if ($SshKeyPath) {

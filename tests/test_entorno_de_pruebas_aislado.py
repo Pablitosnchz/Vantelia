@@ -267,3 +267,64 @@ def test_el_compose_de_pruebas_existe_y_esta_aislado():
     # El puerto de fuera es otro; el de dentro sigue siendo 8000 porque la imagen
     # es la MISMA que en produccion (no hay un codigo "de pruebas" distinto).
     assert '"8001:8000"' in contenido
+
+
+# ─── La resolucion del entorno, ejecutando el script de verdad ────────────
+
+def _powershell():
+    for nombre in ("powershell", "pwsh"):
+        ruta = shutil.which(nombre)
+        if ruta:
+            return ruta
+    pytest.skip("PowerShell no disponible en este entorno")
+
+
+def _resolver(*argumentos):
+    """Lo que deploy.ps1 decide antes de tocar nada, preguntandoselo a el."""
+    resultado = subprocess.run(
+        [_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", DEPLOY_PS1, "-MostrarEntorno"] + list(argumentos),
+        capture_output=True, text=True, cwd=RAIZ,
+    )
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    valores = {}
+    for linea in resultado.stdout.splitlines():
+        if "=" in linea:
+            clave, valor = linea.split("=", 1)
+            valores[clave.strip()] = valor.strip()
+    return valores
+
+
+def test_produccion_se_resuelve_como_siempre():
+    produccion = _resolver()
+
+    assert produccion["Entorno"] == "produccion"
+    assert produccion["Proyecto"] == "/srv/vantelia"
+    assert produccion["Contenedor"] == "vantelia-app"
+    assert produccion["Puerto"] == "8000"
+
+
+def test_el_env_de_produccion_no_arrastra_al_entorno_de_pruebas():
+    """El fallo que tuvo esto y por poco se entrega.
+
+    Las variables DEPLOY_* del .env describen PRODUCCION
+    (`DEPLOY_REMOTE_PROJECT=/srv/vantelia`). En la primera version ganaban
+    tambien en pruebas, asi que `-Entorno staging` acababa apuntando al arbol de
+    produccion: el cortafuegos lo paraba, pero dejaba el entorno de pruebas
+    inservible para cualquiera con ese .env, que es todo el mundo.
+    """
+    pruebas = _resolver("-Entorno", "staging")
+
+    assert pruebas["Proyecto"] == "/srv/vantelia-staging"
+    assert pruebas["Archivo"] == "vantelia-staging-deploy.tar.gz"
+    assert pruebas["Contenedor"] == "vantelia-staging"
+    assert pruebas["Imagen"] == "vantelia-staging"
+    assert pruebas["Puerto"] == "8001"
+
+
+def test_los_dos_entornos_resueltos_no_coinciden_en_nada():
+    produccion, pruebas = _resolver(), _resolver("-Entorno", "staging")
+
+    for clave in ("Proyecto", "Archivo", "Compose", "Imagen", "Contenedor",
+                  "Puerto", "Backups"):
+        assert produccion[clave] != pruebas[clave], clave
