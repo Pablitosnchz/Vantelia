@@ -895,6 +895,52 @@ def _pregunta_por_otra_cosa(cliente_id: str, servicio: str, mensaje: str) -> boo
     return all(not (set(catalog_pick._raices(f)) & cubre) for f in familias)
 
 
+def _duracion_de_lo_que_ha_nombrado(cliente_id: str, mensaje: str,
+                                    location_id: str = "") -> str:
+    """La duracion de la familia que acaba de nombrar, con cifras del catalogo.
+
+    Vacio si no ha nombrado nada reconocible. Si esa familia tiene versiones de
+    distinta duracion se dice el abanico y se pregunta lo que falta -con la
+    pregunta del catalogo, la misma que usa la reserva-.
+    """
+    familias = catalog_pick.familias_pedidas(cliente_id, mensaje)
+    if len(familias) != 1:
+        return ""
+    talla = catalog_pick.talla_de(mensaje)
+    datos = {"familia": familias[0], "texto": mensaje}
+    if talla:
+        datos["talla"] = talla
+    quien = _para_quien_dice(mensaje)
+    if quien:
+        datos["para_quien"] = quien
+    eleccion = catalog_pick.elegir(cliente_id, datos, location_id)
+
+    if getattr(eleccion, "servicio", ""):
+        minutos = _duracion_del_catalogo(cliente_id, eleccion.servicio)
+        if not minutos:
+            return ""
+        return ("TE HA PREGUNTADO CUANTO DURA. Son EXACTAMENTE %d minutos, que es lo "
+                "que el catalogo dice de '%s' y lo que la agenda le va a apartar. "
+                "Dile ese numero y NO la mandes a una valoracion para saberlo."
+                % (minutos, textnorm.nombre_de_servicio_publico(eleccion.servicio)))
+
+    minutos = sorted({_duracion_del_catalogo(cliente_id, n)
+                      for n in (getattr(eleccion, "candidatos", None) or [])} - {0})
+    if not minutos:
+        return ""
+    pregunta = (catalog_pick.pregunta_para(eleccion)
+                or catalog_pick.sobre_que_preguntar(eleccion) or "")
+    if minutos[0] == minutos[-1]:
+        return ("TE HA PREGUNTADO CUANTO DURA. Son EXACTAMENTE %d minutos segun el "
+                "catalogo. Dile ese numero." % minutos[0])
+    return (
+        "TE HA PREGUNTADO CUANTO DURA. Segun el catalogo va de %d a %d minutos, y lo "
+        "que lo cambia es %s Dile ese abanico -esos dos numeros, no otros- y "
+        "preguntaselo. NUNCA digas que no tienes el dato: lo tienes aqui."
+        % (minutos[0], minutos[-1], pregunta or "lo que le falta por concretar.")
+    )
+
+
 def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
                              pedido: str = "", location_id: str = "") -> str:
     """Cuando pregunta cuanto tarda, la cifra sale del catalogo o no sale.
@@ -952,6 +998,15 @@ def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
     if servicio and _pregunta_por_otra_cosa(cliente_id, servicio, mensaje):
         servicio = ""
     if not servicio:
+        # Antes de mandarle a mirar, se mira aqui: si lo que ha nombrado esta en el
+        # catalogo, la cifra va en la guia y el modelo no tiene que ir a buscarla.
+        # Paso de verdad: la tool devolvio "de 160 a 280 minutos segun el largo" y
+        # el asistente contesto "no tengo informacion sobre la duracion de la
+        # queratina", dos mensajes despues de haber dicho 220. Un dato correcto que
+        # el modelo se salta es un dato perdido.
+        del_catalogo = _duracion_de_lo_que_ha_nombrado(cliente_id, mensaje, location_id)
+        if del_catalogo:
+            return _recordar(del_catalogo)
         return _recordar(
             "TE HA PREGUNTADO CUANTO DURA y todavia no hay un servicio elegido. "
             "Usa `buscar_servicio` con lo que ha dicho ANTES de contestar: la "

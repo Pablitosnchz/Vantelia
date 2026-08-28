@@ -260,3 +260,44 @@ def test_lo_pedido_junto_se_sigue_sumando(salon):
     dicho = "quiero un corte de senora y un secado, lo tengo largo, cuanto tarda?"
     guia = agent._duracion_si_la_pregunta(salon, dicho, reserva.Estado(), pedido=dicho)
     assert "EXACTAMENTE 35 minutos" in guia, guia
+
+
+def test_la_cifra_va_en_la_guia_y_no_se_deja_al_modelo(salon):
+    """Un dato correcto que el modelo se salta es un dato perdido.
+
+    Paso de verdad: `buscar_servicio` devolvio "de 160 a 280 minutos segun el
+    largo" y el asistente contesto "no tengo informacion sobre la duracion de la
+    queratina" -dos mensajes despues de haber dicho 220-. La herramienta acerto y
+    la respuesta salio mal igual.
+
+    Asi que cuando lo que nombra esta en el catalogo, la cifra va escrita en la
+    guia y el modelo no tiene que ir a buscarla.
+    """
+    from backend import agent, reserva
+
+    # En este catalogo el secado va de 10 a 15 minutos segun el largo: el mismo
+    # caso que la keratina del salon real, que va de 160 a 280.
+    guia = agent._duracion_si_la_pregunta(
+        salon, "quiero un secado, que tarda?", reserva.Estado(),
+        pedido="quiero un secado, que tarda?")
+    assert "10" in guia and "15" in guia, guia
+    assert "NUNCA digas que no tienes el dato" in guia
+
+
+def test_un_solo_servicio_da_la_cifra_exacta(salon):
+    from backend import agent, reserva
+
+    guia = agent._duracion_si_la_pregunta(
+        salon, "cuanto tarda un corte de senora?", reserva.Estado(),
+        pedido="cuanto tarda un corte de senora?")
+    assert "EXACTAMENTE 20 minutos" in guia, guia
+
+
+def test_lo_que_no_existe_se_manda_a_mirar_el_catalogo(salon):
+    """Sin inventarse un abanico para algo que el negocio no hace."""
+    from backend import agent, reserva
+
+    guia = agent._duracion_si_la_pregunta(
+        salon, "cuanto tarda un chiringuito?", reserva.Estado(),
+        pedido="cuanto tarda un chiringuito?")
+    assert "buscar_servicio" in guia

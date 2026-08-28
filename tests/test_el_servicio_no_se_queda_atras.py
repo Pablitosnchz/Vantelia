@@ -164,7 +164,11 @@ def test_no_le_da_la_duracion_del_servicio_viejo(salon):
     guia = agent._duracion_si_la_pregunta(
         salon, "Quiero una queratina que tarda", _Estado("Corte senora"))
     assert "20 minutos" not in guia, guia
-    assert "buscar_servicio" in guia, "tiene que ir a mirarlo al catalogo"
+    # Y ademas le da la cifra de LA QUERATINA, sacada del catalogo. Antes se le
+    # mandaba a mirarlo con `buscar_servicio` y ahi se perdia: la herramienta
+    # devolvia el dato correcto y el asistente contestaba "no tengo informacion
+    # sobre la duracion de la queratina".
+    assert "225 minutos" in guia, guia
 
 
 def test_si_pregunta_por_lo_que_ya_tiene_elegido_si_contesta(salon):
