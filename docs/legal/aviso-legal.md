@@ -11,7 +11,8 @@ Informacion general exigida por el articulo 10 de la Ley 34/2002, de servicios d
 - **Titular:** Pablo Sanchez Sanchez
 - **NIF:** 02751906W
 - **Nombre comercial:** Vantelia
-- **Domicilio:** Calle Garabay 7, planta 2, puerta C, 28850 Torrejon de Ardoz (Madrid), Espana
+- **Domicilio:** Calle Garabay S/N, portal 7, planta 2, puerta C, 28850 Torrejon de Ardoz (Madrid), Espana
+- **Telefono:** +34 675 802 001
 - **Email de contacto:** info@vantelia.es
 - **Actividad:** desarrollo y explotacion de software como servicio (SaaS) de asistentes conversacionales con inteligencia artificial. Epigrafe IAE 845 (explotacion electronica por cuenta de terceros), CNAE 6310.
 
@@ -28,7 +29,7 @@ Este aviso legal se aplica a los sitios `https://www.vantelia.es` (web comercial
 
 ## 4. Propiedad intelectual e industrial
 
-- El codigo, el disenyo, los textos, las marcas y los demas contenidos de la web y de la plataforma son titularidad de Pablo Sanchez Sanchez o de terceros que han autorizado su uso.
+- El codigo, el diseno, los textos, las marcas y los demas contenidos de la web y de la plataforma son titularidad de Pablo Sanchez Sanchez o de terceros que han autorizado su uso.
 - Queda prohibida su reproduccion, distribucion, comunicacion publica o transformacion sin autorizacion expresa y por escrito del titular, salvo los usos permitidos por la ley.
 - Los contenidos que cada cliente incorpora a su propio asistente (catalogo, textos, documentos) siguen siendo suyos. Vantelia solo los trata para prestar el servicio, en los terminos del [DPA](/legal/privacidad).
 
@@ -44,4 +45,4 @@ El tratamiento de datos personales se describe en la [politica de privacidad](/l
 
 ## 7. Legislacion aplicable
 
-Este aviso legal se rige por la legislacion espanyola. Para cualquier controversia, y salvo que la normativa de consumo disponga otro fuero, las partes se someten a los juzgados y tribunales del domicilio del titular.
+Este aviso legal se rige por la legislacion espanola. Para cualquier controversia, y salvo que la normativa de consumo disponga otro fuero, las partes se someten a los juzgados y tribunales del domicilio del titular.

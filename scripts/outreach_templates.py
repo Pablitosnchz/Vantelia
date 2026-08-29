@@ -360,7 +360,7 @@ VANTELIA_SIGNATURE = {
     "email": "info@vantelia.es",
     "website": "https://vantelia.es",
     "website_label": "vantelia.es",
-    "address": "Calle Garabay 7, Torrejon de Ardoz, 28850 Madrid",
+    "address": "Calle Garabay S/N, portal 7, 28850 Torrejon de Ardoz (Madrid)",
     "logo_url": os.getenv(
         "VANTELIA_EMAIL_LOGO_URL",
         "https://app.vantelia.es/brand-assets/Logo_Letra.png",
