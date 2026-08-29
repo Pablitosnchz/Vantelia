@@ -25,6 +25,8 @@ import tarfile
 
 import pytest
 
+from utiles_bash import ejecutar, ruta_posix as _ruta_posix
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEPLOY_PS1 = os.path.join(RAIZ, "deploy", "deploy.ps1")
 
@@ -45,91 +47,6 @@ exit 0
 SQLITE_STUB = """#!/bin/bash
 exit 0
 """
-
-
-_BASH_ELEGIDO = []  # cache: [] sin resolver, [None] no hay, [ruta] el bueno
-
-
-def _carpetas_donde_buscar_bash():
-    """El PATH y, en Windows, donde vive Git Bash aunque no este en el PATH.
-
-    El PATH de PowerShell no suele llevar Git Bash; el de Git Bash si. Buscar
-    solo en el PATH hacia que este test se saltara justo desde donde corre el
-    deploy, que es cuando mas falta hace.
-    """
-    for carpeta in os.environ.get("PATH", "").split(os.pathsep):
-        if carpeta:
-            yield carpeta
-    if os.name != "nt":
-        return
-    git = shutil.which("git")
-    if git:
-        # C:/.../Git/mingw64/bin/git.exe -> C:/.../Git/{bin,usr/bin}
-        raiz_git = os.path.dirname(os.path.dirname(os.path.dirname(git)))
-        # usr/bin ANTES que bin: Git/bin/bash.exe es un lanzador que se queda
-        # con la salida abierta, asi que subprocess espera para siempre a un
-        # proceso que ya termino. Git/usr/bin/bash.exe es el bash de verdad.
-        yield os.path.join(raiz_git, "usr", "bin")
-        yield os.path.join(raiz_git, "bin")
-    for archivos in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
-        base = os.environ.get(archivos)
-        if not base:
-            continue
-        for git in ("Git", os.path.join("Programs", "Git")):
-            yield os.path.join(base, git, "usr", "bin")
-            yield os.path.join(base, git, "bin")
-
-
-def _candidatos_bash():
-    """Todos los bash visibles, no solo el primero del PATH."""
-    vistos = set()
-    nombres = ("bash.exe", "bash") if os.name == "nt" else ("bash",)
-    for carpeta in _carpetas_donde_buscar_bash():
-        for nombre in nombres:
-            ruta = os.path.normpath(os.path.join(carpeta, nombre))
-            clave = ruta.lower() if os.name == "nt" else ruta
-            if clave not in vistos and os.path.isfile(ruta):
-                vistos.add(clave)
-                yield ruta
-
-
-def _bash() -> str:
-    """Un bash que entienda las rutas /c/... que este test le pasa.
-
-    En Windows con WSL instalado, shutil.which("bash") devuelve el bash de WSL
-    (C:/Windows/system32/bash.exe), que monta el disco en /mnt/c y NO ve
-    /c/Users/...: el guion "no existia" (codigo 127) y el test fallaba por un
-    detalle del PATH, no por nada real. Y como el PATH de PowerShell no es el de
-    Git Bash, pasaba suelto y tumbaba el deploy. Por eso no se coge el primero:
-    se prueba cada uno contra una ruta que existe de verdad.
-    """
-    if not _BASH_ELEGIDO:
-        prueba = _ruta_posix(RAIZ)
-        elegido = None
-        for candidato in _candidatos_bash():
-            try:
-                resultado = subprocess.run(
-                    [candidato, "-c", 'test -d "$1"', "_", prueba],
-                    capture_output=True,
-                    timeout=30,
-                )
-            except (OSError, subprocess.SubprocessError):
-                continue
-            if resultado.returncode == 0:
-                elegido = candidato
-                break
-        _BASH_ELEGIDO.append(elegido)
-    if _BASH_ELEGIDO[0] is None:
-        pytest.skip("no hay un bash que entienda las rutas de este entorno")
-    return _BASH_ELEGIDO[0]
-
-
-def _ruta_posix(ruta: str) -> str:
-    """Convierte una ruta de Windows a la forma que entiende bash."""
-    ruta = ruta.replace("\\", "/")
-    if len(ruta) > 1 and ruta[1] == ":":
-        return "/" + ruta[0].lower() + ruta[2:]
-    return ruta
 
 
 def _script_remoto() -> str:
@@ -183,62 +100,20 @@ def _montar(tmp_path, env_pruebas, env_produccion="WHATSAPP_ACCESS_TOKEN=TOKEN_R
     return base, stubs, guion
 
 
-def _herramientas_del_bash(bash):
-    """Las carpetas con sleep, tar, cp... del bash elegido.
-
-    El guion remoto usa coreutils. Lanzado desde Git Bash vienen en el PATH
-    heredado; lanzado desde PowerShell no, y un `sleep` que no existe dentro de
-    un `while` convierte una espera en un bucle infinito: el test se colgaba en
-    vez de fallar. Se anaden explicitamente.
-    """
-    carpeta = os.path.dirname(bash)
-    raiz = os.path.dirname(carpeta)
-    candidatas = [carpeta, os.path.join(raiz, "usr", "bin"), os.path.join(raiz, "bin")]
-    if os.path.basename(raiz).lower() == "usr":
-        candidatas.append(os.path.join(os.path.dirname(raiz), "bin"))
-    vistas, salida = set(), []
-    for c in candidatas:
-        c = os.path.normpath(c)
-        clave = c.lower() if os.name == "nt" else c
-        if clave not in vistas and os.path.isdir(c):
-            vistas.add(clave)
-            salida.append(c)
-    return salida
-
-
 def _desplegar_pruebas(base, stubs, guion):
-    entorno = dict(os.environ)
-    bash = _bash()
-    # PATH minimo y a proposito: los stubs y las herramientas del propio bash.
-    # NO se hereda el PATH de quien lanza los tests. Heredarlo hacia que el
-    # guion encontrara binarios de Windows (Docker Desktop, curl.exe de
-    # System32...) y el resultado dependia de la maquina: pasaba lanzado desde
-    # Git Bash y se colgaba lanzado desde PowerShell, que es como corre el
-    # deploy. En el VPS el PATH tampoco es el de un escritorio.
-    partes = [stubs] + _herramientas_del_bash(bash)
-    if os.name != "nt":
-        partes += ["/usr/bin", "/bin"]
-    entorno["PATH"] = os.pathsep.join(p for p in partes if p)
-    entorno["DOCKER_LOG"] = _ruta_posix(os.path.join(base, "docker.log"))
-    argumentos = [
-        bash, _ruta_posix(guion),
-        _ruta_posix(os.path.join(base, "srv")),                    # REMOTE_BASE
-        _ruta_posix(os.path.join(base, "srv", "vantelia-staging")),  # REMOTE_PROJECT
-        "vantelia-staging-deploy.tar.gz",
-        "deploy/hostinger/docker-compose.staging.yml",
-        "vantelia-staging", "vantelia-staging", "8001", "staging",
-        _ruta_posix(os.path.join(base, "backups")),
-        _ruta_posix(os.path.join(base, "srv", "vantelia", ".env")),
-    ]
-    # Sin stdin y con plazo: el guion corre solo en el VPS, y si alguna vez se
-    # queda esperando algo tiene que fallar el test, no colgarlo.
-    return subprocess.run(
-        argumentos,
-        capture_output=True,
-        text=True,
-        env=entorno,
-        stdin=subprocess.DEVNULL,
-        timeout=120,
+    return ejecutar(
+        [
+            _ruta_posix(guion),
+            _ruta_posix(os.path.join(base, "srv")),                       # REMOTE_BASE
+            _ruta_posix(os.path.join(base, "srv", "vantelia-staging")),   # REMOTE_PROJECT
+            "vantelia-staging-deploy.tar.gz",
+            "deploy/hostinger/docker-compose.staging.yml",
+            "vantelia-staging", "vantelia-staging", "8001", "staging",
+            _ruta_posix(os.path.join(base, "backups")),
+            _ruta_posix(os.path.join(base, "srv", "vantelia", ".env")),
+        ],
+        stubs,
+        DOCKER_LOG=_ruta_posix(os.path.join(base, "docker.log")),
     )
 
 

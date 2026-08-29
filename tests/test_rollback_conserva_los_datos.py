@@ -20,9 +20,8 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 
-import pytest
+from utiles_bash import ejecutar, ruta_posix as _ruta_posix
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROLLBACK_SH = os.path.join(RAIZ, "deploy", "hostinger", "rollback.sh")
@@ -40,22 +39,6 @@ exit 0
 """
 
 
-def _bash() -> str:
-    ruta = shutil.which("bash")
-    if not ruta:
-        pytest.skip("bash no disponible en este entorno")
-    return ruta
-
-
-def _ruta_posix(ruta: str) -> str:
-    """Convierte una ruta de Windows a la forma que entiende bash.
-
-    En el VPS las rutas ya son POSIX; esto solo existe para que el test corra
-    igual en Windows, donde bash se comeria las barras invertidas como escapes.
-    """
-    if len(ruta) > 1 and ruta[1] == ":":
-        return "/" + ruta[0].lower() + ruta[2:].replace("\\", "/")
-    return ruta.replace("\\", "/")
 
 
 def _escribir(ruta: str, contenido: str) -> None:
@@ -96,14 +79,7 @@ def _preparar(tmp_path, con_prev: bool = True):
 
 
 def _ejecutar(copia, proyecto, stubs):
-    entorno = dict(os.environ)
-    entorno["PATH"] = stubs + os.pathsep + entorno.get("PATH", "")
-    return subprocess.run(
-        [_bash(), _ruta_posix(copia), _ruta_posix(proyecto)],
-        capture_output=True,
-        text=True,
-        env=entorno,
-    )
+    return ejecutar([_ruta_posix(copia), _ruta_posix(proyecto)], stubs)
 
 
 def _leer(*partes):
@@ -167,13 +143,11 @@ def test_el_rollback_de_pruebas_no_toca_la_imagen_de_produccion(tmp_path):
         )
     os.chmod(os.path.join(stubs, "docker"), 0o755)
 
-    entorno = dict(os.environ)
-    entorno["PATH"] = stubs + os.pathsep + entorno.get("PATH", "")
-    resultado = subprocess.run(
-        [_bash(), _ruta_posix(copia), _ruta_posix(proyecto),
+    resultado = ejecutar(
+        [_ruta_posix(copia), _ruta_posix(proyecto),
          "deploy/hostinger/docker-compose.staging.yml", "vantelia-staging",
          "vantelia-staging", "8001"],
-        capture_output=True, text=True, env=entorno,
+        stubs,
     )
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
