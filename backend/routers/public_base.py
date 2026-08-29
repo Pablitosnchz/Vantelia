@@ -34,6 +34,11 @@ async def favicon() -> FileResponse:
 
 
 LEGAL_DOCUMENTS = {
+    # El aviso legal va PRIMERO: es el que exige el articulo 10 de la LSSI y el
+    # que busca quien viene a comprobar quien esta detras del negocio -incluida la
+    # verificacion de empresa de Meta, que rechazo la solicitud sin poder cotejar
+    # el titular con ninguna fuente publica-.
+    "aviso-legal": "Aviso legal",
     "privacidad": "Politica de privacidad",
     "terminos": "Terminos de uso",
     "cookies": "Politica de cookies",

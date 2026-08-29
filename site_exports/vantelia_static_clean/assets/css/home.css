@@ -1189,6 +1189,12 @@
 .footer-grid { grid-template-columns: 1.6fr repeat(4, 1fr); }
 .footer-bottom { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .footer-locale { font-size: .82rem; color: var(--muted-2); margin: 0; }
+/* Identidad del titular: la exige la LSSI y es lo que mira quien viene a
+   comprobar quien esta detras del negocio. Va en el pie de TODAS las
+   paginas, no escondida dentro de la politica de privacidad. */
+.footer-legal-id { flex-basis: 100%; font-size: .78rem; line-height: 1.6;
+  color: var(--muted-2); margin: 6px 0 0; }
+.footer-legal-id a { color: inherit; text-decoration: underline; }
 @media (max-width: 1024px) { .footer-grid { grid-template-columns: 1fr 1fr 1fr; } .footer-brand { grid-column: span 3; } }
 @media (max-width: 640px)  { .footer-grid { grid-template-columns: 1fr 1fr; } .footer-brand { grid-column: span 2; } .footer-bottom { flex-direction: column; text-align: center; } }
 
