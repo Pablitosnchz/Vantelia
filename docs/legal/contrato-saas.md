@@ -12,7 +12,7 @@ Ultima actualizacion: 2 de mayo de 2026.
 
 **Prestador**:
 Pablo Sanchez Sanchez, que opera bajo el nombre comercial **Vantelia**. NIF 02751906W.
-Domicilio: Garabay S/N, Portal 7, Planta 2, Puerta 2C, 28850 Torrejon de Ardoz (Madrid), Espana.
+Domicilio: Calle Garabay S/N, Portal 7, Planta 2, Puerta C, 28850 Torrejon de Ardoz (Madrid), Espana.
 Email: contacto@vantelia.es
 Web: https://vantelia.es
 

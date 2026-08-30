@@ -36,6 +36,11 @@ python -m pytest -k senal             # por nombre
 Existen para que no se repita un error concreto. Si uno falla, lee su docstring
 antes de "arreglarlo": suele estar diciendo algo cierto.
 
+- `test_los_tests_no_mandan_emails.py` — la suite no habla con el buzón real.
+  Pasó de verdad (ago-2026): `pytest` cargaba el `.env` de producción y las
+  confirmaciones de cita salían por `smtp.hostinger.com` a `@test.es` y
+  `@example.com`; los rebotes duros suspendían el envío de `info@vantelia.es`.
+  El cortafuegos está en `conftest.py` (se aplica al importarlo).
 - `test_patrones_sin_tilde.py` — el texto al cliente lleva tildes; los patrones
   que casan lo que el cliente ESCRIBE, no (se comparan ya normalizados). También
   vigila que no reaparezca texto con doble codificación UTF-8.
@@ -100,6 +105,13 @@ importar el compartido** en vez de duplicar el bloque de entorno:
 ```python
 from test_booking_exhaustive import api_module, client  # noqa: F401
 ```
+
+`conftest.py` además **corta la salida al mundo real al importarse**: vacía las
+credenciales de envío del entorno (SMTP, IMAP, Twilio, WhatsApp, OpenAI; Stripe
+solo si es `sk_live_`) y bloquea `smtplib`/`imaplib`. Se pone `""` en vez de
+borrar la clave porque `load_dotenv` solo rellena lo ausente. Un test que
+necesite credenciales de mentira las pone en su `env_overrides` y hace
+monkeypatch del envío.
 
 Ojo: local corre **Python 3.8** (sin walrus en tests async, sin `dict | dict`);
 el contenedor de producción es 3.11.

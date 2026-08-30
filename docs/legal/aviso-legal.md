@@ -11,7 +11,7 @@ Informacion general exigida por el articulo 10 de la Ley 34/2002, de servicios d
 - **Titular:** Pablo Sanchez Sanchez
 - **NIF:** 02751906W
 - **Nombre comercial:** Vantelia
-- **Domicilio:** Garabay S/N, Portal 7, Planta 2, Puerta 2C, 28850 Torrejon de Ardoz (Madrid), Espana
+- **Domicilio:** Calle Garabay S/N, Portal 7, Planta 2, Puerta C, 28850 Torrejon de Ardoz (Madrid), Espana
 - **Telefono:** +34 675 802 001
 - **Email de contacto:** info@vantelia.es
 - **Actividad:** desarrollo y explotacion de software como servicio (SaaS) de asistentes conversacionales con inteligencia artificial. Epigrafe IAE 845 (explotacion electronica por cuenta de terceros), CNAE 6310.

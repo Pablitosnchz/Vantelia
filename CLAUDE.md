@@ -494,7 +494,7 @@ Cobro de citas: además del botón "💳 Cobrar" del detalle de cita (genera enl
 
 Canales de envio multi-tenant: pestaña `Canales de envio`, endpoints `/auth/app/channels*` y tablas `client_channel_settings`, `client_oauth_connections`, `client_channel_oauth_states`, `client_channel_audit`. `_send_client_email` selecciona Gmail OAuth o SMTP Vantelia; `_send_client_sms` selecciona el remitente Twilio provisionado o el global. Gmail usa exclusivamente `openid email gmail.send`, PKCE, state firmado/de un solo uso y tokens Fernet cifrados con `OAUTH_TOKEN_ENCRYPTION_KEY`. Nunca guardes ni registres tokens en claro. Un Sender ID/número dedicado no puede enviar hasta tener `sms_sender_status='active'`.
 
-No enviar emails reales en pruebas. Usa entornos o credenciales dummy.
+No enviar emails reales en pruebas. `tests/conftest.py` lo garantiza al importarse: vacia en el entorno las credenciales de salida (SMTP, IMAP, Twilio, WhatsApp, OpenAI; Stripe solo si es `sk_live_`) y bloquea `smtplib`/`imaplib`. Motivo (ago-2026): pytest cargaba el `.env` real (`settings.py` hace `load_dotenv` sin override) y un solo fichero de tests abria 22 conexiones a `smtp.hostinger.com` mandando confirmaciones de cita de VERDAD a `@test.es`/`@example.com`; los cientos de rebotes duros hacian que Hostinger suspendiera el envio del buzon `info@vantelia.es` hasta el limite diario. Lo vigila `tests/test_los_tests_no_mandan_emails.py`.
 
 ## WhatsApp
 
