@@ -306,7 +306,25 @@ if (-not $SkipLocalChecks) {
     }
     Write-Host "Sincronizando dependencias de requirements.txt..."
     Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", "requirements.txt") -WorkingDirectory $ProjectRoot
-    Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "pytest") -WorkingDirectory $ProjectRoot
+    # La salida de los tests se guarda en un fichero. Sin esto, cuando el deploy
+    # se para aqui solo se ve "el comando fallo con codigo 1" y hay que volver a
+    # correr la suite entera a mano para saber que test cayo (paso dos veces el
+    # 31-ago-2026, media hora cada vez).
+    $pytestLog = Join-Path $env:TEMP "vantelia-pytest-deploy.log"
+    Push-Location $ProjectRoot
+    try {
+        & $PythonCommand -m pytest 2>&1 | Tee-Object -FilePath $pytestLog
+        $pytestExit = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+    if ($pytestExit -ne 0) {
+        Write-Host ""
+        Write-Host "Los tests han fallado. Ultimas lineas de $pytestLog :"
+        Get-Content -LiteralPath $pytestLog -Tail 40
+        throw "Los tests locales fallaron (codigo $pytestExit). Log completo en $pytestLog"
+    }
     Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "py_compile", "api.py", "auto_onboarding.py", "onboarding_utils.py") -WorkingDirectory $ProjectRoot
 }
 
