@@ -2125,6 +2125,7 @@ def _pagina_alta_whatsapp(titulo: str, mensaje: str, *, ok: bool) -> HTMLRespons
 @app.get("/whatsapp/signup/callback", include_in_schema=False)
 async def whatsapp_signup_callback(
     code: str = "",
+    state: str = "",
     error: str = "",
     error_description: str = "",
     portal_session: Optional[str] = Cookie(default=None, alias=settings.PORTAL_COOKIE_NAME),
@@ -2132,9 +2133,14 @@ async def whatsapp_signup_callback(
     """Vuelta del registro insertado ALOJADO POR META.
 
     El flujo del navegador devuelve el `code` por JavaScript; el alojado por Meta
-    lo devuelve navegando aqui. El negocio llega con su sesion del portal puesta
-    (la cookie es SameSite=lax, asi que viaja en una navegacion de primer nivel),
-    y de ahi sale el tenant: la URL no lo trae y no se puede deducir del `code`.
+    lo devuelve navegando aqui. La URL no dice a que tenant conectar el numero y
+    del `code` no se puede deducir, asi que hay dos formas de saberlo, en este
+    orden:
+
+    1. El `state` FIRMADO que metimos en el enlace (`hosted_signup_url`). Es el
+       que manda, porque funciona aunque el negocio abra el enlace desde el movil
+       o desde el correo, sin haber entrado nunca en el panel.
+    2. Su sesion del portal, si lanzo el alta desde ahi.
 
     Un `code` caduca en minutos, asi que un fallo aqui se explica en pantalla en
     vez de dejar al negocio en una pagina en blanco sin saber que ha pasado.
@@ -2155,17 +2161,22 @@ async def whatsapp_signup_callback(
             ok=False,
         )
 
-    user = security._get_authenticated_portal_user_or_none(portal_session)
-    if not user:
-        return _pagina_alta_whatsapp(
-            "Inicia sesion para terminar",
-            "Por seguridad necesitamos saber a que negocio conectar el numero. Entra en "
-            "tu panel y vuelve a lanzar la conexion desde la pestana WhatsApp.",
-            ok=False,
-        )
+    cliente_id = wa_onboarding.read_signup_state(state) if state else ""
+    if not cliente_id:
+        user = security._get_authenticated_portal_user_or_none(portal_session)
+        if not user:
+            return _pagina_alta_whatsapp(
+                "Inicia sesion para terminar",
+                "Por seguridad necesitamos saber a que negocio conectar el numero. Entra en "
+                "tu panel y vuelve a lanzar la conexion desde la pestana WhatsApp.",
+                ok=False,
+            )
+        try:
+            security._require_portal_min_role(user, "owner")
+            cliente_id = security._resolve_cliente_for_self_serve_user(user)
+        except HTTPException as exc:
+            return _pagina_alta_whatsapp("No se ha podido conectar", str(exc.detail), ok=False)
     try:
-        security._require_portal_min_role(user, "owner")
-        cliente_id = security._resolve_cliente_for_self_serve_user(user)
         cuenta = await _completar_alta_whatsapp(
             cliente_id, code=code, origen="hosted_signup"
         )

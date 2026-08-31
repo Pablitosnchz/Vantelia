@@ -258,3 +258,82 @@ def test_sin_codigo_no_se_queda_en_blanco(api_module, client):
 
     assert res.status_code == 400
     assert "Falta informacion" in res.text
+
+
+# --- El enlace que se le manda al negocio -----------------------------------
+#
+# Sacar el tenant de la sesion obligaba al negocio a haber entrado antes en el
+# panel EN EL MISMO NAVEGADOR. Abriendo el enlace desde el movil volvia sin
+# sesion y el `code` -que caduca en minutos- se perdia. Por eso va firmado.
+
+
+@pytest.fixture
+def _meta_configurado(api_module, monkeypatch):
+    from backend import settings
+
+    monkeypatch.setattr(settings, "WHATSAPP_APP_ID", "123", raising=False)
+    monkeypatch.setattr(settings, "WHATSAPP_APP_SECRET", "secreto-de-prueba", raising=False)
+    monkeypatch.setattr(settings, "WHATSAPP_ES_CONFIG_ID", "456", raising=False)
+    monkeypatch.setattr(settings, "APP_BASE_URL", "https://app.vantelia.es", raising=False)
+
+
+def test_el_estado_del_enlace_va_firmado_y_devuelve_el_tenant(api_module, _meta_configurado):
+    from backend import wa_onboarding
+
+    estado = wa_onboarding.make_signup_state("demo")
+
+    assert wa_onboarding.read_signup_state(estado) == "demo"
+    assert wa_onboarding.read_signup_state(estado[:-1] + "0") == ""   # firma tocada
+    assert wa_onboarding.read_signup_state("cualquier-cosa") == ""
+
+
+def test_el_enlace_lleva_coexistence_y_nuestro_callback(api_module, _meta_configurado):
+    from backend import wa_onboarding
+
+    url = wa_onboarding.hosted_signup_url("demo")
+
+    assert "whatsapp_business_app_onboarding" in url   # esto es lo que activa Coexistence
+    assert "app.vantelia.es%2Fwhatsapp%2Fsignup%2Fcallback" in url
+    assert "config_id=456" in url
+    assert "state=" in url
+
+
+def test_con_el_estado_firmado_no_hace_falta_sesion(api_module, client, monkeypatch, _meta_configurado):
+    """El caso real: abre el enlace desde el movil, sin haber entrado al panel."""
+    from backend import wa_onboarding
+
+    visto = {}
+
+    async def _falso_completar(cliente_id, **kwargs):
+        visto["cliente_id"] = cliente_id
+        return {"phone_number_id": "999", "display_phone_number": "+34 600 111 222"}
+
+    monkeypatch.setattr(wa_onboarding, "complete_signup", _falso_completar)
+
+    res = client.get(
+        "/whatsapp/signup/callback",
+        params={"code": "AQD-x", "state": wa_onboarding.make_signup_state("demo")},
+        follow_redirects=False,
+    )
+
+    assert res.status_code == 200
+    assert "WhatsApp conectado" in res.text
+    assert visto["cliente_id"] == "demo"
+
+
+def test_un_estado_falsificado_no_conecta_nada(api_module, client, monkeypatch, _meta_configurado):
+    from backend import wa_onboarding
+
+    async def _no_debe_llamarse(*a, **k):
+        raise AssertionError("un estado invalido no puede dar acceso a un tenant")
+
+    monkeypatch.setattr(wa_onboarding, "complete_signup", _no_debe_llamarse)
+
+    res = client.get(
+        "/whatsapp/signup/callback",
+        params={"code": "AQD-x", "state": "otro-negocio.firmafalsa"},
+        follow_redirects=False,
+    )
+
+    assert res.status_code == 400
+    assert "Inicia sesion" in res.text

@@ -33,6 +33,7 @@ from backend import (
     settings,
     textnorm,
     timeutils,
+    wa_onboarding,
 )
 from backend.main import app
 
@@ -786,6 +787,32 @@ async def admin_wa_demo_codes(cliente_id: str = "") -> Dict[str, Any]:
         "hub_configured": bool(wa_demo.hub_phone_number_ids()),
         "public_number": settings.WHATSAPP_DEMO_PUBLIC_NUMBER,
         "items": wa_demo.list_codes(cliente_id),
+    }
+
+
+@app.get(
+    "/admin/clientes/{cliente_id}/whatsapp-signup-link",
+    dependencies=[Depends(security._require_admin_token)],
+)
+async def admin_whatsapp_signup_link(cliente_id: str) -> Dict[str, Any]:
+    """El enlace de alta de WhatsApp para ESTE negocio, listo para mandarselo.
+
+    Lleva el tenant firmado, asi que el negocio puede abrirlo desde el movil sin
+    haber entrado nunca en el panel. Sin eso habria que pedirle que iniciara
+    sesion antes, y un `code` de Meta caduca en minutos: el que se equivoque de
+    orden pierde el alta.
+    """
+    if cliente_id not in appstate.CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+    url = wa_onboarding.hosted_signup_url(cliente_id)
+    return {
+        "cliente_id": cliente_id,
+        "url": url,
+        "listo": bool(url),
+        "aviso": "" if url else (
+            "Falta configurar WHATSAPP_APP_ID, WHATSAPP_APP_SECRET y "
+            "WHATSAPP_ES_CONFIG_ID en el entorno."
+        ),
     }
 
 

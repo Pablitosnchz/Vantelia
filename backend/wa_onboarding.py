@@ -19,7 +19,13 @@ configuration cuyo id va en WHATSAPP_ES_CONFIG_ID.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import sqlite3
+import urllib.parse
+from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -39,6 +45,75 @@ def embedded_signup_available() -> bool:
         and getattr(settings, "WHATSAPP_APP_SECRET", "")
         and getattr(settings, "WHATSAPP_ES_CONFIG_ID", "")
     )
+
+
+# --- El enlace de alta que se le manda al negocio ---------------------------
+#
+# Meta hospeda la pagina de alta y devuelve al negocio a nuestra redirect_uri con
+# el `code`. Esa URL NO dice a que tenant conectar el numero, y del `code` no se
+# puede deducir. Sacarlo de la sesion del portal obliga al negocio a haber
+# entrado antes en el panel EN ESE MISMO NAVEGADOR: si abre el enlace desde el
+# movil o desde el correo, vuelve sin sesion y el `code` -que caduca en minutos-
+# se pierde. Por eso el enlace lleva firmado el tenant.
+
+ESTADO_TTL_HORAS = 72
+
+
+def _estado_secreto() -> bytes:
+    base = (
+        str(getattr(settings, "WHATSAPP_APP_SECRET", "") or "")
+        or str(getattr(settings, "ADMIN_API_TOKEN", "") or "")
+    )
+    return base.encode("utf-8") or b"vantelia-signup"
+
+
+def make_signup_state(cliente_id: str) -> str:
+    """Firma el tenant para que vuelva intacto desde Meta."""
+    payload = "%s|%s" % (cliente_id, timeutils._utc_now_iso())
+    raw = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
+    firma = hmac.new(_estado_secreto(), raw.encode("ascii"), hashlib.sha256).hexdigest()[:32]
+    return "%s.%s" % (raw, firma)
+
+
+def read_signup_state(state: str) -> str:
+    """El cliente_id si el estado es autentico y no ha caducado; "" si no."""
+    try:
+        raw, firma = str(state or "").split(".", 1)
+        esperada = hmac.new(_estado_secreto(), raw.encode("ascii"), hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(firma, esperada):
+            return ""
+        relleno = "=" * (-len(raw) % 4)
+        cliente_id, emitido = base64.urlsafe_b64decode(raw + relleno).decode("utf-8").split("|", 1)
+    except Exception:  # noqa: BLE001 - estado manipulado o de otra version
+        return ""
+    emitido_dt = timeutils._from_utc_iso(emitido)
+    if not emitido_dt or timeutils._utc_now() - emitido_dt > timedelta(hours=ESTADO_TTL_HORAS):
+        return ""
+    return cliente_id
+
+
+def hosted_signup_url(cliente_id: str, *, base_url: str = "") -> str:
+    """El enlace de alta para ESTE negocio, listo para mandarselo.
+
+    `featureType=whatsapp_business_app_onboarding` es lo que activa Coexistence:
+    el numero se queda en la app de WhatsApp Business de su movil.
+    """
+    if not embedded_signup_available():
+        return ""
+    base = (base_url or str(getattr(settings, "APP_BASE_URL", "") or "")).rstrip("/")
+    extras = {
+        "version": "v4",
+        "sessionInfoVersion": "3",
+        "featureType": "whatsapp_business_app_onboarding",
+    }
+    parametros = {
+        "app_id": str(getattr(settings, "WHATSAPP_APP_ID", "")),
+        "config_id": str(getattr(settings, "WHATSAPP_ES_CONFIG_ID", "")),
+        "extras": json.dumps(extras, separators=(",", ":")),
+        "redirect_uri": "%s/whatsapp/signup/callback" % base,
+        "state": make_signup_state(cliente_id),
+    }
+    return "https://business.facebook.com/messaging/whatsapp/onboard/?" + urllib.parse.urlencode(parametros)
 
 
 # --- Persistencia ----------------------------------------------------------
