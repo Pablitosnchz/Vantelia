@@ -128,6 +128,41 @@ OpenAI y Meta tratan datos en EE.UU. al amparo del **EU-US Data Privacy Framewor
 
 ---
 
+## 10 bis. Solicitudes de autoridades publicas
+
+Vantelia no comunica datos personales a autoridades publicas salvo obligacion
+legal exigible. Cuando se recibe una solicitud, se aplica el siguiente proceso,
+que es obligatorio y no discrecional:
+
+a) **Revision de legalidad.** Toda solicitud se examina antes de responder:
+   autoridad competente, base juridica invocada, jurisdiccion aplicable y forma
+   (orden judicial, requerimiento administrativo motivado). No se atiende
+   ninguna solicitud informal, verbal o sin identificar a su emisor.
+
+b) **Impugnacion.** Si la solicitud carece de base legal suficiente, excede lo
+   que la norma permite o entra en conflicto con el RGPD, Vantelia la impugna o
+   solicita su aclaracion antes de entregar dato alguno, recurriendo a asesoria
+   juridica cuando proceda.
+
+c) **Minimizacion.** Se entrega unicamente el dato concreto exigido, para el
+   periodo concreto exigido. Nunca se entregan volcados completos, bases de
+   datos enteras ni datos de interesados ajenos a la solicitud.
+
+d) **Documentacion.** De cada solicitud se deja constancia por escrito: fecha,
+   autoridad, base juridica invocada, datos entregados o motivo de la negativa,
+   y razonamiento seguido. Ese registro se conserva y esta disponible para el
+   Cliente en una auditoria (clausula 12).
+
+e) **Aviso al Cliente.** Cuando la solicitud afecte a datos de un Cliente,
+   Vantelia se lo notifica sin demora, salvo prohibicion legal expresa de
+   hacerlo. Si la prohibicion es temporal, se notifica en cuanto decae.
+
+En la fecha de esta version, Vantelia **no ha recibido ni atendido** ninguna
+solicitud de autoridades publicas relativa a datos de sus Clientes, ni de
+seguridad nacional ni de otro tipo.
+
+---
+
 ## 11. Final del tratamiento
 
 A la finalizacion del Contrato SaaS, a eleccion del Cliente comunicada por escrito en los 15 dias posteriores:
