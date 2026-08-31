@@ -310,7 +310,9 @@ if (-not $SkipLocalChecks) {
     # se para aqui solo se ve "el comando fallo con codigo 1" y hay que volver a
     # correr la suite entera a mano para saber que test cayo (paso dos veces el
     # 31-ago-2026, media hora cada vez).
-    $pytestLog = Join-Path $env:TEMP "vantelia-pytest-deploy.log"
+    # Un nombre por ejecucion: dos despliegues a la vez se peleaban por el
+    # mismo fichero y el segundo moria con "esta siendo utilizado en otro proceso".
+    $pytestLog = Join-Path $env:TEMP ("vantelia-pytest-deploy-{0}-{1}.log" -f $PID, (Get-Date -Format "HHmmss"))
     Push-Location $ProjectRoot
     try {
         & $PythonCommand -m pytest 2>&1 | Tee-Object -FilePath $pytestLog
