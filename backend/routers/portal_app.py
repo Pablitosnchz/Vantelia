@@ -50,13 +50,14 @@ from urllib.parse import quote, urlencode
 
 import httpx
 from fastapi import (
+    Cookie,
     Depends,
     HTTPException,
     Request,
     Response,
     status,
 )
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 
 import onboarding_utils
@@ -2019,6 +2020,53 @@ class WhatsAppSignupPayload(BaseModel):
     event: str = Field(default="", max_length=80)
 
 
+async def _completar_alta_whatsapp(
+    cliente_id: str,
+    *,
+    code: str,
+    waba_id: str = "",
+    phone_number_id: str = "",
+    event: str = "",
+    origen: str = "embedded_signup",
+) -> Dict[str, Any]:
+    """Cierra el alta de WhatsApp y deja el canal operativo. Punto UNICO.
+
+    Hay dos formas de llegar aqui y las dos tienen que hacer LO MISMO: el flujo
+    del navegador con el SDK de JavaScript (POST /auth/app/whatsapp/connect) y la
+    vuelta del registro insertado alojado por Meta (GET /whatsapp/signup/callback).
+    Duplicar esto seria duplicar el guardado de credenciales y la activacion del
+    canal, que es justo donde no conviene tener dos versiones.
+    """
+    if not clients._plan_feature(cliente_id, "whatsapp_enabled"):
+        raise HTTPException(status_code=403, detail="WhatsApp esta disponible desde el plan Pro.")
+    try:
+        cuenta = await wa_onboarding.complete_signup(
+            cliente_id,
+            code=code,
+            waba_id=waba_id,
+            phone_number_id=phone_number_id,
+            pin=settings.WHATSAPP_ES_PIN,
+            event=event,
+        )
+    except Exception as exc:  # noqa: BLE001 - el error de Meta se le muestra al usuario
+        security._channel_audit(cliente_id, "whatsapp", "connect_failed", origen, False, str(exc)[:300])
+        raise HTTPException(status_code=502, detail=f"Meta rechazo la conexion: {exc}")
+
+    # El canal queda operativo con el numero recien conectado.
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        wa = dict(cfg.get("whatsapp", {}) or {})
+        wa["enabled"] = True
+        wa["phone_number_id"] = cuenta.get("phone_number_id", "")
+        cfg["whatsapp"] = wa
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    security._channel_audit(cliente_id, "whatsapp", "connect", origen, True)
+    return cuenta
+
+
 @app.post("/auth/app/whatsapp/connect")
 async def app_whatsapp_connect(
     data: WhatsAppSignupPayload,
@@ -2034,34 +2082,109 @@ async def app_whatsapp_connect(
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if not wa_onboarding.embedded_signup_available():
         raise HTTPException(status_code=503, detail="La conexion automatica de WhatsApp no esta configurada.")
-    if not clients._plan_feature(cliente_id, "whatsapp_enabled"):
-        raise HTTPException(status_code=403, detail="WhatsApp esta disponible desde el plan Pro.")
-    try:
-        cuenta = await wa_onboarding.complete_signup(
-            cliente_id,
-            code=data.code,
-            waba_id=data.waba_id,
-            phone_number_id=data.phone_number_id,
-            pin=settings.WHATSAPP_ES_PIN,
-            event=data.event,
-        )
-    except Exception as exc:  # noqa: BLE001 - el error de Meta se le muestra al usuario
-        security._channel_audit(cliente_id, "whatsapp", "connect_failed", "embedded_signup", False, str(exc)[:300])
-        raise HTTPException(status_code=502, detail=f"Meta rechazo la conexion: {exc}")
+    return {"ok": True, "account": await _completar_alta_whatsapp(
+        cliente_id,
+        code=data.code,
+        waba_id=data.waba_id,
+        phone_number_id=data.phone_number_id,
+        event=data.event,
+        origen="embedded_signup",
+    )}
 
-    # El canal queda operativo con el numero recien conectado.
-    with appstate.state_lock:
-        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
-        cfg = next_configs.get(cliente_id, {})
-        wa = dict(cfg.get("whatsapp", {}) or {})
-        wa["enabled"] = True
-        wa["phone_number_id"] = cuenta.get("phone_number_id", "")
-        cfg["whatsapp"] = wa
-        next_configs[cliente_id] = cfg
-        clients._update_runtime_configs(next_configs)
-    clients._persist_configs_to_disk(next_configs)
-    security._channel_audit(cliente_id, "whatsapp", "connect", "embedded_signup", True)
-    return {"ok": True, "account": cuenta}
+
+def _pagina_alta_whatsapp(titulo: str, mensaje: str, *, ok: bool) -> HTMLResponse:
+    """Lo ultimo que ve el negocio al volver de Meta. Sin dependencias externas."""
+    color = "#12b76a" if ok else "#d92d20"
+    icono = "&#10003;" if ok else "!"
+    cuerpo = f"""<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{titulo} &middot; Vantelia</title>
+<style>
+  body {{ margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+         background:#f6f8fb; color:#101828; display:flex; min-height:100vh;
+         align-items:center; justify-content:center; padding:24px; }}
+  .caja {{ background:#fff; border-radius:16px; padding:40px; max-width:460px;
+           box-shadow:0 8px 32px rgba(16,24,40,.08); text-align:center; }}
+  .icono {{ width:56px; height:56px; border-radius:50%; background:{color};
+            color:#fff; font-size:28px; line-height:56px; margin:0 auto 20px; }}
+  h1 {{ font-size:20px; margin:0 0 12px; }}
+  p {{ color:#475467; line-height:1.6; margin:0 0 24px; }}
+  a {{ display:inline-block; background:#101828; color:#fff; text-decoration:none;
+       padding:12px 24px; border-radius:10px; font-weight:600; }}
+</style></head>
+<body><div class="caja">
+  <div class="icono">{icono}</div>
+  <h1>{titulo}</h1>
+  <p>{mensaje}</p>
+  <a href="/app">Ir a mi panel</a>
+</div></body></html>"""
+    return HTMLResponse(cuerpo, status_code=200 if ok else 400)
+
+
+@app.get("/whatsapp/signup/callback", include_in_schema=False)
+async def whatsapp_signup_callback(
+    code: str = "",
+    error: str = "",
+    error_description: str = "",
+    portal_session: Optional[str] = Cookie(default=None, alias=settings.PORTAL_COOKIE_NAME),
+) -> HTMLResponse:
+    """Vuelta del registro insertado ALOJADO POR META.
+
+    El flujo del navegador devuelve el `code` por JavaScript; el alojado por Meta
+    lo devuelve navegando aqui. El negocio llega con su sesion del portal puesta
+    (la cookie es SameSite=lax, asi que viaja en una navegacion de primer nivel),
+    y de ahi sale el tenant: la URL no lo trae y no se puede deducir del `code`.
+
+    Un `code` caduca en minutos, asi que un fallo aqui se explica en pantalla en
+    vez de dejar al negocio en una pagina en blanco sin saber que ha pasado.
+    """
+    if error or error_description:
+        settings.logger.warning("Alta de WhatsApp cancelada: %s / %s", error, error_description)
+        return _pagina_alta_whatsapp(
+            "No se ha conectado",
+            "El alta se ha cancelado o Meta la ha rechazado. Puedes volver a intentarlo "
+            "desde la pestana WhatsApp de tu panel.",
+            ok=False,
+        )
+    if not code:
+        return _pagina_alta_whatsapp(
+            "Falta informacion",
+            "Meta no ha devuelto el codigo de autorizacion. Vuelve a empezar el alta "
+            "desde la pestana WhatsApp de tu panel.",
+            ok=False,
+        )
+
+    user = security._get_authenticated_portal_user_or_none(portal_session)
+    if not user:
+        return _pagina_alta_whatsapp(
+            "Inicia sesion para terminar",
+            "Por seguridad necesitamos saber a que negocio conectar el numero. Entra en "
+            "tu panel y vuelve a lanzar la conexion desde la pestana WhatsApp.",
+            ok=False,
+        )
+    try:
+        security._require_portal_min_role(user, "owner")
+        cliente_id = security._resolve_cliente_for_self_serve_user(user)
+        cuenta = await _completar_alta_whatsapp(
+            cliente_id, code=code, origen="hosted_signup"
+        )
+    except HTTPException as exc:
+        return _pagina_alta_whatsapp("No se ha podido conectar", str(exc.detail), ok=False)
+    except Exception as exc:  # noqa: BLE001 - el negocio merece una explicacion, no un 500
+        settings.logger.exception("Fallo el alta alojada de WhatsApp")
+        return _pagina_alta_whatsapp(
+            "No se ha podido conectar", f"Ha ocurrido un error: {exc}", ok=False
+        )
+
+    numero = cuenta.get("display_phone_number") or "tu numero"
+    return _pagina_alta_whatsapp(
+        "WhatsApp conectado",
+        f"Ya estamos atendiendo en {numero}. Puedes seguir usando la aplicacion de "
+        "WhatsApp Business en tu movil: cuando contestes tu, el asistente se callara "
+        "en esa conversacion.",
+        ok=True,
+    )
 
 
 @app.delete("/auth/app/whatsapp/connect")

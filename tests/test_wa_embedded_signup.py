@@ -163,3 +163,98 @@ def test_connect_sin_configuracion_de_meta_responde_503(api_module, client, monk
         json={"code": "AQD-codigo-de-prueba", "waba_id": "", "phone_number_id": ""},
     )
     assert res.status_code == 503
+
+
+# --- Vuelta del registro insertado ALOJADO POR META -------------------------
+#
+# El flujo del navegador devuelve el `code` por JavaScript; el alojado por Meta
+# navega de vuelta a /whatsapp/signup/callback. Un `code` caduca en minutos, asi
+# que cada forma de fallar tiene que explicarse en pantalla: dejar al negocio en
+# una pagina en blanco significa perder el alta sin que nadie sepa por que.
+
+
+def _crear_owner(client, cliente_id="demo"):
+    import uuid
+
+    from backend import security
+
+    email = f"wa-cb-{uuid.uuid4().hex[:8]}@example.com"
+    security._create_user(
+        email=email, password="wa-test-password-123", role="client",
+        display_name="Owner WA", cliente_id=cliente_id, portal_role="owner",
+    )
+    login = client.post("/auth/login", json={"email": email, "password": "wa-test-password-123"})
+    return {"vantelia_portal_session": login.cookies["vantelia_portal_session"]}
+
+
+def test_la_vuelta_de_meta_conecta_el_numero_del_negocio(api_module, client, monkeypatch):
+    from backend import wa_onboarding
+    from backend.routers import portal_app
+
+    llamadas = {}
+
+    async def _falso_completar(cliente_id, **kwargs):
+        llamadas["cliente_id"] = cliente_id
+        llamadas.update(kwargs)
+        return {"phone_number_id": "999", "display_phone_number": "+34 600 000 000"}
+
+    monkeypatch.setattr(wa_onboarding, "complete_signup", _falso_completar)
+    cookies = _crear_owner(client)
+
+    res = client.get(
+        "/whatsapp/signup/callback",
+        params={"code": "AQD-codigo-de-meta"},
+        cookies=cookies,
+        follow_redirects=False,
+    )
+
+    assert res.status_code == 200
+    assert "WhatsApp conectado" in res.text
+    # El tenant sale de la SESION: la URL de Meta no lo trae.
+    assert llamadas["cliente_id"] == "demo"
+    assert llamadas["code"] == "AQD-codigo-de-meta"
+    _ = portal_app  # el endpoint vive ahi
+
+
+def test_sin_sesion_no_se_conecta_nada_y_se_explica(api_module, client, monkeypatch):
+    """Sin sesion no hay forma de saber a QUE negocio conectar el numero."""
+    from backend import wa_onboarding
+
+    async def _no_debe_llamarse(*a, **k):
+        raise AssertionError("no se puede completar un alta sin saber el tenant")
+
+    monkeypatch.setattr(wa_onboarding, "complete_signup", _no_debe_llamarse)
+
+    res = client.get("/whatsapp/signup/callback", params={"code": "AQD-x"}, follow_redirects=False)
+
+    assert res.status_code == 400
+    assert "Inicia sesion" in res.text
+
+
+def test_si_meta_devuelve_error_se_dice_y_no_se_toca_el_canal(api_module, client, monkeypatch):
+    from backend import wa_onboarding
+
+    async def _no_debe_llamarse(*a, **k):
+        raise AssertionError("Meta ha rechazado el alta: no hay nada que completar")
+
+    monkeypatch.setattr(wa_onboarding, "complete_signup", _no_debe_llamarse)
+    cookies = _crear_owner(client)
+
+    res = client.get(
+        "/whatsapp/signup/callback",
+        params={"error": "access_denied", "error_description": "El usuario cancelo"},
+        cookies=cookies,
+        follow_redirects=False,
+    )
+
+    assert res.status_code == 400
+    assert "No se ha conectado" in res.text
+
+
+def test_sin_codigo_no_se_queda_en_blanco(api_module, client):
+    cookies = _crear_owner(client)
+
+    res = client.get("/whatsapp/signup/callback", cookies=cookies, follow_redirects=False)
+
+    assert res.status_code == 400
+    assert "Falta informacion" in res.text

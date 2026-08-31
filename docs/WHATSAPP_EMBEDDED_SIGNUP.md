@@ -25,31 +25,62 @@ la app **el asistente se calla solo** en esa conversación.
 
 Tests: `tests/test_wa_embedded_signup.py` y `tests/test_inbox_takeover.py`.
 
-## Lo que falta, y es en Meta, no en el código
+## Estado (31-ago-2026)
 
-El botón **no aparece** mientras falten estas tres variables de entorno:
+**Verificación del negocio: APROBADA.** La **Revisión de la aplicación está
+ENVIADA** y pendiente (Meta avisa de hasta 20 días). Hasta que resuelva no se
+pueden dar de alta números de otras empresas.
+
+Qué costó cuatro rechazos en la verificación, por si vuelve a pasar: Meta **no
+acepta documentos fiscales autocumplimentados**, y el modelo 036 lo es; sí
+acepta el **certificado de situación censal**, que emite la AEAT. Y un autónomo
+va por la vía **"empresa no registrada aún"** (persona física), no por la de
+empresa registrada, donde piden inscripción en un registro mercantil.
+
+Datos ya obtenidos, listos para el `.env` del VPS:
 
 ```bash
-WHATSAPP_APP_ID=<id de la app "Vantelia">
-WHATSAPP_ES_CONFIG_ID=<id de la Login configuration>
-WHATSAPP_ES_PIN=<PIN de 6 dígitos para registrar números>
+WHATSAPP_APP_ID=2434714980339087
+WHATSAPP_ES_CONFIG_ID=1080408011403320
+WHATSAPP_ES_PIN=<6 digitos a elegir>
 ```
 
-`WHATSAPP_APP_SECRET` ya está configurada.
+El `config_id` salió del enlace de **registro insertado alojado por Meta**: al
+generarlo, Meta crea la Login configuration sola. No hay que crearla a mano.
 
-Para obtener el `config_id` hay que, en el panel de Meta:
+**Pendiente cuando aprueben**, y esto no se puede olvidar: suscribir el webhook
+de la app al campo **`smb_message_echoes`**. Sin él no llegan los ecos y el
+asistente NO se calla cuando el negocio responde desde su móvil, que es la razón
+de ser de Coexistence.
 
-1. **Verificar el negocio** (Business Verification) en el portfolio empresarial.
-2. Configurar la app como **Tech Provider / Solution Partner** de WhatsApp. Comprobado
-   el 14-ago-2026: la API responde *"This action requires that the Business that owns
-   this App is a Business Solution Provider for WhatsApp"*, así que **hoy no lo somos**
-   y este paso es el bloqueante real.
-3. Crear una **Login configuration** de tipo *WhatsApp Embedded Signup* (Facebook Login
-   for Business) y copiar su id.
-4. Añadir `https://app.vantelia.es` a los dominios permitidos de la app.
+Las variables NO se ponen todavía en producción a propósito: en cuanto están,
+aparece el botón de conectar en la pestaña WhatsApp del portal, y hoy fallaría
+por falta de acceso avanzado. Un cliente pulsando un botón roto es peor que no
+tener botón.
 
-Sin el paso 2 el flujo no se puede usar para dar de alta números de OTRAS empresas,
-que es justo lo que necesitamos para vender.
+## Las dos formas de entrar
+
+Las dos acaban en `_completar_alta_whatsapp` (`backend/routers/portal_app.py`),
+punto ÚNICO que guarda credenciales y activa el canal:
+
+1. **Navegador (SDK de JavaScript)** — `POST /auth/app/whatsapp/connect`. El
+   `code` llega por JavaScript desde el botón del portal.
+2. **Alojado por Meta** — `GET /whatsapp/signup/callback`. Se le manda al
+   negocio un enlace y Meta lo devuelve ahí con `?code=`. El tenant sale de **su
+   sesión del portal** (la cookie es `SameSite=lax`, así que viaja en la
+   navegación de vuelta): la URL no lo trae y no se deduce del `code`. Cada
+   forma de fallar pinta una página explicándolo, porque un `code` caduca en
+   minutos y no hay segundo intento. Tests en `tests/test_wa_embedded_signup.py`.
+
+El enlace alojado, con el redirect ya configurado:
+
+```
+https://business.facebook.com/messaging/whatsapp/onboard/
+  ?app_id=2434714980339087
+  &config_id=1080408011403320
+  &extras={"version":"v4","sessionInfoVersion":"3","featureType":"whatsapp_business_app_onboarding"}
+  &redirect_uri=https://app.vantelia.es/whatsapp/signup/callback
+```
 
 ## Cómo se comporta
 
