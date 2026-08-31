@@ -11,7 +11,7 @@ Esta politica describe como Vantelia trata los datos personales en su plataforma
 - **Vantelia** es el nombre comercial bajo el que presta sus servicios **Pablo Sanchez Sanchez**, NIF 02751906W.
 - Domicilio: Calle Garabay S/N, Portal 7, Planta 2, Puerta C, 28850 Torrejon de Ardoz (Madrid), Espana.
 - Email de contacto: info@vantelia.es
-- Email: privacidad@vantelia.es
+- Email: info@vantelia.es
 - Web: https://www.vantelia.es
 - Contacto soporte: soporte@vantelia.es
 
@@ -122,7 +122,7 @@ Puedes ejercer los derechos de:
 
 Como ejercerlos:
 
-- Escribe a `privacidad@vantelia.es` indicando el derecho que ejerces y adjuntando documento que acredite tu identidad.
+- Escribe a `info@vantelia.es` indicando el derecho que ejerces y adjuntando documento que acredite tu identidad.
 - Plazo de respuesta: maximo 1 mes (prorrogable a 2 meses en casos complejos).
 - Tambien puedes reclamar ante la **Agencia Espanola de Proteccion de Datos** (https://www.aepd.es).
 
@@ -158,5 +158,5 @@ Cualquier cambio relevante se comunicara con al menos 30 dias de antelacion por 
 
 ## 13. Contacto
 
-- privacidad@vantelia.es — proteccion de datos.
+- info@vantelia.es — proteccion de datos.
 - soporte@vantelia.es — incidencias tecnicas.

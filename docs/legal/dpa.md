@@ -195,7 +195,7 @@ Este DPA entra en vigor con la firma del Contrato SaaS y se mantiene durante tod
 
 ## 15. Contacto del Encargado
 
-Email: privacidad@vantelia.es
+Email: info@vantelia.es
 Web: https://www.vantelia.es
 
 ---

@@ -41,7 +41,7 @@ Este aviso legal se aplica a los sitios `https://www.vantelia.es` (web comercial
 
 ## 6. Proteccion de datos
 
-El tratamiento de datos personales se describe en la [politica de privacidad](/legal/privacidad). Para ejercer los derechos de acceso, rectificacion, supresion, oposicion, limitacion y portabilidad puede escribirse a privacidad@vantelia.es.
+El tratamiento de datos personales se describe en la [politica de privacidad](/legal/privacidad). Para ejercer los derechos de acceso, rectificacion, supresion, oposicion, limitacion y portabilidad puede escribirse a info@vantelia.es.
 
 ## 7. Legislacion aplicable
 
