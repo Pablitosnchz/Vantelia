@@ -415,3 +415,32 @@ cuesta clientas.
 - Las clases nuevas se añaden aquí, con su búsqueda.
 - Si una clase deja de tener sentido, se borra: un documento que miente es peor
   que no tenerlo.
+
+---
+
+### 21. Reprogramar da vueltas (VIVO, ~40 % de las veces, 3-sep-2026)
+
+Ella pide mover la cita sin decir hora ("cualquier otro hueco que tengas me
+vale"). El modelo llama a `reprogramar_cita` con una hora que se inventa, el
+freno `_hora_que_nadie_ha_pedido` la rechaza, y **vuelve a llamar con la misma
+hora**. A la tercera, el humo lo corta: "reprogramar_cita se ha llamado 3 veces
+con lo mismo: esta dando vueltas".
+
+Medido con `scripts/humo.py --caso reprogramar-mueve-la-cita`, 5 tiradas: falla
+al primer intento **2 de 5**. El reintento suele salvarlo, asi que el gate del
+despliegue lo tumba solo cuando fallan los DOS (0,4x0,4 = 16 %). Paso la noche
+del 2 al 3 de septiembre y volvio atras un despliegue entero.
+
+**Intentado y descartado CON DATOS:** meter los huecos REALES dentro del propio
+rechazo (`resultado["huecos_reales"]`), para que no tuviera nada que adivinar.
+
+| | MAL de 5 tiradas |
+| --- | --- |
+| sin tocar nada | 0 (2 con reintento) |
+| con los huecos en el rechazo | **2** |
+
+Sale PEOR. La hipotesis era que le faltaba informacion; con mas informacion se
+pierde igual o mas. Pista para quien lo retome: el problema no parece ser que no
+sepa los huecos, sino que insiste en la hora que ya decidio. Antes de volver a
+tocarlo, medir 5 tiradas de linea base: la variacion normal es alta y a ojo no
+se distingue una mejora de la suerte.
