@@ -145,6 +145,28 @@ def _familias_del_tenant(cliente_id: str) -> List[str]:
     return familias[:40]
 
 
+def _habla_de_otra_cosa(cliente_id: str, mensaje: str, qa: Dict[str, str]) -> bool:
+    """La Q&A reconocida va de otra familia que la que ha nombrado el cliente.
+
+    Solo frena cuando las DOS nombran familia y no comparten ninguna: una Q&A del
+    horario o de la direccion no nombra ninguna, y esas tienen que seguir
+    sirviendose para cualquier pregunta.
+    """
+    try:
+        from backend import catalog_pick
+
+        suyas = set(catalog_pick.familias_pedidas(cliente_id, mensaje) or [])
+        if not suyas:
+            return False
+        de_la_qa = set(catalog_pick.familias_pedidas(
+            cliente_id, "%s %s" % (qa.get("question", ""), qa.get("answer", ""))) or [])
+        if not de_la_qa:
+            return False
+        return not (suyas & de_la_qa)
+    except Exception:  # noqa: BLE001 - entender nunca puede dejar sin respuesta
+        return False
+
+
 def preguntas_del_tenant(cliente_id: str, limite: int = 40) -> List[Dict[str, str]]:
     """Preguntas que el negocio ya tiene respondidas, para que el modelo las reconozca.
 
@@ -513,7 +535,17 @@ def classify(
         indice = 0
     if 1 <= indice <= len(preguntas):
         elegida = preguntas[indice - 1]
-        resultado["qa_id"] = elegida.get("id", "")
-        resultado["qa_answer"] = elegida.get("answer", "")
+        # Y que vaya de lo MISMO. Medido en la simulacion del 2-sep: a "quiero
+        # hacerme MECHAS pero no se que tecnica elegir" se le servia la Q&A de
+        # "que tipos de ALISADO teneis", la clienta elegia Bio Premium del menu
+        # equivocado y acababa con un alisado reservado. El dano es que la
+        # conversacion sigue siendo coherente, asi que nadie lo nota hasta que se
+        # planta en el salon. Si las dos nombran familia y no coinciden, no vale.
+        if _habla_de_otra_cosa(cliente_id, texto, elegida):
+            resultado["qa_id"] = ""
+            resultado["qa_answer"] = ""
+        else:
+            resultado["qa_id"] = elegida.get("id", "")
+            resultado["qa_answer"] = elegida.get("answer", "")
     _cache_put(clave, resultado)
     return resultado
