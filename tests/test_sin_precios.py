@@ -51,7 +51,11 @@ def test_el_modelo_no_ve_ni_un_precio(salon_sin_precios, api_module):  # noqa: F
     lineas = " | ".join(booking._service_catalog_lines("demo"))
     assert "Corte senora" in lineas, "el catalogo tiene que seguir estando"
     assert "25" not in lineas and "EUR" not in lineas and "€" not in lineas
-    assert "NO se da por mensaje" in lineas
+    assert "SIN PRECIO PUBLICADO" in lineas
+    # Y la duracion tiene que ir ETIQUETADA. Sin el "dura", el modelo cogia la
+    # cifra de al lado y la daba como precio: "Secado al aire corto · 10 min" se
+    # convirtio en "Precio: 10 EUR" de un servicio que cuesta 4.
+    assert "dura 30 min" in lineas
 
 
 def test_cualquier_cifra_esta_prohibida(salon_sin_precios, api_module):  # noqa: F811
