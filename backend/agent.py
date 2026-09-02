@@ -863,6 +863,79 @@ def _lo_que_el_negocio_tiene_escrito(cliente_id: str, mensaje: str, config=None)
             "despues sigue con lo que estabais haciendo: %s" % texto)
 
 
+_DUDA_AL_ELEGIR = re.compile(
+    r"\b(no (lo )?se\b|ni idea|no estoy segur[oa]|no sabria|no tengo claro|"
+    r"no me aclaro|no se cual|cual me recomiendas|cual me recomendais|"
+    r"que me aconsejas|lo que (tu |vosotras )?veais?|lo que (tu )?veas|"
+    r"decide tu|elige tu|elegid vosotras)\b")
+
+_RECOMIENDA_UN_SERVICIO = re.compile(
+    r"\b(te recomiend[oa]|te recomendari[ao]|te aconsej[oa]|te aconsejari[ao]|"
+    r"te sugier[oa]|mi recomendacion|yo optari[ao]|yo te pondria|"
+    r"te vendria (mejor|bien)|(la|lo) mejor (opcion )?para ti)\b")
+
+
+def _lo_que_el_negocio_dice_al_no_saber(cliente_id: str, mensaje: str,
+                                        config=None) -> str:
+    """Lo que el negocio contesta a "no se cual me va mejor", si lo tiene escrito.
+
+    Medido el 3-sep-2026 sobre el salon piloto. Preguntado DE FRENTE -"quiero un
+    alisado pero no se cual me va mejor"- contesta exactamente lo que la duenya
+    escribio: "sin ver tu cabello y poder tocarlo en persona no te puedo decir
+    cual te recomendariamos". Pero dicho como duda, sin forma de pregunta:
+
+        ELLA  no se, ni idea de que largo tengo
+        IA    te recomendaria el Acido lactico bio premium
+
+    Se inventa un criterio profesional que el negocio ha dicho por escrito que
+    NO se puede dar por mensaje. Es la misma forma que el fallo de la lactancia:
+    la capa que entiende dispara con la pregunta directa y se queda muda cuando
+    la misma duda se expresa sin preguntar.
+
+    Aqui la duda se traduce a la pregunta que lleva dentro y se le pregunta al
+    negocio. Si no tiene nada escrito no cambia nada: recomendar es legitimo
+    para quien no haya dicho lo contrario.
+    """
+    if not _DUDA_AL_ELEGIR.search(catalog_pick._norm(mensaje or "")):
+        return ""
+    try:
+        from backend import chat
+
+        # UNA sola formulacion, la que se midio que llega: `intents` cachea por
+        # mensaje identico, asi que en una conversacion sale gratis a partir del
+        # segundo turno.
+        decision = chat.decision_del_negocio(cliente_id, "cual me va mejor",
+                                             config=config)
+    except Exception:  # noqa: BLE001 - entender nunca puede dejar sin respuesta
+        return ""
+    if not decision or decision.get("intent") not in ("qa_exact", "qa_semantica"):
+        return ""
+    return str(decision.get("texto") or "").strip()
+
+
+def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
+    """Dice "te recomendaria X" siendo X un servicio del catalogo."""
+    norm = catalog_pick._norm(texto or "")
+    if not _RECOMIENDA_UN_SERVICIO.search(norm):
+        return False
+    try:
+        from backend import agenda
+
+        servicios = agenda._catalog_services(cliente_id)
+    except Exception:  # noqa: BLE001
+        return False
+    for servicio in servicios:
+        nombre = str(servicio.get("name") or servicio.get("nombre") or "")
+        # El catalogo lleva la variante pegada ("Acido lactico bio premium-corto
+        # medio") y el modelo dice el nombre a secas, asi que comparar el nombre
+        # entero no casa nunca. Se compara la parte de antes del guion.
+        base = catalog_pick._norm(nombre.split("-")[0])
+        # Nombres muy cortos ("corte") aparecen en cualquier frase.
+        if len(base) >= 10 and base in norm:
+            return True
+    return False
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -2413,6 +2486,7 @@ async def responder(
         obligar = False
         sin_precio = ""
         qa_negocio = ""
+        no_sabe = ""
         catalogo_mirado = False
         norma_mirada = False
         dias_abiertos_vistos = False   # se ha consultado un dia que SI abre
@@ -2466,8 +2540,16 @@ async def responder(
             # restricciones: si no, cada llamada a una tool la volveria a buscar.
             qa_negocio = (_lo_que_el_negocio_tiene_escrito(cliente_id, mensaje, config)
                           if vuelta == 0 else qa_negocio)
+            # Ella ha dicho que no sabe. Si el negocio tiene escrito que eso no
+            # se decide por mensaje, manda lo suyo y NO se recomienda por ella.
+            no_sabe = (_lo_que_el_negocio_dice_al_no_saber(cliente_id, mensaje, config)
+                       if vuelta == 0 else no_sabe)
+            guia_no_sabe = (
+                ("ELLA NO SABE QUE ELEGIR. El negocio tiene escrito esto para ese "
+                 "caso, diselo con tus palabras: %s. NO le recomiendes tu ningun "
+                 "tratamiento concreto." % no_sabe) if no_sabe else "")
             guia = [t for t in (reserva.resumen(estado, conocido), aviso,
-                                qa_negocio, cuanto_dura, sin_precio,
+                                qa_negocio, guia_no_sabe, cuanto_dura, sin_precio,
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:
@@ -2616,6 +2698,25 @@ async def responder(
                 #    una clienta que preguntaba por ella se le dijo que no habia.
                 #    Negar por defecto cuesta clientas, y es primo hermano de
                 #    negar un servicio que si se hace, que ya es critico.
+                # 3 quater) Elegir POR ella cuando ha dicho que no sabe. El
+                #    salon tiene escrito que sin ver el cabello no se puede decir
+                #    cual conviene; preguntado de frente lo contesta bien, pero a
+                #    "no se, ni idea de que largo tengo" soltaba "te recomendaria
+                #    el Acido lactico bio premium". Solo frena donde el negocio ha
+                #    dicho por escrito que eso no se decide por mensaje: quien no
+                #    lo haya dicho puede recomendar tranquilamente.
+                if (no_sabe and _recomienda_un_servicio(cliente_id, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("eligio_por_ella")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Ha dicho que NO SABE, y el negocio tiene escrito "
+                                    "que eso no se decide por mensaje. Reescribe tu "
+                                    "respuesta SIN recomendarle ningun tratamiento "
+                                    "concreto: dile lo del negocio con tus palabras y "
+                                    "ofrecele la cita donde se lo pueden ver."),
+                    })
+                    continue
                 if (_niega_algo_que_no_puede_saber(cliente_id, texto_final)
                         and vuelta + 1 < MAX_VUELTAS):
                     traza.freno("nego_lo_que_no_sabe")
