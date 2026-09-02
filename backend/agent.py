@@ -261,6 +261,34 @@ _NOMBRES_QUE_NO_LO_SON = {
 }
 
 
+def _lo_dijo_como_su_nombre(dicho: str, valor: str) -> bool:
+    """Ella acaba de decir que se llama asi, aunque coincida con una peluquera.
+
+    Medido el 2-sep: una clienta llamada Lucia -que es tambien el nombre de una
+    profesional del salon- no pudo reservar. El freno que evita coger la cita a
+    nombre de la peluquera ("un corte con Alicia") la tomaba por la profesional y
+    le decia que llamara por telefono, una y otra vez. En un salon con varias
+    estilistas eso deja fuera a las Laura, las Ana y las Maria.
+
+    Lo que distingue los dos casos no es el nombre: es COMO lo dijo. "Con Lucia"
+    es la profesional; "Lucia" o "me llamo Lucia", contestando a que como se
+    llama, es ella.
+    """
+    limpio = textnorm._strip_accents(str(valor or "").strip().lower())
+    frase = textnorm._strip_accents(str(dicho or "").strip().lower())
+    if not limpio or not frase:
+        return False
+    # Con una preposicion delante es de quien la atiende, no de ella.
+    for delante in ("con ", "para ", "por ", "pregunto por ", "atienda "):
+        if (delante + limpio) in frase:
+            return False
+    if re.search(r"\b(?:me llamo|soy|mi nombre es|se llama)\s+" + re.escape(limpio), frase):
+        return True
+    # O lo ha dicho a secas, que es lo que se contesta a "¿como te llamas?".
+    solo = re.sub(r"[^a-z0-9 ]+", " ", frase)
+    return " ".join(solo.split()) == limpio
+
+
 def _es_una_profesional(cliente_id: str, valor: str) -> bool:
     """¿Ese "nombre de la clienta" es en realidad el de quien la va a atender?
 
@@ -422,6 +450,7 @@ async def _ejecutar(
     cliente_id: str, nombre: str, argumentos: Dict[str, Any], *,
     telefono: str, location_id: str = "", ya_creadas: Optional[set] = None,
     quien: Optional[Dict[str, str]] = None, remate_manual: bool = False,
+    dicho: str = "",
 ) -> Dict[str, Any]:
     """Ejecuta una tool. Nunca lanza: un fallo se devuelve como resultado."""
     argumentos = _normalizar_argumentos(argumentos)
@@ -437,9 +466,9 @@ async def _ejecutar(
     if nombre == "consultar_profesionales":
         return _tool_consultar_profesionales(cliente_id, argumentos, location_id=location_id)
 
-    if nombre == "crear_cita" and remate_manual and _es_una_profesional(
-        cliente_id, argumentos.get("nombre")
-    ):
+    if (nombre == "crear_cita" and remate_manual
+            and not _lo_dijo_como_su_nombre(dicho, argumentos.get("nombre"))
+            and _es_una_profesional(cliente_id, argumentos.get("nombre"))):
         argumentos["profesional"] = argumentos.get("profesional") or argumentos["nombre"]
         argumentos["nombre"] = ""
 
@@ -472,7 +501,8 @@ async def _ejecutar(
         # la tool. Sin nombre de verdad, no hay cita.
         # De una clienta conocida ya se sabe el nombre: lo pone el codigo antes de
         # dar por incompleta la cita, en vez de hacersela repetir.
-        if _es_una_profesional(cliente_id, argumentos.get("nombre")):
+        if (not _lo_dijo_como_su_nombre(dicho, argumentos.get("nombre"))
+                and _es_una_profesional(cliente_id, argumentos.get("nombre"))):
             # Se ha quedado con el nombre de la peluquera: eso no es la clienta.
             argumentos["profesional"] = argumentos.get("profesional") or argumentos["nombre"]
             argumentos["nombre"] = ""
@@ -2727,7 +2757,7 @@ async def responder(
                     resultado = await _ejecutar(
                         cliente_id, llamada.function.name, argumentos,
                         telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
-                        quien=quien, remate_manual=remate_manual,
+                        quien=quien, remate_manual=remate_manual, dicho=dicho_de_ella,
                     )
                 traza.tool(llamada.function.name, argumentos,
                            ok=bool(resultado.get("ok", True)),
