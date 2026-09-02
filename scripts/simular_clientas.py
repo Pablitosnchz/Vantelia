@@ -247,7 +247,15 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
         else:
             resultado["veredicto"] = "bien"
     elif objetivo == "cancelar":
-        if vivas:
+        # Lo que se juzga es que SU cita quedara cancelada, no que no quede
+        # ninguna. Una clienta puede anular y, en la misma conversacion, pedir
+        # otra: eso es un final bueno y se contaba como atasco. Paso el
+        # 2-sep-2026 con una clienta que dijo "anular" y luego "no queria
+        # cancelar" -son sinonimos-, y el asistente hizo lo correcto: le explico
+        # que no podia revertirla y le busco hueco nuevo.
+        suya = previa["booking_code"] if previa else ""
+        sigue = any(c["booking_code"] == suya for c in vivas) if suya else bool(vivas)
+        if sigue:
             resultado["veredicto"] = "atascada"
             resultado["motivo"] = "la cita sigue viva"
         else:
@@ -285,7 +293,7 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
                 resultado["motivo"] = "le ha cogido %r en vez de la valoracion" % (
                     vivas[0]["servicio"])
                 resultado["fallos"].append("cita_del_tratamiento_en_vez_de_valoracion")
-        elif vivas and not previa:
+        elif vivas and not previa and not _ella_pidio_cita(conversacion):
             resultado["veredicto"] = "fallo"
             resultado["motivo"] = "le ha cogido una cita que no habia pedido"
             resultado["fallos"].append("cita_sin_pedirla")
@@ -375,6 +383,28 @@ def _habla_de(plano: str, pistas) -> bool:
 
 def _familia_ok(familia: str, cita: Dict[str, Any]) -> bool:
     return _norm(familia) in _norm(str(cita.get("servicio") or ""))
+
+
+def _ella_pidio_cita(conversacion) -> bool:
+    """Lo dijo ELLA, con sus palabras, en algun momento de la conversacion.
+
+    Venir preguntando el horario y acabar cogiendo cita no es que se la cojan sin
+    permiso: es que la han convencido, que es justo lo que el negocio quiere. Se
+    contaba como fallo y castigaba una conversion. Lo que hay que detectar es la
+    cita que aparece SIN que ella la pida en ningun momento.
+    """
+    from backend import textnorm
+
+    pistas = ("quiero", "me vale", "confirmo", "resérvame", "reservame", "cogeme",
+              "cogedme", "apuntame", "apuntadme", "ponme", "cita", "me viene bien",
+              "me llamo", "de acuerdo", "vale, ponme")
+    for turno in conversacion:
+        if turno.get("quien") != "clienta":
+            continue
+        dicho = textnorm._strip_accents(str(turno.get("texto") or "").lower())
+        if any(p in dicho for p in pistas):
+            return True
+    return False
 
 
 def _se_repite(dichos: List[str]) -> bool:
