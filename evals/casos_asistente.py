@@ -465,9 +465,13 @@ CASOS = [
             "nada de precio ni del tiempo que dura, todo eso no tiene que decirlo'. "
             "Siete horas sueltas asi asustan a cualquiera."
         ),
-        "mensajes": ["quiero hacerme las mechas y tengo el cabello largo"],
+        "mensajes": ["quiero unas mechas", "tengo el cabello largo"],
+        # Se mide la respuesta de DESPUES de elegir servicio, y se prohibe "dura",
+        # no "minutos": el texto que escribio la duenya para el diagnostico dice
+        # "una cita de 15 minutos", y prohibir esa palabra la castigaba a ella.
+        "no_debe_en": "ultima",
         "debe": [],
-        "no_debe": ["minutos"],
+        "no_debe": ["dura"],
     },
     {
         "id": "foto-anunciada-no-vuelve-a-preguntar-el-largo",
@@ -496,6 +500,8 @@ CASOS = [
         ),
         "mensajes": ["cuanto cuesta un secado?"],
         "debe": [],
+        # 10 y 15 son las DURACIONES de esos secados. El asistente las daba como
+        # precio: dijo 10 EUR de un servicio que cuesta 4 y 15 de uno que cuesta 8.
         "no_debe": ["€", " eur"],
     },
 ]

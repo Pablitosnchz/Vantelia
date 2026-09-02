@@ -1201,6 +1201,17 @@ def _tool_buscar_servicio(
             "servicio_en_agenda": eleccion.servicio,
             **detalle,
         }
+        # La duracion viaja SIEMPRE -hace falta para contestar "cuanto tarda?"-
+        # pero no se suelta sin que la pidan. Queja literal de la duenya del salon
+        # piloto: "El servicio es Mechas o balayage largo y dura 440 minutos"
+        # cuando nadie habia preguntado. Siete horas dichas de golpe, con el precio
+        # que ella no da, asustan a cualquiera: "no le he preguntado nada de precio
+        # ni del tiempo que dura, todo eso no tiene que decirlo".
+        respuesta["nota_al_confirmar"] = (
+            "Confirma QUE servicio es y pasa al dia. NO menciones cuanto dura ni lo "
+            "que cuesta si no te lo han preguntado. Si te lo preguntan, contesta con "
+            "estos datos."
+        )
         # Sin duracion en el catalogo, la agenda aparta el hueco por defecto. Ese
         # numero es un relleno del sistema, no un dato del negocio: recitarlo
         # como si lo fuera es como se dijo "el alisado son 30 minutos".

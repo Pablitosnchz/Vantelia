@@ -6648,14 +6648,20 @@ def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
         except (TypeError, ValueError):
             dur = 0
         if dur > 0:
-            parts.append(f"{dur} min")
+            # "dura", no un numero suelto. Con el formato anterior
+            # -"Secado al aire corto · 10 min · precio: NO se da por mensaje"- el
+            # modelo cogia la cifra de al lado y la daba como precio: a esa
+            # clienta le dijo 10 EUR de un servicio que cuesta 4, y 15 de uno que
+            # cuesta 8. No era una fuga del catalogo: se lo INVENTABA copiando la
+            # duracion, que es el fallo mas caro que puede tener un asistente.
+            parts.append(f"dura {dur} min")
         try:
             price_cents = int(service.get("price_cents") or 0)
         except (TypeError, ValueError):
             price_cents = 0
         price_label = textnorm._sanitize_text(str(service.get("price_label") or ""))
         if ninguno:
-            parts.append("precio: NO se da por mensaje")
+            parts.append("SIN PRECIO PUBLICADO: no digas ninguna cifra de dinero")
         elif _exige_valoracion(name, sin_precio):
             parts.append("precio SOLO tras la cita de valoracion")
         elif price_cents > 0 and price_label:
