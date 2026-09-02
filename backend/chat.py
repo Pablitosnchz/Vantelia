@@ -1215,6 +1215,7 @@ async def _process_chat_message(
     # mas caro de un asistente es decir una cifra que no existe.
     clean_text = _sin_precios_que_no_se_dan(cliente_id, clean_text, message)
     clean_text = _sin_negar_lo_que_no_sabe(cliente_id, clean_text)
+    clean_text = _sin_negar_un_servicio_que_existe(cliente_id, clean_text, message)
 
     chat_response = RespuestaChat(
         respuesta=clean_text or "No tengo una respuesta valida en este momento.",
@@ -1236,6 +1237,48 @@ async def _process_chat_message(
 # Van SIN tildes: `_detect_commercial_intent` normaliza el mensaje antes de
 # buscarlas. Aqui habia ademas una variante de "recomendacion" con la tilde
 # doblemente codificada, que no casaba nada.
+# "no tenemos un servicio especifico llamado X", "no ofrecemos X", "X no esta
+# en nuestro catalogo". Sin tildes: se compara sobre texto normalizado.
+_NIEGA_UN_SERVICIO = re.compile(
+    r"\bno\s+(?:tenemos|ofrecemos|hacemos|disponemos|contamos|realizamos|trabajamos)\b"
+    r"[^.!?]{0,60}?\b(?:servicio|servicios|catalogo|tratamiento)\b"
+    r"|\bno\s+(?:esta|figura|aparece)\s+en\s+(?:nuestro|el)\s+catalogo\b"
+)
+
+
+def _sin_negar_un_servicio_que_existe(cliente_id: str, texto: str, mensaje: str) -> str:
+    """Quita la negativa cuando el salon SI hace eso por lo que preguntan.
+
+    Negar un servicio que si se hace es de los fallos criticos del banco, y
+    estaba prohibido en el PROMPT -\"antes de decir que NO haceis algo, buscalo
+    en esta lista\"-, que es una instruccion y se desobedece. Medido en
+    produccion el 2-sep: a \"cuanto dura un corte de senora?\" contesto \"en
+    nuestro catalogo no tenemos un servicio especifico llamado corte de
+    senora\". Existe: 20 minutos, 20 EUR, activo.
+
+    Se comprueba contra las FAMILIAS del catalogo del negocio, no contra el
+    nombre exacto: la clienta dice \"corte de senora\" y en el catalogo pone
+    \"Corte senora\".
+    """
+    if not texto or not _NIEGA_UN_SERVICIO.search(textnorm._strip_accents(texto.lower())):
+        return texto
+    try:
+        from backend import catalog_pick
+
+        if not catalog_pick.familias_pedidas(cliente_id, mensaje or ""):
+            return texto   # de eso el salon no hace nada: negar esta bien
+        # Se SUSTITUYE la frase, no se borra: quitarla deja la respuesta coja
+        # ("...pero ofrecemos varios tipos. ¿Cual prefieres?" se queda en
+        # "¿Cual prefieres?", que no se entiende).
+        frases = re.split(r"(?<=[.!?])\s+", texto)
+        salida = ["Si, eso si lo hacemos."
+                  if _NIEGA_UN_SERVICIO.search(textnorm._strip_accents(f.lower())) else f
+                  for f in frases]
+        return " ".join(x for x in salida if x).strip() or texto
+    except Exception:  # noqa: BLE001 - un freno nunca puede dejar sin respuesta
+        return texto
+
+
 def _sin_negar_lo_que_no_sabe(cliente_id: str, texto: str) -> str:
     """Cambia la negativa rotunda sobre algo que el negocio no ha escrito.
 
