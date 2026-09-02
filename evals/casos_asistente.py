@@ -504,4 +504,44 @@ CASOS = [
         # precio: dijo 10 EUR de un servicio que cuesta 4 y 15 de uno que cuesta 8.
         "no_debe": ["€", " eur"],
     },
+    # ─── Digresiones: preguntar algo de verdad a media reserva ────────────
+    # La duenya del salon, 2-sep-2026. A mitad de elegir alisado pregunto si
+    # habia problema estando dando pecho y el asistente contesto "consulta con
+    # tu medico", teniendo el salon escrito que su Acido Lactico Bio Premium es
+    # apto para embarazadas y madres lactantes. La MISMA pregunta, hecha sola,
+    # se contestaba perfecta: fallaba solo DENTRO de una reserva.
+    # El caso 18 (`duda-a-media-cita`) no lo cazaba: solo miraba que no dijera
+    # "no he reconocido". Una respuesta creible pero contraria a lo que el
+    # negocio tiene escrito le parecia bien.
+    {
+        "id": "digresion-protocolo-a-media-reserva",
+        "gravedad": "critico",
+        "solo_si": "tiene_qa:como tengo que venir con el cabello para un alisado",
+        "por_que": "Lo que el negocio tiene escrito no puede apagarse por estar reservando.",
+        "mensajes": ["quiero cita para un alisado",
+                     "y como tengo que venir con el cabello?"],
+        "debe": ["3 lavados", "mismo dia", "mismo día", "la noche anterior"],
+        "no_debe": ["consulta con tu medico", "consulta con tu médico",
+                    "te recomiendo consultar", "no dispongo de esa informacion",
+                    "no dispongo de esa información"],
+    },
+    {
+        "id": "digresion-donde-estais-a-media-reserva",
+        "gravedad": "importante",
+        "solo_si": "tiene_qa:donde estais",
+        "por_que": "La direccion la tiene escrita: inventarla manda a la clienta a otro sitio.",
+        "mensajes": ["quiero cita para un corte de señora",
+                     "y donde estais exactamente?"],
+        "debe": ["andreu castillejos", "elche"],
+        "no_debe": [],
+    },
+    {
+        "id": "digresion-fianza-a-media-reserva",
+        "gravedad": "critico",
+        "solo_si": "tiene_qa:como se paga la fianza de la cita",
+        "por_que": "Es dinero. Inventarse el metodo de pago es el fallo mas caro que hay.",
+        "mensajes": ["quiero cita para un alisado", "y la fianza como se paga?"],
+        "debe": ["bizum", "transferencia", "670 387 625"],
+        "no_debe": ["efectivo en el salon", "paypal", "link de pago"],
+    },
 ]

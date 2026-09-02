@@ -207,6 +207,13 @@ def _aplica_a_este_negocio(cliente_id: str, caso: dict) -> bool:
         from backend import booking
 
         return bool(booking.no_se_da_precio_de(cliente_id, condicion.split(":", 1)[1]))
+    if condicion.startswith("tiene_qa:"):
+        # El caso mide que se dice LO QUE EL NEGOCIO TIENE ESCRITO. Si este
+        # negocio no lo tiene escrito, el caso no aplica: darlo por roto seria
+        # medir una Q&A que nadie configuro, la misma trampa que los precios.
+        from backend import rag
+
+        return bool(rag._match_qa_answer(cliente_id, condicion.split(":", 1)[1]))
     return True
 
 
