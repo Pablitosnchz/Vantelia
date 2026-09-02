@@ -782,6 +782,51 @@ def _dice_una_duracion(texto: str) -> bool:
     return bool(_DICE_UNA_DURACION.search(catalog_pick._norm(texto or "")))
 
 
+# "No tenemos promociones", "no hay ofertas", "no contamos con descuentos".
+# Afirmaciones rotundas sobre algo que el sistema NO sabe: el negocio no tiene
+# las promociones en ninguna parte, asi que el modelo se lo inventa por el lado
+# de negar. Le paso a la duenya del salon: SI tenia promocion los martes y
+# miercoles, y a una clienta que preguntaba por ella se le dijo que no habia.
+_NIEGA_PROMOCIONES = re.compile(
+    r"\bno\s+(?:tenemos|hay|tienen|contamos|disponemos|ofrecemos|manejamos)\b"
+    r"[^.!?]{0,50}?\b(?:promocion|promociones|oferta|ofertas|descuento|descuentos)\b"
+)
+
+# Las mismas palabras, para mirar si el negocio ha escrito algo del tema.
+_PALABRAS_DE_PROMOCION = ("promocion", "promociones", "oferta", "ofertas",
+                         "descuento", "descuentos")
+
+
+def _el_negocio_ha_escrito_de_promociones(cliente_id: str) -> bool:
+    """¿Hay algo suyo -Q&A o regla- que hable de promociones?"""
+    try:
+        from backend import db
+
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT question, answer FROM kb_qa WHERE cliente_id = ?",
+                (cliente_id,),
+            ).fetchall()
+            reglas = conexion.execute(
+                "SELECT nombre, texto FROM business_rules WHERE cliente_id = ?",
+                (cliente_id,),
+            ).fetchall()
+    except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
+        return True
+    for fila in list(filas) + list(reglas):
+        texto = catalog_pick._norm(" ".join(str(v or "") for v in tuple(fila)))
+        if any(p in texto.split() for p in _PALABRAS_DE_PROMOCION):
+            return True
+    return False
+
+
+def _niega_algo_que_no_puede_saber(cliente_id: str, texto: str) -> bool:
+    """Dice que NO hay promociones cuando el negocio no ha escrito ninguna."""
+    if not _NIEGA_PROMOCIONES.search(catalog_pick._norm(texto or "")):
+        return False
+    return not _el_negocio_ha_escrito_de_promociones(cliente_id)
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -2521,6 +2566,25 @@ async def responder(
                                     "Reescribe tu respuesta sin ninguna cifra de "
                                     "minutos ni de horas. Confirma que servicio es y "
                                     "sigue con el dia y la hora."),
+                    })
+                    continue
+                # 3 ter) Negar algo que no puede saber. El negocio no tiene las
+                #    promociones en ninguna parte, asi que el modelo elige la
+                #    salida rotunda: "no tenemos promociones". Le paso a la duenya
+                #    del salon, que SI tenia promocion los martes y miercoles: a
+                #    una clienta que preguntaba por ella se le dijo que no habia.
+                #    Negar por defecto cuesta clientas, y es primo hermano de
+                #    negar un servicio que si se hace, que ya es critico.
+                if (_niega_algo_que_no_puede_saber(cliente_id, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("nego_lo_que_no_sabe")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Las promociones NO estan en tu informacion: no "
+                                    "sabes si las hay. NO digas que no tienen. "
+                                    "Reescribe diciendo que lo confirmas con el "
+                                    "salon, y ofrecele seguir con lo que venia a "
+                                    "hacer."),
                     })
                     continue
                 # 4) Y decir que la cita existe cuando no existe es el fallo mas
