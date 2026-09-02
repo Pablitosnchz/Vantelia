@@ -769,6 +769,19 @@ _PREGUNTA_DURACION = re.compile(
 )
 
 
+# "dura 45 minutos", "son unos 30 min", "tarda 2 horas". Lo que el asistente
+# SUELTA, no lo que le preguntan.
+_DICE_UNA_DURACION = re.compile(
+    r"\b(?:dura|duran|tarda|tardan|lleva|llevan|son|es)\b[^.!?]{0,20}?"
+    r"\b\d{1,3}\s*(?:min|mins|minutos|h|hs|horas)\b"
+    r"|\b\d{1,3}\s*(?:min|minutos)\b"
+)
+
+
+def _dice_una_duracion(texto: str) -> bool:
+    return bool(_DICE_UNA_DURACION.search(catalog_pick._norm(texto or "")))
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -2482,6 +2495,32 @@ async def responder(
                                     "la cita de valoracion. Reescribe tu respuesta sin "
                                     "ninguna cifra, explicandole por que y ofreciendole "
                                     "esa cita."),
+                    })
+                    continue
+                # 3 bis) Los minutos que nadie ha pedido. Queja literal de la
+                #    duenya del salon, viendo "el servicio es Mechas o balayage
+                #    largo y dura 440 minutos": "no le he preguntado nada de
+                #    precio ni del tiempo que dura, todo eso no tiene que
+                #    decirlo". Siete horas sueltas de golpe asustan a cualquiera.
+                #    Se mira si lo pidio en CUALQUIER momento de la conversacion,
+                #    no solo en este mensaje: preguntarlo hace tres turnos cuenta.
+                # OJO: el mensaje que ACABA de escribir todavia no esta en el
+                # historial de la base de datos, asi que hay que mirarlo aparte.
+                # Sin eso, a "¿que suele tardar?" el freno tapaba la respuesta que
+                # ella misma acababa de pedir: lo pillo el banco, caso critico
+                # `cuanto-tarda-lo-que-ya-ha-elegido`.
+                if (_dice_una_duracion(texto_final)
+                        and not _pregunta_cuanto_dura(dicho_de_ella)
+                        and not booking.pidio_la_duracion_en_la_conversacion(
+                            cliente_id, session_id)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("duracion_que_no_pidio")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("NO te ha preguntado cuanto dura: no se lo digas. "
+                                    "Reescribe tu respuesta sin ninguna cifra de "
+                                    "minutos ni de horas. Confirma que servicio es y "
+                                    "sigue con el dia y la hora."),
                     })
                     continue
                 # 4) Y decir que la cita existe cuando no existe es el fallo mas

@@ -6536,6 +6536,27 @@ def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
         return False
 
 
+def pidio_la_duracion_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
+    """Ha preguntado cuanto dura en algun momento de ESTA conversacion.
+
+    Hermano de `pidio_precio_en_la_conversacion`, y por lo mismo: se mira lo que
+    ESCRIBIO ella. Preguntarlo hace tres mensajes cuenta igual que preguntarlo
+    ahora, y sin esto el freno taparia una respuesta que si le habian pedido.
+    """
+    try:
+        from backend import agent, db
+
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
+                " AND role = 'user' ORDER BY id DESC LIMIT 30",
+                (cliente_id, session_id),
+            ).fetchall()
+        return any(agent._pregunta_cuanto_dura(str(f["content"] or "")) for f in filas)
+    except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
+        return False
+
+
 def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool) -> Dict[str, Any]:
     """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.
 
