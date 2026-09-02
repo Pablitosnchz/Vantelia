@@ -827,6 +827,42 @@ def _niega_algo_que_no_puede_saber(cliente_id: str, texto: str) -> bool:
     return not _el_negocio_ha_escrito_de_promociones(cliente_id)
 
 
+def _lo_que_el_negocio_tiene_escrito(cliente_id: str, mensaje: str, config=None) -> str:
+    """La respuesta que el negocio escribio para lo que le acaban de preguntar.
+
+    ESTO ES EL MANEJO DE DIGRESIONES. A media reserva, una clienta pregunta algo
+    de verdad -"¿hay problema si estoy dando pecho?"- y hasta ahora se quedaba sin
+    contestar: `whatsapp.py` apaga la capa del negocio en cuanto hay flujo activo,
+    y el agente solo mira las Q&A si el MODELO se acuerda de llamar a la tool
+    `politica_del_negocio`. No se acordo, y contesto "consulta con tu medico"
+    teniendo el salon escrito que su Acido Lactico Bio Premium es apto para
+    embarazadas y madres lactantes.
+
+    Asi lo hacen los asistentes de produccion (digressions en Rasa, state handlers
+    en Dialogflow): la comprension NO se apaga dentro de una tarea. Se contesta la
+    digresion y se sigue con lo que se estaba haciendo, que aqui sale gratis
+    porque el agente conserva su estado.
+
+    Solo lo INFORMATIVO -lo que el negocio escribio-, nunca las acciones de sus
+    reglas: esas son las que secuestran la conversacion (la del precio se repitio
+    siete veces mientras una clienta intentaba confirmar).
+    """
+    try:
+        from backend import chat
+
+        decision = chat.decision_del_negocio(cliente_id, mensaje, config=config)
+    except Exception:  # noqa: BLE001 - entender nunca puede dejar sin respuesta
+        return ""
+    if not decision or decision.get("intent") not in ("qa_exact", "qa_semantica"):
+        return ""
+    texto = str(decision.get("texto") or "").strip()
+    if not texto:
+        return ""
+    return ("LO QUE EL NEGOCIO TIENE ESCRITO para lo que te acaban de preguntar, "
+            "diselo con tus palabras SIN cambiar el fondo ni anyadir datos, y "
+            "despues sigue con lo que estabais haciendo: %s" % texto)
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -2376,6 +2412,7 @@ async def responder(
         cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=25.0)
         obligar = False
         sin_precio = ""
+        qa_negocio = ""
         catalogo_mirado = False
         norma_mirada = False
         dias_abiertos_vistos = False   # se ha consultado un dia que SI abre
@@ -2425,8 +2462,12 @@ async def responder(
             # antes y competia con la nota del catalogo ("preguntale el largo"),
             # que ganaba por ir despues: el asistente pedia el largo para dar un
             # precio que este negocio no da.
+            # La digresion se resuelve en la PRIMERA vuelta, como el resto de
+            # restricciones: si no, cada llamada a una tool la volveria a buscar.
+            qa_negocio = (_lo_que_el_negocio_tiene_escrito(cliente_id, mensaje, config)
+                          if vuelta == 0 else qa_negocio)
             guia = [t for t in (reserva.resumen(estado, conocido), aviso,
-                                cuanto_dura, sin_precio,
+                                qa_negocio, cuanto_dura, sin_precio,
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:
