@@ -2314,7 +2314,7 @@ async def responder(
         return "", False
     cfg = config if config is not None else clients._get_client_config(cliente_id)
 
-    from backend import reserva, timeutils
+    from backend import booking, reserva, timeutils
 
     try:
         from zoneinfo import ZoneInfo
