@@ -613,6 +613,31 @@ def ya_se_lo_hemos_dicho(clave: str, texto: str) -> bool:
     return bool(cuando and (time.time() - cuando) <= _YA_DICHO_TTL)
 
 
+# Lo que dice quien contesta que SI, sin preguntar nada. Sin tildes: se compara
+# sobre texto normalizado (ver tests/test_patrones_sin_tilde.py).
+_SOLO_CONFIRMA_RE = re.compile(
+    r"^(?:si|sip|ok|okey|vale|claro|perfecto|genial|correcto|confirmo|confirmado|"
+    r"de acuerdo|esta bien|me parece bien|adelante|dale|eso es|exacto|"
+    r"si por favor|si porfa|si gracias|lo confirmo|todo correcto|todo bien|"
+    r"ya he dicho que confirmo|si confirmo)"
+    r"[\s.,!¡¿?]*$"
+)
+
+
+def _es_solo_confirmacion(mensaje: str) -> bool:
+    """La clienta solo esta diciendo que si a lo que se le acaba de preguntar.
+
+    Solo cuenta si el mensaje NO trae nada mas: "si, y cuanto cuesta?" si es una
+    consulta y tiene que seguir su camino.
+    """
+    plano = textnorm._strip_accents(str(mensaje or "").strip().lower())
+    # Sin la puntuacion de dentro: "si, por favor" es tan confirmacion como
+    # "si por favor", y la coma no puede cambiar la decision.
+    plano = re.sub(r"[.,;!¡¿?]+", " ", plano)
+    plano = re.sub(r"\s+", " ", plano).strip()
+    return bool(plano) and bool(_SOLO_CONFIRMA_RE.match(plano))
+
+
 def decision_del_negocio(
     cliente_id: str,
     message: str,
@@ -638,6 +663,14 @@ def decision_del_negocio(
     arranca su flujo guiado.
     """
     mensaje = str(message or "")
+
+    # 0. "Confirmo", "si", "vale". Eso no es una consulta: es la respuesta a lo
+    #    que le acabamos de preguntar. Medido el 2-sep: una clienta dijo
+    #    "confirmo" SIETE veces y en cada una se le solto otra vez la regla del
+    #    precio -"el precio depende mucho de tu pelo..."- porque la decision del
+    #    negocio se consulta en cada mensaje. La cita no se cogio nunca.
+    if _es_solo_confirmacion(mensaje):
+        return None
 
     # 1. Lo que el negocio escribio literalmente para esta pregunta. Salvo que
     # pregunte por HOY o por AHORA: eso lo contesta el bloque de datos en vivo del
