@@ -1960,7 +1960,7 @@ async def _wa_turno_del_agente(
 
 async def _wa_start_booking_flow(
     *, cliente_id: str, phone_number_id: str, from_number: str,
-    flow: appstate.WAFlowState, config: Dict[str, Any],
+    flow: appstate.WAFlowState, config: Dict[str, Any], dicho: str = "",
 ) -> None:
     """Arranque COMUN del flujo de reserva (opcion de menu, texto libre e intencion IA):
     centro (solo si el negocio tiene varios y el numero no esta atado a uno) -> servicio
@@ -1992,8 +1992,14 @@ async def _wa_start_booking_flow(
         flow.location_id = effective_location
         if await _wa_turno_del_agente(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
-            incoming_text="Quiero coger cita.", flow=flow, config=config, request=None,
-            intencion="reservar",
+            # LO QUE DIJO ELLA. Antes aqui iba fijo "Quiero coger cita." y su frase
+            # real se perdia: a "no quiero cita para diagnostico, quiero cita para
+            # hacermelas" el agente respondia insistiendo en el diagnostico porque
+            # NUNCA la habia oido, y a "coger cita" intentaba resolverlo como si
+            # fuera un servicio del catalogo ("no tengo un servicio llamado coger
+            # cita"). La intencion ya viaja aparte, en `intencion`.
+            incoming_text=dicho or "Quiero coger cita.", flow=flow, config=config,
+            request=None, intencion="reservar",
         ):
             return
         # Sin agente, se pregunta a mano y luego se resuelve con el catalogo.
@@ -2276,6 +2282,7 @@ async def _handle_whatsapp_message(
                 await _wa_start_booking_flow(
                     cliente_id=cliente_id, phone_number_id=phone_number_id,
                     from_number=from_number, flow=flow, config=config,
+                    dicho=incoming_text,
                 )
             return
         # Sin texto configurado, la intencion todavia sirve para acertar con lo
@@ -2289,6 +2296,7 @@ async def _handle_whatsapp_message(
             await _wa_start_booking_flow(
                 cliente_id=cliente_id, phone_number_id=phone_number_id,
                 from_number=from_number, flow=flow, config=config,
+                dicho=incoming_text,
             )
             return
         # Cancelar y reprogramar los gestionan los disparadores de abajo, que ya
@@ -2442,7 +2450,7 @@ async def _handle_whatsapp_message(
         _wa_reset_booking_fields(flow)
         await _wa_start_booking_flow(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
-            flow=flow, config=config,
+            flow=flow, config=config, dicho=incoming_text,
         )
         return
 
@@ -3211,7 +3219,7 @@ async def _handle_whatsapp_message(
         )
         await _wa_start_booking_flow(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
-            flow=flow, config=config,
+            flow=flow, config=config, dicho=incoming_text,
         )
         return
 
