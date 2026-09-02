@@ -1152,6 +1152,14 @@ async def _process_chat_message(
         message[:120],
     )
 
+    # ULTIMO FRENO: un precio que este negocio no da. El agente ya lo tiene en su
+    # bucle, pero esta rama -la respuesta documental del chat web- no pasaba por
+    # ahi y se escapaba. Medido en produccion: a "precio del secado al aire corto"
+    # contestaba "10 EUR" de un servicio que cuesta 4, copiando la duracion. No es
+    # que filtrara el catalogo -no ve los precios-: se los inventaba, y el fallo
+    # mas caro de un asistente es decir una cifra que no existe.
+    clean_text = _sin_precios_que_no_se_dan(cliente_id, clean_text, message)
+
     chat_response = RespuestaChat(
         respuesta=clean_text or "No tengo una respuesta valida en este momento.",
         mostrar_formulario=mostrar_formulario and booking_enabled,
@@ -1172,6 +1180,34 @@ async def _process_chat_message(
 # Van SIN tildes: `_detect_commercial_intent` normaliza el mensaje antes de
 # buscarlas. Aqui habia ademas una variante de "recomendacion" con la tilde
 # doblemente codificada, que no casaba nada.
+def _sin_precios_que_no_se_dan(cliente_id: str, texto: str, mensaje: str) -> str:
+    """Cambia la respuesta si lleva una cifra de dinero que el negocio no publica.
+
+    No se intenta "limpiarla" quitando numeros: una frase a la que se le arranca
+    el precio queda coja y sigue sonando a que hay uno. Se sustituye por lo que el
+    negocio ha escrito para esa pregunta, y si no ha escrito nada, por una
+    explicacion corta con la salida de siempre -la cita de valoracion-.
+    """
+    if not texto:
+        return texto
+    try:
+        from backend import agent
+
+        if not agent._da_un_precio_prohibido(cliente_id, texto, mensaje):
+            return texto
+        regla = booking.no_se_da_precio_de(cliente_id, mensaje)
+        propio = str((regla or {}).get("texto") or "").strip()
+        if propio:
+            return propio
+        return (
+            "El precio depende de tu cabello, asi que no te doy una cifra a ciegas. "
+            "Lo vemos en una cita de valoracion, sin compromiso, y ahi te lo decimos "
+            "cerrado. ¿Te busco un hueco?"
+        )
+    except Exception:  # noqa: BLE001 - un freno nunca puede dejar sin respuesta
+        return texto
+
+
 COMMERCIAL_INTENT_PATTERNS: Dict[str, List[re.Pattern[str]]] = {
     "diagnostico": [
         re.compile(pattern, re.IGNORECASE)
