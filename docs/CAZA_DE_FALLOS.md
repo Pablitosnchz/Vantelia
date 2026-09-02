@@ -339,6 +339,36 @@ rg -n 'nota"|nota_al_confirmar|aviso_' backend/agent.py
 
 ---
 
+### 19 bis. El muro reformulado (INTENTADO Y DESCARTADO, 2-sep-2026)
+
+La clienta insiste en algo que el negocio no hace y recibe la misma negativa una
+y otra vez. `_ya_dijo_esto` compara los 90 primeros caracteres EXACTOS, y el
+modelo la esquiva cambiando dos palabras:
+
+    "Lamento QUE NO TENGAMOS servicios de manicura ni de unas de gel..."
+    "Lamento INFORMARTE QUE NO TENEMOS servicios de manicura ni de unas de gel..."
+
+**Se intento comparar por parecido y se descarto con datos.** Midiendo la
+coincidencia de palabras sobre casos reales:
+
+| | parecido |
+| --- | --- |
+| negativa reformulada (hay que frenarla) | 0,647 |
+| regla del precio repetida (hay que frenarla) | 0,714 |
+| "corte de senora, 20 min" vs "corte de caballero, 30 min" (NO frenar) | **0,667** |
+| dos ofertas de horas distintas (NO frenar) | 0,526 |
+
+El caso que NO hay que frenar se parece MAS que uno de los que si. Cualquier
+umbral que cace la negativa reformulada bloquea una respuesta legitima, y
+bloquear una respuesta buena es peor que repetir una.
+
+Si se retoma, la senyal no es cuanto se parecen sino QUE cambia: en las que hay
+que frenar solo cambian conectores y formas verbales (tengamos/tenemos,
+que/informarte), y en las que no, cambian las palabras con contenido (senora/
+caballero, 20/30). Habria que pesar los tokens, no contarlos.
+
+---
+
 ### 20. Afirmar sobre lo que no se tiene configurado
 
 Ante un hueco en la configuración, el modelo elige una respuesta rotunda en vez de
