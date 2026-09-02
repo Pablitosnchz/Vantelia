@@ -2933,6 +2933,57 @@ async def _update_booking_details(
     )
 
 
+# Canales donde no hay nadie supervisando: ahi es donde se cuelan las dobles
+# citas. El portal NO entra -el mostrador si puede querer dos a la vez, por
+# ejemplo dos ninyos de la misma madre con dos profesionales-.
+FUENTES_SIN_SUPERVISION = ("chat", "whatsapp", "voice", "widget", "agente")
+
+
+def _cita_suya_a_esa_hora(
+    cliente_id: str, telefono: str, booking_date: str, booking_time: str,
+    duracion: int, source: str,
+) -> Optional[sqlite3.Row]:
+    """La cita activa de ESTE telefono que se solaparia con la que se va a crear."""
+    if not telefono or not any(f in str(source or "") for f in FUENTES_SIN_SUPERVISION):
+        return None
+    try:
+        from backend import crm
+
+        buscado = crm._normalize_phone_for_match(telefono)
+        if not buscado:
+            return None
+        nuevo_ini, nuevo_fin = _minutos_del_tramo(booking_time, duracion)
+        with db._get_db_connection() as connection:
+            filas = connection.execute(
+                """
+                SELECT id, booking_code, servicio, booking_time, telefono
+                  FROM bookings
+                 WHERE cliente_id = ? AND booking_date = ?
+                   AND status IN ('pending_review', 'confirmed', 'pending_payment')
+                """,
+                (cliente_id, booking_date),
+            ).fetchall()
+        for fila in filas:
+            if crm._normalize_phone_for_match(fila["telefono"] or "") != buscado:
+                continue
+            suya = agenda._service_duration_minutes(cliente_id, fila["servicio"] or "", None)
+            ini, fin = _minutos_del_tramo(fila["booking_time"] or "", suya)
+            if ini < nuevo_fin and nuevo_ini < fin:
+                return fila
+    except Exception:  # noqa: BLE001 - un freno nunca puede impedir una reserva buena
+        return None
+    return None
+
+
+def _minutos_del_tramo(hora: str, duracion: int):
+    try:
+        h, m = str(hora or "0:0").split(":")[:2]
+        inicio = int(h) * 60 + int(m)
+    except (TypeError, ValueError):
+        inicio = 0
+    return inicio, inicio + max(int(duracion or 0), 1)
+
+
 async def _create_booking_core(
     cliente_id: str,
     *,
@@ -2976,6 +3027,24 @@ async def _create_booking_core(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Ese horario ya no esta disponible. Elige otro tramo.",
+        )
+
+    ya = _cita_suya_a_esa_hora(
+        cliente_id, telefono, booking_date, booking_time, service_duration, source,
+    )
+    if ya:
+        # Medido en la simulacion del 2-sep: reservo "Mechas medio" a las 11:00,
+        # cambio de idea a mitad de conversacion y se le confirmo ADEMAS "Corte
+        # mecha" a las 11:00. Dos citas a la vez, la primera sin cancelar, y el
+        # negocio con el hueco ocupado dos veces. Cambiar de servicio es CAMBIAR
+        # la cita, no coger otra.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Esta persona ya tiene una cita a esa hora (%s, %s). Si quiere otra "
+                "cosa, hay que CAMBIAR esa cita, no crear una segunda."
+                % (ya["booking_code"] or ya["id"], ya["servicio"] or "sin servicio")
+            ),
         )
 
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
