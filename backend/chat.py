@@ -1192,6 +1192,7 @@ async def _process_chat_message(
     # que filtrara el catalogo -no ve los precios-: se los inventaba, y el fallo
     # mas caro de un asistente es decir una cifra que no existe.
     clean_text = _sin_precios_que_no_se_dan(cliente_id, clean_text, message)
+    clean_text = _sin_negar_lo_que_no_sabe(cliente_id, clean_text)
 
     chat_response = RespuestaChat(
         respuesta=clean_text or "No tengo una respuesta valida en este momento.",
@@ -1213,6 +1214,36 @@ async def _process_chat_message(
 # Van SIN tildes: `_detect_commercial_intent` normaliza el mensaje antes de
 # buscarlas. Aqui habia ademas una variante de "recomendacion" con la tilde
 # doblemente codificada, que no casaba nada.
+def _sin_negar_lo_que_no_sabe(cliente_id: str, texto: str) -> str:
+    """Cambia la negativa rotunda sobre algo que el negocio no ha escrito.
+
+    Mismo caso que el freno del agente, y por el mismo motivo tiene que estar
+    tambien aqui: la respuesta documental del chat no pasa por el bucle del
+    agente, asi que el guardarrail solo protegia un camino (clase 17 de
+    docs/CAZA_DE_FALLOS.md). Medido en produccion: con el freno ya desplegado,
+    a "¿teneis alguna promocion para el alisado?" seguia contestando "no
+    tenemos promociones especificas para el alisado".
+
+    Se cambia SOLO la frase que niega, no toda la respuesta: lo que venia
+    despues -ofrecerle el diagnostico- esta bien y se conserva.
+    """
+    if not texto:
+        return texto
+    try:
+        from backend import agent
+
+        if not agent._niega_algo_que_no_puede_saber(cliente_id, texto):
+            return texto
+        frases = re.split(r"(?<=[.!?])\s+", texto)
+        honesta = ("Sobre promociones no tengo el dato aqui; te lo confirmo con el "
+                   "salon.")
+        salida = [honesta if agent._niega_algo_que_no_puede_saber(cliente_id, f) else f
+                  for f in frases]
+        return " ".join(x for x in salida if x).strip() or honesta
+    except Exception:  # noqa: BLE001 - un freno nunca puede dejar sin respuesta
+        return texto
+
+
 def _sin_precios_que_no_se_dan(cliente_id: str, texto: str, mensaje: str) -> str:
     """Cambia la respuesta si lleva una cifra de dinero que el negocio no publica.
 

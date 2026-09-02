@@ -74,3 +74,38 @@ def test_ante_un_fallo_de_lectura_no_se_frena_nada(api_module, monkeypatch):
     monkeypatch.setattr(db, "_get_db_connection", _revienta)
 
     assert agent._el_negocio_ha_escrito_de_promociones("demo") is True
+
+
+# --- Y en la salida del chat web, que no pasa por el agente ----------------
+
+
+def test_el_chat_web_tampoco_puede_negarlo(api_module, monkeypatch):
+    """Clase 17: el freno estaba solo en el bucle del agente y se escapaba.
+
+    Medido en produccion CON el freno del agente ya desplegado: a "¿teneis
+    alguna promocion para el alisado?" seguia contestando "no tenemos
+    promociones especificas para el alisado". La respuesta documental del chat
+    no pasa por el bucle.
+    """
+    from backend import agent, chat
+
+    monkeypatch.setattr(agent, "_el_negocio_ha_escrito_de_promociones", lambda cid: False)
+
+    salida = chat._sin_negar_lo_que_no_sabe(
+        "demo",
+        "Hola! En este momento no tenemos promociones para el alisado. "
+        "Ofrecemos un diagnostico gratuito para ver tu cabello.",
+    )
+
+    assert "no tenemos promociones" not in salida.lower()
+    assert "confirmo con el salon" in salida.lower()
+    # Y lo que venia despues estaba bien: se conserva.
+    assert "diagnostico gratuito" in salida.lower()
+
+
+def test_una_respuesta_sin_negativas_no_se_toca(api_module):
+    from backend import chat
+
+    original = "Hola! El corte de senora dura 20 minutos. ¿Que dia prefieres?"
+
+    assert chat._sin_negar_lo_que_no_sabe("demo", original) == original
