@@ -71,6 +71,7 @@ CASOS = [
     },
     {
         "id": "no-dar-la-cita-por-hecha",
+        "no_debe_en": "ultima",
         "gravedad": "critico",
         "por_que": "Decirle que tiene cita cuando no la tiene es lo peor que puede pasar.",
         "mensajes": [
@@ -400,5 +401,101 @@ CASOS = [
         "mensajes": ["hola quiero un corte de señora", "que suele tardar?"],
         "debe": ["minuto"],
         "no_debe": ["valoracion", "valoración", "diagnostico", "diagnóstico"],
+    },
+    # ─── Lo que rompio la confianza del salon piloto (2-sep-2026) ──────────
+    #
+    # Los cuatro salieron de conversaciones REALES de la duenya probando su propio
+    # asistente. Los tres primeros tienen la misma raiz, ya arreglada: al agente le
+    # llegaba la frase fija "Quiero coger cita." en vez de lo que ella escribia.
+    {
+        "id": "no-quiero-diagnostico-quiero-cita",
+        "gravedad": "critico",
+        "por_que": (
+            "Lo dijo TRES veces -'no quiero cita para diagnostico, quiero cita para "
+            "hacermelas'- y el asistente siguio ofreciendole el diagnostico hasta "
+            "mandarla a llamar por telefono. No la ignoraba: su mensaje se perdia "
+            "antes de llegar al agente. Es el fallo que le hizo dudar del producto."
+        ),
+        "mensajes": [
+            "quiero unas mechas y tengo el pelo largo",
+            "no quiero cita para diagnostico, quiero cita para hacermelas",
+        ],
+        # Ofrecerlo la PRIMERA vez es su politica configurada y esta bien. Lo que
+        # se mide es la respuesta de despues, cuando ella ya ha dicho que no.
+        "no_debe_en": "ultima",
+        "debe": [],
+        # Insistir en el diagnostico despues de que lo rechace, o mandarla a
+        # llamar, es exactamente lo que hizo perder la conversacion.
+        "no_debe": ["diagnostico", "diagnóstico", "llamarnos", "que nos llames"],
+    },
+    {
+        "id": "no-negar-el-servicio-por-como-se-llama-en-el-catalogo",
+        "gravedad": "critico",
+        "por_que": (
+            "'Carino, no tengo un servicio especifico llamado mechas' a un salon que "
+            "tiene 31 servicios de mechas. Pasa porque busca la frase de la clienta "
+            "en el catalogo y anuncia el fallo en vez de resolverlo."
+        ),
+        "mensajes": ["quiero una cita para hacerme unas mechas"],
+        "debe": [],
+        "no_debe": [
+            "no tengo un servicio", "no tenemos un servicio",
+            "no existe ese servicio", "no encuentro ese servicio",
+        ],
+    },
+    {
+        "id": "no-enumerar-las-variantes-del-catalogo",
+        "gravedad": "importante",
+        "por_que": (
+            "Le solto la lista interna: 'Mechas media cabeza-extra largo, Mechas "
+            "corto, Mechas medio, Mechas corto-med. Cual de estas te gustaria?'. "
+            "Esos nombres son de cocina y la clienta no puede elegir entre ellos. "
+            "Lo que hay que preguntar es como tiene el pelo de largo."
+        ),
+        "mensajes": ["quiero unas mechas"],
+        "debe": ["largo"],
+        "no_debe": ["corto-med", "media cabeza-"],
+    },
+    {
+        "id": "no-soltar-la-duracion-sin-que-la-pidan",
+        "gravedad": "importante",
+        "por_que": (
+            "'El servicio es Mechas o balayage largo y dura 440 minutos' cuando "
+            "nadie habia preguntado. Palabras de la duenya: 'no le he preguntado "
+            "nada de precio ni del tiempo que dura, todo eso no tiene que decirlo'. "
+            "Siete horas sueltas asi asustan a cualquiera."
+        ),
+        "mensajes": ["quiero hacerme las mechas y tengo el cabello largo"],
+        "debe": [],
+        "no_debe": ["minutos"],
+    },
+    {
+        "id": "foto-anunciada-no-vuelve-a-preguntar-el-largo",
+        "gravedad": "critico",
+        "por_que": (
+            "Bucle real: ella insistia en mandar una foto y el asistente repetia "
+            "'necesito saber como tienes el pelo de largo' una y otra vez, tambien "
+            "despues de mandarla. El asistente no ve fotos, pero entonces lo que "
+            "toca es decir que la mande y que le contestan, no seguir preguntando."
+        ),
+        "mensajes": ["si te mando una foto y me ves el cabello, es mejor?"],
+        "debe": ["mand", "foto"],
+        "no_debe": ["como tienes el pelo de largo", "corto, medio, largo"],
+    },
+    {
+        "id": "precio-sin-regla-de-familia-tampoco",
+        "gravedad": "critico",
+        "solo_si": "sin_precio_global",
+        "por_que": (
+            "Su negocio tiene `mostrar_precios: False`: NO da precios por mensaje, de "
+            "nada. Con mechas o alisado funciona, porque ademas hay una regla de "
+            "familia con texto propio. Pero preguntado por un secado -que no tiene "
+            "regla, solo el interruptor global- el asistente en produccion recito el "
+            "catalogo: 'Secado al aire corto: 10 min, Precio: 10 EUR'. El freno esta "
+            "escrito como INSTRUCCION al modelo, y el modelo puede desobedecerla."
+        ),
+        "mensajes": ["cuanto cuesta un secado?"],
+        "debe": [],
+        "no_debe": ["€", " eur"],
     },
 ]

@@ -193,6 +193,11 @@ def _aplica_a_este_negocio(cliente_id: str, caso: dict) -> bool:
         from backend import booking
 
         return not booking.precios_ocultos(cliente_id)
+    if condicion == "sin_precio_global":
+        # Solo para quien ha apagado los precios ENTEROS (`mostrar_precios: False`).
+        from backend import booking
+
+        return booking.precios_ocultos(cliente_id)
     if condicion.startswith("sin_precio:"):
         # El caso comprueba que NO se da el precio de algo. Si este negocio si lo
         # da, el caso no aplica -y sobre todo: no puede contarse como FALLO-.
@@ -322,8 +327,14 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     if debe and not any(_norm(p) in todo for p in debe):
         return False, respuestas, "no dice nada de %s" % debe
 
+    # Donde no puede aparecer lo prohibido. Por defecto en ninguna respuesta, pero
+    # hay casos en los que decirlo AL PRINCIPIO es lo correcto y el fallo esta en
+    # insistir: a "quiero mechas" el negocio ofrece diagnostico -es su politica-, y
+    # lo que no vale es repetirlo cuando ella ya ha dicho que no lo quiere. Medir
+    # eso contra todas las respuestas castiga justo el comportamiento bueno.
+    donde = "ultima" if caso.get("no_debe_en") == "ultima" else "todas"
     for prohibido in caso.get("no_debe") or []:
-        objetivo = ultimo if caso["id"] == "no-dar-la-cita-por-hecha" else todo
+        objetivo = ultimo if donde == "ultima" else todo
         if _norm(prohibido) in objetivo:
             return False, respuestas, "no deberia decir %r" % prohibido
     return True, respuestas, ""
@@ -388,7 +399,11 @@ def main() -> int:
             aciertos += 1
         else:
             fallos[caso["gravedad"]].append((caso, motivo, respuestas))
-            print("           %s (las DOS veces)" % motivo)
+            print("           %s (%s)" % (
+                motivo,
+                "en la ultima respuesta" if caso.get("no_debe_en") == "ultima"
+                else "las DOS veces",
+            ))
             print("           por que importa: %s" % caso.get("por_que", ""))
         if args.detalle and respuestas:
             for r in respuestas:
