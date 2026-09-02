@@ -2740,12 +2740,15 @@ def _load_booking_by_token_or_404(manage_token: str) -> sqlite3.Row:
     return row
 
 
-def _booking_update_payload_from_reschedule(row: sqlite3.Row, data: BookingReschedulePayload) -> BookingUpdatePayload:
+def _booking_update_payload_from_reschedule(
+    row: sqlite3.Row, data: BookingReschedulePayload, *, servicio: str = "",
+) -> BookingUpdatePayload:
+    """El payload para mover una cita. Con `servicio` ademas se le cambia el servicio."""
     return BookingUpdatePayload(
         nombre=row["nombre"],
         email=row["email"],
         telefono=row["telefono"] or "",
-        servicio=row["servicio"] or "",
+        servicio=servicio or (row["servicio"] or ""),
         employee_id=data.employee_id or (row["employee_id"] or ""),
         fecha=data.fecha,
         hora=data.hora,

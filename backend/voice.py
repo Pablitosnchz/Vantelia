@@ -1581,10 +1581,19 @@ def _voice_booking_tools(
                         ),
                     },
                     "hora": {"type": "string", "description": "Nueva hora HH:MM en 24h"},
+                    "servicio": {
+                        "type": "string",
+                        "description": (
+                            "Nuevo servicio, si lo que quiere es CAMBIAR de servicio "
+                            "('mejor solo un corte de puntas'). Deja fecha y hora vacias "
+                            "para conservar las que ya tiene. NO crees una cita nueva "
+                            "para esto: se cambia la que ya existe."
+                        ),
+                    },
                     "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
                     "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
                 },
-                "required": ["fecha", "hora"],
+                "required": [],
             },
         },
         {
@@ -2903,6 +2912,7 @@ async def _voice_reschedule_booking(
     fecha: str,
     hora: str,
     *,
+    servicio: str = "",
     from_number: str = "",
     telefono: str = "",
     email: str = "",
@@ -2921,10 +2931,17 @@ async def _voice_reschedule_booking(
     # a "quiero cancelar mi cita" el modelo llamo aqui con la fecha y la hora que
     # ya tenia, dijo "listo, reprogramada" y la cita siguio en pie. Quien pedia
     # cancelar se quedo con la cita puesta.
-    limpia_fecha = textnorm._sanitize_text(fecha)
-    limpia_hora = textnorm._sanitize_text(hora)
+    # Cambiar SOLO el servicio es legitimo: la fecha y la hora se conservan. Sin
+    # esto, a "mejor solo quiero cortarme las puntas" el asistente no tenia forma
+    # de cambiarla, lo intentaba, se atascaba y acababa mandandola a llamar por
+    # telefono (medido: 3 de 30 conversaciones se fueron sin cita asi).
+    nuevo_servicio = textnorm._sanitize_text(servicio or "")
+    limpia_fecha = textnorm._sanitize_text(fecha) or (row["booking_date"] or "")
+    limpia_hora = textnorm._sanitize_text(hora) or (row["booking_time"] or "")
+    fecha, hora = limpia_fecha, limpia_hora
     if (limpia_fecha == (row["booking_date"] or "")
-            and limpia_hora == (row["booking_time"] or "")):
+            and limpia_hora == (row["booking_time"] or "")
+            and not nuevo_servicio):
         return {
             "ok": False,
             "error": ("Esa cita YA es de ese dia y esa hora: asi no cambia nada. Si "
@@ -2934,7 +2951,8 @@ async def _voice_reschedule_booking(
 
     verified_by_code = _voice_booking_otp_verified(cliente_id, row["id"])
     payload = booking._booking_update_payload_from_reschedule(
-        row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora))
+        row, BookingReschedulePayload(fecha=limpia_fecha, hora=limpia_hora),
+        servicio=nuevo_servicio,
     )
     try:
         await booking._update_booking_details(row, payload, None, source="voice")
@@ -3134,6 +3152,7 @@ async def _voice_dispatch_tool_impl(
             str(args.get("fecha", "")),
             str(args.get("hora", "")),
             from_number=from_number,
+            servicio=str(args.get("servicio", "")),
             telefono=str(args.get("telefono", "")),
             email=str(args.get("email", "")),
             fecha_texto=str(args.get("fecha_texto", "")),
