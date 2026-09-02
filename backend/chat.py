@@ -692,6 +692,7 @@ def decision_del_negocio(
     #    Los dos canales ya saben tratar `pasar_a_humano`: contestan y llaman a
     #    `inbox.claim`, que calla al asistente en ESA conversacion.
     if inbox.pide_una_persona(mensaje) and inbox.paso_a_persona_activo(cliente_id, config):
+        # `hay_vuelta` lo decide el CANAL: se resuelve abajo, en quien llama.
         return {
             "texto": inbox.texto_al_pedir_persona(cliente_id, config),
             "intent": "pide_una_persona",
@@ -925,7 +926,15 @@ async def _process_chat_message(
     )
     if decision and decision["texto"]:
         if decision["accion"] == "pasar_a_humano":
-            inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+            # El widget de la web NO tiene canal de vuelta: el salon no puede
+            # contestar por ahi. Callar al asistente dejaria a la clienta mirando
+            # el silencio, asi que aqui no se silencia y se le da un telefono
+            # donde si la atienden. En WhatsApp es al reves y sigue igual.
+            if decision["intent"] == "pide_una_persona":
+                decision = dict(decision, texto=inbox.texto_al_pedir_persona(
+                    cliente_id, client_config, hay_vuelta=False))
+            else:
+                inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
         rag._record_chat_message(
             session_id=session_id, cliente_id=cliente_id, role="assistant",
             content=decision["texto"], intent=decision["intent"],

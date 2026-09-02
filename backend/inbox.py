@@ -80,9 +80,33 @@ def paso_a_persona_activo(cliente_id: str, config=None) -> bool:
     return bool(_seccion(cliente_id, config).get("enabled", True))
 
 
-def texto_al_pedir_persona(cliente_id: str, config=None) -> str:
-    return str(_seccion(cliente_id, config).get("texto")
-               or DEFECTO_PASO_A_PERSONA).strip()
+def texto_al_pedir_persona(cliente_id: str, config=None, *, hay_vuelta: bool = True) -> str:
+    """Que se le contesta a quien pide una persona.
+
+    `hay_vuelta` dice si por ESE canal alguien puede contestarle. Por WhatsApp si:
+    el equipo responde desde su movil o desde el panel, y por eso ahi el asistente
+    se calla. Por el widget de la web NO hay vuelta -no existe canal de respuesta-,
+    asi que prometerle que "te contesta enseguida" seria mentira: se le da un
+    telefono donde si le van a atender.
+    """
+    propio = str(_seccion(cliente_id, config).get("texto") or "").strip()
+    if propio:
+        return propio
+    if hay_vuelta:
+        return DEFECTO_PASO_A_PERSONA
+    from backend import clients
+
+    telefono = ""
+    try:
+        telefono = str((clients._get_client_config(cliente_id).get("contacto") or {})
+                       .get("telefono") or "").strip()
+    except Exception:  # noqa: BLE001
+        telefono = ""
+    if telefono:
+        return ("Claro. Por aquí no puedo pasarte con nadie, pero si llamas al %s "
+                "te atienden directamente." % telefono)
+    return ("Claro. Por aquí no puedo pasarte con nadie, pero si nos escribes por "
+            "WhatsApp te atiende una compañera.")
 
 
 def _row_to_state(row: Optional[sqlite3.Row]) -> Dict[str, Any]:

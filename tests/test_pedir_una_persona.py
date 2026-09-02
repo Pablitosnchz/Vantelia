@@ -75,3 +75,49 @@ def test_el_negocio_puede_poner_su_texto(api_module):
     config = {"pasar_a_humano": {"texto": "Te llamamos en 5 minutos."}}
 
     assert inbox.texto_al_pedir_persona("demo", config) == "Te llamamos en 5 minutos."
+
+
+# --- Y por donde puede contestar de verdad ---------------------------------
+
+
+def test_por_whatsapp_se_le_dice_que_espere(api_module):
+    """Ahi SI hay vuelta: el equipo contesta desde su movil o desde el panel."""
+    from backend import inbox
+
+    texto = inbox.texto_al_pedir_persona("demo", hay_vuelta=True)
+
+    assert "espera" in texto.lower()
+
+
+def test_por_el_widget_no_se_promete_una_respuesta_que_no_puede_llegar(api_module):
+    """El widget no tiene canal de vuelta: el salon no puede contestar por ahi.
+
+    Callar al asistente ahi dejaria a la clienta mirando el silencio hasta que
+    caduque el turno. Lo correcto es darle un sitio donde SI la atiendan.
+    """
+    from backend import inbox
+
+    texto = inbox.texto_al_pedir_persona("demo", hay_vuelta=False)
+
+    assert "espera" not in texto.lower()
+    assert "llamas" in texto.lower() or "whatsapp" in texto.lower()
+
+
+def test_el_texto_del_negocio_manda_en_los_dos_casos(api_module):
+    from backend import inbox
+
+    config = {"pasar_a_humano": {"texto": "Te llamamos en 5 minutos."}}
+
+    assert inbox.texto_al_pedir_persona("demo", config, hay_vuelta=True) == "Te llamamos en 5 minutos."
+    assert inbox.texto_al_pedir_persona("demo", config, hay_vuelta=False) == "Te llamamos en 5 minutos."
+
+
+def test_el_chat_web_no_silencia_al_asistente(api_module):
+    """Si silenciara, la clienta se quedaria sin nadie que le conteste."""
+    import inspect
+
+    from backend import chat
+
+    fuente = inspect.getsource(chat._process_chat_message)
+    assert 'decision["intent"] == "pide_una_persona"' in fuente
+    assert "hay_vuelta=False" in fuente
