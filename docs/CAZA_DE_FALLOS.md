@@ -339,6 +339,31 @@ rg -n 'nota"|nota_al_confirmar|aviso_' backend/agent.py
 
 ---
 
+### 18 bis. Lo que solo funciona si el negocio lo configura
+
+Una capacidad existe en el codigo, funciona bien... y esta atada a que el negocio
+cree una regla. Si no la crea -y no la crea nadie-, para el cliente sencillamente
+no existe.
+
+Caso real (2-sep-2026): `pasar_a_humano` estaba impecable -contesta y llama a
+`inbox.claim`, que calla al asistente en esa conversacion- pero solo se disparaba
+desde una REGLA del negocio, y su plantilla va atada a la intencion "queja". El
+salon piloto tiene tres reglas y ninguna es esa, asi que a *"quiero hablar con
+una persona"* el asistente seguia hablando.
+
+```bash
+# Acciones potentes que solo se alcanzan desde una regla
+rg -n 'accion.*==.*"(pasar_a_humano|pedir_foto|formulario)"' backend/
+rg -n '"intenciones": \[' backend/playbooks.py
+```
+
+**Pregunta:** ¿esto es una preferencia del negocio o algo que SIEMPRE hay que
+hacer? Pedir una persona, mandar una foto o quejarse no son preferencias: pasan
+en cualquier negocio y el comportamiento correcto es el mismo. Eso va en codigo,
+encendido por defecto y apagable; no en una plantilla que hay que activar.
+
+---
+
 ### 19 bis. El muro reformulado (INTENTADO Y DESCARTADO, 2-sep-2026)
 
 La clienta insiste en algo que el negocio no hace y recibe la misma negativa una

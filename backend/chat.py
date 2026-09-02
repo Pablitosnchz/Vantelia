@@ -686,6 +686,19 @@ def decision_del_negocio(
             "intencion": "",
         }
 
+    # 1 bis. "Quiero hablar con una persona". Va DESPUES de las Q&A escritas -si
+    #    el negocio tiene su propia respuesta, manda la suya- y antes que todo lo
+    #    demas: quien pide una persona no quiere seguir hablando con la maquina.
+    #    Los dos canales ya saben tratar `pasar_a_humano`: contestan y llaman a
+    #    `inbox.claim`, que calla al asistente en ESA conversacion.
+    if inbox.pide_una_persona(mensaje) and inbox.paso_a_persona_activo(cliente_id, config):
+        return {
+            "texto": inbox.texto_al_pedir_persona(cliente_id, config),
+            "intent": "pide_una_persona",
+            "accion": "pasar_a_humano",
+            "intencion": "",
+        }
+
     # 2. "Te mando una foto?" Se contesta SIEMPRE que si, tambien en mitad de un
     #    agendado: seguir preguntando el largo mientras la clienta intenta mandar
     #    una foto es el bucle que hizo dudar al salon piloto de todo el producto.

@@ -16,6 +16,7 @@ lugar de intentar el envio y fallar en silencio.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any, Dict, Optional
 
@@ -33,6 +34,55 @@ WINDOW_CLOSED_MESSAGE = (
     "permite escribir libremente dentro de esa ventana: espera a que vuelva a "
     "escribir o contacta por telefono o email."
 )
+
+
+# --- Cuando la clienta pide hablar con alguien -----------------------------
+#
+# La accion `pasar_a_humano` existia solo como REGLA del negocio, y su plantilla
+# se dispara con quejas. Si nadie la configura -el salon piloto tiene tres reglas
+# y ninguna es esa-, a "quiero hablar con una persona" el asistente seguia
+# hablando. Pedir una persona no puede depender de que el negocio se acuerde de
+# configurarlo: es lo mismo que con una foto, hace falta alguien de verdad.
+
+_PIDE_UNA_PERSONA = re.compile(
+    # Un verbo de hablar/pasar/atender y, cerca, una palabra de persona.
+    r"\b(?:habl\w*|pas\w*|atien\w*|atend\w*|pon\w*|contact\w*)\b[^.!?]{0,30}?\b(?:persona|humano|humana|alguien|encargad[ao]|responsable|recepcion|operador[ao]?)\b"
+    r"|\bno quiero (?:hablar|seguir)[^.!?]{0,20}?(?:bot|robot|maquina|ia|inteligencia artificial)\b"
+    r"|\beres (?:un |una )?(?:bot|robot|maquina|ia)\b"
+)
+
+DEFECTO_PASO_A_PERSONA = (
+    "Claro, ahora mismo aviso a una compañera. Espera un momento y te contesta ella por aquí 😊"
+)
+
+
+def pide_una_persona(texto: str) -> bool:
+    """Esta pidiendo que le atienda alguien del equipo, no el asistente."""
+    from backend import textnorm as _t
+
+    return bool(_PIDE_UNA_PERSONA.search(_t._strip_accents(str(texto or "").lower())))
+
+
+def _seccion(cliente_id: str, config=None) -> Dict[str, Any]:
+    if config is None:
+        from backend import clients
+
+        try:
+            config = clients._get_client_config(cliente_id)
+        except Exception:  # noqa: BLE001
+            return {}
+    seccion = (config or {}).get("pasar_a_humano")
+    return seccion if isinstance(seccion, dict) else {}
+
+
+def paso_a_persona_activo(cliente_id: str, config=None) -> bool:
+    """Encendido salvo que el negocio lo apague."""
+    return bool(_seccion(cliente_id, config).get("enabled", True))
+
+
+def texto_al_pedir_persona(cliente_id: str, config=None) -> str:
+    return str(_seccion(cliente_id, config).get("texto")
+               or DEFECTO_PASO_A_PERSONA).strip()
 
 
 def _row_to_state(row: Optional[sqlite3.Row]) -> Dict[str, Any]:
