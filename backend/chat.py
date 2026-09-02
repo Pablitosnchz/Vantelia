@@ -34,8 +34,8 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import RespuestaChat
-from backend import (agenda, appstate, booking, clients, commerce, inbox, intents, keywords,
-                     rag, rules, settings, textnorm, timeutils)
+from backend import (agenda, appstate, booking, clients, commerce, fotos, inbox, intents,
+                     keywords, rag, rules, settings, textnorm, timeutils)
 
 GREETING_PATTERNS = [
     re.compile(p, re.IGNORECASE)
@@ -653,7 +653,18 @@ def decision_del_negocio(
             "intencion": "",
         }
 
-    # 2. Que le estan pidiendo. Con una gestion de cita a medias NO se clasifica:
+    # 2. "Te mando una foto?" Se contesta SIEMPRE que si, tambien en mitad de un
+    #    agendado: seguir preguntando el largo mientras la clienta intenta mandar
+    #    una foto es el bucle que hizo dudar al salon piloto de todo el producto.
+    if fotos.activo(cliente_id, config) and fotos.anuncia_foto(mensaje):
+        return {
+            "texto": fotos.texto_al_anunciar(cliente_id, config),
+            "intent": "foto_anunciada",
+            "accion": "responder",
+            "intencion": "",
+        }
+
+    # 3. Que le estan pidiendo. Con una gestion de cita a medias NO se clasifica:
     #    su "el jueves a las 5" es la respuesta a lo que se le acaba de preguntar.
     if gestion_en_curso or not intents.enabled_for(cliente_id, config):
         return None
@@ -663,7 +674,7 @@ def decision_del_negocio(
 
     pide_algo = intencion["intencion"] in INTENCIONES_QUE_SE_ACTUAN
 
-    # 3. ¿Es una de sus preguntas, dicha con otras palabras?
+    # 4. ¿Es una de sus preguntas, dicha con otras palabras?
     respuesta_qa = "" if pide_algo else str(intencion.get("qa_answer") or "").strip()
     if respuesta_qa:
         return {
@@ -673,7 +684,7 @@ def decision_del_negocio(
             "intencion": intencion["intencion"],
         }
 
-    # 4. Sus reglas: cuando pidan X, haz Y.
+    # 5. Sus reglas: cuando pidan X, haz Y.
     regla = rules.match(cliente_id, intencion)
     if regla:
         # Se cuenta SIEMPRE, tambien con "continuar": esa accion existe para medir
@@ -687,7 +698,7 @@ def decision_del_negocio(
                 "intencion": intencion["intencion"],
             }
 
-    # 5. Sin nada configurado, la intencion sigue siendo util para el canal.
+    # 6. Sin nada configurado, la intencion sigue siendo util para el canal.
     return {"texto": "", "intent": "", "accion": "", "intencion": intencion["intencion"]}
 
 

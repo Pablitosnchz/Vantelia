@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, fotos, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -3258,6 +3258,36 @@ def _handle_whatsapp_echoes(
         )
 
 
+async def _wa_foto_recibida(
+    *, cliente_id: str, phone_number_id: str, from_number: str, pie: str, request,
+) -> None:
+    """Ha llegado una foto. Se acusa recibo y se aparta el asistente.
+
+    El asistente no ve imagenes. Antes esto caia en la rama generica de "no es
+    texto" y el modelo volvia a preguntar lo que estuviera preguntando -en el
+    salon piloto, el largo del pelo, una y otra vez, mientras la clienta intentaba
+    ensenyar su cabello-. Quien manda una foto quiere que la mire una persona.
+    """
+    config = clients._get_client_config(cliente_id)
+    if not fotos.activo(cliente_id, config):
+        return
+
+    entrante = "[foto] %s" % pie if pie else "[foto]"
+    texto = fotos.texto_al_recibir(cliente_id, config)
+    session_id = _wa_registrar(
+        cliente_id=cliente_id, from_number=from_number, request=request,
+        entrante=entrante, respuesta=texto, intent="foto_recibida",
+    )
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=from_number, text=texto,
+    )
+    if fotos.pasa_a_humano(cliente_id, config):
+        # El asistente se calla en ESTA conversacion. Caduca solo, como cualquier
+        # intervencion humana, asi que nadie se queda sin respuesta para siempre.
+        inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Foto recibida")
+
+
 async def _handle_whatsapp_webhook(
     request: Request,
     *,
@@ -3315,6 +3345,7 @@ async def _handle_whatsapp_webhook(
                 message_type = str(message_payload.get("type", "")).strip()
                 interactive_id = ""
                 audio_media_id = ""
+                foto_recibida = False
                 if message_type == "text":
                     incoming_text = str(message_payload.get("text", {}).get("body", "")).strip()
                 elif message_type == "interactive":
@@ -3350,6 +3381,12 @@ async def _handle_whatsapp_webhook(
                         continue
                     else:
                         incoming_text = ""
+                elif message_type in ("image", "document", "sticker"):
+                    # No se baja el fichero: el asistente no ve fotos, y fingir que
+                    # las entiende es peor que decir la verdad. Se marca y se trata
+                    # abajo, cuando ya se sabe de que negocio es.
+                    foto_recibida = True
+                    incoming_text = str((message_payload.get(message_type) or {}).get("caption") or "").strip()
                 elif message_type == "audio":
                     # Mucha gente manda notas de voz en vez de escribir. Aqui solo se
                     # apunta cual es: para bajarlo hace falta el token DEL NEGOCIO, y
@@ -3403,6 +3440,14 @@ async def _handle_whatsapp_webhook(
                         )
                         processed += 1
                         continue
+
+                if foto_recibida:
+                    await _wa_foto_recibida(
+                        cliente_id=cliente_id, phone_number_id=phone_number_id,
+                        from_number=from_number, pie=incoming_text, request=request,
+                    )
+                    processed += 1
+                    continue
 
                 try:
                     await _handle_whatsapp_message(
