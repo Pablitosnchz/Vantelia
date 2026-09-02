@@ -230,6 +230,129 @@ rg -n 'if not await .*_available|if .*_disponible' backend/
 
 ---
 
+## Clases de comportamiento del asistente
+
+Las de arriba son de código: se encuentran leyendo el repo. Estas se encuentran
+**leyendo conversaciones enteras**, y son las que llegan por WhatsApp de la dueña
+de un salón. Ninguna se ve en un resumen ni en una captura suelta.
+
+---
+
+### 15. El mensaje del cliente no llega al que decide
+
+Se sustituye lo que escribió por una etiqueta, un texto fijo o un resumen, y la
+capa que decide contesta a otra cosa. El síntoma no es "no me hace caso": es que
+literalmente **no la oyó**.
+
+Caso real (2-sep-2026): `_wa_start_booking_flow` llamaba al agente con el texto
+fijo `"Quiero coger cita."`. La clienta escribió tres veces *"no quiero cita para
+diagnóstico"* y el asistente siguió ofreciéndoselo. Además intentó resolver esa
+frase inventada contra el catálogo: *"no tengo un servicio que se llame coger
+cita"*.
+
+```bash
+# Textos fijos que viajan como si fueran del cliente
+rg -n 'incoming_text\s*=\s*"' backend/
+rg -n 'mensaje\s*=\s*"[A-Z]' backend/
+```
+
+**Pregunta:** ¿lo que recibe quien decide es LO QUE ESCRIBIÓ el cliente? Si hay
+que transmitir una intención, va en un parámetro aparte, no falseando el mensaje.
+
+---
+
+### 16. Un dato del prompt que se lee como otro
+
+El modelo copia la cifra que tiene al lado. Pasa cuando dos números distintos
+comparten línea sin etiqueta.
+
+Caso real: el catálogo decía `Secado al aire corto · 10 min · precio: NO se da por
+mensaje`, y contestó *"El precio es de 10 €"* de un servicio que cuesta 4. No
+filtraba el catálogo -no ve esos precios-: se los **inventaba** copiando la
+duración, siempre por encima del doble.
+
+```bash
+# Lineas de prompt con varias cifras y poca etiqueta
+rg -n 'f"\{.*\} min"|· \{' backend/booking.py backend/rag.py backend/voice.py
+```
+
+**Pregunta:** si tapo la etiqueta, ¿se puede confundir este número con otro?
+Etiquétalo ("dura 10 min") y deja el hueco vacío explícito ("SIN PRECIO
+PUBLICADO"), nunca ambiguo.
+
+---
+
+### 17. El freno que solo protege un camino
+
+Un guardarraíl bien hecho, enganchado en el bucle del agente… y otra rama que
+responde sin pasar por él. Con el tiempo el freno "existe" y no frena.
+
+Caso real: `_da_un_precio_prohibido` corregía al agente, pero la respuesta
+documental del chat web salía por otra puerta y decía el precio igual.
+
+```bash
+# Frenos usados en un solo sitio
+rg -n '_da_un_precio_prohibido|_freno_de|no_se_da_precio_de' backend/ | rg -v tests
+# Puntos por donde sale texto al cliente
+rg -n 'RespuestaChat\(|_send_whatsapp_text\(' backend/ | wc -l
+```
+
+**Pregunta:** ¿cuántas puertas de salida tiene el texto al cliente, y por cuántas
+pasa este freno? Si no son las mismas, el freno es decorativo.
+
+---
+
+### 18. Lo que no es texto se tira
+
+Una foto, un audio, una ubicación, un contacto. Si no hay rama propia, cae en un
+saco genérico y el modelo recibe una instrucción que no tiene nada que ver con lo
+que pasó.
+
+Caso real: una imagen se convertía en *"El usuario ha enviado un mensaje que no es
+texto"*, y el asistente, a media reserva, volvía a preguntar el largo del pelo.
+La clienta insistió cuatro veces.
+
+```bash
+rg -n 'message_type ==|no es texto' backend/whatsapp.py
+```
+
+**Pregunta:** ¿qué pasa con cada tipo que Meta puede mandar? Y cuando el
+asistente no puede con algo, ¿lo dice y lo pasa a una persona, o disimula?
+
+---
+
+### 19. Decir cosas que nadie ha preguntado
+
+Cada Q&A, regla o plantilla que se añade es algo que el modelo puede recitar en
+el momento equivocado. Se construye mucha capacidad de decir y poca de callarse.
+
+Casos reales: soltar `440 minutos` al elegir servicio; enumerar variantes internas
+del catálogo (*"Mechas corto-med"*); repetir la política de precios después del
+resumen de la cita. Palabras de la dueña: *"no le he preguntado nada de precio ni
+del tiempo que dura, todo eso no tiene que decirlo"*.
+
+```bash
+rg -n 'nota"|nota_al_confirmar|aviso_' backend/agent.py
+```
+
+**Pregunta:** ¿esto lo ha pedido en ESTE mensaje? Si no, ¿por qué se dice?
+
+---
+
+### 20. Afirmar sobre lo que no se tiene configurado
+
+Ante un hueco en la configuración, el modelo elige una respuesta rotunda en vez de
+reconocer que no lo sabe.
+
+Caso real: *"No tenemos promociones específicas para el alisado en este momento"*
+cuando el negocio SÍ tenía promoción; simplemente no estaba en el sistema. Es
+primo hermano de negar un servicio que sí se hace, que ya es crítico.
+
+**Pregunta:** ante un hueco, ¿el asistente niega o consulta? Negar por defecto
+cuesta clientas.
+
+---
+
 ## Después de auditar
 
 - Los fallos encontrados van con test que reproduce, verificado contra el código

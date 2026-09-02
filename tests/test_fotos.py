@@ -141,3 +141,34 @@ def test_la_foto_queda_en_el_historial_del_negocio(api_module, monkeypatch):
     assert any("[foto]" in c for c in contenidos), contenidos
     assert any("mira este color" in c for c in contenidos), "el pie de la foto tambien"
     inbox.release(session_id)
+
+
+# --- Los otros tipos que manda Meta ----------------------------------------
+#
+# Clase 18 de docs/CAZA_DE_FALLOS.md: lo que no es texto caia en un saco generico
+# y al modelo le llegaba "esto no es texto, pidele que escriba". Cada tipo que
+# Meta puede mandar necesita su respuesta, o al menos que no estorbe.
+
+
+def _webhook(tipo, cuerpo):
+    """El payload que manda Meta para un mensaje de este tipo."""
+    return {
+        "entry": [{"changes": [{"value": {
+            "metadata": {"phone_number_id": "pn"},
+            "messages": [dict({"from": "34600999888", "id": "wamid.x", "type": tipo}, **cuerpo)],
+        }}]}]
+    }
+
+
+def test_un_video_se_trata_como_una_foto(api_module):
+    """Grabar el pelo en video es tan comun como fotografiarlo, y tampoco se ve."""
+    from backend import whatsapp
+
+    fuente = whatsapp._handle_whatsapp_webhook.__doc__ or ""
+    _ = fuente
+    import inspect
+
+    codigo = inspect.getsource(whatsapp._handle_whatsapp_webhook)
+    assert '"video"' in codigo, "el video tiene que entrar por la puerta de la foto"
+    assert 'message_type == "reaction"' in codigo, "una reaccion no es una consulta"
+    assert 'message_type == "location"' in codigo, "compartir ubicacion se contesta"

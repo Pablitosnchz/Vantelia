@@ -3389,12 +3389,23 @@ async def _handle_whatsapp_webhook(
                         continue
                     else:
                         incoming_text = ""
-                elif message_type in ("image", "document", "sticker"):
+                elif message_type == "reaction":
+                    # Un corazon a un mensaje no es una consulta. Contestarle
+                    # "escribe tu consulta" es ruido, y encima rompe el hilo de lo
+                    # que se estuviera hablando.
+                    processed += 1
+                    continue
+                elif message_type in ("image", "document", "sticker", "video"):
                     # No se baja el fichero: el asistente no ve fotos, y fingir que
                     # las entiende es peor que decir la verdad. Se marca y se trata
                     # abajo, cuando ya se sabe de que negocio es.
                     foto_recibida = True
                     incoming_text = str((message_payload.get(message_type) or {}).get("caption") or "").strip()
+                elif message_type == "location":
+                    # Comparte su ubicacion: normalmente esta preguntando si les
+                    # pilla cerca. Cae al cerebro como texto para que conteste con
+                    # la direccion del negocio en vez de con "eso no es texto".
+                    incoming_text = "Te he compartido mi ubicacion. Donde estais vosotros?"
                 elif message_type == "audio":
                     # Mucha gente manda notas de voz en vez de escribir. Aqui solo se
                     # apunta cual es: para bajarlo hace falta el token DEL NEGOCIO, y
