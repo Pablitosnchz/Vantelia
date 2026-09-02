@@ -1063,3 +1063,42 @@ def test_quien_solo_pregunta_el_horario_sigue_sin_llevarse_una_cita(api_module):
     estado = reserva.Estado()
     assert not (estado.servicio and estado.hora)
     assert reserva.ha_pedido_cita("a que hora abris manana?") is False
+
+
+def test_no_se_da_por_confirmada_una_cita_que_no_existe(api_module):  # noqa: F811
+    """Se colo el 2-sep midiendo 30 conversaciones.
+
+    El asistente cancelo una cita, ofrecio horas para otra y remato con "tu cita
+    para cortarte las puntas esta confirmada para manana a las 10:00". En la
+    agenda no habia ninguna. La clienta se planta en el salon y no hay hueco: es
+    el fallo mas caro que puede tener el asistente.
+
+    La frase NO se puede meter en la lista de "acabo de hacerlo": es LA MISMA que
+    se usa para contar una cita que si existe, despues de consultar_cita. Por eso
+    esto se cruza con los HECHOS del turno (`mutada`, `mirada_la_cita`) y no se
+    juzga por como suena.
+    """
+    from backend import agent
+
+    assert agent._afirma_que_hay_cita_confirmada(
+        "Tu cita para cortarte las puntas esta confirmada para manana a las 10:00")
+    assert agent._afirma_que_hay_cita_confirmada("Tu cita queda confirmada")
+
+    # Lo correcto sigue pasando.
+    assert not agent._afirma_que_hay_cita_confirmada("Tu cita NO esta confirmada todavia")
+    assert not agent._afirma_que_hay_cita_confirmada("¿Quieres que te la confirme?")
+    assert not agent._afirma_que_hay_cita_confirmada(
+        "Para confirmar, tenemos el corte el jueves. ¿Te parece bien?")
+
+
+def test_afirmar_la_cita_se_cruza_con_lo_que_paso_en_el_turno(api_module):  # noqa: F811
+    """Contar una cita que SI existe -tras consultarla- tiene que seguir valiendo."""
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_afirma_que_hay_cita_confirmada(texto_final)" in fuente
+    assert "not mutada and not mirada_la_cita" in fuente, (
+        "sin mirar si se consulto la cita, se bloquearia contar una que si existe"
+    )

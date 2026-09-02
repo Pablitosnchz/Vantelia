@@ -1633,7 +1633,30 @@ _ACABO_DE_HACERLO = (
     "queda actualizada", "queda reservada", "queda anulada", "queda cancelada",
     "ya esta cambiada", "ya esta modificada", "ya esta actualizada",
     "cambiada a ", "modificada a ", "actualizada a ",
+    "queda confirmada", "he confirmado tu cita", "he confirmado la cita",
 )
+
+# "Tu cita esta confirmada para manana a las 10:00" no se puede meter arriba: es
+# LA MISMA frase que se usa para contar una cita que SI existe, despues de
+# consultar_cita, y ahi es correcta. Por eso esta va aparte y se cruza con los
+# hechos del turno -¿se ha creado algo?, ¿se ha consultado algo?- en vez de
+# juzgarse por como suena. Se colo el 2-sep: cancelo una cita, ofrecio horas
+# para otra y remato con "tu cita para cortarte las puntas esta confirmada para
+# manana a las 10:00" sin haber creado nada.
+_AFIRMA_CITA_CONFIRMADA = re.compile(
+    r"\b(?:tu|la|su)\s+cita\b[^.!?]{0,80}?\b(?:esta|queda|ha\s+quedado)\s+confirmada\b"
+    r"|\bcita\s+confirmada\s+para\b"
+)
+
+
+def _afirma_que_hay_cita_confirmada(texto: str) -> bool:
+    """Da por hecho que hay una cita cerrada, sin decir que acabe de crearla."""
+    plano = catalog_pick._norm(texto or "")
+    donde = _AFIRMA_CITA_CONFIRMADA.search(plano)
+    if not donde:
+        return False
+    contexto = plano[max(0, donde.start() - 16):donde.end()]
+    return not any(negacion in contexto for negacion in _NIEGA)
 
 
 def _dice_que_acaba_de_hacerlo(texto: str) -> bool:
@@ -2446,6 +2469,19 @@ async def responder(
                                     "insiste, dilo en una linea y ofrecele la salida "
                                     "concreta (una cita, o que llame). Y no empieces "
                                     "igual que antes."),
+                    })
+                    continue
+                if (_afirma_que_hay_cita_confirmada(texto_final)
+                        and not mutada and not mirada_la_cita
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("dijo_que_hay_cita_sin_haberla")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("NO hay ninguna cita: en este turno no has creado "
+                                    "ninguna ni has consultado la agenda. No digas que "
+                                    "esta confirmada. Si ella la quiere, CREALA con la "
+                                    "herramienta y confirmasela despues; si no estas "
+                                    "seguro de que tenga uno, mira con consultar_cita."),
                     })
                     continue
                 if (_dice_que_acaba_de_hacerlo(texto_final) and not mutada
