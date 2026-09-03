@@ -506,3 +506,43 @@ con palabra completa: nombrar CUALQUIER servicio sobra.
   tinte" -> "He encontrado el servicio de Tinte cejas". La AGENDA esta protegida
   (`_freno_de_varios_servicios` actua al crear, y su caso critico pasa); lo que
   falla es lo que le dice por el camino.
+
+### 25. Le repite su muletilla como si fuera un servicio (CERRADA, 3-sep-2026)
+
+    ELLA  hola?
+    IA    No tengo un servicio especifico llamado "hola"
+
+Lo primero que ve alguien que solo estaba saludando. Se intento PRIMERO pidiendolo
+en el mensaje de la tool ("si lo que ha escrito no es un servicio, no se lo
+repitas como si lo fuera") y no cambio absolutamente nada. Es el ejemplo mas
+limpio de la regla de la casa: lo que el modelo puede hacer mal lo impide el
+codigo, no el prompt.
+
+### 26. Dos personas en un hueco (CERRADA, 3-sep-2026)
+
+"Cita para mi y para mi madre, cortes las dos" creaba UNA cita de veinte minutos.
+Misma familia que varios servicios en una cita. Avisa una vez y luego las coge de
+una en una: un freno que solo mire el texto acumulado bloquea PARA SIEMPRE -lo
+que ella escribio no se borra- y la deja sin NINGUNA cita, que es peor.
+
+### 27. Se inventa servicios que el negocio no hace (ABIERTA, medida 3-sep-2026)
+
+A quien preguntaba por la manicura, en un salon que no toca las unas:
+
+    IA  No tenemos manicura. Te gustaria un tratamiento de unas o un esmaltado?
+
+Es el espejo del caso critico de negar un servicio que si existe, y sale igual de
+caro: la clienta se planta alli.
+
+**Intentado y retirado el mismo dia.** Un detector que, dentro de una negativa,
+buscara lo que ofrece y lo comprobara contra el catalogo. Marca la palabra
+equivocada: de "un tratamiento de unas o algo relacionado" se queda con
+"relacionado" (un adjetivo), y da por inventada una frase correcta como "otro
+tipo de servicio relacionado con el cabello". Bloquear una respuesta legitima es
+peor que dejar pasar una mala -misma conclusion que la clase 19 bis-, asi que se
+retiro en vez de dejarlo a medias.
+
+Pista para quien lo retome: el nucleo del problema es identificar el SUSTANTIVO
+que manda en lo que ofrece, y eso con expresiones regulares no sale. Con el
+catalogo delante seguramente lo resuelve una llamada corta al modelo, pagando una
+por respuesta que niegue algo (son pocas).

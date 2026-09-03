@@ -1055,6 +1055,48 @@ def _vende_sobre_una_queja(cliente_id: str, mensaje: str, texto: str) -> bool:
                                minimo=5)
 
 
+# Las comillas se construyen con chr() a proposito: escritas a mano, el escapado
+# de este fichero ya ha dejado dos regex inservibles esta misma noche.
+_COMILLAS = '"\'“”‘’'
+
+_REPITE_COMO_SERVICIO = re.compile(
+    'servicio[^.]{0,30}(?:llamado|que se llame|con el nombre)[^.]{0,4}'
+    '[%s]([^%s]{1,60})' % (_COMILLAS, _COMILLAS))
+
+# Las comillas se construyen con chr() a proposito: escribirlas a mano en este
+# fichero ya ha dejado dos regex inservibles esta misma noche.
+_COMILLAS = '"\'“”‘’'
+
+_REPITE_COMO_SERVICIO = re.compile(
+    'servicio[^.]{0,30}(?:llamado|que se llame|con el nombre)[^.]{0,4}'
+    '[%s]([^%s]{1,60})' % (_COMILLAS, _COMILLAS))
+
+
+def _le_repite_sus_palabras_como_servicio(mensaje: str, texto: str) -> bool:
+    """Le devuelve lo que ella escribio como si fuera un nombre de servicio.
+
+    Medido el 3-sep-2026:
+
+        ELLA  hola?
+        IA    No tengo un servicio especifico llamado "hola"
+
+        ELLA  hmm
+        IA    No tengo un servicio especifico que se llame "hmm"
+
+    Da sensacion de maquina rota. Se intento pidiendolo en el mensaje de la tool
+    y NO cambio nada: por eso esta aqui y no en el prompt.
+    """
+    for citado in _REPITE_COMO_SERVICIO.findall(texto or ''):
+        suyo = catalog_pick._norm(citado)
+        dicho = catalog_pick._norm(mensaje or '')
+        # En los DOS sentidos: el entrecomillado acumulaba varios mensajes suyos
+        # ("hola? hay alguien?"), asi que su ultimo mensaje esta DENTRO de la
+        # cita, no al reves. Mirando un solo sentido, ese caso se escapaba.
+        if suyo and dicho and (suyo in dicho or dicho in suyo):
+            return True
+    return False
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -2882,6 +2924,25 @@ async def responder(
                 #    el Acido lactico bio premium". Solo frena donde el negocio ha
                 #    dicho por escrito que eso no se decide por mensaje: quien no
                 #    lo haya dicho puede recomendar tranquilamente.
+                # 3 septies) Le devuelve sus propias palabras como si fueran
+                #    un servicio ("No tengo un servicio llamado 'hola'") o se
+                #    inventa alternativas que el negocio no hace (a quien pedia
+                #    manicura: "un tratamiento de unas", "un esmaltado"). Lo
+                #    segundo es el espejo de negar un servicio que si existe, y
+                #    sale igual de caro: la clienta se planta alli. Se intento
+                #    pidiendolo en el mensaje de la tool y no cambio nada.
+                if (_le_repite_sus_palabras_como_servicio(mensaje, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("le_repitio_su_muletilla")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Le estas repitiendo lo que ella ha escrito como "
+                                    "si fuera el nombre de un servicio, y suena a "
+                                    "maquina rota. Reescribe tu respuesta sin "
+                                    "entrecomillar sus palabras: saludala con "
+                                    "naturalidad y preguntale que quiere hacerse."),
+                    })
+                    continue
                 # 3 sexies) Se queja de un trabajo hecho y se le ofrece otro
                 #    tratamiento. "Se te ha quedado fatal -> podemos optar por
                 #    Keratina premium o Acido lactico" es el mensaje que

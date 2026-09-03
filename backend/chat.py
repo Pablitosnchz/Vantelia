@@ -809,10 +809,17 @@ def _contexto_del_catalogo(cliente_id: str, message: str) -> str:
     if familias:
         return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio con esas palabras. "
                 "Lo que SI ofrece el negocio, por familias: %s. Si preguntaba por algo "
-                "concreto que no esta, dilo con amabilidad y ofrecele estas."
+                "concreto que no esta, dilo con amabilidad y ofrecele estas. "
+                "NO te inventes alternativas: lo que ofrezcas tiene que salir de esa "
+                "lista (a quien pedia manicura se le ofrecio 'un tratamiento de unas' "
+                "y 'un esmaltado', que este negocio no hace). Y si lo que ha escrito "
+                "no es un servicio -un saludo, una muletilla, 'hola?'-, NO se lo "
+                "repitas como si lo fuera: saluda y preguntale que quiere hacerse."
                 % ", ".join(familias[:12]))
     return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio que encaje con lo que "
-            "pregunta. Dilo con amabilidad y ofrece lo que si haceis.")
+            "pregunta. Dilo con amabilidad y ofrece lo que si haceis, sin "
+            "inventarte nada. Si lo que ha escrito no es un servicio -un saludo, "
+            "una muletilla-, NO se lo repitas como si lo fuera.")
 
 
 async def _process_chat_message(
