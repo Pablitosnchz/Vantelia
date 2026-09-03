@@ -1365,6 +1365,64 @@ def _lo_que_ha_escrito(mensajes: List[Dict[str, Any]]) -> str:
     return " ".join(trozos)[-1500:]
 
 
+MARCA_VARIAS_PERSONAS = "La cita es para MAS DE UNA PERSONA."
+
+_VARIAS_PERSONAS = re.compile(
+    r"\b(somos (dos|tres|cuatro|varias|varios)|para mi y (para )?mi |"
+    r"mi (madre|hija|hermana|amiga|novia|prima|sobrina|nieta|suegra) y yo|"
+    r"(venimos|vamos|iriamos|seriamos) (dos|tres|cuatro)|"
+    r"(para|somos) (dos|tres|cuatro) personas|"
+    r"(?<!a )(las|los) (dos|tres|cuatro)\b(?! (de la (tarde|manana|noche)|y (media|cuarto)|en punto))|"
+    r"(una|cita) para cada una|cada una (un|una)|"
+    r"y (otra|una) (cita )?para mi )")
+
+
+def _freno_de_varias_personas(
+    cliente_id: str,
+    mensajes: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Impide meter DOS personas en un solo hueco.
+
+    Medido el 3-sep-2026 sobre el salon piloto, hasta el final:
+
+        ELLA  queria cita para mi y para mi madre el mismo dia, cortes las dos
+        IA    Perfecto, ya tengo el servicio de Corte senora para las dos
+        ...
+        IA    *Cita confirmada*
+
+    Quedo UNA cita. Un hueco de veinte minutos para dos cortes, y el negocio con
+    dos personas plantadas a la misma hora.
+
+    Es la misma familia que `_freno_de_varios_servicios` -y el mismo incidente
+    que ya costo una tarde al salon-: el modelo da la cita por buena porque para
+    el se creo bien. Lo tiene que impedir el codigo.
+
+    No se intenta crear las dos citas solo: hacen falta dos huecos y dos nombres,
+    y eso lo tiene que decidir ella. Se le dice y se cogen de una en una.
+    """
+    escrito = catalog_pick._norm(_lo_que_ha_escrito(mensajes))
+    if not _VARIAS_PERSONAS.search(escrito):
+        return None
+    # Avisa UNA vez. Lo que ella escribio no se borra nunca, asi que sin esto el
+    # freno bloquea para siempre y se queda sin NINGUNA cita, que es peor que el
+    # fallo que viene a arreglar: medido, repetia "cada persona necesita su
+    # propio hueco" tres veces y no cogia ni la primera. Una vez avisada, se le
+    # cogen de una en una.
+    for mensaje in mensajes:
+        if (str(mensaje.get("role") or "") == "tool"
+                and MARCA_VARIAS_PERSONAS in str(mensaje.get("content") or "")):
+            return None
+    return {
+        "ok": False,
+        "error": (MARCA_VARIAS_PERSONAS + " Cada persona necesita su propio "
+                  "hueco: en uno solo no caben. NO crees esta cita. Dile que se "
+                  "las coges de una en una, empieza por la primera y preguntale "
+                  "su nombre y que servicio quiere. En cuanto tengas los datos de "
+                  "UNA sola, creala con normalidad."),
+    }
+
+
+
 def _freno_de_varios_servicios(
     cliente_id: str,
     mensajes: List[Dict[str, Any]],
@@ -3148,6 +3206,12 @@ async def responder(
                     freno_servicios = _freno_de_varios_servicios(
                         cliente_id, mensajes, argumentos, location_id=location_id
                     )
+                    # Dos personas tampoco caben en un hueco. Mismo incidente,
+                    # distinta forma: "para mi y para mi madre, cortes las dos"
+                    # creaba UNA cita de veinte minutos.
+                    if freno_servicios is None:
+                        freno_servicios = _freno_de_varias_personas(
+                            cliente_id, mensajes)
                 if (llamada.function.name == "consultar_disponibilidad"
                         and dias_mirados >= 3):
                     resultado = {
