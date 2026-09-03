@@ -40,8 +40,28 @@ def test_frena_cuando_le_insiste_tras_dejarlo(api_module):
     from backend import agent
 
     for dicho in ("dejalo, ya lo miro luego", "me lo pienso y te digo",
-                  "ya te dire", "lo miro mas tarde", "dejalo por ahora"):
+                  "ya te dire", "lo miro mas tarde", "dejalo por ahora",
+                  # Medidas con el simulador: una clienta dijo OCHO veces que
+                  # solo queria el horario y en cada respuesta le ofrecian un
+                  # alisado. Cerrar no es solo aplazar; tambien es decir "ya esta".
+                  "solo queria saber los horarios", "no necesito cita",
+                  "solo era eso, gracias", "con eso me vale"):
         assert agent._sigue_insistiendo_tras_dejarlo(dicho, INSISTE), dicho
+
+
+def test_empujar_no_es_solo_pedirle_un_dato(api_module):
+    """A quien decia que solo queria el horario le colaban un tratamiento."""
+    from backend import agent
+
+    ofrece = ("Entiendo que solo querias saber los horarios. Si en algun momento "
+              "decides hacerte un alisado, te recomendaria la Keratina premium.")
+    assert agent._sigue_insistiendo_tras_dejarlo(
+        "Solo queria saber los horarios. LISTO", ofrece)
+
+    cierra = ("Hoy abrimos de 10:00 a 20:30 y los sabados de 09:00 a 20:30. "
+              "Cualquier cosa, aqui estoy.")
+    assert not agent._sigue_insistiendo_tras_dejarlo(
+        "Solo queria saber los horarios. LISTO", cierra)
 
 
 def test_no_frena_una_despedida_correcta(api_module):

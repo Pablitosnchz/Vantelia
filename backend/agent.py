@@ -987,13 +987,23 @@ _LO_DEJA_PARA_LUEGO = re.compile(
     r"\b(dejalo|lo dejo|dejemoslo|olvidalo|ya lo mirare|ya lo miro|"
     r"lo miro (luego|mas tarde|otro dia)|luego te (digo|escribo|cuento)|"
     r"ya te (dire|digo|escribo)|me lo pienso|lo pienso y te|"
-    r"otro dia lo veo|mas adelante|ahora no puedo|dejalo estar)\b")
+    r"otro dia lo veo|mas adelante|ahora no puedo|dejalo estar|"
+    # Medido con el simulador: una clienta dijo OCHO veces "solo queria saber
+    # los horarios" y en cada respuesta le ofrecian un alisado. Cerrar una
+    # conversacion no es solo aplazarla: tambien es decir que ya esta.
+    r"no necesito cita|no quiero cita|solo queria saber|solo quiero saber|"
+    r"solo era eso|era solo eso|nada mas gracias|no necesito nada mas|"
+    r"ya esta gracias|con eso me vale|con eso ya)\b")
 
 _SIGUE_PIDIENDO_DATOS = re.compile(
     r"(necesito saber|podrias decirme|puedes decirme|dime que|"
     r"que dia te|que hora te|para poder reservar|para reservar la cita|"
     r"como tienes el pelo|que largo|cual de estas|cual prefieres|"
-    r"te gustaria (venir|reservar)|elige (una|la) )")
+    r"te gustaria (venir|reservar|hacerte|optar)|elige (una|la) |"
+    # Empujar no es solo pedirle un dato: a quien decia que solo queria el
+    # horario se le colaba un tratamiento en cada respuesta.
+    r"si (en algun momento )?decides|te recomend|te agendo|te cojo la cita|"
+    r"quieres que te (coja|reserve|agende))")
 
 
 def _sigue_insistiendo_tras_dejarlo(dicho_de_ella: str, texto: str) -> bool:

@@ -54,3 +54,32 @@ def test_pyflakes_no_encuentra_nombres_sin_definir():
         "hay nombres usados sin importar; revientan en cuanto se ejecuta esa "
         "rama:\n  " + "\n  ".join(rotos)
     )
+
+
+def test_ningun_patron_lleva_un_backspace_dentro():
+    """Un regex con un backspace compila, no casa nada, y nadie se entera.
+
+    Esto ha pasado CUATRO veces en una sola noche (3-sep-2026). Al generar
+    codigo, `chr(92) + "b"` acaba dentro de una cadena SIN el prefijo `r`:
+
+        re.compile("BORDE(dejalo|lo dejo|...)")     <- BORDE = backslash + b
+
+    Python lo lee como el caracter de retroceso (0x08), el modulo importa sin una
+    sola queja, `pyflakes` no dice nada, y el freno que depende de ese patron
+    simplemente no salta nunca. Uno de ellos -el que impide soltar la duracion sin
+    que la pidan- llego asi a produccion.
+
+    Un `` de verdad se escribe `r"..."`. Este test mira el BYTE, que es lo unico
+    que no se puede fingir.
+    """
+    sospechosos = []
+    for ruta in sorted(RAIZ.joinpath("backend").rglob("*.py")):
+        texto = ruta.read_text(encoding="utf-8", errors="replace")
+        for numero, linea in enumerate(texto.splitlines(), 1):
+            if "" in linea:
+                sospechosos.append("%s:%d" % (ruta.name, numero))
+
+    assert not sospechosos, (
+        "hay un caracter de retroceso (0x08) en el codigo; casi seguro es un "
+        "regex que perdio el prefijo r. Ficheros y lineas: "
+        + ", ".join(sospechosos))
