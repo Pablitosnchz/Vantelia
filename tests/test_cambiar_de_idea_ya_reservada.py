@@ -72,6 +72,37 @@ def test_no_le_confirma_una_hora_que_no_es_la_suya(api_module, monkeypatch):
         False)
 
 
+def test_no_rompe_una_reprogramacion(api_module, monkeypatch):
+    """El fallo que metio este mismo freno, medido contra datos de PRODUCCION.
+
+    Su cita es a las 10:00 y quiere moverla a las 14:00. El freno veia que 14:00
+    no era "su" hora y obligaba a contestarle 10:00, una y otra vez, mientras ella
+    escribia "Confirmo" SEIS veces sin conseguir nada:
+
+        ELLA  Me viene bien a las 14:00.
+        IA    Para el 8 tengo disponible ... a las 10:00. Te gustaria confirmar?
+        ELLA  Confirmo.
+        IA    ... el 8 de septiembre a las 14:00. Puedes confirmarme...?
+        ELLA  Confirmo.
+
+    Mover una cita consiste EXACTAMENTE en hablar de otra hora. Las que ella ha
+    pedido o que se le han ofrecido no son un error.
+    """
+    from backend import agent, booking
+
+    monkeypatch.setattr(booking, "citas_vivas_del_telefono",
+                        lambda c, t: [{"booking_time": "10:00"}])
+
+    assert not agent._le_dice_una_hora_que_no_es_la_suya(
+        "demo", "34600111222",
+        "Para confirmar, tu cita el 8 de septiembre a las 14:00.",
+        False, pedidas={"14:00"})
+
+    # Sin pedirla, sigue frenando.
+    assert agent._le_dice_una_hora_que_no_es_la_suya(
+        "demo", "34600111222", "Te esperamos a las 11:30.", False, pedidas=set())
+
+
 def test_ofrecer_huecos_no_es_confirmar(api_module, monkeypatch):
     """Sin esto, el freno se comeria cualquier lista de horas libres."""
     from backend import agent, booking

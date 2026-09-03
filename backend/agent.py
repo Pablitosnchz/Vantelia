@@ -1137,6 +1137,7 @@ _UNA_HORA = re.compile(r'\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b')
 
 def _le_dice_una_hora_que_no_es_la_suya(
     cliente_id: str, telefono: str, texto: str, mutada: bool,
+    pedidas: Optional[set] = None,
 ) -> str:
     """Le confirma su cita a una hora que NO es la que tiene puesta.
 
@@ -1181,6 +1182,14 @@ def _le_dice_una_hora_que_no_es_la_suya(
     except Exception:  # noqa: BLE001
         return ""
     if suya in dichas:
+        return ""
+    # Las horas que ella ha PEDIDO o que se le han ofrecido no son un error: si
+    # esta moviendo la cita, hablar de otra hora es justo lo que toca. Sin esto el
+    # freno rompia las reprogramaciones enteras -medido contra produccion: cita a
+    # las 10:00, ella pide las 14:00, y el freno obligaba a contestarle 10:00 una y
+    # otra vez mientras ella escribia "confirmo" SEIS veces sin conseguir nada-.
+    dichas -= set(pedidas or ())
+    if not dichas:
         return ""
     return suya
 
@@ -1907,6 +1916,45 @@ def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
         elif isinstance(hueco, dict):
             ofrecidos.add(str(hueco.get("hora") or hueco.get("time") or "").strip())
     return limpia not in ofrecidos
+
+
+_DIAS_SEMANA = ("lunes", "martes", "miercoles", "jueves", "viernes",
+               "sabado", "domingo")
+
+
+def _fecha_que_nadie_ha_pedido(hablado: str, fecha: str) -> bool:
+    """Se mueve la cita a un DIA que nadie ha nombrado ni ofrecido.
+
+    Medido contra datos de produccion el 3-sep-2026:
+
+        ELLA  Queria saber si hay disponibilidad para otro dia.
+        IA    He reprogramado tu cita para el martes 8 de septiembre a las 10:00.
+
+    Ella PREGUNTA y el asistente le mueve la cita. El freno que ya habia
+    (`_hora_que_nadie_ha_pedido`) no lo vio porque mira solo la HORA, y la cita
+    era a las 10:00 y se movio al martes tambien a las 10:00: esa hora ya estaba
+    dicha en la conversacion, asi que pasaba el filtro. El dia no lo miraba nadie.
+
+    Cuenta como pedido si el dia aparece en lo hablado de cualquier forma: la
+    fecha entera, el numero del dia, o el nombre del dia de la semana.
+    """
+    fecha = str(fecha or "").strip()
+    if len(fecha) != 10:
+        return False
+    plano = catalog_pick._norm(hablado or "")
+    if fecha in (hablado or ""):
+        return False
+    try:
+        import datetime
+
+        dia = datetime.date(int(fecha[:4]), int(fecha[5:7]), int(fecha[8:10]))
+    except (TypeError, ValueError):
+        return False
+    if re.search(r"\b%d\b" % dia.day, plano):
+        return False
+    if _DIAS_SEMANA[dia.weekday()] in plano:
+        return False
+    return True
 
 
 def _pide_anular_y_solo_eso(dicho: str) -> bool:
@@ -3132,7 +3180,8 @@ async def responder(
                 # teniendo las mechas a las 12:00. Ella se planta a las 11:30 y el
                 # salon tiene un hueco largo a las 12:00 que nadie ocupa.
                 hora_real = _le_dice_una_hora_que_no_es_la_suya(
-                    cliente_id, telefono, texto_final, mutada)
+                    cliente_id, telefono, texto_final, mutada,
+                    pedidas=set(ofrecidas) | _horas_que_ha_dicho(dicho_de_ella))
                 if hora_real and vuelta + 1 < MAX_VUELTAS:
                     traza.freno("hora_que_no_es_la_suya")
                     mensajes.append({
@@ -3324,6 +3373,28 @@ async def responder(
                 # verdad -"quiero cancelar mi cita"- y el modelo llamo a
                 # reprogramar con el MISMO dia y la MISMA hora, dijo "listo,
                 # reprogramada" y la clienta se quedo con la cita puesta.
+                # El DIA tambien cuenta, no solo la hora. Medido contra datos de
+                # produccion: a "queria saber si hay disponibilidad para otro dia"
+                # le movio la cita al martes siguiente. El freno de la hora no lo
+                # vio porque la cita era a las 10:00 y la movio al martes a las
+                # 10:00, y esa hora ya se habia dicho en la conversacion.
+                if (llamada.function.name == "reprogramar_cita"
+                        and _fecha_que_nadie_ha_pedido(
+                            dicho_de_ella, str(argumentos.get("fecha") or ""))
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("dia_que_nadie_ha_pedido")
+                    resultado = {
+                        "ok": False,
+                        "error": ("Ese dia no lo ha pedido ella ni se lo has ofrecido: "
+                                  "no le muevas la cita a un dia que has elegido tu. "
+                                  "Mira que dias tienen hueco, ofreceselos y espera a "
+                                  "que elija."),
+                    }
+                    mensajes.append({
+                        "role": "tool", "tool_call_id": llamada.id,
+                        "content": json.dumps(resultado, ensure_ascii=False),
+                    })
+                    continue
                 if (llamada.function.name == "reprogramar_cita"
                         and str(argumentos.get("hora") or "") not in ofrecidas
                         and _hora_que_nadie_ha_pedido(
