@@ -1589,6 +1589,23 @@ def _freno_de_varias_personas(
 
 
 
+def _sin_lo_que_ha_rechazado(cliente_id: str, pedido: str, familias):
+    """Quita de lo pedido la valoracion, si ella ha dicho que no la quiere."""
+    try:
+        from backend import booking
+
+        if not booking.renuncio_al_diagnostico(pedido):
+            return familias
+        valoracion = booking._servicio_de_valoracion(cliente_id)
+        nombre = str((valoracion or {}).get("nombre") or "")
+        if not nombre:
+            return familias
+        suyas = set(catalog_pick.familias_pedidas(cliente_id, nombre))
+        return [f for f in familias if f not in suyas]
+    except Exception:  # noqa: BLE001 - ante la duda, no se toca nada
+        return familias
+
+
 def _freno_de_varios_servicios(
     cliente_id: str,
     mensajes: List[Dict[str, Any]],
@@ -1612,6 +1629,13 @@ def _freno_de_varios_servicios(
     """
     pedido = _lo_que_ha_escrito(mensajes)
     familias = catalog_pick.familias_pedidas(cliente_id, pedido)
+    # El diagnostico que ella ha RECHAZADO no es un servicio que haya pedido.
+    # Reportado el 3-sep-2026: dijo "no quiero cita para diagnostico, quiero que me
+    # cojas cita para las mechas solo" y este freno leyo "mechas" + "diagnostico",
+    # decidio que pedia dos cosas y le solto "no podemos incluir el diagnostico en
+    # la misma cita, llamanos al 625...". Nombrar algo para decir que NO lo quieres
+    # no es pedirlo.
+    familias = _sin_lo_que_ha_rechazado(cliente_id, pedido, familias)
     if len(familias) < 2:
         return None
 

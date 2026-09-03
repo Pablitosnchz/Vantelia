@@ -855,3 +855,30 @@ vuelven a la version vieja y pasan. Hay que revertir solo el codigo:
     git stash push backend/whatsapp.py
     python -m pytest tests/test_lo_que_sea.py     # tiene que FALLAR
     git stash pop
+
+---
+
+### 35. Rechazar un servicio contaba como pedirlo (CERRADA, 3-sep-2026)
+
+Reportado probando la demo, justo antes de cerrar la cita:
+
+    ELLA  no quiero cita para diagnostico quiero que me cojas cita para las
+          mechas solo
+    ...
+    IA    para poder reservar las mechas, necesito que elijas solo un servicio.
+          Si quieres hacerte las mechas, no podemos incluir el diagnostico en la
+          misma cita [...] tambien puedes llamarnos al 625 120 100.
+
+`_freno_de_varios_servicios` leia "mechas" Y "diagnostico" en la conversacion y
+decidia que habia pedido DOS cosas. El freno hace falta -nacio de una cita de 20
+minutos para cuatro servicios- pero contaba como pedido justo lo que ella acababa
+de rechazar.
+
+    familias que veia            ['mechas', 'diagnostico']  -> saltaba
+    quitando lo rechazado        ['mechas']                 -> no salta
+    varios servicios de verdad   ['cortes', 'secado', ...]  -> sigue saltando
+
+**Leccion de metodo, otra vez sobre el instrumento.** La primera version de los
+tests leia el catalogo REAL de la BD local -que no es fiel a produccion- y fallaba
+por los datos, no por el codigo. Un test de logica se monta con un catalogo de
+mentira: si depende de lo que tenga hoy un salon, no prueba lo que dice probar.
