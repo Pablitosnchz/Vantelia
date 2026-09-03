@@ -444,3 +444,65 @@ pierde igual o mas. Pista para quien lo retome: el problema no parece ser que no
 sepa los huecos, sino que insiste en la hora que ya decidio. Antes de volver a
 tocarlo, medir 5 tiradas de linea base: la variacion normal es alta y a ojo no
 se distingue una mejora de la suerte.
+
+---
+
+### 22. Elegir por ella (CERRADA, 3-sep-2026)
+
+El salon tiene escrito que sin ver el cabello no se puede decir cual conviene.
+Preguntado DE FRENTE lo contesta perfecto. Dicho como duda, se lo inventaba:
+
+    ELLA  no se, ni idea de que largo tengo
+    IA    te recomendaria el Acido lactico bio premium
+
+Misma forma que el fallo de la lactancia (clase 20): la capa que entiende dispara
+con la pregunta directa y se queda muda cuando la duda se expresa sin preguntar.
+
+Arreglado en dos piezas: la duda se traduce a la pregunta que lleva dentro y se le
+pregunta al negocio, y un freno impide recomendar un servicio concreto. **Lo
+dispara la RECOMENDACION, no que ella dude**: asi cae tambien la que nadie pidio
+("te recomendaria Keratina premium" cuando ella solo habia dicho el dia), que es
+la que mas molesta a la duenya. Solo actua donde el negocio lo ha dicho por
+escrito.
+
+### 23. El abandono blando (CERRADA, 3-sep-2026)
+
+    ELLA  dejalo, ya lo miro luego
+    IA    Entiendo, no hay problema. PERO para reservar necesito saber el largo...
+
+"Mira al final no, gracias" YA se cerraba bien. Fallaba el abandono BLANDO
+("dejalo", "me lo pienso", "ya te dire"), que es justo el que un humano deja
+marchar sin insistir. Es el tercer patron de reparacion de los asistentes de
+produccion -cancellation en Rasa, junto a digressions (clase 20) y corrections
+(que YA funcionaban: cambiar de dia, de servicio, "es para mi hija")-.
+
+**Trampa:** el detector tiene que mirar SOLO el ultimo mensaje. Con
+`dicho_de_ella`, que acumula todo lo que ella ha escrito, quien decia "dejalo" y
+dos mensajes despues "va, si que quiero, el viernes" seguia recibiendo la
+despedida: la conversacion quedaba muerta.
+
+### 24. Vender sobre una queja (CERRADA, 3-sep-2026)
+
+    ELLA  me hice el alisado y se me ha quedado fatal el pelo
+    IA    Para solucionarlo, podemos optar por Keratina premium o Acido lactico
+
+A quien se queja de un trabajo mal hecho se le vende otro. El playbook
+`pasar_a_persona` lo cubre para quien lo active en el portal -el salon piloto NO
+lo tenia-, pero el suelo no puede depender de que alguien se acuerde.
+
+**Trampa:** el filtro de nombres pedia 10 caracteres (heredado de la clase 22) y
+"Matiz" y "Elumen" se colaban enteros. Dentro de una queja se puede apretar a 5
+con palabra completa: nombrar CUALQUIER servicio sobra.
+
+### Abierto, medido, sin cerrar
+
+- **Precio tras insistir** (inestable). A la tercera insistencia -"dime un rango
+  aunque sea aproximado"- una tirada empezo a desglosar precios por largo y otra
+  deflecto correctamente al diagnostico. Ademas se le vio pedir el largo "para
+  darte un rango", que es el rodeo que ya prohibe
+  `test_precio_oculto_no_pregunta_el_largo.py`. Medir varias tiradas antes de
+  tocar: una sola no distingue el fallo de la suerte.
+- **Nombra un servicio equivocado al pedir varios.** "corte y secado y tambien
+  tinte" -> "He encontrado el servicio de Tinte cejas". La AGENDA esta protegida
+  (`_freno_de_varios_servicios` actua al crear, y su caso critico pasa); lo que
+  falla es lo que le dice por el camino.
