@@ -418,7 +418,7 @@ cuesta clientas.
 
 ---
 
-### 21. Reprogramar da vueltas (VIVO, ~40 % de las veces, 3-sep-2026)
+### 21. Reprogramar da vueltas (CERRADA el 3-sep-2026: era el instrumento)
 
 Ella pide mover la cita sin decir hora ("cualquier otro hueco que tengas me
 vale"). El modelo llama a `reprogramar_cita` con una hora que se inventa, el
@@ -440,6 +440,18 @@ rechazo (`resultado["huecos_reales"]`), para que no tuviera nada que adivinar.
 | con los huecos en el rechazo | **2** |
 
 Sale PEOR. La hipotesis era que le faltaba informacion; con mas informacion se
+**CERRADA.** No era del producto: la BD local tenia una "Agenda general"
+fantasma sin dias cerrados, asi que se ofrecian huecos de un LUNES -dia en que el
+salon cierra- y la validacion, que va contra la profesional REAL, los rechazaba
+uno tras otro. De ahi las seis llamadas seguidas con los mismos argumentos.
+
+Con un snapshot de PRODUCCION, `scripts/humo.py --caso reprogramar-mueve-la-cita`
+sale **5 de 5 a la primera**. Llevaba semanas tumbando despliegues. Antes de
+volver a tocar este caso, comprueba el instrumento: lunes y domingo tienen que dar
+CERO huecos.
+
+Lo de abajo es de cuando se creia un fallo del producto, y se deja por la leccion:
+
 pierde igual o mas. Pista para quien lo retome: el problema no parece ser que no
 sepa los huecos, sino que insiste en la hora que ya decidio. Antes de volver a
 tocarlo, medir 5 tiradas de linea base: la variacion normal es alta y a ojo no
@@ -743,3 +755,41 @@ que la SEGUNDA vez siga parando la cita y hablando, pero con otras palabras y si
 volver a explicar lo mismo; el texto de `_wa_explicar_la_regla_del_precio` es fijo.
 Y medir siempre `da_un_precio_que_no_debe`, no solo las repeticiones: es facil
 cambiar un fallo visible por otro mas caro.
+
+---
+
+### 32. Se va sin cita porque le piden un dato que ese servicio no tiene (ABIERTA, 3-sep-2026)
+
+Con datos de produccion:
+
+    ELLA  Creo que un "Corte de nino de 0 a 7" seria lo mejor, tiene 7 anos.
+    ELLA  Para el martes 8, podria ser a las 10:30?
+    IA    Solo necesito que me confirmes como tiene el pelo de largo: corto,
+          medio o largo?
+    ELLA  Confirmo. Gracias!
+    IA    Solo necesito saber como tiene el pelo de largo...
+
+Se fue SIN CITA. Le pedian el largo del pelo para un corte infantil, que no tiene
+variantes por largo.
+
+**Origen exacto**, encontrado llamando a `catalog_pick.elegir` a pelo: el catalogo
+dice "Corte nino de 0 a 7" y ella escribio "corte DE nino de 0 a 7". Por esa
+palabra no lo reconoce, devuelve `falta="tecnica"`, y el modelo convierte esa falta
+en una pregunta inventada.
+
+**Intentado y descartado (medido).** Un resolutor que acepta el servicio cuando
+ella lo nombra tal cual: todas las palabras con contenido del nombre presentes en
+lo que dijo, y que encaje UNO solo. Resuelve el caso en la unidad -da con "Corte
+nino de 0 a 7" y no toca "unas mechas", que sigue pidiendo la talla- pero sobre 8
+conversaciones:
+
+| | consigue lo que queria | se fue sin cita |
+| --- | --- | --- |
+| sin tocar nada | 87,5 % | 1 |
+| con el resolutor por nombre | 75,0 % | 2 |
+
+Sin evidencia de mejora y con el fallo que venia a arreglar al alza. Para quien lo
+retome: el caso concreto SI se arregla, asi que el danyo esta en otra parte -alguna
+conversacion que antes se resolvia por familia ahora se cierra antes de tiempo-.
+Y mide con mas de 8 conversaciones: con esa muestra, 7 frente a 6 no distingue una
+mejora de la suerte.
