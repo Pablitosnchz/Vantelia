@@ -560,6 +560,31 @@ def _format_price_cents(cents: int) -> str:
     return (f"{cents / 100:.2f}").replace(".", ",") + " €"
 
 
+def duracion_humana(minutos) -> str:
+    """"20 min", "1 h", "1 h 30 min". Cadena vacia si no hay duracion.
+
+    Fuente unica para todos los canales: lo que lee el cliente en el resumen de
+    WhatsApp tiene que ser lo mismo que aparta la agenda, y con el mismo formato
+    en todas partes.
+
+    Se dice "min" y no "minutos" a proposito: es mas corto para una ficha y no
+    choca con el freno que impide soltar duraciones en mitad de la conversacion
+    -que es cosa distinta: aqui es un dato de la cita, no cháchara-.
+    """
+    try:
+        total = int(minutos or 0)
+    except (TypeError, ValueError):
+        return ""
+    if total <= 0:
+        return ""
+    horas, resto = divmod(total, 60)
+    if not horas:
+        return "%d min" % resto
+    if not resto:
+        return "%d h" % horas
+    return "%d h %d min" % (horas, resto)
+
+
 def _parse_date(date_text: str) -> datetime:
     try:
         return datetime.strptime(date_text, "%Y-%m-%d")

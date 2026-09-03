@@ -1062,6 +1062,23 @@ async def _wa_send_availability_overview(
     )
 
 
+def _wa_duracion_del_servicio(cliente_id: str, flow: appstate.WAFlowState) -> str:
+    """Lo que va a durar la cita, con el MISMO resolutor que aparta el hueco.
+
+    Si se calculara aparte, lo que lee el cliente y lo que se le guarda podrian
+    discrepar, que es justo el fallo que costo una tarde con las duraciones
+    inventadas.
+    """
+    try:
+        from backend import agenda
+
+        minutos = agenda._service_duration_minutes(
+            cliente_id, flow.servicio or "", flow.location_id or None)
+        return textnorm.duracion_humana(minutos)
+    except Exception:  # noqa: BLE001 - la cita no se cae por una etiqueta
+        return ""
+
+
 def _wa_linea_de_recargo(cliente_id: str, flow: appstate.WAFlowState) -> str:
     """"Con X el servicio cuesta un N% mas", si es el caso. Vacio si no lo es."""
     if not flow.employee_id:
@@ -1326,6 +1343,13 @@ async def _wa_send_booking_summary(
     lineas.append(f"📞 {flow.from_number}")
     lineas.append("🛍️ %s" % textnorm.nombre_de_servicio_publico(
         flow.servicio or "Servicio general"))
+    # Cuanto va a durar. Pedido por el negocio: no es lo mismo reservar veinte
+    # minutos que tres horas, y el cliente necesita saberlo para organizarse.
+    # Va en la FICHA de la cita, no en la conversacion: soltar duraciones
+    # charlando es otra cosa y sigue frenado.
+    duracion_cita = _wa_duracion_del_servicio(cliente_id, flow)
+    if duracion_cita:
+        lineas.append("⏱️ %s" % duracion_cita)
     lineas.append(f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}")
     # Si ha pedido a alguien que cuesta mas, el recargo va AQUI, en el resumen que
     # firma. Fiarlo al modelo no basta: se le paso el aviso, contesto "claro, con
@@ -1476,6 +1500,9 @@ async def _wa_create_booking(
         + (f"📧 {flow.email}\n" if flow.email else "")
         +         f"📞 {flow.from_number}\n"
         f"🛍️ {flow.servicio or 'Servicio general'}\n"
+        + (f"⏱️ {_wa_duracion_del_servicio(cliente_id, flow)}\n"
+           if _wa_duracion_del_servicio(cliente_id, flow) else "")
+        +
         f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}\n"
         f"📅 {fecha_humana}\n"
         f"🕐 {flow.hora}\n"
