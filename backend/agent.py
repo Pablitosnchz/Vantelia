@@ -1011,6 +1011,7 @@ _LO_DEJA_PARA_LUEGO = re.compile(
     # los horarios" y en cada respuesta le ofrecian un alisado. Cerrar una
     # conversacion no es solo aplazarla: tambien es decir que ya esta.
     r"no necesito cita|no quiero cita|solo queria saber|solo quiero saber|"
+    r"solo pregunte|solo preguntaba|solo era (por|para) saber|"
     r"solo era eso|era solo eso|nada mas gracias|no necesito nada mas|"
     r"ya esta gracias|con eso me vale|con eso ya)\b")
 

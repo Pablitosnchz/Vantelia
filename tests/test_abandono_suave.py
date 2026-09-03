@@ -45,7 +45,14 @@ def test_frena_cuando_le_insiste_tras_dejarlo(api_module):
                   # solo queria el horario y en cada respuesta le ofrecian un
                   # alisado. Cerrar no es solo aplazar; tambien es decir "ya esta".
                   "solo queria saber los horarios", "no necesito cita",
-                  "solo era eso, gracias", "con eso me vale"):
+                  "solo era eso, gracias", "con eso me vale",
+                  # Medido otra vez el 3-sep: una clienta dijo NUEVE veces "solo
+                  # pregunte por los horarios" y en cada respuesta le ofrecian un
+                  # tratamiento. La primera version solo cubria "solo queria
+                  # saber"; el verbo que usa la gente varia mas que eso.
+                  "solo pregunte por los horarios", "solo preguntaba por el horario",
+                  "ya te dije que solo pregunte los horarios",
+                  "solo era para saber el horario"):
         assert agent._sigue_insistiendo_tras_dejarlo(dicho, INSISTE), dicho
 
 
