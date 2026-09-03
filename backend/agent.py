@@ -1918,45 +1918,6 @@ def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
     return limpia not in ofrecidos
 
 
-_DIAS_SEMANA = ("lunes", "martes", "miercoles", "jueves", "viernes",
-               "sabado", "domingo")
-
-
-def _fecha_que_nadie_ha_pedido(hablado: str, fecha: str) -> bool:
-    """Se mueve la cita a un DIA que nadie ha nombrado ni ofrecido.
-
-    Medido contra datos de produccion el 3-sep-2026:
-
-        ELLA  Queria saber si hay disponibilidad para otro dia.
-        IA    He reprogramado tu cita para el martes 8 de septiembre a las 10:00.
-
-    Ella PREGUNTA y el asistente le mueve la cita. El freno que ya habia
-    (`_hora_que_nadie_ha_pedido`) no lo vio porque mira solo la HORA, y la cita
-    era a las 10:00 y se movio al martes tambien a las 10:00: esa hora ya estaba
-    dicha en la conversacion, asi que pasaba el filtro. El dia no lo miraba nadie.
-
-    Cuenta como pedido si el dia aparece en lo hablado de cualquier forma: la
-    fecha entera, el numero del dia, o el nombre del dia de la semana.
-    """
-    fecha = str(fecha or "").strip()
-    if len(fecha) != 10:
-        return False
-    plano = catalog_pick._norm(hablado or "")
-    if fecha in (hablado or ""):
-        return False
-    try:
-        import datetime
-
-        dia = datetime.date(int(fecha[:4]), int(fecha[5:7]), int(fecha[8:10]))
-    except (TypeError, ValueError):
-        return False
-    if re.search(r"\b%d\b" % dia.day, plano):
-        return False
-    if _DIAS_SEMANA[dia.weekday()] in plano:
-        return False
-    return True
-
-
 def _pide_anular_y_solo_eso(dicho: str) -> bool:
     """Delega en `reserva`: una sola forma de leer lo que pide."""
     from backend import reserva
@@ -2806,6 +2767,27 @@ async def responder(
     )
     estado = reserva.cargar(cliente_id, telefono)
     reserva.anotar_intencion(estado, intencion)
+    # Si viene a tocar SU cita y solo tiene una, el codigo no se le pide: ya lo
+    # sabemos por su telefono, que en estos canales viene verificado.
+    #
+    # Medido contra datos de produccion: `que_falta` devolvia 'codigo' en los siete
+    # turnos, asi que la instruccion de cierre -la unica que dice "llama a
+    # reprogramar_cita AHORA"- no salia nunca. La clienta escribio "Confirmo" SEIS
+    # veces y su cita no se movio. Las propias tools ya buscan por telefono sin
+    # codigo; el unico que lo exigia era este estado.
+    # SOLO para reprogramar. Con `cancelar` esto es peligrosisimo: probado contra
+    # produccion, a "Hola! Queria hablar sobre mi cita" -que el canal habia
+    # marcado como cancelar- le contesto "he cancelado tu cita del 5 de
+    # septiembre" en el PRIMER mensaje. Anular es destructivo y se le sigue
+    # pidiendo que lo confirme; mover no rompe nada que no se pueda volver a
+    # mover.
+    if (not estado.codigo and telefono
+            and estado.intencion == "reprogramar"):
+        from backend import booking as _bk
+
+        _suyas = _bk.citas_vivas_del_telefono(cliente_id, telefono)
+        if len(_suyas) == 1:
+            estado.codigo = str(_suyas[0]["booking_code"] or "").strip()
     reserva.anotar_lo_que_dice(
         estado, mensaje,
         str((cfg.get("booking") or {}).get("timezone") or settings.DEFAULT_TIMEZONE),
@@ -3113,7 +3095,15 @@ async def responder(
                                     "cuando quiera te lo dice y se lo miras."),
                     })
                     continue
+                # Si el servicio lo ha nombrado ELLA, repetirselo no es
+                # recomendar. Sin esta linea el freno se metia en mitad de una
+                # confirmacion -"tenemos el Acido lactico bio premium el martes 8 a
+                # las 14:00"- y la conversacion no cerraba nunca: medido contra
+                # produccion, la clienta escribio "Confirmo" seis veces.
+                lo_dijo_ella = _familia_nombrada(
+                    cliente_id, catalog_pick._norm(dicho_de_ella), 5)
                 if (_recomienda_un_servicio(cliente_id, texto_final)
+                        and not lo_dijo_ella
                         and (no_sabe or _lo_que_el_negocio_dice_al_recomendar(
                             cliente_id, config))
                         and vuelta + 1 < MAX_VUELTAS):
@@ -3373,28 +3363,6 @@ async def responder(
                 # verdad -"quiero cancelar mi cita"- y el modelo llamo a
                 # reprogramar con el MISMO dia y la MISMA hora, dijo "listo,
                 # reprogramada" y la clienta se quedo con la cita puesta.
-                # El DIA tambien cuenta, no solo la hora. Medido contra datos de
-                # produccion: a "queria saber si hay disponibilidad para otro dia"
-                # le movio la cita al martes siguiente. El freno de la hora no lo
-                # vio porque la cita era a las 10:00 y la movio al martes a las
-                # 10:00, y esa hora ya se habia dicho en la conversacion.
-                if (llamada.function.name == "reprogramar_cita"
-                        and _fecha_que_nadie_ha_pedido(
-                            dicho_de_ella, str(argumentos.get("fecha") or ""))
-                        and vuelta + 1 < MAX_VUELTAS):
-                    traza.freno("dia_que_nadie_ha_pedido")
-                    resultado = {
-                        "ok": False,
-                        "error": ("Ese dia no lo ha pedido ella ni se lo has ofrecido: "
-                                  "no le muevas la cita a un dia que has elegido tu. "
-                                  "Mira que dias tienen hueco, ofreceselos y espera a "
-                                  "que elija."),
-                    }
-                    mensajes.append({
-                        "role": "tool", "tool_call_id": llamada.id,
-                        "content": json.dumps(resultado, ensure_ascii=False),
-                    })
-                    continue
                 if (llamada.function.name == "reprogramar_cita"
                         and str(argumentos.get("hora") or "") not in ofrecidas
                         and _hora_que_nadie_ha_pedido(

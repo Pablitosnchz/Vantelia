@@ -658,3 +658,50 @@ sitio ("Mechas o balayage medio" -> "mechas balayage") y no casan con lo que dic
 el modelo.
 
 Queda abierto el `servicio_equivocado` (3 de 8): pide corte y acaba con mechas.
+
+---
+
+### 30. Mover la cita pidiendo un codigo que ya sabemos (CERRADA, 3-sep-2026)
+
+Medido contra datos de PRODUCCION. La clienta quiere mover su cita y la
+conversacion no cierra:
+
+    ELLA  Me viene bien a las 14:00.
+    IA    ... el 8 de septiembre a las 14:00. Confirmas esta cita?
+    ELLA  Confirmo.                              (SEIS veces)
+
+Instrumentando el estado turno a turno, la causa cabe en una linea:
+
+    [estado] intencion=cancelar codigo= fecha=2026-09-08 hora=14:00 FALTA='codigo'
+
+`que_falta` devuelve 'codigo' siempre, asi que `instruccion_de_cierre` -la unica
+que dice "llama a reprogramar_cita AHORA"- no sale nunca. Y pedirle el codigo no
+tenia sentido: tiene UNA cita y el telefono viene verificado; las tools ya buscan
+por telefono sin codigo.
+
+| | consigue lo que queria | |
+| --- | --- | --- |
+| base | 50,0 % | 4 atascadas sin mover la cita |
+| + freno del dia que nadie pidio | 37,5 % | 3 citas DUPLICADAS -> retirado |
+| codigo automatico, sin ese freno | **87,5 %** | 0 atascadas |
+
+**Solo para reprogramar.** Autocompletarlo tambien en `cancelar` hizo esto, en el
+primer mensaje: "Hola! Queria hablar sobre mi cita" -> "he cancelado tu cita del 5
+de septiembre". Anular es destructivo; mover no.
+
+**Retirado con datos:** el freno `dia_que_nadie_ha_pedido` (para que no le muevan
+la cita a un dia que ella no ha pedido). Al bloquear el movimiento, el modelo
+cogia una cita NUEVA y dejaba la vieja: 3 duplicadas de 8. El problema que venia a
+arreglar es real -"queria saber si hay disponibilidad para otro dia" -> le movio
+la cita al martes- pero frenarlo asi sale mas caro que el fallo.
+
+**Ademas, dos regresiones MIAS de esa manyana, las dos medidas y arregladas:** el
+freno de la hora rompia las reprogramaciones (la hora que ella PIDE no es un
+error) y el de recomendar se metia en mitad de una confirmacion (si el servicio lo
+nombro ella, repetirselo no es recomendar).
+
+Queda abierto que la intencion se quede pegada en `cancelar` cuando ella dice
+"no puedo ir, podria moverla": ni `_message_requests_cancel_booking` ni
+`_message_requests_reschedule_booking` casan esa frase, asi que viene de otro
+sitio (`anotar_intencion_por_tool` pone `cancelar` en cuanto el modelo llama a
+`cancelar_cita`, aunque la llamada se rechace).
