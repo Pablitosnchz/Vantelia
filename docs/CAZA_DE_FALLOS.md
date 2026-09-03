@@ -546,3 +546,37 @@ Pista para quien lo retome: el nucleo del problema es identificar el SUSTANTIVO
 que manda en lo que ofrece, y eso con expresiones regulares no sale. Con el
 catalogo delante seguramente lo resuelve una llamada corta al modelo, pagando una
 por respuesta que niegue algo (son pocas).
+
+### 28. Le coge el TRATAMIENTO a quien preguntaba el precio (ABIERTA, medida 3-sep-2026)
+
+Simulador de 40 clientas, 3 de las 8 conversaciones rotas:
+
+    "le ha cogido 'Pack mechas o balayage medio' en vez de la valoracion"
+    "le ha cogido 'Flash repair largo y extralargo' en vez de la valoracion"  x2
+
+Preguntan el precio y acaban con un pack de horas cogido en la agenda en lugar de
+la valoracion de quince minutos. `preguntar_precio` es el peor objetivo del
+simulador con diferencia: **16,7 % (1 de 6)**, cuando reservar va al 94 %.
+
+La causa esta localizada: el freno que canjea el tratamiento por la valoracion
+existe y funciona -"Pack mechas o balayage medio" -> "Diagnostico y presupuesto"-
+pero solo actua si `estado.veces_sin_precio` es mayor que cero, y ese contador
+solo sube cuando el asistente se NIEGA a dar el precio. En este salon la pregunta
+la contesta antes la Q&A escrita a mano, asi que el contador se queda a cero y el
+freno no llega nunca.
+
+**Dos intentos, los dos medidos, los dos peores:**
+
+1. Abrir la condicion entera (`o _pregunta_el_precio(dicho_de_ella)`). La rama que
+   BLOQUEA cuando la regla del negocio es otra -para los alisados, pedir foto- se
+   abre tambien, y la clienta acaba sin ninguna cita y mandada al telefono:
+   "no podemos agendar la cita para el diagnostico sin antes ver tu cabello".
+2. Abrir SOLO el canje, dejando la rama que bloquea como estaba. Deja de bloquear,
+   pero el canje tampoco se ve: da vueltas preguntando el largo y no coge nada.
+
+Pista para quien lo retome: "Flash repair" (un alisado) NO esta en las familias
+que exigen valoracion, asi que para esos dos casos el canje no aplica y lo que
+toca es la regla de la foto. El unico de los tres que el canje arregla es el de
+mechas. Conviene separarlos y medir cada uno por su lado, con el simulador y no
+con una conversacion suelta: los dos intentos de arriba parecian razonables al
+leerlos.
