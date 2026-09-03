@@ -994,23 +994,6 @@ def _familias_del_catalogo(cliente_id: str):
     return familias
 
 
-def _cabezas_de_servicio(cliente_id: str, norm: str):
-    """Las PRIMERAS palabras de servicio que aparecen en el texto.
-
-    Para saber si le esta hablando de OTRA cita distinta a la que tiene basta la
-    palabra que manda -mechas frente a corte-. Comparar dos palabras no vale aqui:
-    el catalogo normaliza "Mechas o balayage medio" a "mechas balayage" (se come
-    la "o" suelta) mientras que el texto conserva el "o", asi que no casaban nunca.
-    """
-    cabezas = set()
-    for familia in _familias_del_catalogo(cliente_id):
-        cabeza = familia.split()[0] if familia else ""
-        if len(cabeza) >= 5 and re.search(
-                r"\b%s" % re.escape(cabeza), norm):
-            cabezas.add(cabeza)
-    return cabezas
-
-
 def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
     """Dice "te recomendaria X" siendo X un servicio del catalogo."""
     norm = catalog_pick._norm(texto or "")
