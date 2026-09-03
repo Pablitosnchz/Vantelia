@@ -213,7 +213,12 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
     resultado["fallos"].extend(_mentiras(cliente_id, dichos, vivas))
     if any("[REVENTO]" in t["texto"] for t in conversacion):
         resultado["fallos"].append("revienta")
-    if dichos and not dichos[-1].strip():
+    # Callarse es un FALLO... salvo cuando es lo que se le ha pedido: quien pide
+    # hablar con una persona quiere justo eso, que el asistente deje de contestar
+    # encima. Sin esta excepcion, la clienta `pide-persona` salia 0 % haciendo
+    # exactamente lo correcto (medido el 3-sep-2026, primera tirada con ella).
+    if (dichos and not dichos[-1].strip()
+            and objetivo != "hablar_con_persona"):
         resultado["fallos"].append("se_queda_callada")
     if _se_repite(dichos):
         resultado["fallos"].append("repite_la_misma_pregunta")
@@ -234,6 +239,12 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
             resultado["veredicto"] = "fallo"
             resultado["motivo"] = "le ha cogido %d citas" % len(nuevas)
             resultado["fallos"].append("cita_duplicada")
+        elif _es_diagnostico(nuevas[0]) and persona.get("rechaza_valoracion"):
+            # Ella dijo que NO queria el diagnostico. Cogerselo igual es no
+            # escucharla, aunque sea la ruta habitual del negocio.
+            resultado["veredicto"] = "fallo"
+            resultado["motivo"] = "rechazo el diagnostico y le han cogido el diagnostico"
+            resultado["fallos"].append("no_la_escucha")
         elif (_es_diagnostico(nuevas[0])
               and _tiene_regla_de_no_precio(cliente_id, persona.get("familia", ""))):
             # El salon NO reserva mechas sin ver el pelo: te cita para valorarlo.
@@ -246,6 +257,17 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
             resultado["fallos"].append("servicio_equivocado")
         else:
             resultado["veredicto"] = "bien"
+    elif objetivo == "hablar_con_persona":
+        # Lo que se juzga no es lo que diga, sino que el asistente se CALLE: la
+        # conversacion pasa a una persona y el bot deja de contestar encima.
+        from backend import inbox, whatsapp
+
+        if inbox.bot_is_muted(whatsapp._whatsapp_session_id(cliente_id, telefono)):
+            resultado["veredicto"] = "bien"
+        else:
+            resultado["veredicto"] = "fallo"
+            resultado["motivo"] = "pidio hablar con una persona y el asistente siguio solo"
+            resultado["fallos"].append("no_pasa_a_una_persona")
     elif objetivo == "cancelar":
         # Lo que se juzga es que SU cita quedara cancelada, no que no quede
         # ninguna. Una clienta puede anular y, en la misma conversacion, pedir
@@ -372,9 +394,55 @@ def _mentiras(cliente_id: str, dichos: List[str], vivas: List[Dict[str, Any]]) -
     if (("€" in sin_fianza or " euros" in plano_sin_fianza)
             and _habla_de(plano_sin_fianza, ("mecha", "balayage", "balay"))):
         regla = rules.match(cliente_id, {"intencion": "precio", "familia": "mechas"})
-        if regla is not None:
+        # Una cifra que el negocio TIENE ESCRITA no es un precio inventado. La
+        # duenya publica "Mecha test - 45 minutos, 20 €" en su propia regla, y
+        # repetirsela a la clienta es hacer lo que ella pidio. Contarlo como fallo
+        # critico me hizo leer "2 criticos" donde no habia ninguno y estuve a punto
+        # de revertir un arreglo bueno (3-sep-2026). Mismo motivo por el que arriba
+        # se quitan las frases de fianza.
+        if regla is not None and _cifras_inventadas(cliente_id, sin_fianza):
             fallos.append("da_un_precio_que_no_debe")
     return fallos
+
+
+_CIFRA = re.compile(r"(\d{1,5})(?:[.,]\d{1,2})?\s*(?:€|EUR|euros)", re.IGNORECASE)
+_PUBLICADAS: Dict[str, set] = {}
+
+
+def _cifras_publicadas(cliente_id: str) -> set:
+    """Las cifras que el negocio tiene escritas: sus reglas y sus Q&A.
+
+    Se cachea por tenant: se lee una vez por tirada, no una por conversacion.
+    """
+    if cliente_id in _PUBLICADAS:
+        return _PUBLICADAS[cliente_id]
+    textos = []
+    try:
+        from backend import rules
+
+        textos.extend(str(r["texto"] or "") for r in rules.listar(cliente_id))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from backend import db
+
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT answer FROM kb_qa WHERE cliente_id = ?", (cliente_id,)
+            ).fetchall()
+        textos.extend(str(f["answer"] or "") for f in filas)
+    except Exception:  # noqa: BLE001
+        pass
+    cifras = set()
+    for t in textos:
+        cifras.update(_CIFRA.findall(t))
+    _PUBLICADAS[cliente_id] = cifras
+    return cifras
+
+
+def _cifras_inventadas(cliente_id: str, texto: str) -> set:
+    """Las cifras del mensaje que el negocio NO tiene escritas en ningun sitio."""
+    return set(_CIFRA.findall(texto or "")) - _cifras_publicadas(cliente_id)
 
 
 def _habla_de(plano: str, pistas) -> bool:

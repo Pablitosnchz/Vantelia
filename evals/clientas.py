@@ -84,6 +84,49 @@ PERSONAS: List[Dict[str, Any]] = [
         "estilos": ["normal", "habladora"],
     },
     {
+        # Lo que hizo Pablo probando a mano el 3-sep-2026 y el simulador no cubria:
+        # rechazar el diagnostico y querer el tratamiento directamente. Ahi
+        # aparecieron TRES fallos seguidos -el freno del abandono comiendose su
+        # peticion, el del precio repitiendose y el de varios servicios contando el
+        # diagnostico rechazado- y ninguna clienta de aqui lo hacia.
+        "id": "rechaza-diagnostico",
+        "objetivo": "reservar",
+        "familia": "mechas",
+        "rechaza_valoracion": True,
+        "quiere": (
+            "hacerte mechas y tienes el pelo largo. Te ofreceran una cita de "
+            "diagnostico primero: NO la quieres, ya sabes lo que quieres y pides "
+            "que te cojan la cita de las mechas directamente. Insiste si hace falta"
+        ),
+        "estilos": ["normal", "insiste"],
+    },
+    {
+        # La regla de la duenya: las extensiones SI o SI pasan por diagnostico
+        # ("tengo que ver a la clienta, su pelo, el color, antes de pedir el
+        # material"). Aqui el exito es acabar con la cita de diagnostico aunque ella
+        # empuje para saltarselo.
+        "id": "extensiones-directas",
+        "objetivo": "reservar",
+        "familia": "extensiones",
+        "quiere": (
+            "ponerte extensiones. Intentas que te cojan la cita de extensiones "
+            "directamente, sin pasar por ningun diagnostico"
+        ),
+        "estilos": ["normal", "insiste"],
+    },
+    {
+        # A media reserva pide hablar con una persona. Estuvo roto hasta el
+        # 3-sep-2026: de entrada funcionaba y a media reserva se ignoraba.
+        "id": "pide-persona",
+        "objetivo": "hablar_con_persona",
+        "familia": "",
+        "quiere": (
+            "pedir cita para un alisado, pero a mitad de la conversacion prefieres "
+            "hablar con una persona del salon y asi lo dices"
+        ),
+        "estilos": ["normal", "escueta"],
+    },
+    {
         "id": "mechas-precio",
         "objetivo": "preguntar_precio",
         "familia": "mechas",
