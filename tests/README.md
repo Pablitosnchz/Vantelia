@@ -36,6 +36,13 @@ python -m pytest -k senal             # por nombre
 Existen para que no se repita un error concreto. Si uno falla, lee su docstring
 antes de "arreglarlo": suele estar diciendo algo cierto.
 
+- `test_no_hay_nombres_sin_definir.py` — dos cosas que compilan y no funcionan.
+  (1) Un nombre usado sin importar: `agent.responder` llamaba a `booking.…` sin
+  tener `booking` importado, así que el freno que impide soltar la duración sin
+  que la pidan reventaba justo en el caso que venía a arreglar, y llegó así a
+  producción. (2) Un `` de regex que perdió el prefijo `r` y quedó como el byte
+  de retroceso: compila, `pyflakes` calla, y el freno no salta nunca. Pasó cuatro
+  veces en una noche.
 - `test_los_tests_no_mandan_emails.py` — la suite no habla con el buzón real.
   Pasó de verdad (ago-2026): `pytest` cargaba el `.env` de producción y las
   confirmaciones de cita salían por `smtp.hostinger.com` a `@test.es` y
@@ -69,6 +76,31 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   devuelto la decisión al modelo y volverá la variación entre ejecuciones.
 - `test_agente_de_citas.py` — el modelo lleva la conversación, pero las tools no
   le dejan inventarse un servicio, un hueco ni una cita.
+- `test_digresiones.py` — una pregunta de verdad a media reserva se contesta con
+  lo que el negocio tiene escrito, y se sigue. La dueña del salón preguntó por la
+  lactancia eligiendo alisado y recibió "consulta con tu médico" teniendo escrito
+  que su Ácido Láctico Bio Premium es apto. Fija además que pedir cita NO es una
+  digresión: meter texto del negocio en un turno de reserva la descarrila.
+- `test_no_elige_por_ella.py` — con "no sé, ni idea de qué largo tengo" no se le
+  elige el tratamiento. Incluye los DOS formatos de nombre del catálogo (con
+  guion y con espacio): comparando el nombre entero, el freno no saltaba con la
+  mitad del catálogo.
+- `test_abandono_suave.py` — quien dice que lo deja se va sin que le insistan.
+  Mira SOLO el último mensaje: con el texto acumulado, quien volvía ("va, sí que
+  quiero") seguía recibiendo la despedida para siempre.
+- `test_queja_no_se_vende.py` — a quien se queja de un trabajo mal hecho no se le
+  ofrece otro tratamiento.
+- `test_dos_personas_dos_huecos.py` — "cita para mí y para mi madre" no cabe en un
+  hueco. Avisa una vez y luego las coge de una en una: bloquear siempre la dejaba
+  sin ninguna cita.
+- `test_no_le_repite_su_muletilla.py` — a "hola?" no se le contesta "no tengo un
+  servicio llamado 'hola'". Se pidió primero en el mensaje de la tool y no cambió
+  nada: por eso el freno está en el código.
+- `test_pedir_persona_gana_siempre.py` — pedir hablar con una persona funciona
+  también a media reserva. El traspaso vivía dentro del bloque que solo corre sin
+  flujo activo.
+- `test_freno_del_precio_antes_de_hablar.py` — si la cita se va a parar, el agente
+  no habla primero. Salían dos mensajes contradictorios en el mismo turno.
 - `test_varios_servicios_una_cita.py` — una cita no puede apartar MENOS tiempo del
   que hace falta. Nació de una cita de 20 minutos para cuatro servicios (corte +
   secado + elumen + alisado) en la agenda de un salón real. Vigila las tres
