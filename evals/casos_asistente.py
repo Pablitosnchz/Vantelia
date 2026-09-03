@@ -452,8 +452,15 @@ CASOS = [
             "Esos nombres son de cocina y la clienta no puede elegir entre ellos. "
             "Lo que hay que preguntar es como tiene el pelo de largo."
         ),
+        # Lo que este caso vigila DE VERDAD es `no_debe`: los nombres de cocina.
+        # `debe` acepta las dos salidas correctas porque las dos lo son para este
+        # negocio: preguntarle el largo, o mandarla al diagnostico, que es lo que
+        # su propia regla ("Color y mechas: precio tras valoracion") dice que hay
+        # que hacer con las mechas. Exigiendo solo "largo", el caso fallaba una de
+        # cada dos tiradas segun lo que decidiera el clasificador, y castigaba una
+        # respuesta que la duenya configuro a mano.
         "mensajes": ["quiero unas mechas"],
-        "debe": ["largo"],
+        "debe": ["largo", "diagnostico", "diagnóstico", "valoracion", "valoración"],
         "no_debe": ["corto-med", "media cabeza-"],
     },
     {
