@@ -858,7 +858,7 @@ vuelven a la version vieja y pasan. Hay que revertir solo el codigo:
 
 ---
 
-### 35. Rechazar un servicio contaba como pedirlo (CERRADA, 3-sep-2026)
+### 35. La valoracion contaba como un servicio mas (CERRADA, 3-sep-2026)
 
 Reportado probando la demo, justo antes de cerrar la cita:
 
@@ -882,3 +882,17 @@ de rechazar.
 tests leia el catalogo REAL de la BD local -que no es fiel a produccion- y fallaba
 por los datos, no por el codigo. Un test de logica se monta con un catalogo de
 mentira: si depende de lo que tenga hoy un salon, no prueba lo que dice probar.
+
+**Y por el camino contrario, el mismo dia.** Aceptando el diagnostico salia esto
+justo antes del resumen:
+
+    IA  necesitamos decidir si solo quieres el diagnostico o si tambien quieres
+        hacerte las mechas en la misma cita. Que prefieres hacer?
+    IA  *Resumen de tu cita* ... Diagnostico y presupuesto ... 15 min
+
+Preguntaba que quiere hacer y en el mensaje siguiente ya le daba la cita hecha.
+
+La regla buena es mas simple que "quitar lo rechazado": **la valoracion es el
+primer paso del negocio hacia el tratamiento, no un segundo servicio**. Si lo que
+se esta reservando ES la valoracion, este freno no pinta nada y se sale antes de
+mirar familias. Lo otro -pedir corte, secado y tinte- sigue frenando igual.

@@ -1589,6 +1589,22 @@ def _freno_de_varias_personas(
 
 
 
+def _es_la_valoracion(cliente_id: str, servicio: str) -> bool:
+    """El servicio que se va a reservar es la cita de valoracion del negocio."""
+    if not servicio:
+        return False
+    try:
+        from backend import booking
+
+        valoracion = booking._servicio_de_valoracion(cliente_id)
+        nombre = str((valoracion or {}).get("nombre") or "").strip()
+        if not nombre:
+            return False
+        return catalog_pick._norm(nombre) == catalog_pick._norm(servicio)
+    except Exception:  # noqa: BLE001 - ante la duda, el freno sigue su curso
+        return False
+
+
 def _sin_lo_que_ha_rechazado(cliente_id: str, pedido: str, familias):
     """Quita de lo pedido la valoracion, si ella ha dicho que no la quiere."""
     try:
@@ -1627,6 +1643,14 @@ def _freno_de_varios_servicios(
     o no se reserva. Se prefiere pasarse frenando: molestar preguntando es
     barato, romperle la agenda al negocio no.
     """
+    # La valoracion es el PRIMER PASO del negocio hacia el tratamiento, no un
+    # segundo servicio. Si lo que se esta reservando es ella, este freno no pinta
+    # nada: reportado el 3-sep-2026, acepto el diagnostico y justo antes del
+    # resumen le salio "necesitamos decidir si solo quieres el diagnostico o si
+    # tambien quieres hacerte las mechas en la misma cita" -y el mensaje siguiente
+    # ya era el resumen del diagnostico-. Sobraba.
+    if _es_la_valoracion(cliente_id, str(argumentos.get("servicio") or "")):
+        return None
     pedido = _lo_que_ha_escrito(mensajes)
     familias = catalog_pick.familias_pedidas(cliente_id, pedido)
     # El diagnostico que ella ha RECHAZADO no es un servicio que haya pedido.

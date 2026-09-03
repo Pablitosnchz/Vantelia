@@ -86,3 +86,41 @@ def test_sin_rechazo_no_se_toca_nada(api_module, monkeypatch):
         "mechas", "diagnostico"], (
         "si lo QUIERE, cuenta: son dos citas y hay que cuadrarlas"
     )
+
+
+def test_reservar_la_valoracion_no_dispara_el_freno(api_module, monkeypatch):
+    """Aceptar el diagnostico tampoco es pedir dos servicios.
+
+    Reportado el 3-sep-2026, el caso contrario al de arriba: acepto el
+    diagnostico y justo antes del resumen le salio
+
+        necesitamos decidir si solo quieres el diagnostico o si tambien quieres
+        hacerte las mechas en la misma cita. Que prefieres hacer?
+
+    ...y el mensaje siguiente ya era el resumen del diagnostico. Sobraba.
+
+    La valoracion es el PRIMER PASO del negocio hacia el tratamiento, no un
+    segundo servicio: si lo que se reserva es ella, este freno no pinta nada.
+    """
+    from backend import agent, booking
+
+    monkeypatch.setattr(booking, "_servicio_de_valoracion",
+                        lambda c, **k: {"nombre": "Diagnostico y presupuesto"})
+
+    assert agent._es_la_valoracion(CID, "Diagnostico y presupuesto")
+    assert agent._es_la_valoracion(CID, "diagnostico y presupuesto"), "sin tildes ni mayusculas"
+    assert not agent._es_la_valoracion(CID, "Mechas o balayage largo")
+    assert not agent._es_la_valoracion(CID, "")
+
+
+def test_el_freno_se_salta_ANTES_de_mirar_familias(api_module):
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent._freno_de_varios_servicios)
+    i = fuente.index("_es_la_valoracion(")
+    j = fuente.index("familias_pedidas(")
+    assert i < j, (
+        "si se mira despues, ya ha decidido que hay dos familias y el mensaje sale igual"
+    )
