@@ -1879,6 +1879,23 @@ async def _wa_resumen_para_confirmar(
     flow.from_number = from_number
     if contacto is not None and not flow.email:
         flow.email = str(contacto["email"] or "").strip()
+    # El freno del precio va ANTES de que hable el agente. Estaba despues, pegado
+    # al resumen, y la clienta recibia dos mensajes que se contradecian en el mismo
+    # turno (medido el 3-sep-2026):
+    #
+    #     IA  Ana, para confirmar, tenemos el servicio de mechas o balayage corto
+    #         el jueves 4 de septiembre a las 10:00.
+    #     IA  Te lo digo con sinceridad: el precio depende mucho de tu pelo... ¿Te
+    #         cojo la cita de valoracion?
+    #
+    # Si la cita se va a parar, lo que el agente acababa de decir ya no vale: lo
+    # unico que hace es confundir y volver a abrir la pregunta que ella acababa de
+    # contestar. El freno explica la regla del negocio, deja apuntada la valoracion
+    # y pregunta si se la coge, asi que se basta solo.
+    if await _wa_freno_del_precio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, flow=flow):
+        return True
     if texto_previo:
         _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
                       respuesta=texto_previo, intent="agenda_agente")

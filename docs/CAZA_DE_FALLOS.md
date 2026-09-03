@@ -586,11 +586,34 @@ Medido con `--persona mechas-precio`, 8 conversaciones:
 | sin tocar nada | **37,5 %** | 4 | 1 |
 | con la guia | 25,0 % | 5 | 1 |
 
-Ni siquiera baja el fallo que venia a arreglar. Ojo a esto al retomarlo: el texto
-de rescate ("te busco hueco o prefieres llamarnos al...") se emite en CADA turno
-como un segundo mensaje, y cada vez reabre la pregunta que ella acaba de
-contestar. Puede que el problema de fondo no sea que elija mal el servicio, sino
-esa repeticion; los tres intentos han ido a lo primero.
+Ni siquiera baja el fallo que venia a arreglar.
+
+**CUARTO intento: este SI mejora, y no iba de elegir el servicio.** Poniendo una
+traza en el envio de mensajes se ve que en el turno de confirmar salen DOS, y se
+contradicen:
+
+    IA  Ana, para confirmar, tenemos el servicio de mechas o balayage corto el
+        jueves 4 de septiembre a las 10:00.
+    IA  Te lo digo con sinceridad: el precio depende mucho de tu pelo... ¿Te cojo
+        la cita de valoracion?
+
+`_wa_freno_del_precio` esta pegado al resumen, y el resumen se manda DESPUES del
+mensaje del agente. El freno hace su trabajo -explica la regla, deja apuntada la
+valoracion y pregunta si se la coge-, pero llega detras de una confirmacion que
+lo contradice, y el segundo mensaje reabre la pregunta que ella acababa de
+contestar.
+
+Moverlo delante (`tests/test_freno_del_precio_antes_de_hablar.py`):
+
+| | consigue lo que queria | repite |
+| --- | --- | --- |
+| el agente habla primero | 37,5 % | 4 |
+| el freno va antes | **50,0 %** | 3 |
+
+Aviso sobre una pista que escribi aqui y era FALSA: dije que el texto de rescate
+salia en cada turno como mensaje aparte. No es cierto -la regla solo dispara en la
+pregunta de precio-; lo que veia era esto otro. La traza en el envio lo resolvio
+en diez minutos despues de tres intentos a ciegas.
 
 Pista para quien lo retome: "Flash repair" (un alisado) NO esta en las familias
 que exigen valoracion, asi que para esos dos casos el canje no aplica y lo que
