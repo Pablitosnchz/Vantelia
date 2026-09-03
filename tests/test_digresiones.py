@@ -92,3 +92,47 @@ def test_la_guia_llega_al_turno(api_module):
     assert linea, "no se encuentra la guia del turno"
     bloque = fuente[fuente.index(linea[0]):]
     assert "qa_negocio" in bloque[:400], "tiene que ir dentro de la guia del turno"
+
+
+def test_una_peticion_de_cita_no_es_una_digresion(api_module):
+    """El fallo que metio este mismo arreglo, cazado por el banco.
+
+    "quiero unas mechas" es pedir CITA, pero la capa del negocio la reconocia
+    como la pregunta del presupuesto: la guia le metia la parrafada del
+    diagnostico y el asistente dejaba de preguntar el largo, que era lo unico
+    que hacia falta. Es el riesgo del experimento medido que hundio las reservas
+    del 61 % al 41 %: meter texto del negocio en un turno de reserva la
+    descarrila. Asi que solo cuenta como digresion lo que tiene forma de
+    PREGUNTA.
+    """
+    from backend import agent, catalog_pick
+
+    def parece_pregunta(m):
+        return bool("?" in m
+                    or agent._PARECE_UNA_PREGUNTA.search(catalog_pick._norm(m)))
+
+    for m in ("quiero unas mechas", "quiero cita para un alisado",
+              "el jueves a las 10", "me llamo ana", "si, confirmo"):
+        assert not parece_pregunta(m), m
+
+    for m in ("cuanto cuestan unas mechas?", "y como tengo que venir con el cabello?",
+              "que horario teneis", "teneis parking"):
+        assert parece_pregunta(m), m
+
+
+def test_el_signo_solo_ya_hace_pregunta(api_module):
+    """Hay digresiones que son pregunta UNICAMENTE por el signo.
+
+    "me lo puedo hacer dando pecho?" no lleva ninguna palabra interrogativa. Si
+    el detector solo mirase palabras, el caso que motivo todo esto -la duenya
+    preguntando por la lactancia a media reserva- se quedaria fuera.
+    """
+    from backend import agent, catalog_pick
+
+    solo_el_signo = "me lo puedo hacer dando pecho?"
+
+    assert agent._PARECE_UNA_PREGUNTA.search(catalog_pick._norm(solo_el_signo))
+    # Y quitandole el signo deja de serlo: es lo unico que la marca.
+    assert not agent._PARECE_UNA_PREGUNTA.search(
+        catalog_pick._norm(solo_el_signo.replace("?", ""))
+    ), "si casara por palabras, este test dejaria de probar lo que prueba"

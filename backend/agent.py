@@ -827,6 +827,14 @@ def _niega_algo_que_no_puede_saber(cliente_id: str, texto: str) -> bool:
     return not _el_negocio_ha_escrito_de_promociones(cliente_id)
 
 
+_PARECE_UNA_PREGUNTA = re.compile(
+    r"(\?|^(que|cual|como|cuando|donde|cuanto|cuanta|quien|por que|para que) "
+    r"|\b(que|cual|como|cuando|donde|cuanto|cuanta|quien) (tal|es|son|hay|teneis|"
+    r"tienes|tienen|puedo|se|hago|tengo|va|vale|cuesta|cuestan|dura|duran)\b"
+    r"|\b(hay|teneis|tienen|podeis|se puede|es posible|admitis|aceptais|"
+    r"hace falta|me podeis decir)\b)")
+
+
 def _lo_que_el_negocio_tiene_escrito(cliente_id: str, mensaje: str, config=None) -> str:
     """La respuesta que el negocio escribio para lo que le acaban de preguntar.
 
@@ -847,6 +855,21 @@ def _lo_que_el_negocio_tiene_escrito(cliente_id: str, mensaje: str, config=None)
     reglas: esas son las que secuestran la conversacion (la del precio se repitio
     siete veces mientras una clienta intentaba confirmar).
     """
+    # Solo si PREGUNTA. Medido el 3-sep-2026: "quiero unas mechas" es una
+    # peticion de CITA, y la capa del negocio la reconocia como la pregunta del
+    # presupuesto; la guia le metia la parrafada del diagnostico y el asistente
+    # dejaba de preguntarle el largo, que era lo unico que hacia falta. Lo cazo
+    # el banco (`no-enumerar-las-variantes-del-catalogo`). Es el riesgo del
+    # experimento medido que hundio las reservas del 61 % al 41 %: meter texto
+    # del negocio en un turno de reserva la descarrila.
+    #
+    # El signo se mira tambien en el mensaje crudo, por si algun dia `_norm`
+    # empieza a limpiarlo: hay digresiones que solo son pregunta por el signo,
+    # y la de la duenya del salon es una -"habria algun problema si estoy dando
+    # pecho?"-.
+    if not ("?" in (mensaje or "")
+            or _PARECE_UNA_PREGUNTA.search(catalog_pick._norm(mensaje or ""))):
+        return ""
     try:
         from backend import chat
 
@@ -2844,7 +2867,10 @@ async def responder(
                                     "tratamiento concreto, diciendo en UNA frase que se "
                                     "decide en la cita al ver el cabello, y SIGUE con lo "
                                     "que estabais haciendo (si te ha dado dia u hora, "
-                                    "ofrecele los huecos; no vuelvas a empezar)."),
+                                    "ofrecele los huecos; no vuelvas a empezar). "
+                                    "PREGUNTARLE COMO TIENE EL PELO DE LARGO NO ES "
+                                    "RECOMENDAR: si te hace falta para concretar el "
+                                    "servicio, preguntaselo igual."),
                     })
                     continue
                 if (_niega_algo_que_no_puede_saber(cliente_id, texto_final)
