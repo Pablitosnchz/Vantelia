@@ -6597,6 +6597,50 @@ def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
         return False
 
 
+def valoracion_obligatoria(cliente_id: str) -> List[str]:
+    """Familias en las que la valoracion NO se puede saltar.
+
+    Peticion de la duenya del salon (3-sep-2026), en sus palabras: "en caso de
+    extensiones siempre tiene que haber un diagnostico para poder pedir las
+    extensiones, ver cuantas son las que quiere y demas [...] tengo que ver a la
+    clienta, su pelo, el color, o sea que ese servicio si o si tiene que pasar por
+    el salon antes".
+
+    No es lo mismo que `_familias_que_exigen_valoracion`: ahi caen las familias de
+    las que no se da precio por mensaje, y de esas la clienta PUEDE saltarse el
+    diagnostico si insiste (unas mechas se cogen directamente). Aqui van las que no
+    admiten atajo.
+
+    Va en la config del negocio (`booking.valoracion_obligatoria`), no en codigo:
+    otro salon pondra las suyas o ninguna. Vacia por defecto, asi que sin
+    configurarla nada cambia.
+    """
+    try:
+        from backend import clients
+
+        crudo = (clients._get_client_config(cliente_id).get("booking") or {}).get(
+            "valoracion_obligatoria") or []
+        return [textnorm._strip_accents(str(f).lower().strip()) for f in crudo if str(f).strip()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def la_valoracion_es_obligatoria(cliente_id: str, dicho: str) -> bool:
+    """Lo que pide cae en una familia que no admite saltarse el diagnostico."""
+    familias = valoracion_obligatoria(cliente_id)
+    if not familias:
+        return False
+    plano = textnorm._strip_accents(str(dicho or "").lower())
+    return any(f and f in plano for f in familias)
+
+
+def puede_saltarse_la_valoracion(cliente_id: str, dicho: str) -> bool:
+    """Ha dicho que no quiere el diagnostico Y su servicio admite saltarselo."""
+    if not renuncio_al_diagnostico(dicho):
+        return False
+    return not la_valoracion_es_obligatoria(cliente_id, dicho)
+
+
 def renuncio_al_diagnostico_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
     """Ha dicho en ESTA conversacion que lo quiere sin pasar por la valoracion.
 
@@ -6614,6 +6658,11 @@ def renuncio_al_diagnostico_en_la_conversacion(cliente_id: str, session_id: str)
                 " AND role = 'user' ORDER BY id DESC LIMIT 30",
                 (cliente_id, session_id),
             ).fetchall()
+        # Lo que ella ha escrito EN TODA la conversacion: si en algun momento pidio
+        # algo cuya valoracion es obligatoria, no hay atajo aunque lo rechace.
+        todo = " ".join(str(f["content"] or "") for f in filas)
+        if la_valoracion_es_obligatoria(cliente_id, todo):
+            return False
         return any(renuncio_al_diagnostico(str(f["content"] or "")) for f in filas)
     except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
         return False

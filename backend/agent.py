@@ -1216,7 +1216,10 @@ def _bk_renuncio(cliente_id: str, dicho_de_ella: str) -> bool:
     try:
         from backend import booking
 
-        return booking.renuncio_al_diagnostico(dicho_de_ella)
+        # Hay familias en las que el negocio NO admite saltarse el diagnostico
+        # (las extensiones del salon piloto: hay que ver el pelo y el color antes
+        # de pedir el material). Para esas no hay atajo aunque lo rechace.
+        return booking.puede_saltarse_la_valoracion(cliente_id, dicho_de_ella)
     except Exception:  # noqa: BLE001 - ante la duda no se cambia nada
         return False
 
