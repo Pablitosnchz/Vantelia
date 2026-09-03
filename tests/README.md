@@ -76,6 +76,11 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   devuelto la decisión al modelo y volverá la variación entre ejecuciones.
 - `test_agente_de_citas.py` — el modelo lleva la conversación, pero las tools no
   le dejan inventarse un servicio, un hueco ni una cita.
+- `test_cambiar_de_idea_ya_reservada.py` — cambiar de idea con la cita cogida no
+  deja mentiras ni citas de sobra. La tool `reprogramar_cita` no aceptaba
+  `servicio`, asi que el agente no podia cambiarlo: o cogia una segunda cita o
+  decia que lo habia cambiado sin hacerlo. Fija ademas que no se le confirme una
+  hora distinta de la que tiene, y que ofrecer huecos NO cuente como confirmar.
 - `test_digresiones.py` — una pregunta de verdad a media reserva se contesta con
   lo que el negocio tiene escrito, y se sigue. La dueña del salón preguntó por la
   lactancia eligiendo alisado y recibió "consulta con tu médico" teniendo escrito

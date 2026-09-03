@@ -2978,6 +2978,37 @@ def _cita_suya_a_esa_hora(
     return None
 
 
+def citas_vivas_del_telefono(cliente_id: str, telefono: str):
+    """Las citas activas de ESTE telefono, de hoy en adelante.
+
+    La usa el freno que impide describirle una cita que no coincide con la que
+    tiene puesta. Devuelve lista vacia ante cualquier problema: un freno no puede
+    dejar sin respuesta a nadie.
+    """
+    try:
+        from backend import crm, timeutils
+
+        buscado = crm._normalize_phone_for_match(telefono or "")
+        if not buscado:
+            return []
+        hoy = timeutils._utc_now().date().isoformat()
+        with db._get_db_connection() as connection:
+            filas = connection.execute(
+                """
+                SELECT booking_code, servicio, booking_date, booking_time, telefono
+                  FROM bookings
+                 WHERE cliente_id = ? AND booking_date >= ?
+                   AND status IN ('pending_review', 'confirmed', 'pending_payment')
+                 ORDER BY booking_date, booking_time
+                """,
+                (cliente_id, hoy),
+            ).fetchall()
+        return [f for f in filas
+                if crm._normalize_phone_for_match(f["telefono"] or "") == buscado]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _minutos_del_tramo(hora: str, duracion: int):
     try:
         h, m = str(hora or "0:0").split(":")[:2]

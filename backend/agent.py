@@ -166,10 +166,13 @@ def _herramientas() -> List[Dict[str, Any]]:
             "function": {
                 "name": "reprogramar_cita",
                 "description": (
-                    "Mueve una cita a otro dia u hora. Si no te ha dado el numero de "
-                    "reserva NO se lo pidas: llamala sin el y se busca por su telefono. "
-                    "Comprueba que el hueco nuevo este libre; si no lo esta, te lo dice "
-                    "y no cambia nada."
+                    "Cambia una cita que YA existe: el dia, la hora o el SERVICIO. Si "
+                    "ya tiene cita y cambia de idea sobre lo que quiere hacerse, esto "
+                    "es lo que hay que usar: NO le cojas una segunda cita ni le digas "
+                    "que se lo has cambiado sin llamar aqui. Si no te ha dado el numero "
+                    "de reserva NO se lo pidas: llamala sin el y se busca por su "
+                    "telefono. Comprueba que el hueco nuevo este libre; si no lo esta, "
+                    "te lo dice y no cambia nada."
                 ),
                 "parameters": {
                     "type": "object",
@@ -177,6 +180,11 @@ def _herramientas() -> List[Dict[str, Any]]:
                         "codigo_reserva": {"type": "string", "description": "R-XXXX solo si lo dice ella"},
                         "fecha": {"type": "string", "description": "AAAA-MM-DD"},
                         "hora": {"type": "string", "description": "HH:MM"},
+                        "servicio": {
+                            "type": "string",
+                            "description": ("Solo si quiere cambiar lo que se va a "
+                                            "hacer. Vacio deja el que tenia."),
+                        },
                     },
                     "required": ["fecha", "hora"],
                 },
@@ -957,22 +965,50 @@ def _nombra_un_servicio(cliente_id: str, norm: str, minimo: int = 10) -> bool:
     Los pares demasiado cortos ("corte de", "mechas o") se caen solos con
     `minimo`: aparecen en cualquier frase.
     """
+    return bool(_familia_nombrada(cliente_id, norm, minimo))
+
+
+def _familia_nombrada(cliente_id: str, norm: str, minimo: int = 10) -> str:
+    """La familia del catalogo que nombra el texto (ya normalizado), o vacio."""
+    for familia in _familias_del_catalogo(cliente_id):
+        if len(familia) >= minimo and re.search(
+                r"\b%s\b" % re.escape(familia), norm):
+            return familia
+    return ""
+
+
+def _familias_del_catalogo(cliente_id: str):
+    """Los pares de palabras con que empieza cada servicio del catalogo."""
     try:
         from backend import agenda
 
         servicios = agenda._catalog_services(cliente_id)
     except Exception:  # noqa: BLE001
-        return False
+        return []
+    familias = []
     for servicio in servicios:
         nombre = str(servicio.get("name") or servicio.get("nombre") or "")
         palabras = catalog_pick._norm(nombre.replace("-", " ")).split()
-        if not palabras:
-            continue
-        familia = " ".join(palabras[:2])
-        if len(familia) >= minimo and re.search(
-                r"\b%s\b" % re.escape(familia), norm):
-            return True
-    return False
+        if palabras:
+            familias.append(" ".join(palabras[:2]))
+    return familias
+
+
+def _cabezas_de_servicio(cliente_id: str, norm: str):
+    """Las PRIMERAS palabras de servicio que aparecen en el texto.
+
+    Para saber si le esta hablando de OTRA cita distinta a la que tiene basta la
+    palabra que manda -mechas frente a corte-. Comparar dos palabras no vale aqui:
+    el catalogo normaliza "Mechas o balayage medio" a "mechas balayage" (se come
+    la "o" suelta) mientras que el texto conserva el "o", asi que no casaban nunca.
+    """
+    cabezas = set()
+    for familia in _familias_del_catalogo(cliente_id):
+        cabeza = familia.split()[0] if familia else ""
+        if len(cabeza) >= 5 and re.search(
+                r"\b%s" % re.escape(cabeza), norm):
+            cabezas.add(cabeza)
+    return cabezas
 
 
 def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
@@ -1105,6 +1141,64 @@ def _le_repite_sus_palabras_como_servicio(mensaje: str, texto: str) -> bool:
         if suyo and dicho and (suyo in dicho or dicho in suyo):
             return True
     return False
+
+
+# Como se afirma algo sobre la cita QUE ELLA TIENE, no como se ofrecen horas.
+_ASEGURA_SU_CITA = re.compile(
+    '(te espero|te esperamos|nos vemos|tu cita|tu reserva|tienes (la |una )?cita'
+    '|te he reservado|te he apuntado|queda (la |tu )?cita|te la dejo|apuntada)')
+
+_UNA_HORA = re.compile(r'\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b')
+
+
+def _le_dice_una_hora_que_no_es_la_suya(
+    cliente_id: str, telefono: str, texto: str, mutada: bool,
+) -> str:
+    """Le confirma su cita a una hora que NO es la que tiene puesta.
+
+    Medido con el simulador el 3-sep-2026, reproducido tres veces. Reserva unas
+    mechas el domingo a las 12:00, luego cambia de idea:
+
+        ELLA  he estado pensando y solo quiero cortarme las puntas
+        IA    Entonces haremos un corte de puntas en lugar de las mechas.
+        ELLA  el domingo a las 11:30
+        IA    Perfecto, te esperamos el domingo a las 11:30 para cortarte las puntas.
+
+    En la agenda seguian las MECHAS a las 12:00. Se lo dijo tres veces. Ella se
+    planta a las 11:30 a cortarse las puntas y el salon tiene un hueco largo de
+    mechas a las 12:00: se pierden las dos cosas.
+
+    Los frenos que ya habia miran el pasado ("acabo de cambiarla") y aqui lo dice
+    en futuro. La senyal que si es firme es la HORA: la del mensaje contra la de
+    la agenda. Devuelve la hora real, o cadena vacia.
+
+    Ofrecer huecos NO cuenta: hace falta que este afirmando algo sobre SU cita.
+    """
+    if mutada or not telefono:
+        return ""
+    from backend import booking
+
+    citas = booking.citas_vivas_del_telefono(cliente_id, telefono)
+    if len(citas) != 1:
+        # Con varias no se puede saber de cual habla, y sin ninguna ya hay
+        # frenos que cubren decir que existe una cita que no existe.
+        return ""
+    norm = catalog_pick._norm(texto or "")
+    if not _ASEGURA_SU_CITA.search(norm):
+        return ""
+    dichas = set()
+    for h, m in _UNA_HORA.findall(texto or ""):
+        dichas.add("%02d:%s" % (int(h), m))
+    if not dichas:
+        return ""
+    suya = str(citas[0]["booking_time"] or "")[:5]
+    try:
+        suya = "%02d:%s" % (int(suya.split(":")[0]), suya.split(":")[1])
+    except Exception:  # noqa: BLE001
+        return ""
+    if suya in dichas:
+        return ""
+    return suya
 
 
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
@@ -3046,6 +3140,24 @@ async def responder(
                                     "esta confirmada. Si ella la quiere, CREALA con la "
                                     "herramienta y confirmasela despues; si no estas "
                                     "seguro de que tenga uno, mira con consultar_cita."),
+                    })
+                    continue
+                # Le confirma su cita a una hora que NO es la que tiene puesta.
+                # Los frenos de al lado miran el pasado ("acabo de cambiarla") y
+                # aqui lo dice en futuro: "te esperamos el domingo a las 11:30"
+                # teniendo las mechas a las 12:00. Ella se planta a las 11:30 y el
+                # salon tiene un hueco largo a las 12:00 que nadie ocupa.
+                hora_real = _le_dice_una_hora_que_no_es_la_suya(
+                    cliente_id, telefono, texto_final, mutada)
+                if hora_real and vuelta + 1 < MAX_VUELTAS:
+                    traza.freno("hora_que_no_es_la_suya")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("SU CITA es a las %s: esa es la unica hora que "
+                                    "tiene. No le confirmes otra. Si quiere moverla o "
+                                    "cambiar el servicio, hazlo con `reprogramar_cita` "
+                                    "y confirmaselo DESPUES; si no, dile la hora que "
+                                    "tiene de verdad." % hora_real),
                     })
                     continue
                 if (_dice_que_acaba_de_hacerlo(texto_final) and not mutada

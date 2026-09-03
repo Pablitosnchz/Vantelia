@@ -621,3 +621,40 @@ toca es la regla de la foto. El unico de los tres que el canje arregla es el de
 mechas. Conviene separarlos y medir cada uno por su lado, con el simulador y no
 con una conversacion suelta: los dos intentos de arriba parecian razonables al
 leerlos.
+
+---
+
+### 29. Cambiar de idea con la cita ya cogida (CERRADA, 3-sep-2026)
+
+Reserva unas mechas el domingo a las 12:00 y luego cambia de idea:
+
+    ELLA  he estado pensando y creo que solo quiero cortarme las puntas
+    IA    Entonces haremos un corte de puntas en lugar de las mechas.
+    ELLA  el domingo a las 11:30
+    IA    Perfecto, te esperamos el domingo a las 11:30 para cortarte las puntas.
+
+En la agenda seguian las MECHAS a las 12:00. Se lo dijo tres veces. En otras
+tiradas le cogia una SEGUNDA cita dejando la primera puesta.
+
+**La causa no era el modelo.** La tool `reprogramar_cita` del agente solo aceptaba
+fecha y hora. El motor de debajo (`_voice_reschedule_booking`) SI sabe cambiar el
+servicio -se anadio en 16c4a56- pero el agente no tenia como pedirlo, asi que solo
+le quedaban salidas malas: dejarlo como estaba, coger otra cita, o decir que lo
+habia cambiado. Cuando un modelo hace tres cosas raras seguidas, merece la pena
+mirar si le falta la herramienta antes de escribirle otra instruccion.
+
+Dos arreglos, medidos por separado con `--persona cambia-de-idea` (8 conv):
+
+| | consigue lo que queria | fallos |
+| --- | --- | --- |
+| linea base | 12,5 % | 3 servicio, 1 duplicada, 1 repite |
+| + freno de la hora | 25,0 % | 4 servicio |
+| + servicio en la tool | **50,0 %** | 3 servicio, 1 duplicada |
+
+El freno de la hora compara la hora que dice con la que hay en la agenda, y solo
+cuando AFIRMA algo sobre su cita (ofrecer huecos no cuenta). Es mas firme que
+comparar servicios: los nombres del catalogo normalizan de forma distinta segun el
+sitio ("Mechas o balayage medio" -> "mechas balayage") y no casan con lo que dice
+el modelo.
+
+Queda abierto el `servicio_equivocado` (3 de 8): pide corte y acaba con mechas.
