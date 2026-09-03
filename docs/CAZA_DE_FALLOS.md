@@ -705,3 +705,41 @@ Queda abierto que la intencion se quede pegada en `cancelar` cuando ella dice
 `_message_requests_reschedule_booking` casan esa frase, asi que viene de otro
 sitio (`anotar_intencion_por_tool` pone `cancelar` en cuanto el modelo llama a
 `cancelar_cita`, aunque la llamada se rechace).
+
+---
+
+### 31. La regla del precio, repetida cada turno (ABIERTA, medida 3-sep-2026)
+
+Con datos de PRODUCCION, la clienta que pregunta el precio es la que peor va:
+**25 % (2 de 8), y 6 de 8 repiten**. El asistente le suelta la explicacion entera
+en CADA turno, palabra por palabra, mientras ella contesta lo mismo:
+
+    ELLA  ya tengo la cita de diagnostico para el viernes a las 11:00
+    IA    Ya se que te lo he dicho, carino, y te entiendo. Son dos citas
+          seguidas... 1. Diagnostico y presupuesto - 15 minutos, gratis...
+    ELLA  ya tengo la cita de diagnostico para el viernes a las 11:00
+    IA    (lo mismo, identico)                                    x3
+
+La causa: `_wa_freno_del_precio` va pegado al resumen y vuelve a dispararse en
+cuanto el modelo resuelve otra vez el servicio.
+
+**DOS intentos, los dos medidos, los dos descartados:**
+
+| | | |
+| --- | --- | --- |
+| sin tocar nada | 25,0 % | 6 repite, 1 precio indebido |
+| explicarla UNA vez por conversacion | 50,0 % | 0 repite, pero **4 revientan** |
+| lo mismo, cortando antes del resumen | 25,0 % | 4 repite, **4 precios indebidos** |
+
+El primero quita las repeticiones -que era el objetivo- pero al soltar los datos
+de la cita el resumen sigue adelante con la fecha vacia y salta
+`HTTPException(400, "Fecha invalida")`. El segundo arregla el reventon cortando
+antes del resumen, y entonces habla el agente por su cuenta y CUADRUPLICA el fallo
+critico de dar un precio que este negocio no da.
+
+Pista para quien lo retome: el freno hace dos cosas a la vez -explicar la regla y
+parar la cita- y al separarlas se rompe una u otra. Lo que hay que conseguir es
+que la SEGUNDA vez siga parando la cita y hablando, pero con otras palabras y sin
+volver a explicar lo mismo; el texto de `_wa_explicar_la_regla_del_precio` es fijo.
+Y medir siempre `da_un_precio_que_no_debe`, no solo las repeticiones: es facil
+cambiar un fallo visible por otro mas caro.
