@@ -86,4 +86,9 @@ def test_la_guia_llega_al_turno(api_module):
 
     fuente = inspect.getsource(agent.responder)
     assert "_lo_que_el_negocio_tiene_escrito(cliente_id, mensaje, config)" in fuente
-    assert "qa_negocio, cuanto_dura" in fuente, "tiene que ir dentro de la guia del turno"
+    # El ORDEN dentro de la guia no se fija aqui a proposito: fijarlo hacia que
+    # anyadir una linea nueva rompiera este test sin haber roto nada.
+    linea = [l for l in fuente.splitlines() if "guia = [t for t in (" in l]
+    assert linea, "no se encuentra la guia del turno"
+    bloque = fuente[fuente.index(linea[0]):]
+    assert "qa_negocio" in bloque[:400], "tiene que ir dentro de la guia del turno"

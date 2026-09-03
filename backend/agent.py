@@ -898,12 +898,19 @@ def _lo_que_el_negocio_dice_al_no_saber(cliente_id: str, mensaje: str,
     """
     if not _DUDA_AL_ELEGIR.search(catalog_pick._norm(mensaje or "")):
         return ""
+    return _lo_que_el_negocio_dice_al_recomendar(cliente_id, config)
+
+
+def _lo_que_el_negocio_dice_al_recomendar(cliente_id: str, config=None) -> str:
+    """Lo que el negocio contesta a "cual me va mejor", o cadena vacia.
+
+    Se pregunta con UNA sola formulacion, la que se midio que llega. `intents`
+    cachea por mensaje identico durante 10 min, asi que dentro de una
+    conversacion sale gratis a partir de la primera vez.
+    """
     try:
         from backend import chat
 
-        # UNA sola formulacion, la que se midio que llega: `intents` cachea por
-        # mensaje identico, asi que en una conversacion sale gratis a partir del
-        # segundo turno.
         decision = chat.decision_del_negocio(cliente_id, "cual me va mejor",
                                              config=config)
     except Exception:  # noqa: BLE001 - entender nunca puede dejar sin respuesta
@@ -934,6 +941,43 @@ def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
         if len(base) >= 10 and base in norm:
             return True
     return False
+
+
+_LO_DEJA_PARA_LUEGO = re.compile(
+    r"\b(dejalo|lo dejo|dejemoslo|olvidalo|ya lo mirare|ya lo miro|"
+    r"lo miro (luego|mas tarde|otro dia)|luego te (digo|escribo|cuento)|"
+    r"ya te (dire|digo|escribo)|me lo pienso|lo pienso y te|"
+    r"otro dia lo veo|mas adelante|ahora no puedo|dejalo estar)\b")
+
+_SIGUE_PIDIENDO_DATOS = re.compile(
+    r"(necesito saber|podrias decirme|puedes decirme|dime que|"
+    r"que dia te|que hora te|para poder reservar|para reservar la cita|"
+    r"como tienes el pelo|que largo|cual de estas|cual prefieres|"
+    r"te gustaria (venir|reservar)|elige (una|la) )")
+
+
+def _sigue_insistiendo_tras_dejarlo(dicho_de_ella: str, texto: str) -> bool:
+    """Ella ha dicho que lo deja y la respuesta le vuelve a pedir el dato.
+
+    Medido el 3-sep-2026:
+
+        ELLA  dejalo, ya lo miro luego
+        IA    Entiendo, si prefieres mirar mas tarde, no hay problema. PERO para
+              poder reservar la cita necesito saber el largo de tu cabello...
+
+    Dice "sin problema" y a continuacion repite la misma pregunta. Es el bot
+    pesado del que la gente deja de contestar, y ademas hace quedar mal al
+    negocio.
+
+    Los asistentes de produccion lo tratan como un patron con nombre propio
+    -cancellation en Rasa-: cuando alguien abandona una tarea se acepta, se cierra
+    con la puerta abierta y no se le pide nada mas. Ojo: "al final no, gracias" ya
+    se cerraba bien; lo que fallaba era el abandono BLANDO, que es justo el que un
+    humano deja marchar sin insistir.
+    """
+    if not _LO_DEJA_PARA_LUEGO.search(catalog_pick._norm(dicho_de_ella or "")):
+        return False
+    return bool(_SIGUE_PIDIENDO_DATOS.search(catalog_pick._norm(texto or "")))
 
 
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
@@ -2705,16 +2749,37 @@ async def responder(
                 #    el Acido lactico bio premium". Solo frena donde el negocio ha
                 #    dicho por escrito que eso no se decide por mensaje: quien no
                 #    lo haya dicho puede recomendar tranquilamente.
-                if (no_sabe and _recomienda_un_servicio(cliente_id, texto_final)
+                # 3 quinquies) Ella ha dicho que lo deja y se le sigue pidiendo
+                #    el dato. "Entiendo, no hay problema. PERO necesito saber el
+                #    largo de tu cabello" es el bot pesado del que la gente deja
+                #    de contestar. Se acepta, se cierra con la puerta abierta y
+                #    no se le pide nada mas.
+                if (_sigue_insistiendo_tras_dejarlo(mensaje, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("insistio_tras_dejarlo")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Ha dicho que lo deja para luego. NO le pidas "
+                                    "ningun dato mas ni le preguntes nada de la "
+                                    "cita. Reescribe tu respuesta despidiendote "
+                                    "bien, en una o dos frases, dejandole claro que "
+                                    "cuando quiera te lo dice y se lo miras."),
+                    })
+                    continue
+                if (_recomienda_un_servicio(cliente_id, texto_final)
+                        and (no_sabe or _lo_que_el_negocio_dice_al_recomendar(
+                            cliente_id, config))
                         and vuelta + 1 < MAX_VUELTAS):
                     traza.freno("eligio_por_ella")
                     mensajes.append({
                         "role": "system",
-                        "content": ("Ha dicho que NO SABE, y el negocio tiene escrito "
-                                    "que eso no se decide por mensaje. Reescribe tu "
-                                    "respuesta SIN recomendarle ningun tratamiento "
-                                    "concreto: dile lo del negocio con tus palabras y "
-                                    "ofrecele la cita donde se lo pueden ver."),
+                        "content": ("El negocio tiene escrito que cual conviene NO se "
+                                    "decide por mensaje: no eres tu quien lo elige. "
+                                    "Reescribe tu respuesta SIN recomendar ningun "
+                                    "tratamiento concreto, diciendo en UNA frase que se "
+                                    "decide en la cita al ver el cabello, y SIGUE con lo "
+                                    "que estabais haciendo (si te ha dado dia u hora, "
+                                    "ofrecele los huecos; no vuelvas a empezar)."),
                     })
                     continue
                 if (_niega_algo_que_no_puede_saber(cliente_id, texto_final)
