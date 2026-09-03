@@ -980,6 +980,54 @@ def _sigue_insistiendo_tras_dejarlo(dicho_de_ella: str, texto: str) -> bool:
     return bool(_SIGUE_PIDIENDO_DATOS.search(catalog_pick._norm(texto or "")))
 
 
+_SE_QUEJA = re.compile(
+    r"(me (lo )?(hice|hicisteis|hicieron|habeis hecho)[^.]{0,60}"
+    r"(fatal|mal|horrible|desastre|quemad|estropead|roto)"
+    r"|(se me |me )?(ha |han )?quedad[oa][^.]{0,25}(fatal|mal|horrible|hecho un desastre)"
+    r"|me ha salido mal|no estoy (nada )?contenta|estoy muy descontenta"
+    r"|es un desastre|una verguenza|quiero (poner una )?(queja|reclamacion)"
+    r"|quiero reclamar|me habeis estropeado|se me esta cayendo el pelo desde)")
+
+
+def _vende_sobre_una_queja(cliente_id: str, mensaje: str, texto: str) -> bool:
+    """Se queja de un trabajo ya hecho y la respuesta le ofrece tratamientos.
+
+    Medido el 3-sep-2026:
+
+        ELLA  me hice el alisado la semana pasada y se me ha quedado fatal el pelo
+        IA    Lamento que no te haya salido bien. Para solucionarlo, podemos optar
+              por un tratamiento de Keratina premium o de Acido lactico bio premium.
+
+    A una clienta que se queja de un trabajo mal hecho se le esta vendiendo otro.
+    No es una preferencia de cada negocio: es el mensaje que hace que una queja se
+    convierta en una resenya de una estrella.
+
+    El playbook `pasar_a_persona` cubre esto para quien lo active en el portal,
+    pero el suelo no puede depender de que alguien se acuerde de activarlo. Aqui
+    solo se impide lo indefendible -nombrarle un tratamiento-, no se decide por el
+    negocio que hacer con la queja.
+    """
+    if not _SE_QUEJA.search(catalog_pick._norm(mensaje or "")):
+        return False
+    norm = catalog_pick._norm(texto or "")
+    try:
+        from backend import agenda
+
+        servicios = agenda._catalog_services(cliente_id)
+    except Exception:  # noqa: BLE001
+        return False
+    for servicio in servicios:
+        nombre = str(servicio.get("name") or servicio.get("nombre") or "")
+        base = catalog_pick._norm(nombre.split("-")[0])
+        # Aqui el umbral baja a 5 y se exige palabra completa: los servicios que
+        # ofrecia sobre la queja eran "Matiz" y "Elumen", que con el filtro de 10
+        # caracteres del otro freno se colaban enteros. Dentro de una queja,
+        # nombrar CUALQUIER servicio sobra, asi que se puede apretar.
+        if len(base) >= 5 and re.search("%s%s%s" % (r"\b", re.escape(base), r"\b"), norm):
+            return True
+    return False
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -2749,6 +2797,23 @@ async def responder(
                 #    el Acido lactico bio premium". Solo frena donde el negocio ha
                 #    dicho por escrito que eso no se decide por mensaje: quien no
                 #    lo haya dicho puede recomendar tranquilamente.
+                # 3 sexies) Se queja de un trabajo hecho y se le ofrece otro
+                #    tratamiento. "Se te ha quedado fatal -> podemos optar por
+                #    Keratina premium o Acido lactico" es el mensaje que
+                #    convierte una queja en una resenya de una estrella.
+                if (_vende_sobre_una_queja(cliente_id, mensaje, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("vendio_sobre_una_queja")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Se esta QUEJANDO de un trabajo que ya le han "
+                                    "hecho. NO le nombres ningun tratamiento ni le "
+                                    "vendas nada. Reescribe tu respuesta sintiendolo "
+                                    "de verdad, diciendole que quieren verlo en el "
+                                    "salon para darle una solucion, y preguntale si "
+                                    "quiere que le busquen un hueco para mirarselo."),
+                    })
+                    continue
                 # 3 quinquies) Ella ha dicho que lo deja y se le sigue pidiendo
                 #    el dato. "Entiendo, no hay problema. PERO necesito saber el
                 #    largo de tu cabello" es el bot pesado del que la gente deja
