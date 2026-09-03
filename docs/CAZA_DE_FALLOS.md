@@ -574,6 +574,24 @@ freno no llega nunca.
 2. Abrir SOLO el canje, dejando la rama que bloquea como estaba. Deja de bloquear,
    pero el canje tampoco se ve: da vueltas preguntando el largo y no coge nada.
 
+**Tercer intento, tambien medido, tambien peor.** Decirle en la guia del turno,
+ANTES de que empiece a pedir datos, que la cita que toca es la valoracion y que no
+pregunte el largo (para esa cita no hace falta). Acierta el servicio -deja de
+elegir "Pack mechas o balayage medio" y apunta a "Diagnostico y presupuesto"- pero
+la conversacion se queda dando vueltas en la confirmacion y no llega a crear nada.
+Medido con `--persona mechas-precio`, 8 conversaciones:
+
+| | consigue lo que queria | repite | coge el tratamiento |
+| --- | --- | --- | --- |
+| sin tocar nada | **37,5 %** | 4 | 1 |
+| con la guia | 25,0 % | 5 | 1 |
+
+Ni siquiera baja el fallo que venia a arreglar. Ojo a esto al retomarlo: el texto
+de rescate ("te busco hueco o prefieres llamarnos al...") se emite en CADA turno
+como un segundo mensaje, y cada vez reabre la pregunta que ella acaba de
+contestar. Puede que el problema de fondo no sea que elija mal el servicio, sino
+esa repeticion; los tres intentos han ido a lo primero.
+
 Pista para quien lo retome: "Flash repair" (un alisado) NO esta en las familias
 que exigen valoracion, asi que para esos dos casos el canje no aplica y lo que
 toca es la regla de la foto. El unico de los tres que el canje arregla es el de
