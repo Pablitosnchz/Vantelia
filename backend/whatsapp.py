@@ -2247,6 +2247,33 @@ async def _handle_whatsapp_message(
     # escritas a mano y sus reglas ("cuando pidan X, haz Y"). Misma funcion y misma
     # posicion que en el chat de la web, para que no diverjan. Solo sin flujo
     # activo: a media reserva, sus respuestas son pasos del flujo, no consultas.
+    # Pedir una persona gana SIEMPRE, tambien a media reserva. Estaba metido en
+    # el bloque de abajo, que solo corre sin flujo activo, asi que funcionaba de
+    # entrada y se ignoraba en cuanto habia una reserva empezada:
+    #
+    #     ELLA  quiero cita para un alisado
+    #     ELLA  oye prefiero hablar con una persona
+    #     IA    Entiendo... PERO para poder ayudarte a reservar necesito saber...
+    #
+    # Que es justo lo contrario de lo que dice el comentario de abajo: quien pide
+    # una persona no quiere seguir hablando con la maquina. Y es la misma forma
+    # que el fallo de las digresiones: el guard se apagaba al entrar en un flujo.
+    if (not iid and inbox.pide_una_persona(incoming_text)
+            and inbox.paso_a_persona_activo(cliente_id, config)):
+        inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+        texto_persona = inbox.texto_al_pedir_persona(cliente_id, config)
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=from_number, request=request,
+            entrante=incoming_text, respuesta=texto_persona,
+            intent="pide_una_persona",
+        )
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text=texto_persona,
+        )
+        return
+
+
     intencion_entendida = ""
     if not flow.flow and not iid:
         decision = chat.decision_del_negocio(cliente_id, incoming_text, config=config)
