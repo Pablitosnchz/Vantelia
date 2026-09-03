@@ -3484,6 +3484,18 @@ async def _handle_whatsapp_webhook(
                         processed += 1
                         continue
                     if routing["just_bound"]:
+                        # Mandar el codigo otra vez es EMPEZAR DE CERO. Si la demo
+                        # anterior acabo pasando la conversacion a una persona -al
+                        # enviar una foto, o al pedir hablar con alguien-, el
+                        # asistente se queda mudo a proposito, y con razon. Pero
+                        # entonces la demo saludaba y no volvia a contestar nada: se
+                        # ve como si estuviera muerta y no hay forma de seguir
+                        # probando. Reportado el 3-sep-2026 probando el envio de una
+                        # foto. En un negocio de VERDAD esto no pasa: alli lo suelta
+                        # el equipo desde el panel, y aqui solo se toca la sesion de
+                        # quien acaba de escribir el codigo.
+                        _wa_clear_flow(cliente_id, from_number)
+                        inbox.release(_whatsapp_session_id(cliente_id, from_number))
                         # El mensaje era el codigo, no una consulta: se abre la demo
                         # con la MISMA entrada que veria un cliente real de ese negocio.
                         # Se delega en `_wa_send_main_menu`, que ya decide entre menu de
