@@ -6542,6 +6542,36 @@ def precios_ocultos(cliente_id: str) -> bool:
     return booking_cfg.get("mostrar_precios") is False
 
 
+_RENUNCIA_AL_DIAGNOSTICO = re.compile(
+    r'(sin (el )?(diagnostico|diagnostic|valoracion)'
+    r'|no (quiero|necesito|hace falta)[^.]{0,20}(diagnostico|valoracion)'
+    r'|no quiero cita para (el )?diagnostico'
+    r'|sin pasar por (el )?(diagnostico|valoracion)'
+    r'|(cita|mechas|reservar|hacermelas|hacerme)[^.]{0,30}directamente'
+    r'|directamente[^.]{0,30}(cita|mechas|sin))')
+
+
+def renuncio_al_diagnostico(dicho: str) -> bool:
+    """Ha dicho que quiere el tratamiento SIN pasar por la valoracion.
+
+    La regla del salon, en sus palabras: "para coger unas mechas la cita hay que
+    cogersela directamente preguntandole como tiene el pelo de largo; lo del
+    diagnostico es simplemente para las clientas que pidan presupuesto".
+
+    El problema medido (3-sep-2026, reportado probando la demo) es que haber
+    preguntado el precio UNA vez se quedaba pegado a la conversacion para
+    siempre. Ella preguntaba el precio al principio, luego decia cuatro veces que
+    queria las mechas directamente, y en cada intento de cerrar volvia a salirle
+    la parrafada del diagnostico. Acabo sin cita.
+
+    Sugerir el diagnostico la primera vez es su politica y esta bien. Insistir
+    despues de que lo rechace es lo que hace perder la clienta: se le ofrece, y si
+    dice que no, se le coge lo que pide.
+    """
+    return bool(_RENUNCIA_AL_DIAGNOSTICO.search(textnorm._strip_accents(
+        str(dicho or '').lower())))
+
+
 def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
     """Ha preguntado el precio en algun momento de ESTA conversacion.
 
@@ -6563,6 +6593,28 @@ def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
                 (cliente_id, session_id),
             ).fetchall()
         return any(agent._pregunta_el_precio(str(f["content"] or "")) for f in filas)
+    except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
+        return False
+
+
+def renuncio_al_diagnostico_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
+    """Ha dicho en ESTA conversacion que lo quiere sin pasar por la valoracion.
+
+    Hermano de `pidio_precio_en_la_conversacion`, y por el mismo motivo: haberlo
+    dicho hace tres mensajes cuenta igual que decirlo ahora. Sin mirar toda la
+    conversacion, cada vez que llegaba al resumen le volvia a salir la parrafada
+    del diagnostico aunque ya lo hubiera rechazado.
+    """
+    try:
+        from backend import db
+
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
+                " AND role = 'user' ORDER BY id DESC LIMIT 30",
+                (cliente_id, session_id),
+            ).fetchall()
+        return any(renuncio_al_diagnostico(str(f["content"] or "")) for f in filas)
     except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
         return False
 

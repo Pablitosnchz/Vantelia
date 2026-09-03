@@ -1026,6 +1026,13 @@ _SIGUE_PIDIENDO_DATOS = re.compile(
     r"quieres que te (coja|reserve|agende))")
 
 
+# Pedir algo en el MISMO mensaje en que se rechaza otra cosa NO es irse.
+_PIDE_ALGO = re.compile(
+    '((?<!no )quiero (cita|hora|reservar|que me|hacerme)|cogeme|cojeme'
+    '|reservame|agendame|apuntame|me la coges|me lo coges|si quiero'
+    '|para hacermelas|para hacermelo)')
+
+
 def _sigue_insistiendo_tras_dejarlo(dicho_de_ella: str, texto: str) -> bool:
     """Ella ha dicho que lo deja y la respuesta le vuelve a pedir el dato.
 
@@ -1045,7 +1052,17 @@ def _sigue_insistiendo_tras_dejarlo(dicho_de_ella: str, texto: str) -> bool:
     se cerraba bien; lo que fallaba era el abandono BLANDO, que es justo el que un
     humano deja marchar sin insistir.
     """
-    if not _LO_DEJA_PARA_LUEGO.search(catalog_pick._norm(dicho_de_ella or "")):
+    plano = catalog_pick._norm(dicho_de_ella or "")
+    if not _LO_DEJA_PARA_LUEGO.search(plano):
+        return False
+    # Si en el MISMO mensaje esta pidiendo algo, no se esta yendo: esta
+    # corrigiendo. Reportado el 3-sep-2026 probando la demo:
+    #
+    #     "no quiero cita para el diagnostico, quiero cita para hacermelas"
+    #
+    # El detector veia "no quiero cita" y el asistente se despedia de alguien que
+    # acababa de pedir una cita. Se quedo sin ella.
+    if _PIDE_ALGO.search(plano):
         return False
     return bool(_SIGUE_PIDIENDO_DATOS.search(catalog_pick._norm(texto or "")))
 
@@ -1192,6 +1209,16 @@ def _le_dice_una_hora_que_no_es_la_suya(
     if not dichas:
         return ""
     return suya
+
+
+def _bk_renuncio(cliente_id: str, dicho_de_ella: str) -> bool:
+    """Ha rechazado la valoracion en algun momento de la conversacion."""
+    try:
+        from backend import booking
+
+        return booking.renuncio_al_diagnostico(dicho_de_ella)
+    except Exception:  # noqa: BLE001 - ante la duda no se cambia nada
+        return False
 
 
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
@@ -3305,7 +3332,15 @@ async def responder(
                 # no llamaba nadie. Ojo al matiz que corrigio la duenya: quien
                 # viene a RESERVAR unas mechas se lleva sus mechas; esto solo vale
                 # para quien ha venido a preguntar cuanto cuesta.
+                # Si ya ha dicho que lo quiere SIN pasar por la valoracion, se le
+                # coge: es la regla del salon ("para coger unas mechas la cita hay
+                # que cogersela directamente; lo del diagnostico es para quien pida
+                # presupuesto"). Haber preguntado el precio al principio se quedaba
+                # pegado a la conversacion, y en cada intento de cerrar le volvia a
+                # salir el diagnostico aunque lo hubiera rechazado cuatro veces.
+                renuncio = _bk_renuncio(cliente_id, dicho_de_ella)
                 if (llamada.function.name == "crear_cita" and estado.veces_sin_precio
+                        and not renuncio
                         and argumentos.get("servicio")):
                     from backend import booking as _bk
 

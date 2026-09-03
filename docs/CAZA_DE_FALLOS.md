@@ -793,3 +793,37 @@ retome: el caso concreto SI se arregla, asi que el danyo esta en otra parte -alg
 conversacion que antes se resolvia por familia ahora se cierra antes de tiempo-.
 Y mide con mas de 8 conversaciones: con esa muestra, 7 frente a 6 no distingue una
 mejora de la suerte.
+
+---
+
+### 33. No dejaba saltarse el diagnostico (CERRADA, 3-sep-2026)
+
+Reportado probando la demo. Pidio unas mechas, se le ofrecio el diagnostico -bien,
+es la politica del salon- y a partir de ahi no hubo manera:
+
+    ELLA  puedo coger las mechas directamente? sin el diagnostico
+    ELLA  no quiero cita para el diagnostico quiero cita para hacermelas
+    ELLA  quiero cita para las mechas directamente
+    IA    Te lo digo con sinceridad, carino... Te busco un hueco para el
+          diagnostico?                                  (otra vez, y otra)
+
+Se quedo SIN CITA. La regla del salon es la contraria y estaba escrita en el
+propio codigo: "para coger unas mechas la cita hay que cogersela directamente; lo
+del diagnostico es simplemente para las clientas que pidan presupuesto".
+
+DOS causas, las dos localizadas con la traza de frenos puesta:
+
+1. Haber preguntado el precio UNA vez se quedaba pegado a la conversacion, asi que
+   el freno volvia a saltar en cada intento de cerrar aunque ella ya lo hubiera
+   rechazado cuatro veces. Ahora `renuncio_al_diagnostico_en_la_conversacion` lo
+   aparta.
+2. **El freno del abandono leia "no quiero cita" dentro de "no quiero cita PARA EL
+   DIAGNOSTICO"** y se despedia de alguien que acababa de pedir una cita. Un
+   guardarrail escrito la noche anterior comiendose una peticion. Ahora, si en el
+   mismo mensaje pide algo (`_PIDE_ALGO`), no se le trata como que se va.
+
+**Ojo con el medidor.** La persona `mechas-precio` marca `da_un_precio_que_no_debe`
+por los "20 EUR" del mecha test, que salen del texto que la duenya tiene ESCRITO.
+No es un precio inventado: es su regla, contada tantas veces como se repita. Al
+leer ese contador, mira SIEMPRE que cifra es antes de darlo por critico -esta
+manyana costo una revision entera-.

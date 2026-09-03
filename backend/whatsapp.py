@@ -1219,6 +1219,14 @@ async def _wa_freno_del_precio(
         return False
     numero = flow.from_number or to_number
     estado = reserva.cargar(cliente_id, numero)
+    # Si ya ha dicho que quiere el tratamiento SIN pasar por la valoracion, se le
+    # coge: es su decision. Sugerirselo la primera vez es la politica del salon;
+    # insistir despues de que lo rechace es lo que le hizo quedarse sin cita
+    # -reportado el 3-sep-2026 probando la demo: lo pidio cuatro veces y en cada
+    # intento de cerrar le volvia a salir la parrafada del diagnostico-.
+    if booking.renuncio_al_diagnostico_en_la_conversacion(
+            cliente_id, _whatsapp_session_id(cliente_id, numero)):
+        return False
     pidio_precio = (bool(getattr(estado, "veces_sin_precio", 0))
                     or booking.pidio_precio_en_la_conversacion(
                         cliente_id, _whatsapp_session_id(cliente_id, numero)))
