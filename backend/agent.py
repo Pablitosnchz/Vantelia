@@ -943,11 +943,20 @@ def _lo_que_el_negocio_dice_al_recomendar(cliente_id: str, config=None) -> str:
     return str(decision.get("texto") or "").strip()
 
 
-def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
-    """Dice "te recomendaria X" siendo X un servicio del catalogo."""
-    norm = catalog_pick._norm(texto or "")
-    if not _RECOMIENDA_UN_SERVICIO.search(norm):
-        return False
+def _nombra_un_servicio(cliente_id: str, norm: str, minimo: int = 10) -> bool:
+    """El texto (ya normalizado) nombra un servicio del catalogo.
+
+    Se compara por las DOS PRIMERAS PALABRAS del nombre, no por el nombre entero.
+    El catalogo mezcla dos formatos -"Acido lactico bio premium-corto medio" con
+    guion y "Keratina premium largo" sin el- y el modelo dice siempre la familia
+    a secas ("te recomendaria el alisado con Keratina premium"). Comparando el
+    nombre completo no casaba ninguno de los dos, y el freno no saltaba pese a
+    estar bien escrito: la primera version parecia funcionar solo porque el unico
+    caso probado era de los que llevan guion.
+
+    Los pares demasiado cortos ("corte de", "mechas o") se caen solos con
+    `minimo`: aparecen en cualquier frase.
+    """
     try:
         from backend import agenda
 
@@ -956,14 +965,22 @@ def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
         return False
     for servicio in servicios:
         nombre = str(servicio.get("name") or servicio.get("nombre") or "")
-        # El catalogo lleva la variante pegada ("Acido lactico bio premium-corto
-        # medio") y el modelo dice el nombre a secas, asi que comparar el nombre
-        # entero no casa nunca. Se compara la parte de antes del guion.
-        base = catalog_pick._norm(nombre.split("-")[0])
-        # Nombres muy cortos ("corte") aparecen en cualquier frase.
-        if len(base) >= 10 and base in norm:
+        palabras = catalog_pick._norm(nombre.replace("-", " ")).split()
+        if not palabras:
+            continue
+        familia = " ".join(palabras[:2])
+        if len(familia) >= minimo and re.search(
+                r"\b%s\b" % re.escape(familia), norm):
             return True
     return False
+
+
+def _recomienda_un_servicio(cliente_id: str, texto: str) -> bool:
+    """Dice "te recomendaria X" siendo X un servicio del catalogo."""
+    norm = catalog_pick._norm(texto or "")
+    if not _RECOMIENDA_UN_SERVICIO.search(norm):
+        return False
+    return _nombra_un_servicio(cliente_id, norm)
 
 
 _LO_DEJA_PARA_LUEGO = re.compile(
@@ -1032,23 +1049,10 @@ def _vende_sobre_una_queja(cliente_id: str, mensaje: str, texto: str) -> bool:
     """
     if not _SE_QUEJA.search(catalog_pick._norm(mensaje or "")):
         return False
-    norm = catalog_pick._norm(texto or "")
-    try:
-        from backend import agenda
-
-        servicios = agenda._catalog_services(cliente_id)
-    except Exception:  # noqa: BLE001
-        return False
-    for servicio in servicios:
-        nombre = str(servicio.get("name") or servicio.get("nombre") or "")
-        base = catalog_pick._norm(nombre.split("-")[0])
-        # Aqui el umbral baja a 5 y se exige palabra completa: los servicios que
-        # ofrecia sobre la queja eran "Matiz" y "Elumen", que con el filtro de 10
-        # caracteres del otro freno se colaban enteros. Dentro de una queja,
-        # nombrar CUALQUIER servicio sobra, asi que se puede apretar.
-        if len(base) >= 5 and re.search("%s%s%s" % (r"\b", re.escape(base), r"\b"), norm):
-            return True
-    return False
+    # Dentro de una queja, nombrar CUALQUIER servicio sobra, asi que el minimo
+    # baja: los que ofrecia eran "Matiz" y "Elumen", de 5 y 6 letras.
+    return _nombra_un_servicio(cliente_id, catalog_pick._norm(texto or ""),
+                               minimo=5)
 
 
 def _pregunta_cuanto_dura(mensaje: str) -> bool:

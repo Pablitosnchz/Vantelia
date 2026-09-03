@@ -107,3 +107,34 @@ def test_el_freno_esta_cableado_en_el_turno(api_module):
     assert 'traza.freno("eligio_por_ella")' in fuente, (
         "sin el freno esto es solo una instruccion del prompt, y el prompt se ignora"
     )
+
+
+def test_los_dos_formatos_de_nombre_del_catalogo(api_module, monkeypatch):
+    """El catalogo mezcla formatos y solo uno casaba.
+
+    "Acido lactico bio premium-corto medio" lleva la variante tras un GUION;
+    "Keratina premium largo" la lleva con un ESPACIO. La primera version cortaba
+    por el guion, asi que con los nombres sin guion comparaba el nombre entero
+    contra lo que el modelo dice a secas ("te recomendaria el alisado con
+    Keratina premium") y no casaba NUNCA. El freno parecia funcionar porque el
+    unico caso que se probo era de los que llevan guion.
+
+    Se compara por las DOS PRIMERAS PALABRAS, que es la familia y no depende del
+    formato.
+    """
+    from backend import agenda, agent
+
+    monkeypatch.setattr(agenda, "_catalog_services", lambda *a, **k: [
+        {"nombre": "Acido lactico bio premium-corto medio"},   # con guion
+        {"nombre": "Keratina premium largo"},                  # sin guion
+        {"nombre": "Corte de senora"},                         # familia generica
+    ])
+
+    assert agent._recomienda_un_servicio(
+        "demo", "te recomendaria el alisado con **Keratina premium**, es ideal")
+    assert agent._recomienda_un_servicio(
+        "demo", "te recomendaria el **Acido lactico bio premium**")
+
+    # "corte de" mide 8 y se cae sola: aparece en cualquier frase.
+    assert not agent._recomienda_un_servicio(
+        "demo", "te recomendaria que vengas antes del corte de luz")
