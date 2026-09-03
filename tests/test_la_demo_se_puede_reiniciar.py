@@ -36,8 +36,8 @@ def test_el_codigo_suelta_el_traspaso(api_module):
     from backend import whatsapp
 
     fuente = inspect.getsource(whatsapp._handle_whatsapp_webhook)
-    assert "inbox.release(" in fuente, (
-        "sin soltarlo, la demo saluda y no vuelve a contestar nunca"
+    assert "_wa_reiniciar_la_demo(" in fuente, (
+        "sin reiniciar, la demo saluda y no vuelve a contestar nunca"
     )
 
 
@@ -45,7 +45,7 @@ def test_solo_dentro_del_hub_de_demos(api_module):
     from backend import whatsapp
 
     fuente = inspect.getsource(whatsapp._handle_whatsapp_webhook)
-    i = fuente.index("inbox.release(")
+    i = fuente.index("_wa_reiniciar_la_demo(")
     antes = fuente[:i]
 
     assert "if demo_hub:" in antes, "fuera del hub esto no puede ejecutarse"
@@ -56,10 +56,26 @@ def test_solo_dentro_del_hub_de_demos(api_module):
     )
 
 
-def test_tambien_limpia_el_flujo(api_module):
-    """Si no, la demo nueva arranca a mitad del formulario de la anterior."""
+def test_reinicia_TODO_el_contexto(api_module):
+    """Reportado el 3-sep: la primera respuesta de una demo NUEVA salia asi:
+
+        ELLA  quiero hacerme las mechas y tengo el cabello largo
+        IA    Ya se que te lo he dicho, carino, y te entiendo...
+
+    "Ya se que te lo he dicho" en el PRIMER mensaje. Venia del historial de la
+    demo anterior, igual que el contador de "ya pregunto el precio", que hacia
+    saltar frenos que no tocaban. Soltar el traspaso no basta: hay que empezar
+    de cero de verdad.
+    """
     from backend import whatsapp
 
-    fuente = inspect.getsource(whatsapp._handle_whatsapp_webhook)
-    i = fuente.index("inbox.release(")
-    assert "_wa_clear_flow(" in fuente[max(0, i - 300):i]
+    fuente = inspect.getsource(whatsapp._wa_reiniciar_la_demo)
+
+    assert "inbox.release(" in fuente, "sin esto la demo saluda y no vuelve a hablar"
+    assert "_wa_clear_flow(" in fuente, "arrancaria a mitad del formulario anterior"
+    assert "reserva.olvidar(" in fuente, (
+        "sin esto se arrastra `veces_sin_precio` y saltan frenos que no tocan"
+    )
+    assert "DELETE FROM chat_messages" in fuente, (
+        "sin esto sigue diciendo 'ya se que te lo he dicho' en el primer mensaje"
+    )

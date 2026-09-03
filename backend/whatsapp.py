@@ -1249,6 +1249,45 @@ async def _wa_freno_del_precio(
     return True
 
 
+def _wa_reiniciar_la_demo(cliente_id: str, from_number: str) -> None:
+    """Empezar de cero: sin traspaso, sin formulario a medias y sin memoria.
+
+    Mandar el codigo de demo es abrir una demo NUEVA. Sin esto se arrastraba la
+    conversacion anterior y la primera respuesta ya salia rara -reportado el
+    3-sep-2026, primer mensaje de una demo recien abierta-:
+
+        ELLA  quiero hacerme las mechas y tengo el cabello largo
+        IA    Ya se que te lo he dicho, carino, y te entiendo. Te lo digo con
+              sinceridad...
+
+    "Ya se que te lo he dicho" en el PRIMER mensaje. Venia del historial de la
+    demo anterior, igual que el contador de "ya pregunto el precio", que hacia
+    saltar frenos que no tocaban.
+
+    Se borra el historial de ESA conversacion a proposito: en el hub de demos son
+    pruebas, no clientas, y ademas ensuciaban el panel del negocio. Solo se toca
+    la sesion de quien acaba de escribir el codigo, y solo en el hub.
+    """
+    from backend import reserva
+
+    _wa_clear_flow(cliente_id, from_number)
+    session_id = _whatsapp_session_id(cliente_id, from_number)
+    inbox.release(session_id)
+    try:
+        reserva.olvidar(cliente_id, from_number)
+    except Exception:  # noqa: BLE001 - reiniciar no puede tumbar la demo
+        settings.logger.warning("[demo] no se pudo olvidar el estado de %s", cliente_id)
+    try:
+        with db._get_db_connection() as conexion:
+            conexion.execute(
+                "DELETE FROM chat_messages WHERE cliente_id = ? AND session_id = ?",
+                (cliente_id, session_id),
+            )
+            conexion.commit()
+    except Exception:  # noqa: BLE001
+        settings.logger.warning("[demo] no se pudo limpiar el historial de %s", cliente_id)
+
+
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     flow: appstate.WAFlowState, reconocido: bool = False,
@@ -3502,8 +3541,7 @@ async def _handle_whatsapp_webhook(
                         # foto. En un negocio de VERDAD esto no pasa: alli lo suelta
                         # el equipo desde el panel, y aqui solo se toca la sesion de
                         # quien acaba de escribir el codigo.
-                        _wa_clear_flow(cliente_id, from_number)
-                        inbox.release(_whatsapp_session_id(cliente_id, from_number))
+                        _wa_reiniciar_la_demo(cliente_id, from_number)
                         # El mensaje era el codigo, no una consulta: se abre la demo
                         # con la MISMA entrada que veria un cliente real de ese negocio.
                         # Se delega en `_wa_send_main_menu`, que ya decide entre menu de

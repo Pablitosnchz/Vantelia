@@ -827,3 +827,31 @@ por los "20 EUR" del mecha test, que salen del texto que la duenya tiene ESCRITO
 No es un precio inventado: es su regla, contada tantas veces como se repita. Al
 leer ese contador, mira SIEMPRE que cifra es antes de darlo por critico -esta
 manyana costo una revision entera-.
+
+---
+
+### 34. La demo arrastraba la conversacion anterior (CERRADA, 3-sep-2026)
+
+Reportado probando. PRIMER mensaje de una demo recien abierta con `DEMO XXXXXX`:
+
+    ELLA  quiero hacerme las mechas y tengo el cabello largo
+    IA    Ya se que te lo he dicho, carino, y te entiendo. Te lo digo con
+          sinceridad...
+
+"Ya se que te lo he dicho" en el primer mensaje. Mandar el codigo soltaba el
+traspaso y el formulario, pero NO el historial ni el estado de reserva, asi que la
+demo nueva heredaba la anterior: el prefijo de "esto ya te lo dije", el contador
+de "ya pregunto el precio" -que hacia saltar frenos que no tocaban- y el servicio
+a medio elegir.
+
+`_wa_reiniciar_la_demo` empieza de cero de verdad: traspaso, formulario, estado y
+historial de ESA conversacion. Solo en el hub de demos y solo cuando el mensaje ES
+el codigo; en un negocio real el traspaso lo suelta su equipo desde el panel.
+
+**Leccion de metodo, aparte del fallo.** Comprobar que un test falla sin el
+arreglo con `git stash` A SECAS no vale: el stash se lleva TAMBIEN el test, los dos
+vuelven a la version vieja y pasan. Hay que revertir solo el codigo:
+
+    git stash push backend/whatsapp.py
+    python -m pytest tests/test_lo_que_sea.py     # tiene que FALLAR
+    git stash pop
