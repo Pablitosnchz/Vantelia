@@ -896,3 +896,42 @@ La regla buena es mas simple que "quitar lo rechazado": **la valoracion es el
 primer paso del negocio hacia el tratamiento, no un segundo servicio**. Si lo que
 se esta reservando ES la valoracion, este freno no pinta nada y se sale antes de
 mirar familias. Lo otro -pedir corte, secado y tinte- sigue frenando igual.
+
+---
+
+### 36. Confirmar una reprogramacion crea una cita nueva (ABIERTA, medida 4-sep-2026)
+
+En la tirada de 40 conversaciones aparecen **2 citas duplicadas**, las dos de la
+clienta `cambiar-hora`:
+
+    IA   Podemos reprogramar tu cita para el miercoles 9 a las 10:00
+    IA   *Resumen de tu cita*      <- el resumen de CREAR
+    ELLA Confirmo.
+    IA   *Cita confirmada*         <- crea una segunda; la vieja sigue viva
+
+`booking_confirm` llama SIEMPRE a `_wa_create_booking`, sepa o no que se venia a
+mover una cita. Dos huecos ocupados por la misma persona y el negocio sin
+enterarse.
+
+**Hay DOS caminos y solo uno falla.** Instrumentado el 4-sep:
+
+    el agente reprograma con la tool       -> 1 cita, correcto
+    resumen + boton de confirmar           -> crea una segunda
+
+Por eso no se ve siempre: depende de si la conversacion pasa por el resumen.
+
+**Intentado y retirado el mismo dia.** Un `_wa_mover_en_vez_de_crear` en el boton
+de confirmar: si la intencion es reprogramar y tiene UNA sola cita viva, mover con
+`_voice_reschedule_booking` en vez de crear. Escrito y acotado, pero **no se
+disparo ni una vez** en las muestras -en ellas el agente ya reprogramaba por la
+tool-, asi que no hubo prueba de que ayude. Sobre 6 conversaciones: 100 % sin el
+arreglo y 83,3 % con el, y la conversacion que fallo enseña el camino VIEJO
+(termina en "*Cita confirmada*", no en el "*Cita cambiada*" del arreglo), o sea
+que el arreglo no la causo: es ruido de la muestra.
+
+No se despliega codigo que muta citas sin una sola medicion que lo respalde.
+
+Pista para quien lo retome: hay que reproducir PRIMERO el camino del resumen -que
+la conversacion llegue al boton de confirmar viniendo de reprogramar-, y solo
+entonces medir. Con la persona `cambiar-hora` tal cual, casi siempre se resuelve
+por la tool y el caso no se ejercita.
