@@ -580,8 +580,8 @@
     "color": "#111111",
     "accent_color": "#c9737d",
     "logo_url": "https://app.vantelia.es/site/aliciarincon/assets/avatar-asistente.png",
-    "bienvenida": "Hola, soy el asistente de Alicia Rincón Estilistas. Puedo darte cita, contarte nuestros servicios o resolver tus dudas. ¿En qué te ayudo?",
-    "prompt_extra": "Eres el asistente de una peluqueria colorista de alta gama en Elche. Trato cercano y profesional, de tu, lenguaje cuidado y frases cortas. NUNCA inventes precios: el precio se confirma tras el diagnostico personalizado; ofrece pedir cita de valoracion o el telefono 625 120 100. Recuerda que los lunes cerramos y que no cerramos por vacaciones. Si detectas intencion de cita, guia la reserva paso a paso.",
+    "bienvenida": "Hola cariño 🥰. ¿En qué puedo ayudarte?",
+    "prompt_extra": "Asistente de una peluqueria colorista de alta gama en Elche.\nTONO: muy cercano y carinoso, de tu, como una amiga que sabe mucho de pelo. Usa emojis con naturalidad en casi todos los mensajes (😊😉🥰 💇‍♀️ ✨ 🤗 💕), sin pasarte: uno o dos por mensaje. Frases cortas y calidas.\nSIEMPRE que la clienta te de las gracias (gracias, muchas gracias, gracias por todo, mil gracias...), responde empezando por 'Gracias a ti' con un emoji. Si ademas pregunta algo, contesta a su pregunta despues.\nPRECIOS: NUNCA des precio de mechas, balayage, grey blending, landing, extensiones, cambios de color ni decoloraciones. Ni orientativo ni un rango. Depende del largo, la densidad y el estado del cabello, y hay que verlo. Ofrece SIEMPRE una cita de diagnostico de 15 minutos, gratis y sin compromiso, y ofrecele cogersela en ese momento.\nALISADOS: si piden PRESUPUESTO, pide una foto del cabello por detras y di que nos pondremos en contacto para darselo personalmente. Si quieren CITA, no pidas foto: pregunta como lo tiene de largo (corto, medio, largo o extra largo) y coge la cita normal.\nEl resto de servicios (cortes, peinados, tratamientos, maquillaje) SI tienen precio en el catalogo y se puede decir.\nLos lunes cerramos y no cerramos por vacaciones. Telefono 625 120 100. Si no hay hueco para lo que pide, dile que llame y se lo cuadramos. Si detectas intencion de cita, guia la reserva paso a paso.",
     "chat_model": "",
     "temperature": 0.2,
     "allowed_origins": [
@@ -593,7 +593,9 @@
     ],
     "contacto": {
       "email": "info@aliciarinconestilistas.com",
-      "telefono": "625 120 100 / 966 670 924"
+      "telefono": "625 120 100 / 966 670 924",
+      "direccion": "Calle Andreu Castillejos, 9, 03201 Elche (Alicante)",
+      "mapa": "https://www.google.com/maps/search/Alicia%20Rinc%C3%B3n%20Estilistas/@38.26490020751953,-0.7038000226020813,17z?hl=es"
     },
     "branding": {
       "powered_by": "Powered by Vantelia"
@@ -605,20 +607,20 @@
       "verify_token_env": ""
     },
     "voice": {
-      "enabled": true,
+      "enabled": false,
       "twilio_phone_number": "",
-      "openai_voice": "marin",
+      "openai_voice": "",
       "realtime_model": "",
-      "greeting": "Hola, soy el asistente de Alicia Rincón Estilistas. ¿En qué puedo ayudarte?",
-      "max_duration_seconds": 300,
+      "greeting": "",
+      "max_duration_seconds": 0,
       "sms_confirmation": false,
-      "widget_enabled": true
+      "widget_enabled": false
     },
     "demo_claimable": false,
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",
-      "slot_minutes": 30,
+      "slot_minutes": 15,
       "day_start": "10:00",
       "day_end": "20:30",
       "break_start": "",
@@ -628,23 +630,7 @@
         0,
         6
       ],
-      "weekly_hours": {
-        "1": {
-          "closed": false,
-          "start": "10:00",
-          "end": "18:30"
-        },
-        "2": {
-          "closed": false,
-          "start": "10:00",
-          "end": "18:30"
-        },
-        "5": {
-          "closed": false,
-          "start": "09:00",
-          "end": "14:00"
-        }
-      },
+      "weekly_hours": {},
       "provider": "internal",
       "webhook_env": "WEBHOOK_DEFAULT",
       "webhook_url": "",
@@ -656,8 +642,9 @@
       "google_calendar_id_env": "",
       "google_service_account_path": "",
       "google_service_account_env": "",
-      "success_message": "Tu cita ha quedado registrada. Te esperamos en Andreu Castillejos 9, Elche.",
+      "success_message": "Tu cita ha quedado registrada. Te esperamos en Calle Andreu Castillejos, 9, 03201 Elche (Alicante).",
       "message_templates": {
+        "pending_payment": "Hemos guardado tu hueco, pero la cita todavia NO esta confirmada: falta el pago de la senal. Tienes el enlace debajo.",
         "confirmed": "Tu cita en Alicia Rincon Estilistas ha quedado confirmada. Debajo tienes los detalles y tu enlace personal por si necesitas cambiarla.",
         "reminder_24h": "Te recordamos que manana tienes tu cita en Alicia Rincon Estilistas. Si necesitas ajustarla, puedes hacerlo desde tu enlace de gestion.",
         "reminder_2h": "Tu cita en Alicia Rincon Estilistas empieza en menos de 2 horas. Te esperamos en Andreu Castillejos 9, Elche.",
@@ -665,13 +652,19 @@
         "rescheduled": "Tu cita en Alicia Rincon Estilistas se ha actualizado correctamente. Revisa los nuevos datos abajo."
       },
       "message_template_enabled": {
+        "pending_payment": true,
         "confirmed": true,
         "reminder_24h": true,
-        "reminder_2h": true,
+        "reminder_2h": false,
         "cancelled": true,
         "rescheduled": true
       },
       "message_template_channels": {
+        "pending_payment": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
         "confirmed": {
           "email": true,
           "whatsapp": false,
@@ -699,24 +692,55 @@
         }
       },
       "estilo": "conversacional",
+      "rescate_texto": "Si ninguna de estas opciones te encaja, puedes llamarnos al {telefono} 😊. En ocasiones podemos revisar personalmente la agenda e intentar encontrar alguna alternativa. Estaremos encantadas de ayudarte.",
       "preferir_packs": true,
       "mostrar_precios": false,
       "valoracion_obligatoria": [
         "extensiones"
       ]
     },
-    "empresa": "Alicia Rincón Estilistas",
-    "shop_public": {
-      "enabled_packages": false,
-      "enabled_products": false,
-      "intro_text": "",
-      "pickup_note": "",
-      "accent_color": "#c9737d",
-      "hero_image_url": "https://aliciarinconestilistas.com/media/mslzvpu7-img-9396.jpg",
-      "hero_tagline": "Peluquería colorista en Elche · Más de 36 años creando cambios de imagen"
+    "empresa": "",
+    "reminders": {},
+    "chat_menu": {
+      "ocultas": [
+        "Preguntas frecuentes"
+      ],
+      "enabled": false
     },
     "ai_intents": {
       "enabled": true
+    },
+    "tono": {
+      "estilo": "cercano",
+      "emojis": "muchos",
+      "tratamiento": "tu",
+      "notas": "Dirigete a quien te escribe como 'cariño' ('hola cariño, muy buenas'): vale igual para mujer y para hombre. Tambien puedes usar 'guapa' o 'preciosa' cuando sepas que es una mujer. Cuando te despidas al cerrar la conversacion, termina siempre con estos tres emoticonos juntos: 😉🤗😘"
+    },
+    "message_template_channels": {
+      "confirmed": {
+        "email": true,
+        "whatsapp": true
+      },
+      "rescheduled": {
+        "email": true,
+        "whatsapp": true
+      },
+      "cancelled": {
+        "email": true,
+        "whatsapp": true
+      },
+      "reminder_24h": {
+        "email": true,
+        "whatsapp": true
+      },
+      "reminder_2h": {
+        "email": true,
+        "whatsapp": true
+      },
+      "pending_payment": {
+        "email": true,
+        "whatsapp": true
+      }
     }
   },
   "caprocat": {
