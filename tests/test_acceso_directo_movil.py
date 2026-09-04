@@ -43,3 +43,26 @@ def test_el_icono_es_cuadrado_y_opaco():
     assert ancho == alto == 180, (ancho, alto)
     # Tipo de color 6 = RGBA y 4 = gris+alfa: iOS pintaria de negro lo transparente.
     assert cabecera[25] not in (4, 6), "el icono no puede llevar transparencia"
+
+
+def test_el_panel_cabe_en_una_pantalla_de_movil():
+    """Reglas medidas contra un iPhone de 390px con Playwright (sep-2026).
+
+    Sin ellas: la fila de arriba desbordaba y los iconos se montaban sobre el
+    titulo; la cabecera de la agenda empujaba el panel a 524px (barra de scroll
+    lateral en toda la pestana Citas); los cajones de 420px se salian por la
+    izquierda; los KPIs de Ventas cortaban la cifra ("2543,00" sin el euro); y la
+    ultima sub-pestana de Ventas quedaba fuera de la pantalla.
+    """
+    t = _html("app_ui/index.html")
+    reglas = (
+        ".user-chip .meta,",                      # nombre y correo fuera en movil
+        ".side-panel, .booking-drawer { width: 100vw;",
+        "@media (max-width: 900px) { .gcal-header { flex-wrap:wrap; } }",
+        ".vsell-kpis { grid-template-columns: 1fr; }",
+        'class="ventas-subtabs" style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap;"',
+    )
+    for regla in reglas:
+        assert regla in t, "falta la regla de movil: %s" % regla
+    # El titulo tiene que poder encogerse o vuelve a empujar a los iconos.
+    assert "min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" in t

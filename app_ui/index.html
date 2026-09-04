@@ -102,7 +102,7 @@
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 24px; gap: 12px;
     }
-    .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; }
     .nav-burger {
       display: none;
       align-items: center; justify-content: center;
@@ -120,13 +120,18 @@
     .page-title {
       font-family: var(--font-title);
       font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em;
+      /* Sin esto la fila desborda en el movil y los iconos se montan encima. */
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .user-chip {
       display: flex; align-items: center; gap: 10px;
       background: var(--panel); border: 1px solid var(--line);
       padding: 6px 10px 6px 6px; border-radius: 12px;
-      cursor: pointer; font-size: 0.86rem;
+      cursor: pointer; font-size: 0.86rem; min-width: 0;
     }
+    .user-chip .meta { min-width: 0; overflow: hidden; }
+    .user-chip .meta b,
+    .user-chip .meta span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .avatar {
       width: 30px; height: 30px; border-radius: 50%;
       background: linear-gradient(135deg, var(--accent-2), var(--accent));
@@ -571,6 +576,11 @@
 
     /* ── Calendar (Google-style) ── */
     .gcal-header { display:flex; align-items:center; gap:10px; padding:0 0 16px 0; }
+    /* Solo en pantallas estrechas: sin wrap, esta fila (Hoy / flechas / titulo /
+     * Dia-3 dias-Semana / leyenda) empujaba el ancho del panel a 524px en un movil
+     * de 390 y salia barra de scroll lateral en TODA la pestana de Citas. En
+     * escritorio se deja como estaba: alli cabe en una linea. */
+    @media (max-width: 900px) { .gcal-header { flex-wrap:wrap; } }
     .gcal-month-title { font-family:var(--font-title); font-size:1.2rem; font-weight:400; color:var(--text); margin:0; flex:1; }
     .gcal-btn-today {
       background:transparent; border:1px solid var(--line); color:var(--text);
@@ -1022,6 +1032,13 @@
     .vsell-kpi.warn .vsell-kpi-ic { background:rgba(255,200,87,0.14); color:var(--warning); }
     .vsell-kpi.ok .vsell-kpi-ic { background:rgba(0,245,212,0.12); color:var(--success); }
     .vsell-kpi-val { font-family:var(--font-title); font-size:1.4rem; font-weight:700; line-height:1.1; }
+    /* En el movil caben dos columnas de 173px, pero el icono se come 54 y la
+       cifra sale cortada ("2543,00" sin el simbolo del euro). Una por fila. */
+    @media (max-width: 560px) {
+      .vsell-kpis { grid-template-columns: 1fr; }
+      .vsell-kpi-val { font-size: 1.25rem; }
+      .inf-kpi .k-value { font-size: 1.25rem; word-break: break-word; }
+    }
     .vsell-kpi-lbl { font-size:0.74rem; color:var(--soft); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
     .vsell-kpi-sub { font-size:0.72rem; color:var(--soft-2); margin-top:1px; }
     .vsell-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:0 0 14px; }
@@ -1176,7 +1193,12 @@
     #clientePanel.open { right: 0; }
     #qaFormCard { width: 440px; right: -460px; }
     #qaFormCard.open { right: 0; }
-    @media (max-width: 520px) { #qaFormCard { width: 100%; right: -100%; } }
+    @media (max-width: 520px) {
+      #qaFormCard { width: 100%; right: -100%; }
+      /* 420px no caben en una pantalla de 390: el cajon se salia por la
+         izquierda y cortaba los campos del formulario. */
+      .side-panel, .booking-drawer { width: 100vw; right: -100vw; }
+    }
     .side-panel-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
     .side-panel-head b { flex: 1; font-family: var(--font-title); font-size: 1rem; }
     .side-panel-head button { background: transparent; border: 0; color: var(--soft); cursor: pointer; font-size: 1.2rem; }
@@ -1230,7 +1252,13 @@
       .main { padding: 16px; }
       .topbar { margin-bottom: 18px; }
       .page-title { font-size: 1.2rem; }
-      .user-chip .meta span { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .topbar { gap: 8px; }
+      .topbar-right { gap: 6px; }
+      /* El nombre y el correo se comian la fila entera: queda el avatar, que
+         abre el mismo menu al tocarlo. */
+      .user-chip .meta,
+      .user-chip .caret { display: none; }
+      .user-chip { padding: 4px; }
       .bot-fab { bottom: 80px; right: 16px; }
     }
 
@@ -1362,7 +1390,7 @@
     .cd-menu-item:hover { background: rgba(255,255,255,.06); }
 
     /* Topbar acciones: buscar + avisos */
-    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; min-width: 0; }
     .ts-icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--soft); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; transition: all .12s ease; }
     .ts-icon-btn:hover { color: var(--text); border-color: var(--accent); }
     .ts-icon-btn svg { width: 18px; height: 18px; }
@@ -3025,7 +3053,7 @@
   <section class="page" id="page-ventas">
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
       <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Ventas</h2>
-      <div class="ventas-subtabs" style="margin-left:auto; display:flex; gap:6px;">
+      <div class="ventas-subtabs" style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap;">
         <button class="btn ventas-subtab active" data-vtab="central" type="button">Central</button>
         <button class="btn ventas-subtab" data-vtab="online" type="button" data-perm="catalog.manage">Central online</button>
         <button class="btn ventas-subtab" data-vtab="productos" type="button">Productos</button>
