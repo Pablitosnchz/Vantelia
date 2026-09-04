@@ -2449,6 +2449,21 @@ async def _handle_whatsapp_message(
         ):
             intencion_entendida = ""
 
+    # Mismo freno que el chat web: "gracias" a secas es una despedida, no el
+    # nombre de un servicio. El agente contestaba "no tengo un servicio con ese
+    # nombre" justo despues del "gracias a ti".
+    if not flow.flow and not iid and chat._es_solo_agradecimiento(incoming_text):
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=from_number, request=request,
+            entrante=incoming_text, respuesta=chat.TEXTO_SOLO_GRACIAS,
+            intent="agradecimiento",
+        )
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text=chat.TEXTO_SOLO_GRACIAS,
+        )
+        return
+
     # Trigger desde menu o texto
     # Mismo detector que el chat web (`chat.MENU_OPTION_PATTERNS`): reconoce
     # "pedir cita", "coger cita" o "quiero reservar", no solo cinco frases exactas.

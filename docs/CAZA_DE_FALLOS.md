@@ -935,3 +935,42 @@ Pista para quien lo retome: hay que reproducir PRIMERO el camino del resumen -qu
 la conversacion llegue al boton de confirmar viniendo de reprogramar-, y solo
 entonces medir. Con la persona `cambiar-hora` tal cual, casi siempre se resuelve
 por la tool y el caso no se ejercita.
+
+---
+
+### 37. Dos capas contestan al mismo mensaje (CERRADA, 4-sep-2026)
+
+La clienta escribe **"gracias"** y recibe esto, dos veces seguidas:
+
+> ¡Gracias a ti! 😊
+> Hola cariño, ¿qué tal? 😊 Veo que has mencionado "gracias", pero no tengo un
+> servicio con ese nombre. ¿Podrías decirme un poco más sobre lo que te gustaría
+> hacerte? ¿Es un alisado, un peinado, un trabajo de color…?
+
+Lo primero está bien. Lo segundo sobra, y además es falso de una forma que
+desconcierta: nadie ha pedido un servicio llamado "gracias".
+
+**La causa no es el modelo.** `chat._con_gracias_a_ti` antepone el
+agradecimiento a CUALQUIER respuesta (se hizo para que un "mil gracias, ¿a qué
+hora abrís?" no llegara seco), pero no cierra el mensaje: por debajo seguía todo
+el recorrido hasta el agente, que tomaba la única palabra del mensaje por el
+nombre de un servicio.
+
+Es la clase del **cortesía sin cierre**: una capa decora y otra interpreta, y el
+cliente lee las dos.
+
+**Arreglo:** `chat._es_solo_agradecimiento` con la misma disciplina que
+`_message_is_pure_greeting` — si el mensaje trae contenido real ("gracias, ¿a qué
+hora abrís?"), el freno se aparta y manda lo que pide. Va DESPUÉS de las Q&A y
+las reglas del negocio, para que su configuración siga mandando, y en los DOS
+canales: el chat web y WhatsApp tienen recorridos distintos y arreglarlo en uno
+no arregla el otro.
+
+Comprobado con la configuración real del salón: "gracias" y "muchas gracias, un
+beso" cierran en una línea; "gracias, ¿a qué hora abrís?" sigue devolviendo su
+horario. `tests/test_dar_las_gracias.py` (17 casos, verificado que fallan sin el
+arreglo).
+
+**Dónde mirar si vuelve:** cualquier otra cortesía que decore sin cerrar. El
+patrón se repite en cuanto un texto fijo se antepone a una respuesta que puede
+no llegar a existir.

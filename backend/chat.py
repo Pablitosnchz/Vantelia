@@ -133,6 +133,42 @@ def _con_gracias_a_ti(message: str, respuesta: str) -> str:
     return "¡Gracias a ti! 😊\n\n" + respuesta
 
 
+# Palabras que acompañan a un "gracias" sin pedir nada: despedidas y cortesia.
+# Si tras quitarlas queda una palabra de verdad, el mensaje pide algo y NO es una
+# simple despedida ("gracias, quiero cita" -> queda "quiero", "cita").
+DESPEDIDA_FILLER_RE = re.compile(
+    r"\b(gracias|graciass+|mil|much[ao]s|muchisimas|infinitas|todo|todos|nada|"
+    r"vale|ok|okey|okay|perfecto|genial|estupendo|fenomenal|guay|bien|muy|amable|"
+    r"eres|sois|un|una|de|por|besos|beso|abrazo|abrazos|adios|hasta|luego|manana|"
+    r"pronto|chao|chau|bye|nos|vemos|ya|esta|si|no|te|lo|la|el|los|las|me|mi|y|a|"
+    r"agradezco|agradecida|agradecido|encantada|encantado|saludos)\b",
+    re.IGNORECASE,
+)
+
+TEXTO_SOLO_GRACIAS = "¡Gracias a ti! 😊 Si necesitas cualquier cosa, aquí estoy."
+
+
+def _es_solo_agradecimiento(message: str) -> bool:
+    """El mensaje SOLO da las gracias: se cierra la conversacion, no se interpreta.
+
+    Sin esto, un "gracias" a secas seguia bajando hasta el agente, que lo tomaba
+    por el nombre de un servicio y contestaba "no tengo un servicio con ese
+    nombre" JUSTO DESPUES de haber dicho "gracias a ti" (visto en la demo del
+    salon el 4-sep-2026: dos mensajes seguidos, los dos igual de raros).
+
+    Misma disciplina que `_message_is_pure_greeting`: si ademas trae contenido
+    real ("gracias, ¿a que hora abris?"), eso manda y esta funcion se aparta.
+    """
+    texto = str(message or "")
+    norm = textnorm._strip_accents(texto.lower())
+    if not AGRADECIMIENTO_RE.search(norm):
+        return False
+    if "?" in norm or "¿" in norm or len(norm) > 120:
+        return False
+    resto = DESPEDIDA_FILLER_RE.sub(" ", norm)
+    return not re.findall(r"[a-z0-9]{3,}", resto)
+
+
 GIFT_CARD_INTENT_RE = re.compile(r"tarjeta[s]?\s+(de\s+)?regalo|gift\s*card|bono\s+regalo|cheque\s+regalo", re.IGNORECASE)
 GIFT_CARD_PURCHASE_RE = re.compile(
     r"\b(comprar|compra|pagar|regalar|regalo|enlace|link|url|web|donde|d[oó]nde|"
@@ -953,6 +989,19 @@ async def _process_chat_message(
         )
 
     intencion_detectada = decision["intencion"] if decision else ""
+
+    # Un "gracias" a secas se contesta y se cierra: no es una peticion que haya
+    # que interpretar. Va aqui, despues de las Q&A y las reglas del negocio, para
+    # que su configuracion siga mandando.
+    if _es_solo_agradecimiento(message):
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id, role="assistant",
+            content=TEXTO_SOLO_GRACIAS, intent="agradecimiento",
+        )
+        return RespuestaChat(
+            respuesta=TEXTO_SOLO_GRACIAS, mostrar_formulario=False,
+            session_id=session_id, intent="agradecimiento",
+        )
 
     # "¿puedo ir mañana?" acababa en la IA generica, que contestaba el horario de
     # apertura; lo que quiere saber es si hay HUECO. Misma respuesta que da la
