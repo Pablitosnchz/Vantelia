@@ -16,6 +16,13 @@ import struct
 
 from fastapi.testclient import TestClient
 
+# El arnes compartido del repo. NO se usa el `client` de conftest: ese runtime es
+# de sesion y crearlo aqui -este fichero va el segundo por orden alfabetico- lo
+# adelantaba a todo, y los ficheros que despues montan el suyo purgan y reimportan
+# `backend.*`, dejando obsoleto el primero. Sintoma: `test_demo_conversion` fallaba
+# con los tokens de la demo vacios, y solo en la suite completa (medido 4-sep-2026).
+from test_booking_exhaustive import api_module, client  # noqa: F401
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAGINAS = ("app_ui/index.html", "access_ui/index.html")
 ICONO = os.path.join(RAIZ, "brand_assets", "apple-touch-icon.png")
