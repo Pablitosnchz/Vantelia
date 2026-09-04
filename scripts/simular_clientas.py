@@ -345,7 +345,24 @@ def _ofrecio_una_salida(cliente_id: str, dichos: List[str]) -> bool:
         digitos = "".join(c for c in telefono if c.isdigit())[:6]
         if digitos and digitos in "".join(c for c in texto if c.isdigit()):
             return True
-    return any(p in _norm(texto) for p in ("llamanos", "llamar al", "que llames"))
+    if any(p in _norm(texto) for p in ("llamanos", "llamar al", "que llames")):
+        return True
+    # Ofrecerle la cita de VALORACION tambien es darle una salida: en las familias
+    # donde el negocio la exige (extensiones), es la unica puerta que hay. Sin
+    # esto se contaba como fracaso una conversacion en la que el asistente explica
+    # la regla, se ofrece a reservar la valoracion y mantiene el criterio del
+    # salon; el fracaso seria despedirla sin ofrecerle nada.
+    try:
+        from backend import booking
+
+        valoracion = booking._servicio_de_valoracion(cliente_id) or {}
+        nombre = _norm(str(valoracion.get("nombre") or ""))
+        cabeza = nombre.split()[0] if nombre else ""
+        if cabeza and len(cabeza) >= 5 and cabeza in _norm(texto):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
 
 
 def _es_diagnostico(cita: Dict[str, Any]) -> bool:

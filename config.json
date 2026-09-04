@@ -700,7 +700,10 @@
       },
       "estilo": "conversacional",
       "preferir_packs": true,
-      "mostrar_precios": false
+      "mostrar_precios": false,
+      "valoracion_obligatoria": [
+        "extensiones"
+      ]
     },
     "empresa": "Alicia Rincón Estilistas",
     "shop_public": {

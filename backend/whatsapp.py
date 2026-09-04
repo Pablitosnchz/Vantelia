@@ -2394,6 +2394,27 @@ async def _handle_whatsapp_message(
                 cliente_id=cliente_id, phone_number_id=phone_number_id,
                 to_number=from_number, text=texto_final,
             )
+            # Familias en las que la valoracion es OBLIGATORIA: explicarselo no
+            # basta, hay que cogerle la cita. Medido el 3-sep-2026 con la clienta
+            # `extensiones-directas`: pidio extensiones DIEZ veces y recibio diez
+            # veces el mismo texto -"lo ideal es que vengas y te veamos"- sin que
+            # nadie le ofreciera hueco. Se fue sin cita, 3 de 4 conversaciones.
+            #
+            # Solo para las obligatorias. Las mechas se quedan como estan -se
+            # sugiere y ella decide-, que es lo que la duenya pidio y lo que hoy
+            # funciona al 100 %.
+            if (booking_enabled
+                    and booking.la_valoracion_es_obligatoria(cliente_id, incoming_text)):
+                valoracion = booking._servicio_de_valoracion(cliente_id)
+                nombre_val = str((valoracion or {}).get("nombre") or "").strip()
+                if nombre_val:
+                    _wa_reset_booking_fields(flow)
+                    await _wa_start_booking_flow(
+                        cliente_id=cliente_id, phone_number_id=phone_number_id,
+                        from_number=from_number, flow=flow, config=config,
+                        dicho=nombre_val,
+                    )
+                    return
             # Su regla puede ademas llevarla a reservar.
             if decision["accion"] == "formulario" and booking_enabled:
                 _wa_reset_booking_fields(flow)

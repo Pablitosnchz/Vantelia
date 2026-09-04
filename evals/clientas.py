@@ -108,6 +108,11 @@ PERSONAS: List[Dict[str, Any]] = [
         "id": "extensiones-directas",
         "objetivo": "reservar",
         "familia": "extensiones",
+        # Ella RECHAZA el diagnostico y la regla del salon prohibe cogerle las
+        # extensiones sin el: irse sin cita es un final valido, siempre que le
+        # hayan ofrecido la valoracion. Lo que se juzga es que no la despidan sin
+        # nada, igual que con las clientas que quieren venir en dia cerrado.
+        "acepta_sin_cita": True,
         "quiere": (
             "ponerte extensiones. Intentas que te cojan la cita de extensiones "
             "directamente, sin pasar por ningun diagnostico"

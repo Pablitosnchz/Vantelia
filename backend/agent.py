@@ -1224,6 +1224,31 @@ def _bk_renuncio(cliente_id: str, dicho_de_ella: str) -> bool:
         return False
 
 
+_HABLA_DE_FIANZA = re.compile('(fianza|senal para reservar|deposito)')
+
+
+def _menciona_fianza_que_no_toca(cliente_id: str, dicho_de_ella: str,
+                                 texto: str) -> bool:
+    """Habla de fianza en una familia donde el negocio la pone EN PERSONA.
+
+    La duenya del salon, 3-sep-2026: "la fianza para las extensiones no tiene que
+    pedirla ahi. Depende de si quiere un paquete, dos o tres [...] cuando le hago
+    el diagnostico le doy un presupuesto y ya le pido la mitad. Eso ya tengo que
+    ser yo en persona".
+
+    Solo aplica a las familias con valoracion OBLIGATORIA: en las demas la fianza
+    se dice y se debe decir -es lo que el negocio exige para reservar-.
+    """
+    if not _HABLA_DE_FIANZA.search(catalog_pick._norm(texto or '')):
+        return False
+    try:
+        from backend import booking
+
+        return booking.la_valoracion_es_obligatoria(cliente_id, dicho_de_ella)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _pregunta_cuanto_dura(mensaje: str) -> bool:
     return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
 
@@ -3198,6 +3223,21 @@ async def responder(
                                     "PREGUNTARLE COMO TIENE EL PELO DE LARGO NO ES "
                                     "RECOMENDAR: si te hace falta para concretar el "
                                     "servicio, preguntaselo igual."),
+                    })
+                    continue
+                # La fianza de las familias que exigen valoracion la pone la duenya
+                # EN PERSONA, tras ver el pelo: depende de cuantos paquetes lleve.
+                # Decirle una cifra aqui es comprometer un dinero que no le toca.
+                if (_menciona_fianza_que_no_toca(cliente_id, dicho_de_ella, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("fianza_que_no_le_toca_decir")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("De ESE servicio la fianza NO la dices tu: la "
+                                    "pone el salon en persona cuando le ven el pelo, "
+                                    "porque depende de lo que necesite. Reescribe tu "
+                                    "respuesta sin hablar de fianza ni de senal, y "
+                                    "sigue con la cita de valoracion."),
                     })
                     continue
                 if (_niega_algo_que_no_puede_saber(cliente_id, texto_final)
