@@ -1633,6 +1633,47 @@ def _es_la_valoracion(cliente_id: str, servicio: str) -> bool:
         return False
 
 
+_PIDE_VALORACION_RE = re.compile(r"\b(diagnostic\w*|valoracion\w*|valorarme|valorar)\b")
+
+
+def _pide_la_valoracion(cliente_id: str, dicho: str) -> bool:
+    """Lo que dice AHORA es pedir la cita de diagnostico del negocio.
+
+    Se mira lo que acaba de decir, no el estado: pedir el diagnostico es una
+    peticion COMPLETA en si misma, no un detalle que complete lo anterior.
+    """
+    if not dicho:
+        return False
+    if not _PIDE_VALORACION_RE.search(catalog_pick._norm(dicho)):
+        return False
+    try:
+        from backend import booking
+
+        return bool(booking._servicio_de_valoracion(cliente_id))
+    except Exception:  # noqa: BLE001 - sin catalogo, que siga el curso normal
+        return False
+
+
+def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str):
+    """Que se le pasa a `buscar_servicio` y que queda acumulado despues.
+
+    Devuelve (descripcion, servicio_texto). Al buscar el servicio va TODO lo que
+    ha dicho, no solo su ultimo mensaje: quien dijo "unas mechas" y luego "lo
+    tengo por los hombros" ya ha dado los dos datos. La excepcion es pedir el
+    diagnostico, que es una peticion completa y no un detalle de lo anterior.
+    """
+    dicho = str(dicho or "").strip()
+    if not servicio_texto:
+        return dicho, servicio_texto
+    if _pide_la_valoracion(cliente_id, dicho):
+        return dicho, ""
+    if catalog_pick._norm(dicho) not in catalog_pick._norm(servicio_texto):
+        dicho = (servicio_texto + " " + dicho).strip()
+    else:
+        dicho = servicio_texto
+    return dicho[-300:], servicio_texto
+
+
 def _sin_lo_que_ha_rechazado(cliente_id: str, pedido: str, familias):
     """Quita de lo pedido la valoracion, si ella ha dicho que no la quiere."""
     try:
@@ -3522,12 +3563,17 @@ async def responder(
                 # los hombros" ya ha dado los dos datos, y preguntarle otra vez
                 # que servicio quiere es el fallo que mas se repite.
                 if llamada.function.name == "buscar_servicio" and estado.servicio_texto:
-                    dicho = str(argumentos.get("descripcion") or "").strip()
-                    if catalog_pick._norm(dicho) not in catalog_pick._norm(estado.servicio_texto):
-                        dicho = (estado.servicio_texto + " " + dicho).strip()
-                    else:
-                        dicho = estado.servicio_texto
-                    argumentos["descripcion"] = dicho[-300:]
+                    # Pedir el diagnostico NO es un detalle que complete lo
+                    # anterior: es lo que quiere. Arrastrar lo dicho antes ("un
+                    # alisado", "unas mechas") convertia "cogeme cita para un
+                    # diagnostico" en una busqueda de alisado, y el catalogo pedia
+                    # el largo del pelo para una cita de 15 minutos que no depende
+                    # del largo. Reportado por la duenya del salon el 5-sep-2026:
+                    # la clienta lo pidio dos veces y recibio dos veces la misma
+                    # pregunta.
+                    argumentos["descripcion"], estado.servicio_texto = _descripcion_para_buscar(
+                        cliente_id, argumentos.get("descripcion"), estado.servicio_texto
+                    )
                 # "cualquier hueco que tengas me vale" le hacia pedir el calendario
                 # dia a dia (ocho de una tacada) hasta agotar el turno.
                 # Ha pedido varias cosas y la cita solo cubriria una: eso se para
