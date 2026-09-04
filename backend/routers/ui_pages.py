@@ -83,6 +83,38 @@ async def onboarding_entry(
     return HTMLResponse(html)
 
 
+@app.get("/manifest.webmanifest", include_in_schema=False)
+async def portal_manifest() -> Response:
+    """Manifiesto para instalar el panel como aplicacion.
+
+    Con el, Chrome y Edge ofrecen "Instalar" y la ventana sale con nombre e icono
+    propios en vez de un acceso directo generico con la miniatura de la pagina.
+    Va servido en la RAIZ a proposito: el alcance de un manifiesto es su propio
+    directorio, y desde /brand-assets/ no cubriria /app.
+    """
+    return Response(
+        content=json.dumps({
+            "name": "Vantelia",
+            "short_name": "Vantelia",
+            "description": "Panel de gestion de tu asistente y tu agenda.",
+            "start_url": "/app",
+            "scope": "/",
+            "display": "standalone",
+            "background_color": "#0B132B",
+            "theme_color": "#0B132B",
+            "lang": "es",
+            "icons": [
+                {"src": "/brand-assets/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                {"src": "/brand-assets/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                {"src": "/brand-assets/icon-512.png", "sizes": "512x512", "type": "image/png",
+                 "purpose": "maskable"},
+            ],
+        }, ensure_ascii=False),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/app", include_in_schema=False)
 async def app_entry(
     portal_session: Optional[str] = Cookie(default=None, alias=settings.PORTAL_COOKIE_NAME),

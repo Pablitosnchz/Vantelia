@@ -10,8 +10,11 @@ mira su movil. El icono debe ser cuadrado y SIN transparencia (iOS no la respeta
 la pinta de negro) o se ve un cuadro negro en su pantalla de inicio.
 """
 import io
+import json
 import os
 import struct
+
+from fastapi.testclient import TestClient
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAGINAS = ("app_ui/index.html", "access_ui/index.html")
@@ -66,3 +69,29 @@ def test_el_panel_cabe_en_una_pantalla_de_movil():
         assert regla in t, "falta la regla de movil: %s" % regla
     # El titulo tiene que poder encogerse o vuelve a empujar a los iconos.
     assert "min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" in t
+
+
+def test_el_manifiesto_permite_instalar_el_panel(client: TestClient):
+    """Sin manifiesto, "Instalar" del navegador deja un acceso directo generico.
+
+    Se sirve en la RAIZ a proposito: el alcance de un manifiesto es su propio
+    directorio, asi que desde /brand-assets/ no cubriria /app y la instalacion
+    quedaria fuera de alcance.
+    """
+    r = client.get("/manifest.webmanifest")
+    assert r.status_code == 200
+    assert "manifest" in r.headers["content-type"]
+    m = json.loads(r.content.decode("utf-8"))
+    assert m["start_url"] == "/app" and m["scope"] == "/"
+    assert m["display"] == "standalone"
+    for icono in m["icons"]:
+        destino = os.path.join(RAIZ, "brand_assets", os.path.basename(icono["src"]))
+        assert os.path.exists(destino), icono["src"]
+        cabecera = io.open(destino, "rb").read(26)
+        ancho, alto = struct.unpack(">II", cabecera[16:24])
+        assert (ancho, alto) == tuple(int(x) for x in icono["sizes"].split("x"))
+
+
+def test_las_dos_pantallas_enlazan_el_manifiesto():
+    for nombre in PAGINAS:
+        assert '<link rel="manifest" href="/manifest.webmanifest" />' in _html(nombre), nombre
