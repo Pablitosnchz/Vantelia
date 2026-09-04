@@ -68,6 +68,11 @@ ESTILOS: Dict[str, str] = {
 }
 
 # Que viene a hacer. El objetivo decide como se juzga el resultado.
+# HUECO CONOCIDO: no hay clienta que mande una FOTO. El arnes solo escribe texto,
+# y el recorrido de la foto -pasa la conversacion a una persona, el asistente se
+# calla, y al volver a abrir la demo se reinicia- solo se puede probar a mano. Los
+# dos fallos que salieron por ahi (3-sep-2026) los encontro una persona probando.
+
 PERSONAS: List[Dict[str, Any]] = [
     {
         "id": "corte-directo",
@@ -128,6 +133,31 @@ PERSONAS: List[Dict[str, Any]] = [
         "quiere": (
             "pedir cita para un alisado, pero a mitad de la conversacion prefieres "
             "hablar con una persona del salon y asi lo dices"
+        ),
+        "estilos": ["normal", "escueta"],
+    },
+    {
+        # Reservar para otra persona. El juez ya comprueba que el servicio sea de
+        # la familia correcta, asi que si le coge un corte de senyora para un ninyo
+        # de 7 anyos, lo canta.
+        "id": "cita-para-su-hija",
+        "objetivo": "reservar",
+        "familia": "corte",
+        "quiere": (
+            "cita para cortarle el pelo a tu hija de 7 anyos, no para ti; lo dices "
+            "desde el principio"
+        ),
+        "estilos": ["normal", "habladora"],
+    },
+    {
+        # Escribe en ingles. Una turista en Elche no es raro. Vigilancia generica:
+        # que conteste, que no se repita y que no invente una cita.
+        "id": "en-ingles",
+        "objetivo": "informacion",
+        "familia": "",
+        "quiere": (
+            "saber si hacen mechas y a que hora abren. ESCRIBES SIEMPRE EN INGLES, "
+            "eres una turista y no hablas espanyol"
         ),
         "estilos": ["normal", "escueta"],
     },
