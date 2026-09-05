@@ -164,6 +164,7 @@ cambia, dilo al dar el numero.
 | 26-ago | 68 % | remate con horas reales a quien insiste con el precio |
 | 4-sep | 65 % | linea base nueva: juez actualizado y dos clientas mas |
 | 5-sep | **87,5 %** | menu fuera, "gracias" cierra, Landing acotado, permanente en la regla, el diagnostico deja de arrastrar lo dicho antes |
+| 5-sep | **76,0 %** | **n=100**, semilla distinta. Es la cifra buena: las de 40 varian +-10 y el 87,5 % fue un reparto favorable |
 
 Las tiradas de 45 %, 51 % y 58 % de ese mismo dia salieron de un arnes roto (no
 podia pulsar "Confirmar") y **no son comparables**. El 72 % salio de un
@@ -184,3 +185,9 @@ Los dos casos son del INSTRUMENTO, no del producto: el asistente hizo bien lo qu
 le pidieron. Antes de contar un fallo, leer la conversacion y comprobar que la
 clienta simulada dijo lo que su persona promete decir. Con n=40 esto puede valer
 5 puntos, que es la mitad del margen de la muestra.
+
+**Comparar entre semillas es comparar cosas distintas.** El 5-sep salieron 87,5 %
+y 82,5 % con n=40 (semilla 1) y **76,0 % con n=100** (semilla 7), con el MISMO
+codigo desplegado entre las dos ultimas. La semilla decide que clientas y que
+estilos entran; con 40 el intervalo es de +-10 puntos. Para decidir si algo
+mejora: misma semilla y mismo tamano, y aun asi solo se ven saltos grandes.
