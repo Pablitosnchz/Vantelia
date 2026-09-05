@@ -1640,9 +1640,9 @@ def _seed_qa_from_onboarding(cliente_id: str, result: Any, user_id: Any = "") ->
         return 0
 
 
-def _call_us_line(cliente_id: str) -> str:
+def _call_us_line(cliente_id: str, motivo: str = "") -> str:
     """Alias: la funcion vive en `clients` para que booking tambien pueda usarla."""
-    return clients.call_us_line(cliente_id)
+    return clients.call_us_line(cliente_id, motivo)
 
 
 def _day_unavailable_explanation(cliente_id: str, fecha: str, fecha_humana: str) -> str:

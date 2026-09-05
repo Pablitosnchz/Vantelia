@@ -794,8 +794,14 @@ def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> 
         raise HTTPException(status_code=403, detail=error_message)
 
 
-def call_us_line(cliente_id: str) -> str:
+def call_us_line(cliente_id: str, motivo: str = "") -> str:
     """Salida humana cuando la agenda no da: que llamen y el negocio lo cuadra.
+
+    Con `motivo="precio"` la salida es otra: quien no quiere venir a que le vean el
+    pelo no necesita mas huecos, necesita hablar. Lo pidio asi la duenya del salon:
+    "que nos llame por telefono, que hablaremos mas detenidamente y le preguntamos
+    para poder darle un presupuesto aunque sea aproximado". Texto propio del
+    negocio en `booking.rescate_precio_texto` si lo quiere cambiar.
 
     Un salon puede hacer hueco moviendo cosas que el sistema no sabe (juntar dos
     clientas, alargar un rato, repartirse el trabajo). Sin esta linea, quien no
@@ -812,6 +818,14 @@ def call_us_line(cliente_id: str) -> str:
     telefono = str((config.get("contacto") or {}).get("telefono") or "").strip()
     if not telefono:
         return ""
+    if motivo == "precio":
+        propio = str(booking_cfg.get("rescate_precio_texto") or "").strip()
+        if propio:
+            return "\n\n" + propio.replace("{telefono}", telefono)
+        return (
+            f"\n\nSi prefieres no venir solo para eso, llamanos al {telefono}: te "
+            f"preguntamos un par de cosas y te damos un presupuesto aproximado."
+        )
     plantilla = str(booking_cfg.get("rescate_texto") or "").strip()
     if plantilla:
         return "\n\n" + plantilla.replace("{telefono}", telefono)

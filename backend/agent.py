@@ -2841,6 +2841,30 @@ def _rechaza_las_opciones(mensaje: str) -> bool:
     return any(frase in limpio for frase in _RECHAZA_LAS_OPCIONES)
 
 
+# Rechaza el CAMINO, no la hora: no quiere venir al diagnostico, no quiere mandar
+# la foto, y sigue pidiendo el precio. Ofrecerle mas huecos no le sirve de nada.
+_RECHAZA_EL_CAMINO = (
+    "no quiero la cita", "no quiero cita", "no me interesa la cita",
+    "no quiero ir", "no puedo ir", "sin tener que ir", "sin ir primero", "sin ir",
+    "no pienso ir", "no voy a ir", "no quiero acercarme", "no puedo acercarme",
+    "no quiero mandar", "no quiero enviar", "no quiero foto", "sin mandar",
+    "solo quiero el precio", "solo quiero saber el precio", "solo busco el precio",
+    "solo busco un precio", "rango de precios", "precio aproximado",
+    "una idea del precio", "una idea aproximada", "aunque sea aproximado",
+)
+
+
+def _rechaza_el_camino(mensaje: str) -> bool:
+    """Dice que no al camino propuesto y sigue queriendo el precio.
+
+    El salon lo dejo dicho: "si la clienta insiste... que el asistente le diga que
+    nos llame por telefono". Medido el 5-sep-2026: sin esto, a quien rechazaba la
+    cita de diagnostico se le repetia la misma respuesta DIEZ veces y se iba.
+    """
+    limpio = catalog_pick._norm(mensaje)
+    return any(frase in limpio for frase in _RECHAZA_EL_CAMINO)
+
+
 def _con_el_telefono_si_hace_falta(
     cliente_id: str, mensaje: str, respuesta: str, cita_creada: bool,
 ) -> str:
@@ -2849,9 +2873,12 @@ def _con_el_telefono_si_hace_falta(
     Es una condicion del salon, asi que no puede quedar a lo que decida el modelo:
     "no me va bien ninguna" y despedirse sin ofrecer el telefono es perder la cita.
     """
-    if cita_creada or not respuesta or not _rechaza_las_opciones(mensaje):
+    if cita_creada or not respuesta:
         return respuesta
-    linea = clients.call_us_line(cliente_id)
+    if not (_rechaza_las_opciones(mensaje) or _rechaza_el_camino(mensaje)):
+        return respuesta
+    motivo = "precio" if _rechaza_el_camino(mensaje) else ""
+    linea = clients.call_us_line(cliente_id, motivo)
     if not linea or catalog_pick._norm(linea)[:40] in catalog_pick._norm(respuesta):
         return respuesta
     return respuesta.rstrip() + linea

@@ -1169,6 +1169,7 @@ def _ya_se_le_dijo(cliente_id: str, from_number: str, texto: str) -> bool:
 
 async def _respuesta_del_negocio_con_remate(
     cliente_id: str, from_number: str, decision: dict, config: dict,
+    mensaje: str = "",
 ) -> str:
     """La respuesta del negocio, y si ya se la dijimos, ademas el remate.
 
@@ -1177,14 +1178,33 @@ async def _respuesta_del_negocio_con_remate(
     peor -las reservas cayeron del 61% al 41%-, asi que se manda igual: se
     reconoce que insiste y se le ofrecen horas de verdad para la valoracion.
     """
+    from backend import agent as _agente  # import tardio: evita el circular
+
     texto = str(decision.get("texto") or "")
-    if not texto or not _ya_se_le_dijo(cliente_id, from_number, texto):
+    if not texto:
+        return texto
+    if not _ya_se_le_dijo(cliente_id, from_number, texto):
+        # Aunque sea la primera vez que se le dice ESTO, si ella ya ha dicho que no
+        # quiere venir (o no quiere mandar la foto), la respuesta del negocio la
+        # deja igual de atascada: se le da la salida y punto.
+        if _agente._rechaza_el_camino(mensaje):
+            linea = rag._call_us_line(cliente_id, "precio").strip()
+            ya_esta = textnorm._strip_accents(linea.lower())[:40] in textnorm._strip_accents(texto.lower())
+            if linea and not ya_esta:
+                return texto.rstrip() + chr(10) * 2 + linea
         return texto
     remate = ""
-    try:
-        remate = await booking.cierre_para_quien_insiste(cliente_id)
-    except Exception as exc:  # noqa: BLE001 - hay otra salida mas abajo
-        settings.logger.warning("[whatsapp] sin remate para %s: %s", cliente_id, exc)
+    if _agente._rechaza_el_camino(mensaje):
+        # No rechaza la HORA, rechaza venir (o mandar la foto). Ofrecerle mas
+        # huecos es repetirle el muro: la salida que dejo dicha la duenya es que
+        # llame y lo hablen. Medido el 5-sep-2026: sin esto se le repetia la misma
+        # respuesta diez veces y se iba sin cita.
+        remate = rag._call_us_line(cliente_id, "precio").strip()
+    if not remate:
+        try:
+            remate = await booking.cierre_para_quien_insiste(cliente_id)
+        except Exception as exc:  # noqa: BLE001 - hay otra salida mas abajo
+            settings.logger.warning("[whatsapp] sin remate para %s: %s", cliente_id, exc)
     if not remate:
         # Sin huecos que ofrecer, el remate sale vacio y se le mandaba la MISMA
         # frase otra vez: exactamente el muro que esto venia a quitar. La salida
@@ -2401,7 +2421,7 @@ async def _handle_whatsapp_message(
             # horas reales para cerrar. Repetir la misma frase a secas es lo que
             # mas cansa de todo lo medido.
             texto_final = await _respuesta_del_negocio_con_remate(
-                cliente_id, from_number, decision, config)
+                cliente_id, from_number, decision, config, mensaje=incoming_text)
             session_id = _wa_registrar(
                 cliente_id=cliente_id, from_number=from_number, request=request,
                 entrante=incoming_text, respuesta=texto_final,
