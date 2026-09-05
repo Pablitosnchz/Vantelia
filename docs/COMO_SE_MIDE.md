@@ -168,3 +168,19 @@ cambia, dilo al dar el numero.
 Las tiradas de 45 %, 51 % y 58 % de ese mismo dia salieron de un arnes roto (no
 podia pulsar "Confirmar") y **no son comparables**. El 72 % salio de un
 contenedor parcheado a mano y **tampoco cuenta**.
+
+## La clienta simulada no siempre hace su papel
+
+Visto dos veces el 5-sep-2026, en dos tiradas seguidas:
+
+- `pide-persona/escueta` tenia que pedir hablar con alguien. **Nunca lo pidio**:
+  reservo un alisado y confirmo. El juez lo conto como fallo porque su OBJETIVO
+  era `hablar_con_persona`.
+- `cambia-de-idea/normal` tenia que cambiar a "solo las puntas" a mitad de
+  conversacion. **Tampoco lo hizo**, y el juez conto "queria corte y le ha cogido
+  mechas".
+
+Los dos casos son del INSTRUMENTO, no del producto: el asistente hizo bien lo que
+le pidieron. Antes de contar un fallo, leer la conversacion y comprobar que la
+clienta simulada dijo lo que su persona promete decir. Con n=40 esto puede valer
+5 puntos, que es la mitad del margen de la muestra.
