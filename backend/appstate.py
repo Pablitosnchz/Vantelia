@@ -51,6 +51,9 @@ class WAFlowState:
     email: str = ""
     notas: str = ""
     booking_code: str = ""
+    # Ya se le ha avisado de que tiene otra cita viva y ha decidido: sin esto
+    # se le preguntaria en bucle al confirmar.
+    duplicado_avisado: str = ""
     verify_phone: str = ""
     verify_email: str = ""
     greeted: bool = False

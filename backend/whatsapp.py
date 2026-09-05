@@ -498,6 +498,25 @@ def _wa_get_flow(cliente_id: str, from_number: str) -> appstate.WAFlowState:
     return flow
 
 
+def _wa_cita_viva_distinta(cliente_id: str, from_number: str, flow) -> Dict[str, Any]:
+    """La cita que YA tiene, si lo que va a confirmar es otro hueco distinto.
+
+    Solo con UNA cita viva: con dos o mas, preguntar cual mover es peor que no
+    preguntar. Devuelve {} ante cualquier duda; esto no puede dejar a nadie sin
+    poder reservar.
+    """
+    try:
+        vivas = booking.citas_vivas_del_telefono(cliente_id, from_number)
+    except Exception:  # noqa: BLE001 - un freno no bloquea una reserva
+        return {}
+    if len(vivas) != 1:
+        return {}
+    suya = dict(vivas[0])
+    misma = (str(suya.get("booking_date") or "") == str(flow.fecha or "")
+             and str(suya.get("booking_time") or "")[:5] == str(flow.hora or "")[:5])
+    return {} if misma else suya
+
+
 def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
     """Cerrar la gestion: se olvida el flujo Y lo que el agente sabia de la cita.
 
@@ -3249,6 +3268,36 @@ async def _handle_whatsapp_message(
         return
 
     if flow.flow == "booking_confirm":
+        # Ya tiene una cita viva y esta a punto de crear OTRA. Casi siempre venia a
+        # moverla: el boton de confirmar llama siempre a `_wa_create_booking` y el
+        # flujo no guarda ni rastro de que la intencion fuera reprogramar, asi que
+        # aqui no se puede adivinar. Se le pregunta, que es lo unico honesto, y no
+        # se mueve nada sin que ella lo diga. Medido el 5-sep-2026: con una cita
+        # viva, confirmar el resumen dejaba DOS citas y el negocio sin enterarse.
+        if iid == "dup_mover" and flow.booking_code:
+            from backend import voice as _voz
+
+            resultado = await _voz._voice_reschedule_booking(
+                cliente_id, flow.booking_code, flow.fecha, flow.hora,
+                from_number=from_number, telefono=from_number,
+            )
+            _wa_clear_flow(cliente_id, from_number)
+            texto = str((resultado or {}).get("mensaje") or "").strip() or (
+                "Listo, te he cambiado la cita a %s a las %s."
+                % (_wa_fecha_humana(flow.fecha), flow.hora)
+            )
+            _wa_registrar(
+                cliente_id=cliente_id, from_number=from_number, request=request,
+                respuesta=texto, intent="booking_reschedule",
+            )
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=from_number, text=texto,
+            )
+            return
+        if iid == "dup_crear":
+            flow.duplicado_avisado = "1"
+            iid = "confirm_yes"
         # Los dos botones opcionales del resumen: anadir una nota o corregir los datos
         # que hemos rellenado nosotros al reconocer el telefono.
         if iid == "notes_write":
@@ -3266,6 +3315,26 @@ async def _handle_whatsapp_message(
             )
             return
         if iid == "confirm_yes" or _wa_dice_que_si(text_norm):
+            suya = _wa_cita_viva_distinta(cliente_id, from_number, flow)
+            if suya and not flow.duplicado_avisado:
+                flow.duplicado_avisado = "preguntado"
+                flow.booking_code = str(suya.get("booking_code") or "")
+                await messaging._send_whatsapp_buttons(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    to_number=from_number,
+                    body=(
+                        "Antes de confirmar, cariño: ya tienes una cita el %s a las %s.\n\n"
+                        "¿Quieres que te la cambie a %s a las %s, o prefieres las dos citas?"
+                        % (_wa_fecha_humana(str(suya.get("booking_date") or "")),
+                           str(suya.get("booking_time") or ""),
+                           _wa_fecha_humana(flow.fecha), flow.hora)
+                    ),
+                    buttons=[
+                        {"id": "dup_mover", "title": "Cambiar la que tengo"},
+                        {"id": "dup_crear", "title": "Quiero las dos"},
+                    ],
+                )
+                return
             ok = await _wa_create_booking(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 flow=flow, config=config, request=request,

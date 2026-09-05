@@ -899,7 +899,7 @@ mirar familias. Lo otro -pedir corte, secado y tinte- sigue frenando igual.
 
 ---
 
-### 36. Confirmar una reprogramacion crea una cita nueva (ABIERTA, medida 4-sep-2026)
+### 36. Confirmar una reprogramacion crea una cita nueva (CERRADA, 5-sep-2026)
 
 En la tirada de 40 conversaciones aparecen **2 citas duplicadas**, las dos de la
 clienta `cambiar-hora`:
@@ -974,3 +974,22 @@ arreglo).
 **Dónde mirar si vuelve:** cualquier otra cortesía que decore sin cerrar. El
 patrón se repite en cuanto un texto fijo se antepone a una respuesta que puede
 no llegar a existir.
+
+**Cerrada el 5-sep-2026.** Reproducido por fin, pero NO conversando: cuatro
+intentos con cita viva e intencion de mover acabaron resolviendose por la tool,
+bien, sin duplicar. Se reprodujo colocando el flujo en el resumen con un hueco
+libre distinto y pulsando Confirmar: **dos citas vivas**.
+
+Y ahi se vio por que el arreglo anterior no se disparaba nunca. El estado del
+flujo en ese punto es `{servicio, fecha, hora, nombre}`: **no hay ni rastro de
+que viniera a reprogramar**. En el boton de confirmar no se puede adivinar la
+intencion, asi que cualquier arreglo que dependa de adivinarla es humo.
+
+Lo que se hizo: `_wa_cita_viva_distinta` mira si YA tiene una cita viva (una
+sola; con dos o mas preguntar cual mover es peor) en otro hueco, y entonces se
+**pregunta** con dos botones -"Cambiar la que tengo" / "Quiero las dos"- en vez
+de crear a la callada. No se mueve ni se crea nada sin que ella lo diga, que es
+lo unico honesto cuando el sistema no puede saberlo.
+
+Comprobadas las dos ramas sobre copia de produccion: mover deja UNA cita con el
+mismo numero de reserva; "quiero las dos" crea la segunda. `tests/test_no_duplicar_la_cita.py`.
