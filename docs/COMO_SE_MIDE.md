@@ -165,6 +165,7 @@ cambia, dilo al dar el numero.
 | 4-sep | 65 % | linea base nueva: juez actualizado y dos clientas mas |
 | 5-sep | **87,5 %** | menu fuera, "gracias" cierra, Landing acotado, permanente en la regla, el diagnostico deja de arrastrar lo dicho antes |
 | 5-sep | **76,0 %** | **n=100**, semilla distinta. Es la cifra buena: las de 40 varian +-10 y el 87,5 % fue un reparto favorable |
+| 6-sep | **82,0 %** | n=100, MISMA semilla: preguntar el dia antes de mover la cita (reprogramar 57 -> 86), telefono al tercer cambio, y el juez deja de exigir valoracion donde la regla es pedir foto |
 
 Las tiradas de 45 %, 51 % y 58 % de ese mismo dia salieron de un arnes roto (no
 podia pulsar "Confirmar") y **no son comparables**. El 72 % salio de un
