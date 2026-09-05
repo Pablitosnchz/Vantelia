@@ -162,6 +162,8 @@ cambia, dilo al dar el numero.
 | 26-ago | 63 % | memoria del estado de la reserva |
 | 26-ago | 66 % | las cuatro opciones de mechas, sin repetir |
 | 26-ago | 68 % | remate con horas reales a quien insiste con el precio |
+| 4-sep | 65 % | linea base nueva: juez actualizado y dos clientas mas |
+| 5-sep | **87,5 %** | menu fuera, "gracias" cierra, Landing acotado, permanente en la regla, el diagnostico deja de arrastrar lo dicho antes |
 
 Las tiradas de 45 %, 51 % y 58 % de ese mismo dia salieron de un arnes roto (no
 podia pulsar "Confirmar") y **no son comparables**. El 72 % salio de un
