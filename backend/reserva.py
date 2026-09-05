@@ -60,6 +60,9 @@ class Estado:
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
     cancelada: bool = False      # su cita se anulo: ya no esta en pie
     ya_creada: bool = False      # ya se le cogio UNA cita en esta conversacion
+    # Veces que se le ha MOVIDO la cita aqui. A partir de la tercera se le
+    # ofrece llamar: lo dejo dicho la duenya del salon el 5-sep-2026.
+    veces_movida: int = 0
     # Hay una cita lista y frenada esperando que ella pulse "Confirmar". Es la
     # senyal exacta que abre el resumen con botones: mas fiable que la intencion,
     # que a veces es "reprogramar" -cancelo la vieja y hay que crear la nueva- y

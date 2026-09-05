@@ -2062,6 +2062,68 @@ def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
     return limpia not in ofrecidos
 
 
+_DIAS_DE_LA_SEMANA = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+_DIA_EN_NUMERO = re.compile(r"\b(?:el\s+)?(\d{1,2})(?:\s+de\s+[a-z]+|/\d{1,2})?\b")
+
+
+def _ha_pedido_ese_dia(dicho: str, fecha: str) -> bool:
+    """¿Ha pedido ELLA ese dia concreto? No vale cualquier dia que nombre.
+
+    "Tengo una cita el 8 y no puedo ir, puedo moverla a otro dia?" nombra el 8,
+    pero es el dia que YA tiene: no esta eligiendo el 9. Por eso el dia que dice
+    tiene que COINCIDIR con aquel al que se la quieren mover.
+    """
+    import datetime as _dt
+
+    limpio = catalog_pick._norm(dicho or "")
+    try:
+        dia = _dt.date(*[int(x) for x in str(fecha).split("-")])
+    except Exception:  # noqa: BLE001 - fecha rara: que decida el resto del freno
+        return False
+    if _DIAS_DE_LA_SEMANA[dia.weekday()] in limpio:
+        return True
+    if re.search(r"\b0?%d\b" % dia.day, limpio):
+        return True
+    hoy = _dt.date.today()
+    if "pasado manana" in limpio and dia == hoy + _dt.timedelta(days=2):
+        return True
+    if re.search(r"\bmanana\b", limpio) and dia == hoy + _dt.timedelta(days=1):
+        return True
+    return bool(re.search(r"\bhoy\b", limpio)) and dia == hoy
+
+
+def _dia_que_nadie_ha_pedido(cliente_id: str, estado: Any, dicho: str,
+                             fecha: str, telefono: str = "") -> bool:
+    """¿Se le esta moviendo la cita a un dia que ni ha pedido ni se le ha ofrecido?
+
+    Medido el 5-sep-2026: a "tengo una cita el 8 y no puedo ir, puedo moverla a
+    otro dia?" el asistente la movio EL SOLO al 9; ella dijo que ese no y la movio
+    al 10; y otra vez al 15. Nunca le pregunto que dia queria. La duenya lo dejo
+    dicho: "le preguntas que dia le viene bien".
+
+    El gemelo de `_hora_que_nadie_ha_pedido`: alli la hora salia de la manga, aqui
+    el dia.
+    """
+    limpia = str(fecha or "").strip()
+    if not limpia or getattr(estado, "dia_le_da_igual", False):
+        return False
+    if limpia in (str(getattr(estado, "fecha_de_los_huecos", "") or ""),
+                  str(getattr(estado, "fecha", "") or "")):
+        return False
+    if _ha_pedido_ese_dia(dicho, limpia):
+        return False
+    # Cambiar solo la hora (o el servicio) del MISMO dia no es moverla de dia.
+    try:
+        from backend import booking
+
+        for cita in booking.citas_vivas_del_telefono(cliente_id, telefono) or []:
+            if str(dict(cita).get("booking_date") or "") == limpia:
+                return False
+    except Exception:  # noqa: BLE001 - un freno no puede romper la gestion
+        return False
+    return True
+
+
 def _pide_anular_y_solo_eso(dicho: str) -> bool:
     """Delega en `reserva`: una sola forma de leer lo que pide."""
     from backend import reserva
@@ -2867,13 +2929,25 @@ def _rechaza_el_camino(mensaje: str) -> bool:
 
 def _con_el_telefono_si_hace_falta(
     cliente_id: str, mensaje: str, respuesta: str, cita_creada: bool,
+    veces_movida: int = 0,
 ) -> str:
     """Añade el telefono cuando la clienta rechaza las opciones y no hay cita.
 
     Es una condicion del salon, asi que no puede quedar a lo que decida el modelo:
     "no me va bien ninguna" y despedirse sin ofrecer el telefono es perder la cita.
     """
-    if cita_creada or not respuesta:
+    if not respuesta:
+        return respuesta
+    # Tercera vez que le movemos la cita en la misma conversacion: se le sigue
+    # moviendo -eso no se le quita-, pero ademas se le ofrece llamar, que es lo
+    # que dejo dicho la duenya. Cuadrar por escrito lo que se cuadra en dos
+    # frases por telefono es como se pierde la mananya de alguien.
+    if veces_movida >= 3:
+        linea = clients.call_us_line(cliente_id)
+        if linea and catalog_pick._norm(linea)[:40] not in catalog_pick._norm(respuesta):
+            return respuesta.rstrip() + linea
+        return respuesta
+    if cita_creada:
         return respuesta
     if not (_rechaza_las_opciones(mensaje) or _rechaza_el_camino(mensaje)):
         return respuesta
@@ -3418,6 +3492,7 @@ async def responder(
                     cliente_id, mensaje,
                     _sin_comillas_en_los_servicios(cliente_id, texto_final),
                     cita_creada,
+                    veces_movida=int(getattr(estado, "veces_movida", 0)),
                 )
                 traza.guardar(mensaje=mensaje, respuesta=final)
                 return final, cita_creada
@@ -3573,6 +3648,25 @@ async def responder(
                         "content": json.dumps(resultado, ensure_ascii=False),
                     })
                     continue
+                # Y el gemelo del dia: no se le mueve la cita a un dia que ella no
+                # ha pedido. "Puedo moverla a otro dia?" no es elegir dia: es
+                # preguntar. La duenya lo dejo dicho: preguntarle cual le viene bien.
+                if (llamada.function.name == "reprogramar_cita"
+                        and _dia_que_nadie_ha_pedido(
+                            cliente_id, estado, dicho_de_ella,
+                            str(argumentos.get("fecha") or ""), telefono)):
+                    resultado = {
+                        "ok": False,
+                        "error": ("Ella no ha dicho a que dia quiere moverla. NO la "
+                                  "muevas a un dia que elijas tu: preguntale que dia "
+                                  "le viene bien y, cuando lo diga, mira los huecos "
+                                  "de ESE dia."),
+                    }
+                    mensajes.append({
+                        "role": "tool", "tool_call_id": llamada.id,
+                        "content": json.dumps(resultado, ensure_ascii=False),
+                    })
+                    continue
                 if (llamada.function.name in ("reprogramar_cita", "crear_cita")
                         and _pide_anular_y_solo_eso(mensaje)):
                     resultado = {
@@ -3675,6 +3769,8 @@ async def responder(
                             "la cita, aunque no haya preguntado. Son las indicaciones "
                             "del negocio para venir preparada."
                         )
+                if llamada.function.name == "reprogramar_cita" and resultado.get("ok"):
+                    estado.veces_movida = int(getattr(estado, "veces_movida", 0)) + 1
                 if resultado.get("ok"):
                     if llamada.function.name in ("crear_cita", "cancelar_cita",
                                                  "reprogramar_cita"):

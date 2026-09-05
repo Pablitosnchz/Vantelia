@@ -372,12 +372,20 @@ def _es_diagnostico(cita: Dict[str, Any]) -> bool:
 
 
 def _tiene_regla_de_no_precio(cliente_id: str, familia: str) -> bool:
-    """¿Este negocio ha dicho que de esta familia no da precio por mensaje?"""
+    """¿Este negocio manda a esta familia a una CITA para dar el precio?
+
+    Solo cuenta la regla que ofrece cita. La del alisado dice "pide foto y te
+    contestamos", que es lo contrario: ahi el precio SI se da por mensaje y coger
+    la cita del tratamiento a quien la pide es correcto -lo confirmo la duenya el
+    5-sep-2026-. Sin esta distincion, el juez daba por rotas 3 conversaciones de
+    100 en las que el asistente hizo exactamente lo que ella manda.
+    """
     from backend import rules
 
     if not familia:
         return False
-    return rules.match(cliente_id, {"intencion": "precio", "familia": familia}) is not None
+    regla = rules.match(cliente_id, {"intencion": "precio", "familia": familia})
+    return bool(regla) and str(regla.get("accion") or "") == "ofrecer_cita"
 
 
 def _mentiras(cliente_id: str, dichos: List[str], vivas: List[Dict[str, Any]]) -> List[str]:
