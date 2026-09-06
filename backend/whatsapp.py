@@ -2406,7 +2406,12 @@ async def _handle_whatsapp_message(
 
     intencion_entendida = ""
     if not flow.flow and not iid:
-        decision = chat.decision_del_negocio(cliente_id, incoming_text, config=config)
+        from backend import reserva as _reserva
+
+        decision = chat.decision_del_negocio(
+            cliente_id, incoming_text, config=config,
+            gestion_en_curso=_reserva.hay_gestion_a_medias(cliente_id, from_number),
+        )
         # NO se salta la respuesta del negocio aunque ya se haya dicho. Se probo
         # -a una clienta que insistia se le repitio el horario seis veces
         # identico- y MEDIDO salio peor: el patron que venia a arreglar no se

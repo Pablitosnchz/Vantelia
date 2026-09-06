@@ -99,6 +99,24 @@ def cargar(cliente_id: str, telefono: str) -> Estado:
     return estado
 
 
+def hay_gestion_a_medias(cliente_id: str, telefono: str) -> bool:
+    """¿Esta esta conversacion en mitad de coger, mover o anular una cita?
+
+    Sirve para que la capa del negocio (sus Q&A y sus reglas) NO conteste encima:
+    con una cita a medias, "la cita ya la tengo, me confirmas?" no es una pregunta
+    de precio, aunque el clasificador la vea parecida. El chat web ya se protegia
+    asi; WhatsApp no pasaba el aviso y su regla del precio pisaba la reserva justo
+    al cerrarla (medido el 6-sep-2026: la clienta lo escribio dos veces y se fue
+    sin cita).
+    """
+    estado = cargar(cliente_id, telefono)
+    if not estado.vigente() or estado.hecho:
+        return False
+    return bool(estado.intencion or estado.servicio or estado.servicio_exacto
+                or estado.fecha or estado.hora or estado.codigo
+                or estado.esperando_confirmacion)
+
+
 def guardar(cliente_id: str, telefono: str, estado: Estado, pedido: str = "") -> None:
     estado.tocado = time.time()
     estado.ultimo_pedido = pedido
