@@ -3345,8 +3345,15 @@ async def responder(
                 # confirmacion -"tenemos el Acido lactico bio premium el martes 8 a
                 # las 14:00"- y la conversacion no cerraba nunca: medido contra
                 # produccion, la clienta escribio "Confirmo" seis veces.
-                lo_dijo_ella = _familia_nombrada(
-                    cliente_id, catalog_pick._norm(dicho_de_ella), 5)
+                # Nombrar la FAMILIA no basta para dejar recomendar: "quiero
+                # hacerme el alisado" es justo la clienta que no sabe cual, y el
+                # salon lo dejo dicho el 6-sep-2026: "la IA no sabe cual es el mas
+                # recomendable, no debe aconsejar uno u otro, siempre el cabello de
+                # la clienta manda". Solo se aparta el freno si ella ya ha elegido
+                # el SERVICIO concreto, que es cuando nombrarlo es confirmar, no
+                # recomendar.
+                lo_dijo_ella = _nombra_un_servicio(
+                    cliente_id, catalog_pick._norm(dicho_de_ella))
                 if (_recomienda_un_servicio(cliente_id, texto_final)
                         and not lo_dijo_ella
                         and (no_sabe or _lo_que_el_negocio_dice_al_recomendar(

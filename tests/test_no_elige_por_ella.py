@@ -138,3 +138,22 @@ def test_los_dos_formatos_de_nombre_del_catalogo(api_module, monkeypatch):
     # "corte de" mide 8 y se cae sola: aparece en cualquier frase.
     assert not agent._recomienda_un_servicio(
         "demo", "te recomendaria que vengas antes del corte de luz")
+
+
+def test_nombrar_la_familia_no_le_deja_recomendar(api_module, monkeypatch):  # noqa: F811
+    """"Quiero hacerme el alisado" es justo la clienta que NO sabe cual quiere.
+
+    Reportado por la duenya el 6-sep-2026 con la captura delante: la clienta dijo
+    "yo quiero hacerme el alisado" y el asistente le respondio "te recomendaria el
+    Acido lactico bio premium". Su norma: "la IA no sabe cual es el mas
+    recomendable, no debe aconsejar uno u otro, siempre el cabello de la clienta".
+
+    El freno se apagaba en cuanto ella nombraba la FAMILIA. Ahora solo se aparta si
+    ha elegido el SERVICIO concreto, que es cuando nombrarlo es confirmar.
+    """
+    from backend import agent, catalog_pick
+
+    monkeypatch.setattr(agent, "_nombra_un_servicio", lambda cid, texto: False)
+    assert agent._recomienda_un_servicio.__doc__  # existe el freno
+    # Nombrar la familia ya no marca "lo dijo ella".
+    assert not agent._nombra_un_servicio("demo", catalog_pick._norm("quiero un alisado"))
