@@ -498,6 +498,46 @@ def _wa_get_flow(cliente_id: str, from_number: str) -> appstate.WAFlowState:
     return flow
 
 
+_INSISTE_EN_LA_CITA = re.compile(
+    r"(ya (te )?(lo )?he (confirmado|dicho)|ya confirme|confirmado varias veces|solo quiero que me (agenden|cojais|deis) la cita|te lo he confirmado)")
+
+
+def _wa_cita_recien_hecha(cliente_id: str, from_number: str, mensaje: str) -> str:
+    """Si insiste en confirmar algo YA cogido, se le dice lo que tiene.
+
+    Solo para mensajes que son pura confirmacion o pura insistencia: cualquier
+    otra cosa ("mejor el jueves", "cancelala") sigue su camino normal.
+    """
+    if not (chat._es_solo_confirmacion(mensaje) or _INSISTE_EN_LA_CITA.search(
+            textnorm._strip_accents(str(mensaje or "").lower()))):
+        return ""
+    try:
+        from backend import reserva
+
+        if not reserva.cargar(cliente_id, from_number).hecho:
+            return ""
+        vivas = booking.citas_vivas_del_telefono(cliente_id, from_number)
+    except Exception:  # noqa: BLE001 - ante la duda, que siga el agente
+        return ""
+    if not vivas:
+        return ""
+    cita = dict(vivas[0])
+    salto = chr(10)
+    plantilla = (
+        "Ya la tienes cogida, cariño 😊" + salto * 2
+        + "*%s* el %s a las %s." + salto
+        + "Número de reserva: *%s*." + salto * 2
+        + "Si necesitas cambiarla o anularla, dímelo y lo vemos."
+    )
+    return (
+        plantilla
+        % (str(cita.get("servicio") or cita.get("service_id") or "Tu cita"),
+           _wa_fecha_humana(str(cita.get("booking_date") or "")),
+           str(cita.get("booking_time") or ""),
+           str(cita.get("booking_code") or ""))
+    )
+
+
 def _wa_cita_viva_distinta(cliente_id: str, from_number: str, flow) -> Dict[str, Any]:
     """La cita que YA tiene, si lo que va a confirmar es otro hueco distinto.
 
@@ -2038,6 +2078,23 @@ async def _wa_turno_del_agente(
 
     if not agent.disponible(cliente_id):
         return False
+
+    # Acaba de confirmar y la cita YA esta hecha: repetir "confirmo" no puede
+    # volver a empezar. Medido el 6-sep-2026: al segundo "confirmo" el asistente
+    # dijo que "no tenemos el servicio de corte de senora en nuestro catalogo"
+    # -falso- y al tercero le mando OTRA VEZ el resumen, listo para duplicarla.
+    # La verdad esta en la agenda, no en lo que el modelo recuerde.
+    ya = _wa_cita_recien_hecha(cliente_id, from_number, incoming_text)
+    if ya:
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=from_number, request=request,
+            entrante=incoming_text, respuesta=ya, intent="cita_ya_confirmada",
+        )
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text=ya,
+        )
+        return True
 
     session_id = _wa_registrar(
         cliente_id=cliente_id, from_number=from_number, request=request,
