@@ -183,6 +183,26 @@ def _entero(valor) -> Optional[int]:
 _TRAMO_RE = re.compile(r"\bde\s*(\d{1,2})\s*a\s*(\d{1,2})\b")
 
 
+_EDAD_EN_ANOS = re.compile(r"\b(\d{1,2})\s*(?:an[oi]s?|anitos)\b")
+_TRAMO_DICHO = re.compile(r"\bde\s+(\d{1,2})\s+a\s+(\d{1,2})\b")
+
+
+def _edad_en_lo_que_dijo(texto: str):
+    """La edad que ha dicho ella, sin pasar por el modelo.
+
+    Vale tanto "mi hijo de 7 anos" como nombrar el tramo del catalogo ("el corte
+    de nino de 0 a 7"): con el tramo se usa el tope, que es el que lo identifica.
+    """
+    limpio = _norm(texto or "")
+    if not limpio:
+        return None
+    m = _EDAD_EN_ANOS.search(limpio)
+    if m:
+        return int(m.group(1))
+    m = _TRAMO_DICHO.search(limpio)
+    return int(m.group(2)) if m else None
+
+
 def _tramo_incluye(nombre: str, edad: int) -> bool:
     """¿El nombre lleva un tramo de edad que incluya esta? ("de 0 a 7")."""
     encontrado = _TRAMO_RE.search(_norm(nombre))
@@ -346,6 +366,14 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
     # Si ha dicho la edad, no hay nada que preguntar: el catalogo lleva el tramo
     # en el nombre ("Corte niño de 0 a 7").
     edad = _entero(datos.get("edad"))
+    if edad is None:
+        # El modelo se deja la edad aunque ella la diga. Medido el 6-sep-2026:
+        # "cortarle el pelo a mi hijo de 7 anos" y luego "seria el corte de nino
+        # de 0 a 7" llegaban aqui como {familia: corte, para_quien: nino}, sin
+        # edad, asi que no se podia elegir entre los dos tramos y se le acababa
+        # preguntando el LARGO DEL PELO de un corte de nino. Se saca del texto,
+        # que es dato suyo y no interpretacion.
+        edad = _edad_en_lo_que_dijo(datos.get("texto"))
     if edad is not None:
         acotado = [s for s in candidatos if _tramo_incluye(_nombre(s), edad)]
         if acotado:
