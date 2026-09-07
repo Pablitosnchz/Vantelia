@@ -380,12 +380,18 @@ def _tiene_regla_de_no_precio(cliente_id: str, familia: str) -> bool:
     5-sep-2026-. Sin esta distincion, el juez daba por rotas 3 conversaciones de
     100 en las que el asistente hizo exactamente lo que ella manda.
     """
-    from backend import rules
+    from backend import booking
 
     if not familia:
         return False
-    regla = rules.match(cliente_id, {"intencion": "precio", "familia": familia})
-    return bool(regla) and str(regla.get("accion") or "") == "ofrecer_cita"
+    # Solo donde la valoracion es OBLIGATORIA para el negocio. En mechas la duenya
+    # lo dijo el 7-sep-2026: "le cogemos cita para mechas directamente, no es un
+    # fallo" -se sugiere el diagnostico y decide ella-. Contarlo como fallo
+    # castigaba 3 conversaciones de 100 en las que el asistente hizo lo correcto.
+    try:
+        return booking.la_valoracion_es_obligatoria(cliente_id, familia)
+    except Exception:  # noqa: BLE001 - si no se puede saber, no se exige
+        return False
 
 
 def _mentiras(cliente_id: str, dichos: List[str], vivas: List[Dict[str, Any]]) -> List[str]:
