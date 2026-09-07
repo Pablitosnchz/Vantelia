@@ -166,6 +166,8 @@ cambia, dilo al dar el numero.
 | 5-sep | **87,5 %** | menu fuera, "gracias" cierra, Landing acotado, permanente en la regla, el diagnostico deja de arrastrar lo dicho antes |
 | 5-sep | **76,0 %** | **n=100**, semilla distinta. Es la cifra buena: las de 40 varian +-10 y el 87,5 % fue un reparto favorable |
 | 6-sep | **82,0 %** | n=100, MISMA semilla: preguntar el dia antes de mover la cita (reprogramar 57 -> 86), telefono al tercer cambio, y el juez deja de exigir valoracion donde la regla es pedir foto |
+| 7-sep | 81,0 % | n=100, misma semilla. Cuatro arreglos buenos y UNO mal dirigido: silenciar las Q&A del negocio durante una gestion costo 4 puntos |
+| 7-sep | **85,0 %** | el mismo codigo SIN esa guarda. A/B de un solo cambio: precio 25->50, informacion 75->87,5, reprogramar 86->100 |
 
 Las tiradas de 45 %, 51 % y 58 % de ese mismo dia salieron de un arnes roto (no
 podia pulsar "Confirmar") y **no son comparables**. El 72 % salio de un
@@ -192,3 +194,15 @@ y 82,5 % con n=40 (semilla 1) y **76,0 % con n=100** (semilla 7), con el MISMO
 codigo desplegado entre las dos ultimas. La semilla decide que clientas y que
 estilos entran; con 40 el intervalo es de +-10 puntos. Para decidir si algo
 mejora: misma semilla y mismo tamano, y aun asi solo se ven saltos grandes.
+
+## Un cambio, una medicion
+
+El 7-sep se metieron cinco arreglos juntos y la cifra no se movio (82 -> 81). Solo
+al REVERTIR uno -y medir con la misma semilla- se vio que ese costaba 4 puntos y
+los otros cuatro sumaban: 85 %. Con cinco cambios a la vez no habia forma de saber
+cual era cual, y la tentacion era dar por bueno el conjunto porque "el total no
+baja".
+
+La traza ya decia donde estaba el error y se leyo mal: `decision_del_negocio`
+devolvia VACIO y aun asi salia el texto de la politica de precios, o sea que lo
+emitia el AGENTE. Se arreglo la capa equivocada.

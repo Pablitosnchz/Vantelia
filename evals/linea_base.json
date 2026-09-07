@@ -1,45 +1,37 @@
 {
   "total": 100,
-  "bien": 82,
-  "atascada": 5,
+  "bien": 85,
+  "atascada": 2,
   "fallo": 13,
-  "pct_bien": 82.0,
-  "pct_atascada": 5.0,
+  "pct_bien": 85.0,
+  "pct_atascada": 2.0,
   "pct_fallo": 13.0,
   "patrones": [
     [
       "repite_la_misma_pregunta",
-      8
-    ],
-    [
-      "atascada: se fue sin cita",
-      5
-    ],
-    [
-      "servicio_equivocado",
-      3
-    ],
-    [
-      "no_pasa_a_una_persona",
-      1
-    ],
-    [
-      "cita_duplicada",
-      1
+      10
     ],
     [
       "cita_del_tratamiento_en_vez_de_valoracion",
-      1
+      2
+    ],
+    [
+      "servicio_equivocado",
+      2
+    ],
+    [
+      "atascada: se fue sin cita",
+      2
     ]
   ],
   "por_objetivo": {
     "informacion": {
       "total": 16,
-      "bien": 15
+      "bien": 14
     },
     "reservar": {
       "total": 46,
-      "bien": 37
+      "bien": 39
     },
     "preguntar_precio": {
       "total": 12,
@@ -47,7 +39,7 @@
     },
     "hablar_con_persona": {
       "total": 6,
-      "bien": 5
+      "bien": 6
     },
     "consejo": {
       "total": 7,
@@ -55,7 +47,7 @@
     },
     "reprogramar": {
       "total": 7,
-      "bien": 6
+      "bien": 7
     },
     "cancelar": {
       "total": 6,
