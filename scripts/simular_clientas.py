@@ -250,6 +250,18 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
             # El salon NO reserva mechas sin ver el pelo: te cita para valorarlo.
             # Acabar con la cita de diagnostico es EXITO, no un servicio equivocado.
             resultado["veredicto"] = "bien"
+        elif _es_diagnostico(nuevas[0]) and _ella_pidio_el_diagnostico(conversacion):
+            # Lo pidio ELLA ("si, agendame el diagnostico"). Contarlo como servicio
+            # equivocado castigaba al asistente por hacerle caso.
+            resultado["veredicto"] = "bien"
+        elif persona.get("familia") and not _ella_nombro_la_familia(
+                conversacion, persona["familia"]):
+            # La clienta simulada no ha jugado su papel: la persona `cambia-de-idea`
+            # tenia que pedir un corte a mitad y nunca lo pidio, asi que reservar lo
+            # que SI pidio es correcto. Es fallo del simulador, no del producto:
+            # se aparta del recuento en vez de ensuciar los fallos caros.
+            resultado["veredicto"] = "sin_montar"
+            resultado["motivo"] = "la clienta nunca pidio %s" % persona["familia"]
         elif persona.get("familia") and not _familia_ok(persona["familia"], nuevas[0]):
             resultado["veredicto"] = "fallo"
             resultado["motivo"] = "queria %s y le ha cogido %r" % (
@@ -363,6 +375,38 @@ def _ofrecio_una_salida(cliente_id: str, dichos: List[str]) -> bool:
     except Exception:  # noqa: BLE001
         pass
     return False
+
+
+def _ella_pidio_el_diagnostico(conversacion: List[Dict[str, str]]) -> bool:
+    """¿Pidio ELLA la cita de diagnostico, con sus palabras?
+
+    "Si, agendame el diagnostico" y acabar con esa cita es el asistente haciendole
+    caso. Contarlo como servicio equivocado -porque su objetivo era "mechas"-
+    castigaba justo lo que el negocio quiere que pase.
+    """
+    for linea in conversacion:
+        if linea["quien"] != "clienta":
+            continue
+        dicho = _norm(linea["texto"])
+        if ("diagnostico" in dicho or "valoracion" in dicho) and any(
+                v in dicho for v in ("agenda", "cita", "reserv", "coge", "quiero", "vale", "si,")):
+            return True
+    return False
+
+
+def _ella_nombro_la_familia(conversacion: List[Dict[str, str]], familia: str) -> bool:
+    """¿Llego a pedir eso alguna vez?
+
+    La clienta la escribe un modelo y a veces no hace su papel: la persona
+    `cambia-de-idea` tiene que pedir un corte a mitad de conversacion y hay
+    tiradas en las que no lo pide nunca. Juzgar al asistente por no adivinarlo es
+    medir el simulador, no el producto.
+    """
+    limpia = _norm(familia or "")
+    if not limpia:
+        return True
+    raiz = limpia[:5]
+    return any(raiz in _norm(l["texto"]) for l in conversacion if l["quien"] == "clienta")
 
 
 def _es_diagnostico(cita: Dict[str, Any]) -> bool:
