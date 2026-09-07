@@ -133,11 +133,17 @@ def le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
     llevada acaba contando como "se fue sin cita", porque el asistente manda el
     resumen y ahi se queda.
     """
+    ultimas = []
     for linea in reversed(conversacion):
         if linea["quien"] != "asistente":
-            continue
-        return "confirmamos la cita" in _sin_tildes(linea["texto"])
-    return False
+            break
+        ultimas.append(_sin_tildes(linea["texto"]))
+    # El boton SOLO existe con el resumen delante. Antes bastaba con que el
+    # asistente dijera "confirmamos la cita", y eso lo dice tambien al REPROGRAMAR:
+    # el arnes pulsaba el boton de crear y aparecia una cita duplicada que en
+    # WhatsApp real no existiria. Medido el 7-sep-2026: 3 de cada 100 "duplicadas"
+    # eran esto, y son el fallo mas caro del recuento.
+    return any("resumen de tu cita" in t for t in ultimas)
 
 
 def dice_que_si(texto: str) -> bool:

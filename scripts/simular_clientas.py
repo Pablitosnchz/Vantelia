@@ -371,6 +371,31 @@ def _es_diagnostico(cita: Dict[str, Any]) -> bool:
     return "diagnostico" in nombre or "valoracion" in nombre or "presupuesto" in nombre
 
 
+_PATRONES_CAROS = (
+    # Dañan la agenda: un hueco ocupado que no se vende, o una cita que ya no esta.
+    "duplicada", "cita_sin_pedirla", "hay 0", "hay 2",
+    # Mienten: la clienta se va creyendo algo que no es.
+    "dice_que_hay_cita_y_no_la_hay", "precio_inventado", "servicio_equivocado",
+    "en vez de la valoracion",
+    # Pidio una persona y no la tuvo. En un hotel eso es la queja, no el chiste.
+    "no_pasa_a_una_persona",
+)
+
+
+def _es_caro(patron: str) -> bool:
+    """¿Este fallo le cuesta dinero o credibilidad, o solo cansa?
+
+    CARO: daña la agenda, dice algo falso, o ignora que le pidan una persona.
+    MOLESTO: repetir una pregunta, o que la clienta se canse y se vaya sin cita.
+    Lo segundo es venta perdida y producto flojo; lo primero es un problema que el
+    negocio tiene que arreglar A MANO delante de su cliente.
+
+    La distincion existe porque el porcentaje global los mezclaba: cambiar dos
+    molestos por un caro sale "igual" en la cifra y es mucho peor en el salon.
+    """
+    return any(clave in _norm(patron) for clave in _PATRONES_CAROS)
+
+
 def _tiene_regla_de_no_precio(cliente_id: str, familia: str) -> bool:
     """¿Este negocio manda a esta familia a una CITA para dar el precio?
 
@@ -572,9 +597,21 @@ def _pintar(informe: Dict[str, Any], anterior: Dict[str, Any] = None) -> None:
         print("   %-16s %5.1f%%  (%d de %d)" % (objetivo, pct, datos["bien"], datos["total"]))
 
     if informe["patrones"]:
-        print("\n  PATRONES DE FALLO (agrupados):")
-        for patron, veces in informe["patrones"]:
+        # Un fallo CARO le cuesta dinero o credibilidad: una cita duplicada, una
+        # perdida, un precio inventado, un "ya te la he cogido" sin cita. Uno
+        # MOLESTO cansa a la clienta pero no cuesta nada. Pesaban igual en el
+        # porcentaje, y por eso el numero global no servia para decidir: cambiar
+        # dos molestos por un caro sale "igual" y es mucho peor.
+        caros = [(p, n) for p, n in informe["patrones"] if _es_caro(p)]
+        molestos = [(p, n) for p, n in informe["patrones"] if not _es_caro(p)]
+        print("\n  FALLOS CAROS (dinero o credibilidad): %s"
+              % ("ninguno" if not caros else ""))
+        for patron, veces in caros:
             print("   %3d x  %s" % (veces, patron))
+        if molestos:
+            print("\n  FALLOS MOLESTOS (cansan, no cuestan):")
+            for patron, veces in molestos:
+                print("   %3d x  %s" % (veces, patron))
     print("=" * 68)
 
 
