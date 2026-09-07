@@ -993,3 +993,36 @@ lo unico honesto cuando el sistema no puede saberlo.
 
 Comprobadas las dos ramas sobre copia de produccion: mover deja UNA cita con el
 mismo numero de reserva; "quiero las dos" crea la segunda. `tests/test_no_duplicar_la_cita.py`.
+
+---
+
+### 38. El bucle de la negativa repetida (ABIERTA, dos intentos fallidos)
+
+La clienta pide extensiones sin diagnostico -o el precio de unas mechas- y recibe
+CINCO respuestas seguidas que dicen lo mismo con otras palabras, hasta que se va.
+Es el patron que mas queda: 10 de 13 fallos el 7-sep-2026.
+
+**La regla del negocio es correcta.** En extensiones el diagnostico es
+obligatorio y lo dijo la duenya. Lo que falta es la salida.
+
+**Intento 1 (7-sep, retirado).** Silenciar las Q&A y las reglas del negocio
+mientras hay una gestion a medias (`gestion_en_curso` en WhatsApp). Medido: **81 %
+frente a 85 %**, precio 25 % frente a 50 %, informacion 75 % frente a 87,5 %.
+Callaba respuestas que SI tocaba dar. Ademas no atacaba la causa: el texto lo
+emite el AGENTE, no la capa del negocio, y la traza lo decia -devolvia vacio y el
+texto salia igual-.
+
+**Intento 2 (7-sep, retirado).** Detectar que la respuesta se PARECE a una
+anterior (palabras comunes sobre el total) y, a la segunda, anadir el telefono y
+dejar de insistir. Funcionaba en la conversacion concreta -verificado con el arnes
+mirando que funcion envia cada mensaje-, pero medido: **81 % frente a 85 %**, y
+los bucles SUBIERON de 10 a 12. Ademas cayeron cancelar (100 -> 67) y consejo
+(100 -> 71), que no tenian nada que ver: la linea del telefono se colaba en
+conversaciones que iban bien.
+
+**Lo aprendido:** dos arreglos distintos, los dos en el codigo, los dos peores que
+no hacer nada. La salida que se ofrece hoy ("podemos revisar la agenda") no encaja
+cuando lo que rechaza es el diagnostico, y ese texto es de la duenya, no del
+codigo. Antes de un tercer intento hay que preguntarle QUE quiere que se le diga a
+quien no acepta la norma, y probablemente la solucion sea una Q&A suya y no un
+freno.
