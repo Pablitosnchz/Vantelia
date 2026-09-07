@@ -228,3 +228,28 @@ O sea **±4 a 7 puntos de ruido entre tiradas**. Con eso:
 
 Corolario: el porcentaje sirve para saber si estamos en 60 o en 85, no para
 decidir entre 81 y 85.
+
+## Base honesta: tres tiradas, y los fallos separados (7-sep-2026)
+
+Con el arnes ya arreglado -no fabrica citas duplicadas- y el informe separando
+caro de molesto, tres tiradas de n=100 con semillas 11, 12 y 13:
+
+| | 11 | 12 | 13 |
+| --- | --- | --- | --- |
+| Consiguio lo que queria | 78 % | 83 % | 85 % |
+| **Fallos caros** | 6 | 3 | 5 |
+| Fallos molestos | 18 | 15 | 11 |
+| Citas duplicadas | 0 | 0 | 0 |
+
+**Media 82 %, rango 78-85.** Confirma el ruido de +-4 a 7 puntos: una sola tirada
+no vale para aprobar ni tumbar nada.
+
+Lo que importa para poner esto delante de un cliente NO es el 82 %, es la fila de
+los caros: **menos de 5 por cada 100 conversaciones, y CERO daño en la agenda en
+300 conversaciones**. Las "citas duplicadas" que salian antes las fabricaba el
+propio arnes pulsando el boton de confirmar donde WhatsApp no lo ensena.
+
+El unico fallo caro que queda es `servicio_equivocado`: acaba con una cita de un
+servicio distinto al que pidio (mechas -> diagnostico, corte -> mechas). Parte es
+producto y parte es la persona `cambia-de-idea` del simulador, que no siempre
+cambia de idea.
