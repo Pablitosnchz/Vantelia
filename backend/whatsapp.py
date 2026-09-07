@@ -1207,55 +1207,6 @@ def _ya_se_le_dijo(cliente_id: str, from_number: str, texto: str) -> bool:
     return any(catalog_pick._norm(str(f["content"] or ""))[:120] == limpio for f in filas)
 
 
-def _se_esta_repitiendo(cliente_id: str, from_number: str, texto: str) -> bool:
-    """¿Esto es, EN SUSTANCIA, lo mismo que ya le hemos contestado?
-
-    `_ya_se_le_dijo` compara texto identico y no sirve aqui: el agente reformula
-    cada vez. Medido el 7-sep-2026 con la clienta que pedia extensiones sin
-    diagnostico: cinco negativas seguidas, cada una con otras palabras, hasta que
-    se rindio. La regla del negocio es correcta y no se toca; lo que faltaba era
-    darse cuenta de que ya se lo hemos dicho.
-    """
-    from backend import catalog_pick, db
-
-    def _palabras(s):
-        return {p for p in catalog_pick._norm(s or "")[:400].split() if len(p) > 3}
-
-    nuevas = _palabras(texto)
-    if len(nuevas) < 8:
-        return False
-    try:
-        with db._get_db_connection() as conexion:
-            filas = conexion.execute(
-                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
-                " AND role = 'assistant' ORDER BY id DESC LIMIT 4",
-                (cliente_id, _whatsapp_session_id(cliente_id, from_number)),
-            ).fetchall()
-    except Exception:  # noqa: BLE001 - sin historial, que siga
-        return False
-    parecidas = 0
-    for fila in filas:
-        viejas = _palabras(str(fila["content"] or ""))
-        if not viejas:
-            continue
-        comunes = len(nuevas & viejas)
-        if comunes / float(len(nuevas | viejas)) >= 0.45:
-            parecidas += 1
-    # Con UNA anterior parecida ya es la SEGUNDA vez que se lo decimos, que es
-    # donde la duenya dijo que hay que ofrecer el telefono.
-    return parecidas >= 1
-
-
-def _con_salida_amable(cliente_id: str, texto: str) -> str:
-    """Se le ofrece hablarlo por telefono y se deja de insistir."""
-    linea = rag._call_us_line(cliente_id).strip()
-    if not linea:
-        return texto
-    if textnorm._strip_accents(linea.lower())[:40] in textnorm._strip_accents(texto.lower()):
-        return texto
-    return texto.rstrip() + chr(10) * 2 + linea
-
-
 async def _respuesta_del_negocio_con_remate(
     cliente_id: str, from_number: str, decision: dict, config: dict,
     mensaje: str = "",
@@ -2175,13 +2126,6 @@ async def _wa_turno_del_agente(
     # en el agente, el "Gracias a ti" se quedaba en las capas que ahora se salta.
     # El helper es idempotente, asi que no se duplica si ya lo dice.
     texto = chat._con_gracias_a_ti(incoming_text, texto)
-
-    # Ya se lo hemos dicho dos veces con otras palabras: repetirlo una tercera no
-    # la va a convencer, solo la cansa. Se le ofrece hablarlo por telefono, que es
-    # la salida que dejo dicha la duenya, y se deja de insistir. La regla del
-    # negocio no se toca: lo que cambia es dejar de repetirla.
-    if not cita_creada and _se_esta_repitiendo(cliente_id, from_number, texto):
-        texto = _con_salida_amable(cliente_id, texto)
 
     _wa_registrar(
         cliente_id=cliente_id, from_number=from_number, request=request,
