@@ -206,3 +206,25 @@ baja".
 La traza ya decia donde estaba el error y se leyo mal: `decision_del_negocio`
 devolvia VACIO y aun asi salia el texto de la politica de precios, o sea que lo
 emitia el AGENTE. Se arreglo la capa equivocada.
+
+## Cuanto ruido tiene el simulador (medido el 7-sep-2026)
+
+**La semilla NO hace la tirada repetible.** Fija que clientas y que estilos salen,
+pero la clienta la escribe un modelo con temperatura 1.0: cada tirada dice cosas
+distintas. Cuatro tiradas del mismo dia, misma semilla y mismo tamano (n=100), con
+codigo casi identico:
+
+    85 %   81 %   81 %   78 %
+
+O sea **±4 a 7 puntos de ruido entre tiradas**. Con eso:
+
+- Una diferencia de 4 puntos NO demuestra nada. Ese dia se revirtieron dos
+  arreglos por medir "4 puntos peor", y esa decision no estaba respaldada.
+- Para decidir un cambio de este tamano hacen falta VARIAS tiradas (tres al
+  menos) o mirar un cubo concreto y contable -cuantos bucles de repeticion, cuantas
+  citas duplicadas- en vez del porcentaje global.
+- Lo que si vale con una sola tirada: un salto grande (65 -> 85) y los fallos
+  NUEVOS que aparecen, que se leen uno a uno.
+
+Corolario: el porcentaje sirve para saber si estamos en 60 o en 85, no para
+decidir entre 81 y 85.
