@@ -2486,6 +2486,14 @@ async def _handle_whatsapp_message(
             )
             if decision["accion"] == "pasar_a_humano":
                 inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+                # Y se AVISA. Callar al asistente sin decirselo a nadie deja a la
+                # clienta esperando delante del movil a que alguien mire el panel.
+                from backend import avisos
+
+                avisos.pide_una_persona(
+                    cliente_id, session_id=session_id, de_quien=from_number,
+                    mensaje=incoming_text, config=config,
+                )
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id,
                 to_number=from_number, text=texto_final,
