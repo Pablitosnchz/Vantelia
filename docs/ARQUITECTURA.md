@@ -75,6 +75,7 @@ módulos transversales.
 | `backend/rules.py` | Reglas del propio negocio (cuando quiera X, haz Y): tabla `business_rules`, gana la primera activa por prioridad. Decide QUÉ hacer con la intención que da `intents`. |
 | `backend/fotos.py` | Qué hacer cuando una clienta anuncia o manda una foto: acusar recibo y pasar la conversación a una persona, en vez de seguir preguntando lo de siempre. El asistente no ve imágenes.
 | `backend/inbox.py` | Intervención humana sobre una conversación de WhatsApp: mientras alguien la atiende, el asistente se calla (`bot_is_muted`) y se respeta la ventana de 24 h de Meta. |
+| `backend/avisos.py` | Avisar al negocio por email cuando una clienta pide hablar con una persona: `inbox` calla al asistente y esto se lo cuenta a alguien. Uno por conversación cada 30 min, apagable con `config['avisos']['pedir_persona']`. |
 | `backend/voice_engine.py` | `VoiceCallEngine`: el estado y TODA la lógica determinista de una llamada. El puente (`routers/voice_web.py`) solo mueve audio y delega. |
 | `backend/wa_flows.py` | Reserva como formulario dentro de WhatsApp (WhatsApp Flows): endpoint cifrado, `flow_token` firmado. Apagado por defecto. |
 | `backend/wa_onboarding.py` | Alta self-service del WhatsApp del negocio (Embedded Signup + Coexistence), con sus credenciales cifradas. |
