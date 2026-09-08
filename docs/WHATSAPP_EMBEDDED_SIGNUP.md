@@ -25,7 +25,34 @@ la app **el asistente se calla solo** en esa conversación.
 
 Tests: `tests/test_wa_embedded_signup.py` y `tests/test_inbox_takeover.py`.
 
-## Estado (31-ago-2026)
+## Estado (8-sep-2026)
+
+**Revisión de la aplicación RESUELTA: aprobado todo menos `manage_app_solution`**,
+rechazado porque la app no ha pasado **Access Verification** (un trámite aparte de
+la verificación del negocio, que sí está aprobada).
+
+**Ese permiso no lo usa el código** (cero apariciones en el repo, comprobado). El
+alta va por Embedded Signup v4 con `config_id` +
+`featureType: whatsapp_business_app_onboarding`, y el intercambio del `code` mira
+los granular scopes `whatsapp_business_management` / `whatsapp_business_messaging`.
+`manage_app_solution` es para gestionar "soluciones" empaquetadas de Tech
+Provider, que es otra forma de onboarding. Solo habría que pasar Access
+Verification si algún día se quiere esa vía.
+
+Queda por comprobar lo único que decide de verdad: **dar de alta un número real**.
+Hasta hacerlo no se sabe si el acceso concedido basta.
+
+Orden para activarlo:
+
+1. `.env` del VPS: `WHATSAPP_APP_ID`, `WHATSAPP_ES_CONFIG_ID`, `WHATSAPP_ES_PIN`.
+   En cuanto estén, **aparece el botón "Conectar mi WhatsApp"** en el portal de
+   TODOS los tenants.
+2. Suscribir el webhook de la app al campo **`smb_message_echoes`** (ver abajo).
+   Sin él el asistente no se calla cuando el negocio responde desde su móvil.
+3. Probar con un número **que no sea de un cliente**. Un cliente pulsando un
+   botón roto es peor que no tener botón.
+
+## Estado anterior (31-ago-2026)
 
 **Verificación del negocio: APROBADA.** La **Revisión de la aplicación está
 ENVIADA** y pendiente (Meta avisa de hasta 20 días). Hasta que resuelva no se
