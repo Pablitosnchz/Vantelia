@@ -906,6 +906,101 @@ _RECOMIENDA_UN_SERVICIO = re.compile(
     r"te vendria (mejor|bien)|(la|lo) mejor (opcion )?para ti)\b")
 
 
+_PALABRA_SIN_SERVICIO = re.compile(
+    r"\b(hoy|manana|pasado|ayer|tarde|noche|mediodia|madrugada|"
+    r"lunes|martes|miercoles|jueves|viernes|sabado|domingo|"
+    r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
+    r"octubre|noviembre|diciembre|"
+    r"si|sii|sip|no|vale|ok|okey|okay|venga|claro|perfecto|genial|estupendo|"
+    r"adelante|porfa|porfavor|favor|gracias|hola|buenas|dias|tardes|noches|"
+    r"quiero|querria|queria|quisiera|me|te|lo|la|le|los|las|un|una|unos|unas|"
+    r"el|de|del|en|para|por|con|y|o|a|al|que|es|esta|estoy|mejor|eso|esa|ese|"
+    r"cita|hora|horas|dia|dias|semana|proxima|proximo|siguiente|viene|"
+    r"mismo|misma|cualquiera|cualquier|primera|primero|antes|despues|"
+    r"bien|muy|pues|entonces|tambien|luego|ahora|ya|"
+    r"am|pm|h)\b")
+
+
+def _no_dice_ningun_servicio(cliente_id: str, dicho: str) -> bool:
+    """Lo que ha dicho no describe NINGUN servicio: es una fecha, una hora o un "si".
+
+    Visto en produccion el 8-sep-2026, en la demo de la duenya:
+
+        ELLA  manana
+        IA    veo que mencionas "manana", pero no tengo un servicio especifico
+              con ese nombre
+
+    Es la misma forma que el "gracias" de la semana pasada: una palabra suelta
+    baja hasta `buscar_servicio`, el catalogo no encuentra nada y el asistente le
+    devuelve la palabra convertida en un servicio que no existe. Un dia de la
+    semana, una hora o un "vale" caen todos ahi.
+
+    Se decide en CODIGO y por descarte: si el catalogo reconoce algo de lo que ha
+    dicho, esto se aparta. Solo cuando no queda NADA salvo fechas, horas y
+    muletillas se corta, y entonces lo que se le pide al modelo es que pregunte,
+    no que niegue un servicio.
+    """
+    norm = catalog_pick._norm(dicho or "")
+    if not norm:
+        return True
+    try:
+        if catalog_pick.familias_pedidas(cliente_id, dicho):
+            return False
+    except Exception:  # noqa: BLE001 - sin catalogo, que siga el curso normal
+        return False
+    resto = _PALABRA_SIN_SERVICIO.sub(" ", norm)
+    resto = re.sub(r"\b\d+([:.,]\d+)?\b", " ", resto)
+    return not re.findall(r"[a-z]{3,}", resto)
+
+
+_AFIRMA_A_SECAS = re.compile(
+    r"^(s+i+|sip|claro|vale|ok|okey|okay|venga|adelante|genial|perfecto|"
+    r"estupendo|dale|hazlo|hazmela|reservala|cogela|cogemela|eso|"
+    r"me parece bien|esta bien|de acuerdo|por favor|porfa|pues si|si quiero|"
+    r"quiero|mejor si)"
+    r"([ ,.!]+(si|porfa|por favor|gracias|claro|vale|please|mejor))*[ ,.!]*$")
+
+
+def _ultimo_del_asistente(mensajes) -> str:
+    """Lo ultimo que dijo el asistente, para saber a que esta contestando ella."""
+    for mensaje in reversed(list(mensajes or [])):
+        try:
+            if mensaje.get("role") == "assistant" and mensaje.get("content"):
+                return str(mensaje.get("content"))
+        except AttributeError:  # noqa: PERF203 - objetos del SDK, no dicts
+            continue
+    return ""
+
+
+def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str) -> bool:
+    """Le ha ofrecido el diagnostico y ella ha dicho que si.
+
+    Visto en produccion el 8-sep-2026:
+
+        IA    ...  Te gustaria que te agende una cita de diagnostico?
+        ELLA  si
+        IA    Ahora, para manana, necesito saber como tienes el pelo de largo
+
+    El "si" no estaba atado a nada: pedir el diagnostico solo contaba si ella
+    escribia la palabra. Tuvo que decirlo entero -"quiero el diagnostico"- dos
+    turnos despues para que se lo cogieran. Un si a una pregunta que acabas de
+    hacer es la forma mas normal de pedir algo, y era la unica que no valia.
+    """
+    if not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or "")):
+        return False
+    previo = _ultimo_del_asistente(mensajes)
+    if "?" not in previo:
+        return False
+    if not _PIDE_VALORACION_RE.search(catalog_pick._norm(previo)):
+        return False
+    try:
+        from backend import booking
+
+        return bool(booking._servicio_de_valoracion(cliente_id))
+    except Exception:  # noqa: BLE001 - sin catalogo, que siga el curso normal
+        return False
+
+
 def _lo_que_el_negocio_dice_al_no_saber(cliente_id: str, mensaje: str,
                                         config=None) -> str:
     """Lo que el negocio contesta a "no se cual me va mejor", si lo tiene escrito.
@@ -1636,16 +1731,20 @@ def _es_la_valoracion(cliente_id: str, servicio: str) -> bool:
 _PIDE_VALORACION_RE = re.compile(r"\b(diagnostic\w*|valoracion\w*|valorarme|valorar)\b")
 
 
-def _pide_la_valoracion(cliente_id: str, dicho: str) -> bool:
+def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None) -> bool:
     """Lo que dice AHORA es pedir la cita de diagnostico del negocio.
 
     Se mira lo que acaba de decir, no el estado: pedir el diagnostico es una
     peticion COMPLETA en si misma, no un detalle que complete lo anterior.
+
+    Tambien cuenta el "si" a secas cuando el asistente ACABA de ofrecersela:
+    contestar que si a la pregunta que te acaban de hacer es pedirlo igual que
+    escribir la palabra (`_acepta_la_valoracion`).
     """
     if not dicho:
         return False
     if not _PIDE_VALORACION_RE.search(catalog_pick._norm(dicho)):
-        return False
+        return _acepta_la_valoracion(cliente_id, mensajes, dicho)
     try:
         from backend import booking
 
@@ -1654,7 +1753,112 @@ def _pide_la_valoracion(cliente_id: str, dicho: str) -> bool:
         return False
 
 
-def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str):
+def _texto_de_la_valoracion(cliente_id: str, dicho: str) -> str:
+    """Lo que se busca en el catalogo cuando pide el diagnostico: su nombre real.
+
+    Un "si" no se puede mandar a `buscar_servicio` tal cual -no dice nada- asi
+    que se cambia por el nombre de la cita de valoracion del negocio. Cuando ella
+    SI ha dicho la palabra ("cogeme un diagnostico") se deja tal cual: lo que
+    escribe manda, y cambiarselo por el nombre del catalogo no aporta nada.
+    """
+    if not _no_dice_ningun_servicio(cliente_id, dicho):
+        return dicho
+    try:
+        from backend import booking
+
+        nombre = str((booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
+    except Exception:  # noqa: BLE001
+        nombre = ""
+    if not nombre:
+        return dicho
+    if catalog_pick._norm(nombre) in catalog_pick._norm(dicho):
+        return dicho
+    return nombre
+
+
+def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
+                                   config=None) -> str:
+    """Ella ha dicho que no sabe y ya se le ha preguntado dos veces: se corta.
+
+    La nota de `_nota_al_repetir_la_pregunta` le pide al modelo que ofrezca la
+    cita de valoracion, y el modelo a veces vuelve a preguntar igualmente. Medido
+    el 8-sep-2026 con el catalogo real: a la tercera seguia preguntando "Keratina
+    premium o Acido lactico bio premium?" a alguien que ya habia dicho dos veces
+    que no lo sabia, y que ya le habia dado dia y hora.
+
+    Preguntar dos veces se aguanta; a la tercera se va. Aqui se decide en codigo:
+    se busca la valoracion y se sigue con ella. Solo pasa si se cumplen las
+    CUATRO condiciones -el negocio tiene escrito que eso no se elige por mensaje,
+    tiene cita de valoracion, ella ha expresado la duda, y ya se le ha preguntado
+    dos veces-; con cualquiera que falte, no se toca nada.
+    """
+    if veces < 2:
+        return ""
+    if not _DUDA_AL_ELEGIR.search(catalog_pick._norm(_lo_que_ha_escrito(mensajes))):
+        return ""
+    if not _lo_que_el_negocio_dice_al_recomendar(cliente_id, config):
+        return ""
+    try:
+        from backend import booking
+
+        return str((booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
+    except Exception:  # noqa: BLE001 - ante la duda, se sigue preguntando
+        return ""
+
+
+def _nota_al_repetir_la_pregunta(cliente_id: str, config=None) -> str:
+    """Que hacer cuando vuelve a faltar el MISMO dato y ella no se decide.
+
+    Este freno existe porque repetirle la misma lista es el fallo mas repetido de
+    la medicion: se cansa y se va. Pero tal y como estaba escrito le pedia al
+    modelo *"mojate y recomiendale UNA... y dile que en la cita se puede
+    cambiar"*, que es justo lo que el salon piloto tiene PROHIBIDO: "la IA no
+    sabe cual es el mas recomendable, no debe aconsejar uno u otro".
+
+    El 8-sep-2026 la duenya lo vio en su propia demo: pidio un alisado, dijo dos
+    veces que no sabia cual, y el asistente le reservo el acido lactico anadiendo
+    "si en la cita prefieres la keratina, se puede cambiar". No fue el modelo
+    yendose por su cuenta -se lo pediamos nosotros aqui-, y ganaba por ir DESPUES
+    de la regla del negocio, igual que paso con el largo del pelo y el precio.
+
+    Con la regla escrita, la salida deja de ser recomendar y pasa a ser la cita
+    de valoracion, que es exactamente para lo que existe. Sin regla escrita no
+    cambia nada: mojarse es legitimo para quien no haya dicho lo contrario.
+    """
+    generico = (
+        "OJO: esto ya se lo preguntaste en el mensaje anterior y no se ha "
+        "decidido. NO le repitas la misma lista. Haz una de estas dos: "
+        "preguntale otro dato que falte (por ejemplo como tiene el pelo de "
+        "largo), o mojate y recomiendale UNA explicandole en una linea por que, "
+        "y dile que en la cita se puede cambiar."
+    )
+    if not _lo_que_el_negocio_dice_al_recomendar(cliente_id, config):
+        return generico
+    try:
+        from backend import booking
+
+        valoracion = str(
+            (booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
+    except Exception:  # noqa: BLE001 - sin catalogo, la version generica
+        valoracion = ""
+    if not valoracion:
+        return (
+            "OJO: esto ya se lo preguntaste y no se ha decidido. NO le repitas la "
+            "misma lista y NO elijas tu por ella: este negocio tiene escrito que "
+            "eso no se decide por mensaje. Preguntale otro dato distinto que haga "
+            "falta, o dile en una frase que se decide en el salon al verle el pelo."
+        )
+    return (
+        "OJO: esto ya se lo preguntaste y no se ha decidido. NO le repitas la "
+        "misma lista y NO elijas tu por ella: este negocio tiene escrito que eso "
+        "no se decide por mensaje. Ofrecele la cita de '%s' para verlo en persona "
+        "y decidirlo alli; si ya se la habias ofrecido y ha dicho que si, "
+        "cogesela sin volver a preguntar." % valoracion
+    )
+
+
+def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
+                             mensajes=None):
     """Que se le pasa a `buscar_servicio` y que queda acumulado despues.
 
     Devuelve (descripcion, servicio_texto). Al buscar el servicio va TODO lo que
@@ -1663,10 +1867,13 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str):
     diagnostico, que es una peticion completa y no un detalle de lo anterior.
     """
     dicho = str(dicho or "").strip()
+    # Lo primero, antes incluso de mirar lo acumulado: pedir el diagnostico -o
+    # decir que si cuando se lo ofrecen- es lo que quiere, no un detalle de lo
+    # anterior.
+    if _pide_la_valoracion(cliente_id, dicho, mensajes=mensajes):
+        return _texto_de_la_valoracion(cliente_id, dicho), ""
     if not servicio_texto:
         return dicho, servicio_texto
-    if _pide_la_valoracion(cliente_id, dicho):
-        return dicho, ""
     if catalog_pick._norm(dicho) not in catalog_pick._norm(servicio_texto):
         dicho = (servicio_texto + " " + dicho).strip()
     else:
@@ -1804,6 +2011,18 @@ def _tool_buscar_servicio(
     descripcion = str(argumentos.get("descripcion") or "").strip()
     if not descripcion:
         return {"ok": False, "error": "Dime que te quieres hacer."}
+    # "manana", "a las 10", "si": eso no es el nombre de un servicio. Sin este
+    # corte el catalogo no encontraba nada y el asistente le devolvia su propia
+    # palabra convertida en un servicio inexistente.
+    if _no_dice_ningun_servicio(cliente_id, descripcion):
+        return {
+            "ok": False,
+            "error": "Eso no dice que servicio quiere: es una fecha, una hora o una respuesta suelta.",
+            "no_inventes": ("NO le digas que no existe un servicio con ese nombre ni le "
+                            "repitas su palabra como si lo fuera. Preguntale con "
+                            "naturalidad que le gustaria hacerse, y si ya lo habiais "
+                            "hablado, sigue con lo que estabais haciendo."),
+        }
 
     extraido = intents.extraer_datos_servicio(cliente_id, descripcion)
     datos = extraido or {
@@ -3690,7 +3909,7 @@ async def responder(
                 # ultimo mensaje: quien dijo "unas mechas" y luego "lo tengo por
                 # los hombros" ya ha dado los dos datos, y preguntarle otra vez
                 # que servicio quiere es el fallo que mas se repite.
-                if llamada.function.name == "buscar_servicio" and estado.servicio_texto:
+                if llamada.function.name == "buscar_servicio":
                     # Pedir el diagnostico NO es un detalle que complete lo
                     # anterior: es lo que quiere. Arrastrar lo dicho antes ("un
                     # alisado", "unas mechas") convertia "cogeme cita para un
@@ -3700,7 +3919,8 @@ async def responder(
                     # la clienta lo pidio dos veces y recibio dos veces la misma
                     # pregunta.
                     argumentos["descripcion"], estado.servicio_texto = _descripcion_para_buscar(
-                        cliente_id, argumentos.get("descripcion"), estado.servicio_texto
+                        cliente_id, argumentos.get("descripcion"), estado.servicio_texto,
+                        mensajes=mensajes,
                     )
                 # "cualquier hueco que tengas me vale" le hacia pedir el calendario
                 # dia a dia (ocho de una tacada) hasta agotar el turno.
@@ -3742,19 +3962,37 @@ async def responder(
                 if llamada.function.name == "buscar_servicio":
                     catalogo_mirado = True
                     falta = str(resultado.get("falta") or "")
-                    if falta and falta == estado.ultimo_falta:
-                        # Ya se lo preguntaste y no lo ha elegido. Repetirle la
-                        # misma lista es EL fallo mas repetido de la medicion:
-                        # se cansa y se va. Se le pide otra cosa, o se moja.
+                    estado.veces_falta = (estado.veces_falta + 1
+                                          if falta and falta == estado.ultimo_falta
+                                          else 0)
+                    # Dos veces preguntando lo mismo es el limite. Si ella ya ha
+                    # dicho que no sabe y el negocio tiene escrito que eso se ve
+                    # en persona, se le coge la valoracion y se sigue: no hay una
+                    # tercera pregunta.
+                    valoracion = _hay_que_cogerle_la_valoracion(
+                        cliente_id, mensajes, estado.veces_falta, config)
+                    if valoracion:
+                        traza.freno("le_cojo_la_valoracion")
+                        resultado = _tool_buscar_servicio(
+                            cliente_id, {"descripcion": valoracion},
+                            location_id=location_id)
                         resultado = dict(resultado)
                         resultado["nota"] = (
-                            "OJO: esto ya se lo preguntaste en el mensaje anterior y "
-                            "no se ha decidido. NO le repitas la misma lista. Haz una "
-                            "de estas dos: preguntale otro dato que falte (por "
-                            "ejemplo como tiene el pelo de largo), o mojate y "
-                            "recomiendale UNA explicandole en una linea por que, y "
-                            "dile que en la cita se puede cambiar."
-                        )
+                            "Ya le has preguntado dos veces cual quiere y ha dicho "
+                            "que no lo sabe. NO se lo preguntes otra vez: cogele la "
+                            "cita de '%s' y diselo en una frase, que ahi se decide "
+                            "cual le va mejor. Si ya te ha dado dia y hora, usalos."
+                            % valoracion)
+                        falta = ""
+                    elif falta and falta == estado.ultimo_falta:
+                        # Ya se lo preguntaste y no lo ha elegido. Repetirle la
+                        # misma lista es EL fallo mas repetido de la medicion: se
+                        # cansa y se va. La salida depende de lo que el negocio
+                        # tenga escrito: si dice que eso no se elige por mensaje,
+                        # la valoracion; si no ha dicho nada, mojarse.
+                        resultado = dict(resultado)
+                        resultado["nota"] = _nota_al_repetir_la_pregunta(
+                            cliente_id, config)
                     estado.ultimo_falta = falta
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True

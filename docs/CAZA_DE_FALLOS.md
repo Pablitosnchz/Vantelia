@@ -1059,3 +1059,53 @@ hay nada.
 **Como se encontro:** NO lo detecto ninguna medicion. El simulador pide mechas y
 cortes, no alisados por su nombre tecnico. Lo vio el duenyo del negocio usando el
 asistente y diciendo "yo creo que si deberia haber hueco".
+
+---
+
+### 40. Nuestra propia nota elegia por ella (CERRADA, 8-sep-2026)
+
+    ELLA  no estoy seguro
+    IA    ... te gustaria que te agende una cita de diagnostico?
+    ELLA  si
+    IA    Ahora necesito saber como tienes el pelo de largo
+    ELLA  corto
+    IA    puedo reservarte el alisado con Acido lactico bio premium corto. Si en
+          la cita prefieres la Keratina, se puede cambiar sin problema
+
+Tres fallos en cuatro minutos, los tres de codigo, todos en la misma
+conversacion de la demo:
+
+1. **Una palabra suelta tomada por servicio.** "manana" -> *"no tengo un servicio
+   con ese nombre"*. Misma forma que el "gracias" del 4-sep: un dia, una hora o
+   un "vale" bajan hasta `buscar_servicio` y vuelven convertidos en un servicio
+   inexistente. Tapado por palabra (gracias) en vez de por clase.
+   Arreglo: `agent._no_dice_ningun_servicio`.
+2. **El "si" no valia.** Le ofrecio el diagnostico, dijo que si, y siguio con el
+   alisado. Pedirlo solo contaba si ella escribia la palabra; contestar que si a
+   la pregunta que te acaban de hacer -la forma mas normal de pedir algo- era la
+   unica que no servia. Arreglo: `agent._acepta_la_valoracion`.
+3. **Eligio la tecnica por ella.** Y esto es lo que hay que recordar: **no fue el
+   modelo yendose por su cuenta, se lo pedia nuestro propio codigo**. El freno
+   anti-repeticion decia literalmente *"mojate y recomiendale UNA... y dile que
+   en la cita se puede cambiar"*. Salio palabra por palabra. Ese freno se
+   escribio para un fallo real (repetir la misma lista es lo que mas hace que se
+   vayan) y nadie lo reviso contra la regla del salon: "la IA no debe aconsejar
+   uno u otro".
+
+**La clase, que es la tercera vez que muerde:** una instruccion del codigo pisa
+una regla del negocio por ir DESPUES en el prompt. Antes fue la nota del catalogo
+pidiendo el largo para dar un precio que ese negocio no da. Cada freno nuevo
+tiene que decir que hace **cuando el negocio ya ha dicho lo contrario**.
+
+Arreglo: `_nota_al_repetir_la_pregunta` decide segun lo que el negocio tenga
+escrito -con regla, la cita de valoracion; sin regla, mojarse sigue valiendo-.
+
+**Y la nota no basta.** Con el catalogo real, a la TERCERA el modelo volvia a
+preguntar "Keratina o Acido lactico?" a quien ya habia dicho dos veces que no lo
+sabia y ya habia dado dia y hora. Prompt es sugerencia: lo que el modelo puede
+hacer mal lo impide el codigo. `_hay_que_cogerle_la_valoracion` corta a la
+tercera y coge el diagnostico, con cuatro condiciones (regla escrita, valoracion
+en catalogo, duda expresada por ella, dos preguntas ya hechas).
+
+**Como se encontro:** igual que la 39, usandolo. Ninguna medicion lo vio.
+

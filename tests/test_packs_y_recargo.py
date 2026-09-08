@@ -391,13 +391,27 @@ def test_lo_que_ha_dicho_del_servicio_no_se_pierde_entre_mensajes(api_module):  
 
 
 def test_la_busqueda_del_servicio_usa_todo_lo_dicho(api_module):  # noqa: F811
+    """La regla se comprueba por lo que HACE, no por una linea concreta.
+
+    Antes se miraba que el bucle llevara escrita una condicion literal. Eso ataba
+    la regla a una linea: el 8-sep-2026 hubo que quitar ese gate -para que un
+    "si" al diagnostico, que llega con el estado vacio, tambien pase por aqui- y
+    el test salto sin que la regla se hubiera roto. Lo que importa es que al
+    buscar el servicio viaje TODO lo dicho.
+    """
     import inspect
 
     from backend import agent
 
-    fuente = inspect.getsource(agent.responder)
-    assert 'llamada.function.name == "buscar_servicio" and estado.servicio_texto' in fuente, (
+    descripcion, _ = agent._descripcion_para_buscar(
+        "demo", "lo tengo por los hombros", "me gustaria hacerme unas mechas")
+    assert "mechas" in descripcion and "hombros" in descripcion, (
         "la busqueda del servicio vuelve a mirar solo el ultimo mensaje"
+    )
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_descripcion_para_buscar" in fuente, (
+        "el bucle ya no acumula lo dicho antes de buscar el servicio"
     )
 
 
@@ -461,19 +475,46 @@ def test_no_le_repite_la_misma_lista_de_opciones(api_module):  # noqa: F811
     """Preguntar esta bien; preguntar DOS VECES lo mismo es el muro.
 
     Visto: "unas mechas" -> le ofrece las tres tecnicas -> "quiero unas mechas" ->
-    le ofrece las tres otra vez. Si ya se lo preguntaste y no se decide, o le
-    preguntas otra cosa (el largo) o te mojas y le recomiendas una.
+    le ofrece las tres otra vez. Si ya se lo preguntaste y no se decide, hay que
+    darle una salida.
+
+    CUAL sea la salida depende del negocio, y eso lo corrigio la duenya el
+    8-sep-2026: aqui poniamos "mojate y recomiendale UNA... dile que en la cita
+    se puede cambiar", y a un salon que tiene escrito que la tecnica no se elige
+    por mensaje le hacia justo lo prohibido. Con esa regla escrita la salida es
+    la cita de valoracion; sin ella, mojarse sigue valiendo. Lo que este test
+    vigila es que SIEMPRE haya salida y que nunca sea repetir la lista.
     """
     import inspect
 
-    from backend import agent, reserva
+    from backend import agent, booking, reserva
 
     assert hasattr(reserva.Estado(), "ultimo_falta"), "no hay donde recordar la pregunta"
     fuente = inspect.getsource(agent.responder)
     assert 'falta == estado.ultimo_falta' in fuente, (
         "nada detecta que se le esta preguntando lo mismo otra vez"
     )
-    assert "recomiendale UNA" in fuente, "no se le da salida cuando ella no se decide"
+    assert "_nota_al_repetir_la_pregunta" in fuente, (
+        "no se le da salida cuando ella no se decide"
+    )
+
+    sin_regla = agent._nota_al_repetir_la_pregunta("demo")
+    assert "recomiendale UNA" in sin_regla, (
+        "sin regla del negocio, mojarse sigue siendo una salida legitima"
+    )
+
+    original_qa = agent._lo_que_el_negocio_dice_al_recomendar
+    original_val = booking._servicio_de_valoracion
+    agent._lo_que_el_negocio_dice_al_recomendar = lambda cid, config=None: "Eso se ve en persona."
+    booking._servicio_de_valoracion = lambda cid, location_id="": {"nombre": "Diagnostico"}
+    try:
+        con_regla = agent._nota_al_repetir_la_pregunta("demo")
+    finally:
+        agent._lo_que_el_negocio_dice_al_recomendar = original_qa
+        booking._servicio_de_valoracion = original_val
+    assert "recomiendale UNA" not in con_regla, "elige por ella pese a la regla del negocio"
+    assert "Diagnostico" in con_regla, "no le ofrece la salida que el negocio si permite"
+    assert "NO le repitas la misma lista" in con_regla
 
 
 def test_quien_pregunta_el_precio_se_lleva_la_valoracion_no_el_tratamiento(api_module, client):  # noqa: F811

@@ -75,6 +75,7 @@ class Estado:
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez
+    veces_falta: int = 0        # cuantas veces seguidas se le ha pedido ESE dato
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
 
@@ -218,6 +219,7 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
         estado.hora = ""
         estado.huecos = []
         estado.ultimo_falta = ""
+        estado.veces_falta = 0
 
     # ¿Pide OTRA cita habiendo terminado ya una? Entonces se empieza de cero con
     # la nueva, en vez de quedarse describiendo la anterior una y otra vez.
@@ -494,6 +496,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.ya_creada = False
     estado.esperando_confirmacion = False
     estado.ultimo_falta = ""
+    estado.veces_falta = 0
     estado.ultimo_pedido = ""
 
 

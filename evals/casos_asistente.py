@@ -38,6 +38,39 @@ from __future__ import annotations
 
 # Cada caso corre en una conversacion limpia (telefono propio).
 CASOS = [
+    # ─── La demo del 8-sep-2026, delante de la duenya ──────────────────────
+    {
+        "id": "palabra-suelta-no-es-un-servicio",
+        "gravedad": "critico",
+        "por_que": ("Un dia, una hora o un 'vale' se tomaban por el nombre de un "
+                    "servicio: 'veo que mencionas manana, pero no tengo un servicio "
+                    "con ese nombre'. Misma forma que el 'gracias' del 4-sep."),
+        "mensajes": ["mañana"],
+        "no_debe": ["no tengo un servicio", "con ese nombre", "no existe un servicio"],
+    },
+    {
+        "id": "el-si-al-diagnostico-vale",
+        "gravedad": "critico",
+        "solo_si": "sin_precio:mechas balayage color",
+        "por_que": ("Le ofrecio el diagnostico, ella dijo 'si', y siguio con el "
+                    "alisado preguntandole el largo. Tuvo que escribir 'quiero el "
+                    "diagnostico' dos turnos despues para que se lo cogieran."),
+        "mensajes": ["quiero un alisado", "no estoy segura de cual", "si"],
+        "debe": ["diagnostico", "diagnóstico", "valoracion", "valoración"],
+    },
+    {
+        "id": "no-elige-la-tecnica-por-ella",
+        "gravedad": "critico",
+        "solo_si": "sin_precio:mechas balayage color",
+        "por_que": ("Dijo dos veces que no podia elegir sin verle el pelo y a los "
+                    "dos mensajes le reservo el acido lactico 'y si en la cita "
+                    "prefieres la keratina, se puede cambiar'. Se lo pedia nuestra "
+                    "propia nota anti-repeticion."),
+        "mensajes": ["quiero un alisado", "no estoy segura de cual", "lo tengo corto",
+                     "mañana a las 10"],
+        "no_debe": ["se puede cambiar"],
+        "no_debe_en": "ultima",
+    },
     # ─── Lo que no puede fallar nunca ──────────────────────────────────────
     {
         "id": "precio-mechas-sin-cifra",

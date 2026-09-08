@@ -90,6 +90,14 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   elige el tratamiento. Incluye los DOS formatos de nombre del catálogo (con
   guion y con espacio): comparando el nombre entero, el freno no saltaba con la
   mitad del catálogo.
+- `test_tres_fallos_de_la_demo.py` — los tres de la demo del 8-sep-2026, en una
+  sola conversación: una palabra suelta ("mañana", "a las 10") tomada por el
+  nombre de un servicio; el "sí" al diagnóstico que no contaba porque solo valía
+  escribir la palabra; y la técnica elegida por ella, que **la pedía nuestra
+  propia nota anti‑repetición** ("mójate y recomiéndale UNA"). Vigila también que
+  no haya TERCERA pregunta: dicho dos veces que no sabe, se le coge la
+  valoración. REGLA: un freno nuevo tiene que decir qué hace cuando el negocio ya
+  ha dicho lo contrario.
 - `test_abandono_suave.py` — quien dice que lo deja se va sin que le insistan.
   Mira SOLO el último mensaje: con el texto acumulado, quien volvía ("va, sí que
   quiero") seguía recibiendo la despedida para siempre.
