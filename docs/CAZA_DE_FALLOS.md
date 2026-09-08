@@ -1026,3 +1026,36 @@ cuando lo que rechaza es el diagnostico, y ese texto es de la duenya, no del
 codigo. Antes de un tercer intento hay que preguntarle QUE quiere que se le diga a
 quien no acepta la norma, y probablemente la solucion sea una Q&A suya y no un
 freno.
+
+---
+
+### 39. Un servicio desactivado deja el dia "sin huecos" (CERRADA, 8-sep-2026)
+
+    ELLA: mañana
+    IA:   Mañana no tengo huecos disponibles para el alisado, cariño.
+
+La agenda de ese dia estaba ENTERA libre: cero citas, seis profesionales, sin
+bloqueos. La clienta se fue creyendo que el salon estaba lleno, y era un servicio
+de 240 EUR.
+
+**El catalogo del salon esta bien montado**: se reserva el "Pack" -el tratamiento
+completo, con su duracion real- y el servicio SUELTO esta desactivado porque solo
+cubre un paso (aplicar producto) aunque lleve el precio. De 22 inactivos, 14
+tienen pack equivalente, 5 son pasos y 3 son el mismo largo con otro nombre.
+
+El fallo era nuestro: al consultar disponibilidad por el nombre suelto,
+`_service_name_allowed_for_employee` encontraba la fila pero ningun profesional la
+"ofrece" -solo se listan servicios activos-, asi que salian CERO huecos.
+
+**Detalle que lo explica y que costo entender:** un nombre INVENTADO ya caia bien
+(se ignora el filtro y se dan los huecos del dia). El que mordia era el que EXISTE
+pero no se puede reservar, que es el caso de cualquier catalogo real con servicios
+retirados.
+
+Arreglado con `agenda._servicio_reservable`: traduce lo pedido a lo que si se puede
+coger y, sin equivalente, ignora el filtro. Mejor ofrecer el dia que decir que no
+hay nada.
+
+**Como se encontro:** NO lo detecto ninguna medicion. El simulador pide mechas y
+cortes, no alisados por su nombre tecnico. Lo vio el duenyo del negocio usando el
+asistente y diciendo "yo creo que si deberia haber hueco".
