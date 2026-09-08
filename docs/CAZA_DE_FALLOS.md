@@ -1109,3 +1109,38 @@ en catalogo, duda expresada por ella, dos preguntas ya hechas).
 
 **Como se encontro:** igual que la 39, usandolo. Ninguna medicion lo vio.
 
+---
+
+### 41. Negar un servicio con su nombre exacto delante (CERRADA, 8-sep-2026)
+
+Media hora despues de arreglar la 40, probando otra vez:
+
+    IA    Te voy a reservar una cita para el Diagnostico y presupuesto...
+          Que dia prefieres?
+    ELLA  manana
+    IA    Pablo, parece que no tengo el servicio de Diagnostico y presupuesto en
+          el catalogo. Pero hay un servicio similar que es Diagnostico y
+          presupuesto para extensiones.
+
+El asistente niega un servicio que EL MISMO acaba de nombrar, y que existe.
+
+La traza lo dijo entero: `buscar_servicio("Diagnostico y presupuesto")` ->
+*"En este catalogo no hay nada que encaje con eso"*. Y lo importante es POR QUE:
+`buscar_servicio` le pasaba el nombre al extractor -que es un modelo- y sin
+familia `catalog_pick.elegir` no busca candidatos. Medido en produccion con el
+nombre exacto de la casa: **el extractor devolvio la familia vacia TRES de cada
+CUATRO veces**.
+
+**La trampa de la verificacion:** al desplegar comprobe esa misma llamada a mano
+y me devolvio `ok: true`. Cai en la vez de cuatro que funciona. Una comprobacion
+de UNA tirada sobre algo que decide un modelo no verifica nada; hay que repetirla
+o quitar el modelo de en medio.
+
+Arreglo (`agent._es_el_nombre_de_un_servicio`): si lo dicho ES el nombre de un
+servicio -con las muletillas de delante recortadas-, lo resuelve el catalogo,
+gratis y siempre igual. El extractor sigue mandando para lo demas, y para frases
+donde el nombre aparece dentro ("no quiero el diagnostico, quiero mechas").
+
+El test anula el extractor a proposito: con el modelo mudo, la tool tiene que
+encontrarlo igual.
+

@@ -1858,7 +1858,7 @@ def _nota_al_repetir_la_pregunta(cliente_id: str, config=None) -> str:
 
 
 def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
-                             mensajes=None):
+                             mensajes=None, traza=None):
     """Que se le pasa a `buscar_servicio` y que queda acumulado despues.
 
     Devuelve (descripcion, servicio_texto). Al buscar el servicio va TODO lo que
@@ -1871,6 +1871,13 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
     # decir que si cuando se lo ofrecen- es lo que quiere, no un detalle de lo
     # anterior.
     if _pide_la_valoracion(cliente_id, dicho, mensajes=mensajes):
+        # Queda anotado en la traza: la primera vez que este arreglo no salto en
+        # produccion hubo que deducir a mano si habia entrado o no, y no se pudo.
+        if traza is not None:
+            try:
+                traza.freno("pide_la_valoracion")
+            except Exception:  # noqa: BLE001 - la traza es un cuaderno, no la conversacion
+                pass
         return _texto_de_la_valoracion(cliente_id, dicho), ""
     if not servicio_texto:
         return dicho, servicio_texto
@@ -2002,6 +2009,58 @@ def _alguien_la_hace(cliente_id: str, tecnica: str, location_id: str = "") -> bo
     return False
 
 
+_SOBRA_ANTES_DEL_NOMBRE = re.compile(
+    r"^(quiero|querria|queria|quisiera|me gustaria|cogeme|cogedme|dame|ponme|"
+    r"reservame|agendame|apuntame|una|un|el|la|los|las|de|para|cita|hora|"
+    r"cita de|cita para|el servicio de|servicio de)\s+")
+
+
+def _es_el_nombre_de_un_servicio(cliente_id: str, dicho: str,
+                                 location_id: str = "") -> str:
+    """Lo que ha dicho ES el nombre de un servicio del catalogo. Devuelve cual.
+
+    Sin esto, `buscar_servicio` le pasaba SIEMPRE el nombre al extractor -que es
+    un modelo- y si el modelo no sacaba la familia, `elegir` no encontraba
+    candidatos y la tool contestaba "en este catalogo no hay nada que encaje".
+
+    Medido en produccion el 8-sep-2026, con el nombre EXACTO de un servicio de la
+    casa: el extractor devolvio la familia vacia TRES de cada CUATRO veces, y la
+    clienta leyo *"parece que no tengo el servicio de Diagnostico y presupuesto
+    en el catalogo"*. Negar un servicio que existe es de los fallos criticos, y
+    aqui pasaba con el nombre delante.
+
+    Solo dispara cuando lo dicho es EL NOMBRE y poco mas ("cita para X"), no
+    cuando aparece dentro de una frase: ahi puede estar diciendo lo contrario
+    ("no quiero el diagnostico"). Para lo demas sigue mandando el extractor.
+    """
+    norm = catalog_pick._norm(dicho or "").strip()
+    # Se quitan las muletillas de delante UNA A UNA ("cita para X" son dos), que
+    # es como las escribe la gente.
+    for _ in range(4):
+        recortado = _SOBRA_ANTES_DEL_NOMBRE.sub("", norm).strip()
+        if recortado == norm:
+            break
+        norm = recortado
+    if len(norm) < 6:
+        return ""
+    try:
+        from backend import agenda
+
+        for servicio in agenda._catalog_services(cliente_id, location_id=location_id):
+            nombre = str(servicio.get("nombre") or servicio.get("name") or "")
+            if nombre and catalog_pick._norm(nombre) == norm:
+                return nombre
+        # Puede haberlo dicho por su nombre viejo o desactivado: se traduce al
+        # que si se puede reservar (mismo caso que dejaba la agenda "sin huecos").
+        fila = agenda._find_service_by_name(cliente_id, dicho)
+        if fila is not None:
+            return agenda._servicio_reservable(cliente_id, str(fila["name"]),
+                                               location_id=location_id)
+    except Exception:  # noqa: BLE001 - ante la duda, manda el extractor
+        return ""
+    return ""
+
+
 def _tool_buscar_servicio(
     cliente_id: str, argumentos: Dict[str, Any], *, location_id: str = "",
 ) -> Dict[str, Any]:
@@ -2023,6 +2082,31 @@ def _tool_buscar_servicio(
                             "naturalidad que le gustaria hacerse, y si ya lo habiais "
                             "hablado, sigue con lo que estabais haciendo."),
         }
+
+    # Si lo que ha dicho ES el nombre de un servicio, no hace falta preguntarle a
+    # un modelo si lo es: lo dice el catalogo, gratis y siempre igual.
+    exacto = _es_el_nombre_de_un_servicio(cliente_id, descripcion, location_id=location_id)
+    if exacto:
+        detalle = _detalle_servicio(cliente_id, exacto)
+        respuesta = {
+            "ok": True,
+            "servicio": textnorm.nombre_de_servicio_publico(exacto),
+            "servicio_en_agenda": exacto,
+            **detalle,
+        }
+        respuesta["nota_al_confirmar"] = (
+            "Confirma QUE servicio es y pasa al dia. NO menciones cuanto dura ni lo "
+            "que cuesta si no te lo han preguntado. Si te lo preguntan, contesta con "
+            "estos datos."
+        )
+        if not respuesta.get("duracion_minutos"):
+            respuesta["duracion_configurada"] = False
+            respuesta["no_inventes"] = (
+                "Este servicio no tiene duracion configurada. NO te inventes cuanto "
+                "dura ni des una cifra aproximada: si te lo pregunta, dile que se lo "
+                "confirman en el salon."
+            )
+        return respuesta
 
     extraido = intents.extraer_datos_servicio(cliente_id, descripcion)
     datos = extraido or {
@@ -3920,7 +4004,7 @@ async def responder(
                     # pregunta.
                     argumentos["descripcion"], estado.servicio_texto = _descripcion_para_buscar(
                         cliente_id, argumentos.get("descripcion"), estado.servicio_texto,
-                        mensajes=mensajes,
+                        mensajes=mensajes, traza=traza,
                     )
                 # "cualquier hueco que tengas me vale" le hacia pedir el calendario
                 # dia a dia (ocho de una tacada) hasta agotar el turno.

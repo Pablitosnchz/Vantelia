@@ -217,3 +217,54 @@ def test_el_corte_esta_enchufado(api_module):  # noqa: F811
     fuente = inspect.getsource(agent.responder)
     assert "_hay_que_cogerle_la_valoracion" in fuente
     assert "estado.veces_falta" in fuente
+
+
+# --------------------------- el nombre exacto lo resuelve el catalogo, no el modelo
+@pytest.fixture
+def valoracion_en_catalogo(api_module):  # noqa: F811
+    from backend import db
+
+    with db._get_db_connection() as cx:
+        cols = [r[1] for r in cx.execute("PRAGMA table_info(services)")]
+        campo = "name" if "name" in cols else "nombre"
+        cx.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, %s, duration_minutes, "
+            "price_cents, is_active, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,1,datetime('now'),datetime('now'))" % campo,
+            (CID, "diagnostico_y_presupuesto", "Diagnostico y presupuesto", 15, 0))
+        cx.commit()
+    yield "Diagnostico y presupuesto"
+    with db._get_db_connection() as cx:
+        cx.execute("DELETE FROM services WHERE cliente_id=? AND slug=?",
+                   (CID, "diagnostico_y_presupuesto"))
+        cx.commit()
+
+
+def test_el_nombre_exacto_no_pasa_por_el_modelo(api_module, valoracion_en_catalogo):  # noqa: F811
+    """Medido en produccion: el extractor devolvia familia vacia 3 de cada 4 veces."""
+    from backend import agent
+
+    assert agent._es_el_nombre_de_un_servicio(
+        CID, "Diagnostico y presupuesto") == "Diagnostico y presupuesto"
+    assert agent._es_el_nombre_de_un_servicio(
+        CID, "cita para Diagnostico y presupuesto") == "Diagnostico y presupuesto"
+
+
+def test_no_niega_un_servicio_que_existe(api_module, valoracion_en_catalogo, monkeypatch):  # noqa: F811
+    """Con el extractor mudo -su peor dia- la tool sigue encontrandolo."""
+    from backend import agent, intents
+
+    monkeypatch.setattr(intents, "extraer_datos_servicio", lambda cid, texto: {
+        "familia": "", "tecnica": "", "talla": "", "para_quien": "", "edad": None,
+        "texto": texto})
+    salida = agent._tool_buscar_servicio(CID, {"descripcion": "Diagnostico y presupuesto"})
+    assert salida.get("ok") is True, "niega un servicio que existe, con el nombre delante"
+    assert salida.get("servicio_en_agenda") == "Diagnostico y presupuesto"
+
+
+def test_dentro_de_una_frase_sigue_mandando_el_extractor(api_module, valoracion_en_catalogo):  # noqa: F811
+    """"no quiero el diagnostico, quiero mechas" no es pedir el diagnostico."""
+    from backend import agent
+
+    assert not agent._es_el_nombre_de_un_servicio(
+        CID, "no quiero el Diagnostico y presupuesto, quiero unas mechas")
