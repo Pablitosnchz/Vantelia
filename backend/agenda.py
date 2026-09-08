@@ -3293,6 +3293,39 @@ def _service_name_allowed_for_employee(cliente_id: str, employee_row: sqlite3.Ro
     return any(textnorm._sanitize_text(service.get("nombre")) == normalized_name for service in allowed_services)
 
 
+def _servicio_reservable(cliente_id: str, servicio: str, location_id: str = "") -> str:
+    """Traduce lo pedido a un servicio que SE PUEDA reservar de verdad.
+
+    Un servicio DESACTIVADO existe en la tabla pero ningun profesional lo ofrece,
+    asi que la disponibilidad salia VACIA y el asistente lo contaba como "no hay
+    huecos". Visto en produccion el 8-sep-2026: el salon tiene los alisados
+    sueltos desactivados -son los que llevan el precio- y reservables solo los
+    "Pack"; a quien pedia un alisado se le decia que no habia hueco para manana
+    teniendo el dia ENTERO libre.
+
+    Un nombre que no existe ya caia bien (se ignora el filtro). El que mordia era
+    el que existe pero no se puede coger. Se busca el equivalente activo -"Pack
+    keratina premium largo" para "Keratina premium largo"- y, si no lo hay, se
+    devuelve vacio: mejor dar los huecos del dia que decir que no hay ninguno.
+    """
+    pedido = textnorm._sanitize_text(servicio or "")
+    if not pedido:
+        return ""
+    fila = _find_service_by_name(cliente_id, pedido)
+    if fila is None or bool(fila["is_active"]):
+        return servicio
+    limpio = textnorm._strip_accents(pedido.lower()).strip()
+    for activo in _catalog_services(cliente_id, location_id=location_id):
+        nombre = str(activo.get("nombre") or "")
+        if limpio and limpio in textnorm._strip_accents(nombre.lower()):
+            settings.logger.info(
+                "[agenda] %s no es reservable en %s; se usa %r", servicio, cliente_id, nombre)
+            return nombre
+    settings.logger.warning(
+        "[agenda] %s no es reservable en %s y no hay equivalente activo", servicio, cliente_id)
+    return ""
+
+
 async def _public_slot_sets_for_day(
     cliente_id: str,
     fecha: str,
@@ -3300,6 +3333,7 @@ async def _public_slot_sets_for_day(
     servicio: str = "",
     location_id: str = "",
 ) -> Tuple[Set[str], Set[str]]:
+    servicio = _servicio_reservable(cliente_id, servicio, location_id)
     all_slots: Set[str] = set()
     available_slots: Set[str] = set()
     for employee_row in _list_public_employee_rows(cliente_id, include_inactive=False, location_id=location_id):
