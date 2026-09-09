@@ -143,3 +143,52 @@ def test_no_se_puede_estirar_encima_de_otra(api_module, una_cita):  # noqa: F811
         with db._get_db_connection() as cx:
             cx.execute("DELETE FROM bookings WHERE id=?", (bid,))
             cx.commit()
+
+
+def test_estirar_no_le_manda_nada_a_la_clienta(api_module, una_cita, monkeypatch):  # noqa: F811
+    """"no hace falta mandar recordatorio de cambio de cita" (el salon).
+
+    Viene a la misma hora, con la misma persona y a lo mismo: que le llegue un
+    email cada vez que en el mostrador ajustan el hueco es ruido, y encima le
+    reiniciaba el recordatorio -asi que le llegaria dos veces-.
+    """
+    from backend import booking
+
+    avisos = []
+
+    async def _espia(row, kind, request=None):
+        avisos.append(kind)
+
+    monkeypatch.setattr(booking, "_send_booking_reminder_by_kind", _espia)
+    asyncio.run(booking._update_booking_details(
+        una_cita, _payload(una_cita, duracion_minutos=90), None, source="portal"))
+    assert avisos == [], "estirar la cita le manda un aviso a la clienta: %s" % avisos
+
+
+def test_moverla_de_hora_si_avisa(api_module, una_cita, monkeypatch):  # noqa: F811
+    """El freno es SOLO para la duracion: cambiarle la hora se le sigue diciendo."""
+    from backend import booking
+
+    avisos = []
+
+    async def _espia(row, kind, request=None):
+        avisos.append(kind)
+
+    monkeypatch.setattr(booking, "_send_booking_reminder_by_kind", _espia)
+    asyncio.run(booking._update_booking_details(
+        una_cita, _payload(una_cita, hora="12:00", duracion_minutos=90), None, source="portal"))
+    assert avisos == ["rescheduled"], avisos
+
+
+def test_estirar_no_le_reinicia_el_recordatorio(api_module, una_cita):  # noqa: F811
+    from backend import booking, db, timeutils
+
+    with db._get_db_connection() as cx:
+        cx.execute("UPDATE bookings SET reminder_24h_sent_at=? WHERE id=?",
+                   (timeutils._utc_now_iso(), una_cita["id"]))
+        cx.commit()
+    fila = booking._load_booking_or_404(una_cita["id"])
+    asyncio.run(booking._update_booking_details(
+        fila, _payload(fila, duracion_minutos=75), None, source="portal"))
+    despues = booking._load_booking_or_404(una_cita["id"])
+    assert despues["reminder_24h_sent_at"], "le llegaria el recordatorio dos veces"

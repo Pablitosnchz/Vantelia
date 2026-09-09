@@ -8515,10 +8515,15 @@ function cdTramos(b, emp){
   return [[ini, ini + cdDur(b, emp)]];
 }
 function cdDur(b, emp){
-  const svcDur = Number(b.service_duration_minutes || b.duration_minutes || 0);
-  if (svcDur > 0 && svcDur <= 1440) return svcDur;
+  // MANDA lo que ocupa la cita de verdad (su inicio y su fin), no la duracion del
+  // catalogo. Era al reves y por eso estirar una cita se guardaba bien pero se
+  // seguia pintando del tamanyo de antes: la agenda bloqueaba una cosa y el
+  // calendario ensenyaba otra. Es la misma trampa que en el backend, donde la
+  // disponibilidad sale de `end_at`.
   const s = b.start_at ? new Date(b.start_at) : null, e = b.end_at ? new Date(b.end_at) : null;
   if (s && e && !isNaN(s) && !isNaN(e)) { const d = Math.round((e - s)/60000); if (d > 0 && d <= 1440) return d; }
+  const svcDur = Number(b.service_duration_minutes || b.duration_minutes || 0);
+  if (svcDur > 0 && svcDur <= 1440) return svcDur;
   return Number(emp?.slot_minutes) || Number(citasState.daySchedule?.slot_minutes) || 30;
 }
 // ── Estado de cobro de una cita ───────────────────────────────────────
@@ -8843,7 +8848,12 @@ function renderCitasDay(){
       const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
-      btn.addEventListener('click', () => openManageBookingModal(b));
+      btn.addEventListener('click', () => {
+        // Soltar el borde despues de estirar dispara un click sobre la cita, y
+        // abria el panel de Gestionar cada vez. Se traga ese click y ya esta.
+        if (btn.dataset.arrastrada === '1') { btn.dataset.arrastrada = ''; return; }
+        openManageBookingModal(b);
+      });
       body.appendChild(btn);
       if (est !== 'cancelled' && est !== 'completed' && est !== 'no_show' && hasPerm('agenda.create')) {
         // OJO: el `slotMin` de arriba vive dentro del bloque del hueco vacio, no
@@ -8936,6 +8946,7 @@ function cdPonerBordes(btn, b, ev, body, startMin, slotMin){
         pintar();
       };
       const soltar = async () => {
+        btn.dataset.arrastrada = '1';
         grip.removeEventListener('pointermove', mover);
         grip.removeEventListener('pointerup', soltar);
         grip.removeEventListener('pointercancel', soltar);
@@ -8963,6 +8974,7 @@ function cdPonerBordes(btn, b, ev, body, startMin, slotMin){
       grip.addEventListener('pointerup', soltar);
       grip.addEventListener('pointercancel', soltar);
     });
+    grip.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); });
     btn.appendChild(grip);
   });
 }

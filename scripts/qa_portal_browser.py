@@ -330,6 +330,10 @@ def main() -> int:
                 evento = page.locator(".cd-event").first
                 evento.scroll_into_view_if_needed()
                 assert page.locator(".cd-ev-grip").count() >= 2, "la cita no tiene bordes para estirarla"
+                # La altura se mide ANTES de empezar a arrastrar: durante el arrastre
+                # el bloque ya se ha estirado en pantalla y comparar contra eso no
+                # prueba nada (me paso al escribir este test).
+                alto_antes = page.locator(".cd-event").first.bounding_box()["height"]
                 caja = page.locator(".cd-ev-grip.bot").first.bounding_box()
                 page.mouse.move(caja["x"] + caja["width"] / 2, caja["y"] + caja["height"] / 2)
                 page.mouse.down()
@@ -338,7 +342,19 @@ def main() -> int:
                 with page.expect_response(lambda r: "/reschedule" in r.url) as guardado:
                     page.mouse.up()
                 assert guardado.value.status == 200, guardado.value.status
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(2500)
+                # Se tiene que VER mas larga: el calendario pintaba la duracion del
+                # catalogo y no la de la cita, asi que se guardaba bien y seguia
+                # dibujada igual (reportado el 9-sep-2026).
+                alto_despues = page.locator(".cd-event").first.bounding_box()["height"]
+                assert alto_despues > alto_antes + 20, (
+                    "la cita se guardo estirada pero se sigue pintando igual (%s -> %s)"
+                    % (alto_antes, alto_despues)
+                )
+                # Y soltar el borde no puede abrir el panel de Gestionar cita.
+                assert page.get_by_role("heading", name="Gestionar cita").count() == 0, (
+                    "estirar la cita abre el panel de Gestionar"
+                )
                 # Se vuelve a Informes: la parte de movil que viene detras da por
                 # hecho que se esta ahi.
 

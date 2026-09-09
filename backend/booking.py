@@ -2827,6 +2827,19 @@ async def _update_booking_details(
     # se estiraba por encima de las tres siguientes sin que saltara ni un aviso.
     # Solo se comprueba si CRECE: acortarla nunca pisa a nadie.
     dura_mas = service_duration > _minutos_que_ocupa_ahora(booking_row)
+    # Estirar o acortar una cita desde el calendario NO es reprogramarla: la
+    # clienta viene a la misma hora, con la misma persona y a lo mismo. No se le
+    # manda ningun aviso ("no hace falta mandar recordatorio de cambio de cita",
+    # el salon el 9-sep-2026) ni se le reinicia el recordatorio, que le llegaria
+    # dos veces. El hueco SI se comprueba igual: crecer puede pisar a la de
+    # despues.
+    solo_cambia_la_duracion = (
+        duracion_pedida > 0
+        and booking_date == booking_row["booking_date"]
+        and booking_time == booking_row["booking_time"]
+        and (target_employee["id"] or "") == (booking_row["employee_id"] or "")
+        and textnorm._sanitize_text(data.servicio) == (booking_row["servicio"] or "")
+    )
     slot_changed = (
         booking_date != booking_row["booking_date"]
         or booking_time != booking_row["booking_time"]
@@ -2883,7 +2896,7 @@ async def _update_booking_details(
         "provider_booking_id": provider_result.provider_booking_id,
         "provider_booking_url": provider_result.provider_booking_url,
     }
-    if slot_changed:
+    if slot_changed and not solo_cambia_la_duracion:
         updates.update(
             {
                 "rescheduled_at": timeutils._utc_now_iso(),
@@ -2907,7 +2920,8 @@ async def _update_booking_details(
                 detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
             )
         _update_booking_record(booking_row["id"], **updates)
-    event_type = "booking_rescheduled" if slot_changed else "booking_updated"
+    event_type = ("booking_duration_changed" if solo_cambia_la_duracion
+                  else ("booking_rescheduled" if slot_changed else "booking_updated"))
     _record_booking_audit(
         booking_row["id"],
         booking_row["cliente_id"],
@@ -2927,10 +2941,11 @@ async def _update_booking_details(
         phone=refreshed["telefono"] or "", source=source, status="confirmado",
         entity_type="booking", entity_id=refreshed["id"],
     )
-    try:
-        await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se ha podido enviar el aviso de actualizacion %s: %s", refreshed["id"], exc)
+    if not solo_cambia_la_duracion:
+        try:
+            await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("No se ha podido enviar el aviso de actualizacion %s: %s", refreshed["id"], exc)
 
     return BookingActionResponse(
         ok=True,
