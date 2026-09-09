@@ -6012,7 +6012,16 @@ document.getElementById('waConnectBtn')?.addEventListener('click', async (ev) =>
     });
     window.removeEventListener('message', onMessage);
     const code = respuesta && respuesta.authResponse && respuesta.authResponse.code;
-    if (!code) { toast('Conexión cancelada.', 'error'); ev.target.disabled = false; return; }
+    if (!code) {
+      // Sin esto, cualquier fallo de Meta -sesion invalida, permisos, cuenta
+      // restringida- se veia igual: "Conexion cancelada". Y sin saber QUE ha
+      // dicho Meta no se puede arreglar nada (9-sep-2026).
+      console.warn('[whatsapp] Meta no devolvio codigo:', respuesta);
+      const detalle = (respuesta && (respuesta.status || (respuesta.authResponse && respuesta.authResponse.error))) || '';
+      toast(detalle ? `Meta no completo la conexion (${detalle}). Mira la consola.` : 'Conexión cancelada.', 'error');
+      ev.target.disabled = false;
+      return;
+    }
     await api('/auth/app/whatsapp/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
