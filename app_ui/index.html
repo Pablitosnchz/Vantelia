@@ -2552,96 +2552,17 @@
         </div>
       </div>
 
-      <!-- Hero asistido -->
-      <div style="margin-top:20px; padding:24px; border-radius:14px; background:linear-gradient(135deg, rgba(37,211,102,0.10), rgba(7,16,31,0.55)); border:1px solid rgba(37,211,102,0.28);">
-        <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
-          <div style="width:48px; height:48px; border-radius:50%; background:#25D366; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="#0d1d11" xmlns="http://www.w3.org/2000/svg"><path d="M19.05 4.91A9.82 9.82 0 0 0 12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.27-1.38a9.9 9.9 0 0 0 4.71 1.2h.01c5.46 0 9.91-4.45 9.91-9.91a9.82 9.82 0 0 0-2.9-7zm-7.01 15.24h-.01a8.23 8.23 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.19-.31a8.21 8.21 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.81-.79.97-.14.16-.29.18-.54.06-.25-.12-1.04-.38-1.99-1.22-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.76-1.85-.2-.49-.4-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.23.25-.86.84-.86 2.05 0 1.21.88 2.38 1 2.55.12.16 1.74 2.66 4.22 3.73.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
-          </div>
-          <div>
-            <h3 style="margin:0; font-family:var(--font-title); font-size:1.15rem;">Lo conectamos por ti, gratis</h3>
-            <p class="panel-sub" style="margin:2px 0 0;">Sin tocar Meta. Sin código. Sin esperas largas.</p>
-          </div>
-        </div>
-        <p style="color:var(--soft); font-size:0.92rem; line-height:1.55; margin:6px 0 16px;">Dinos tu número de WhatsApp Business y el equipo de Vantelia se encarga de toda la configuración técnica. En menos de 24 horas hábiles tendrás el asistente respondiendo a tus clientes en WhatsApp.</p>
-
-        <div class="field">
-          <label class="field-label">Tu número de WhatsApp Business</label>
-          <input class="field-input" id="waUserPhone" type="tel" placeholder="+34 600 123 456" autocomplete="tel" />
-        </div>
-        <div class="field" style="margin-top:10px;">
-          <label class="field-label">Comentarios (opcional)</label>
-          <textarea class="field-textarea" id="waUserNotes" rows="2" placeholder="Ej: prefiero que me llaméis por la mañana, ya tengo cuenta Meta Business..." style="min-height:60px;"></textarea>
-        </div>
-        <div style="display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; align-items:center;">
-          <button class="btn btn-primary" id="waRequestBtn" type="button" style="background:#25D366; border-color:#25D366; color:#0d1d11; font-weight:600;">Solicitar activación gratuita</button>
-          <span class="panel-sub" style="margin:0;">Te respondemos en menos de 24h hábiles.</span>
-        </div>
+      <!-- Mientras la conexion automatica no este abierta para este negocio, no se
+           le deja la pantalla en blanco: se le dice a quien escribir. -->
+      <div id="waSignupPending" style="display:none; padding:16px; border-radius:12px; border:1px solid var(--line); background:rgba(7,16,31,0.45);">
+        <b>Conectar tu WhatsApp</b>
+        <p class="panel-sub" style="margin:6px 0 0;">La conexión automática todavía no está abierta para tu cuenta. Escríbenos a
+          <a href="mailto:info@vantelia.es">info@vantelia.es</a> y la activamos nosotros.</p>
       </div>
 
       <div id="waChecklist" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:18px;"></div>
 
-      <details id="waAdvancedBox" style="margin-top:22px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:rgba(7,16,31,0.4);">
-        <summary style="cursor:pointer; font-weight:600; color:var(--soft);">¿Tienes conocimientos técnicos? Configúralo tú mismo</summary>
-        <p class="panel-sub" style="margin-top:10px;">Esta sección es para clientes con experiencia en Meta Developers y la API de WhatsApp Cloud. Si no estás seguro, mejor usa la solicitud de arriba.</p>
-
-        <div style="margin-top:16px; display:grid; gap:14px;">
-          <div style="padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.45);">
-            <div style="font-weight:700;">1. Copia estos datos en Meta</div>
-            <p class="panel-sub" style="margin-top:4px;">En Meta Developers, entra en WhatsApp &gt; Configuration y pega estos dos valores.</p>
-            <label class="field-label">Callback URL</label>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <input class="field-input" id="waWebhookUrl" readonly />
-              <button class="btn btn-ghost" id="waCopyWebhookBtn" type="button">Copiar</button>
-            </div>
-            <label class="field-label" style="margin-top:12px;">Verify token</label>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <input class="field-input" id="waVerifyToken" readonly />
-              <button class="btn btn-ghost" id="waCopyVerifyBtn" type="button">Copiar</button>
-            </div>
-            <p class="panel-sub" id="waTokenStatus" style="margin-top:6px;"></p>
-          </div>
-
-          <div style="padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.45);">
-            <div style="font-weight:700;">2. Pega el Phone Number ID</div>
-            <p class="panel-sub" style="margin-top:4px;">En Meta, abre WhatsApp &gt; API Setup y copia el numero llamado Phone Number ID. No es tu telefono, es un ID largo de Meta.</p>
-            <div class="field">
-              <label class="field-label">Phone Number ID</label>
-              <input class="field-input" id="waPhoneNumberId" placeholder="Ej: 123456789012345" maxlength="120" />
-            </div>
-          </div>
-
-          <div style="padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.45);">
-            <div style="font-weight:700;">3. Activa el canal</div>
-            <p class="panel-sub" style="margin-top:4px;">Cuando Meta acepte la verificación y el token de envío esté listo, activa WhatsApp aquí.</p>
-            <label style="display:flex; align-items:center; gap:12px; margin-top:10px; cursor:pointer;">
-              <input type="checkbox" id="waEnabled" />
-              <span><b>WhatsApp activo</b><br><span class="panel-sub" style="margin:0;">El asistente responderá y podrá iniciar el flujo de citas por WhatsApp.</span></span>
-            </label>
-          </div>
-
-          <div style="padding:14px 16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.35);">
-            <div style="font-weight:600;">Variables del servidor (opcional)</div>
-            <p class="panel-sub" style="margin-top:4px;">Solo si Vantelia te ha dado nombres específicos de variables.</p>
-            <div class="form-row" style="margin-top:10px;">
-              <div class="field">
-                <label class="field-label">Variable del token de envío</label>
-                <input class="field-input" id="waAccessTokenEnv" placeholder="WHATSAPP_ACCESS_TOKEN_CLIENTE" maxlength="120" />
-              </div>
-              <div class="field">
-                <label class="field-label">Variable del token de verificación</label>
-                <input class="field-input" id="waVerifyTokenEnv" placeholder="WHATSAPP_VERIFY_TOKEN_CLIENTE" maxlength="120" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
-          <button class="btn btn-primary" id="waSaveBtn" type="button">Guardar conexión</button>
-          <button class="btn btn-ghost" id="waCopySetupBtn" type="button">Copiar resumen para soporte</button>
-          <button class="btn btn-ghost" id="waReloadBtn" type="button">Descartar cambios</button>
-        </div>
-      </details>
+      
     </div>
   </section>
 
@@ -6031,7 +5952,13 @@ function loadFacebookSdk(appId) {
 function renderWaSignup(data) {
   const card = document.getElementById('waSignupCard');
   if (!card) return;
-  if (!data.embedded_signup_available) { card.style.display = 'none'; return; }
+  const pendiente = document.getElementById('waSignupPending');
+  if (!data.embedded_signup_available) {
+    card.style.display = 'none';
+    if (pendiente) pendiente.style.display = '';
+    return;
+  }
+  if (pendiente) pendiente.style.display = 'none';
   card.style.display = '';
   const conectado = !!data.connected_via_signup;
   document.getElementById('waConnectedBox').style.display = conectado ? '' : 'none';
@@ -6098,13 +6025,6 @@ document.getElementById('waDisconnectBtn')?.addEventListener('click', async () =
 function renderWhatsApp(data) {
   whatsappState = data || {};
   renderWaSignup(data);
-  document.getElementById('waEnabled').checked = !!data.enabled;
-  document.getElementById('waPhoneNumberId').value = data.phone_number_id || '';
-  document.getElementById('waAccessTokenEnv').value = data.access_token_env || '';
-  document.getElementById('waVerifyTokenEnv').value = data.verify_token_env || '';
-  document.getElementById('waWebhookUrl').value = data.webhook_url || '';
-  document.getElementById('waVerifyToken').value = data.verify_token || '';
-
   const pill = document.getElementById('waStatusPill');
   pill.textContent = data.status_label || 'Desactivado';
   const statusColor = data.status === 'ready'
@@ -6117,10 +6037,15 @@ function renderWhatsApp(data) {
 
   document.getElementById('waPlanNotice').style.display = data.plan_allows_whatsapp ? 'none' : '';
   renderWhatsAppChecklist(data);
-  const tokenLines = [];
-  tokenLines.push(data.verify_token_configured ? 'Este token ya esta listo para verificar en Meta.' : 'El verify token aun no esta configurado en el servidor.');
-  tokenLines.push(data.access_token_configured ? 'El token de envio esta listo.' : 'El token de envio lo tiene que configurar soporte antes de activar.');
-  document.getElementById('waTokenStatus').textContent = tokenLines.join(' ');
+}
+
+// Lo usa el boton de copiar de la pestana de VOZ (el de WhatsApp se fue con el
+// bloque tecnico el 9-sep-2026).
+async function copyFieldValue(id) {
+  const value = document.getElementById(id).value || '';
+  if (!value) { toast('No hay nada que copiar.', 'error'); return; }
+  await navigator.clipboard.writeText(value);
+  toast('Copiado', 'success');
 }
 
 async function loadWhatsApp() {
@@ -6130,77 +6055,8 @@ async function loadWhatsApp() {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-async function copyFieldValue(id) {
-  const value = document.getElementById(id).value || '';
-  if (!value) { toast('No hay nada que copiar.', 'error'); return; }
-  await navigator.clipboard.writeText(value);
-  toast('Copiado', 'success');
-}
 
-document.getElementById('waCopyWebhookBtn').addEventListener('click', () => copyFieldValue('waWebhookUrl'));
-document.getElementById('waCopyVerifyBtn').addEventListener('click', () => copyFieldValue('waVerifyToken'));
-document.getElementById('waCopySetupBtn').addEventListener('click', async () => {
-  const summary = [
-    `Bot: ${state.nombre || state.cliente_id}`,
-    `Cliente ID: ${state.cliente_id}`,
-    `Estado: ${whatsappState.status_label || 'Desactivado'}`,
-    `Callback URL: ${document.getElementById('waWebhookUrl').value || ''}`,
-    `Verify token: ${document.getElementById('waVerifyToken').value || ''}`,
-    `Phone Number ID: ${document.getElementById('waPhoneNumberId').value || ''}`,
-    `Plan permite WhatsApp: ${whatsappState.plan_allows_whatsapp ? 'si' : 'no'}`,
-    `Token envio configurado: ${whatsappState.access_token_configured ? 'si' : 'no'}`,
-  ].join('\n');
-  await navigator.clipboard.writeText(summary);
-  toast('Resumen copiado', 'success');
-});
 document.getElementById('waGoBillingBtn').addEventListener('click', () => setTab('billing'));
-document.getElementById('waReloadBtn').addEventListener('click', loadWhatsApp);
-document.getElementById('waRequestBtn').addEventListener('click', () => {
-  const phone = (document.getElementById('waUserPhone').value || '').trim();
-  const notes = (document.getElementById('waUserNotes').value || '').trim();
-  if (!phone) { toast('Indica tu número de WhatsApp Business antes de solicitar la activación.', 'error'); return; }
-  const empresa = state.nombre || state.cliente_id;
-  const userEmail = (document.getElementById('userEmail')?.textContent || '').trim();
-  const userName = (document.getElementById('userName')?.textContent || '').trim();
-  const subject = `Activar WhatsApp para ${empresa}`;
-  const bodyLines = [
-    'Hola equipo Vantelia,',
-    '',
-    'Quiero activar el asistente de IA en mi WhatsApp Business. Estos son mis datos:',
-    '',
-    `• Empresa: ${empresa}`,
-    `• Cliente ID: ${state.cliente_id}`,
-    `• Contacto: ${userName || '(sin nombre)'} — ${userEmail || '(sin email)'}`,
-    `• Número WhatsApp Business: ${phone}`,
-  ];
-  if (notes) { bodyLines.push('', 'Comentarios:', notes); }
-  bodyLines.push('', 'Gracias.');
-  const mailto = `mailto:info@vantelia.es?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
-  window.location.href = mailto;
-  toast('Abriendo tu cliente de correo…', 'success');
-});
-document.getElementById('waSaveBtn').addEventListener('click', async () => {
-  const enabled = document.getElementById('waEnabled').checked;
-  if (enabled && whatsappState.plan_allows_whatsapp === false) {
-    toast('Tu plan actual no incluye WhatsApp.', 'error');
-    return;
-  }
-  try {
-    const data = await api('/auth/app/whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        enabled,
-        phone_number_id: document.getElementById('waPhoneNumberId').value.trim(),
-        access_token_env: document.getElementById('waAccessTokenEnv').value.trim(),
-        verify_token_env: document.getElementById('waVerifyTokenEnv').value.trim(),
-      }),
-    });
-    renderWhatsApp(data);
-    toast('Conexion de WhatsApp guardada', 'success');
-  } catch (err) { toast(err.message, 'error'); }
-});
-
 // ── ASISTENTE DE VOZ ──────────────────────────────────────────────────
 let voiceState = {};
 function renderVoice(data) {
@@ -8927,9 +8783,12 @@ function cdPonerBordes(btn, b, ev, body, startMin, slotMin){
       const y0 = e.clientY;
       const iniOrig = ev.startM, finOrig = ev.endM;
       let ini = iniOrig, fin = finOrig;
-      // El final se mueve libre de 5 en 5; el PRINCIPIO se queda en la rejilla,
-      // porque una cita tiene que empezar en un hueco de verdad.
-      const paso = lado === 'bot' ? 5 : slotMin;
+      // Los DOS bordes van de cinco en cinco. El principio estaba atado a la
+      // rejilla (30 min) y se notaba tosco: si una clienta entra a las 10:55, la
+      // cita empieza a las 10:55. La rejilla es para OFRECER huecos, no para
+      // atarle las manos al mostrador; el backend sigue comprobando que quepa en
+      // la jornada, que no caiga en un descanso y que no pise a nadie.
+      const paso = 5;
       btn.classList.add('resizing');
       const etiqueta = document.createElement('div');
       etiqueta.className = 'cd-ev-dur';

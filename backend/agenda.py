@@ -3051,6 +3051,34 @@ async def _employee_slot_sets_for_day(
     return set(slots), available
 
 
+def _cabe_en_la_jornada(
+    cliente_id: str, fecha: str, start_min: int, end_min: int, employee_row
+) -> bool:
+    """El tramo cabe dentro del horario del dia y no cae en un descanso.
+
+    Sirve para los ajustes A MANO desde el calendario (estirar una cita por
+    arriba), donde la hora no tiene por que caer en la rejilla: si una clienta
+    entra a las 10:55, la cita empieza a las 10:55. Lo que hay que respetar no es
+    la rejilla -que es un invento para OFRECER huecos- sino la jornada, los
+    descansos y no pisar a nadie (eso se comprueba aparte).
+    """
+    config = clients._get_client_config(cliente_id)
+    if not config["booking"]["enabled"]:
+        return False
+    booking_cfg = _employee_schedule_from_row(employee_row)
+    dia = textnorm._parse_date(fecha)
+    ventana = textnorm._weekday_hours(booking_cfg, dia.weekday())
+    if ventana is None:
+        return False
+    abre = textnorm._time_to_min(ventana[0])
+    cierra = textnorm._time_to_min(ventana[1])
+    if abre is None or cierra is None or start_min < abre or end_min > cierra:
+        return False
+    descansos = _break_intervals_from_windows(booking_cfg.get("break_windows", []))
+    descansos.extend(_break_intervals_from_windows(_client_break_windows(config)))
+    return not _interval_overlaps(start_min, end_min, descansos)
+
+
 async def _booking_slot_available_for_reschedule(
     cliente_id: str,
     fecha: str,
@@ -3059,16 +3087,22 @@ async def _booking_slot_available_for_reschedule(
     employee_id: str = "",
     exclude_booking_id: str,
     duration_minutes: Optional[int] = None,
+    en_rejilla: bool = True,
 ) -> bool:
     employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
     dur = int(duration_minutes or _employee_schedule_from_row(employee_row)["slot_minutes"])
     start_min = textnorm._time_to_min(hora)
     if start_min is None:
         return False
-    grid = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=dur)
-    if hora not in grid:
-        return False
     end_min = start_min + dur
+    if en_rejilla:
+        grid = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=dur)
+        if hora not in grid:
+            return False
+    # Ajuste a mano desde el calendario: la rejilla no manda -una clienta que entra
+    # a las 10:55 tiene su cita a las 10:55- pero la jornada y los descansos si.
+    elif not _cabe_en_la_jornada(cliente_id, fecha, start_min, end_min, employee_row):
+        return False
     if _interval_overlaps(
         start_min, end_min,
         _booked_intervals(cliente_id, fecha, employee_id=employee_id, exclude_booking_id=exclude_booking_id),

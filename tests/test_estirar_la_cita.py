@@ -192,3 +192,44 @@ def test_estirar_no_le_reinicia_el_recordatorio(api_module, una_cita):  # noqa: 
         fila, _payload(fila, duracion_minutos=75), None, source="portal"))
     despues = booking._load_booking_or_404(una_cita["id"])
     assert despues["reminder_24h_sent_at"], "le llegaria el recordatorio dos veces"
+
+
+def test_se_puede_empezar_fuera_de_la_rejilla(api_module, una_cita):  # noqa: F811
+    """Estirar por ARRIBA va de 5 en 5, como por abajo (peticion del salon).
+
+    La rejilla existe para OFRECER huecos; en el mostrador, si la clienta entra a
+    las 10:55 la cita empieza a las 10:55. Antes el backend lo rechazaba con un
+    409 porque exigia que la hora fuera uno de los huecos ofrecidos.
+    """
+    from backend import booking
+
+    asyncio.run(booking._update_booking_details(
+        una_cita, _payload(una_cita, hora="09:55", duracion_minutos=65),
+        None, source="portal"))
+    despues = booking._load_booking_or_404(una_cita["id"])
+    assert despues["booking_time"] == "09:55"
+    assert _minutos(despues) == 65
+
+
+def test_fuera_de_la_jornada_se_sigue_rechazando(api_module, una_cita):  # noqa: F811
+    """Saltarse la rejilla no es saltarse el horario del negocio."""
+    from backend import booking
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(booking._update_booking_details(
+            una_cita, _payload(una_cita, hora="05:05", duracion_minutos=30),
+            None, source="portal"))
+    assert exc.value.status_code == 409
+
+
+def test_por_los_canales_publicos_la_rejilla_sigue_mandando(api_module, una_cita):  # noqa: F811
+    """Sin duracion a mano -o sea, cualquier canal que no sea el calendario- la
+    hora tiene que seguir siendo uno de los huecos ofrecidos."""
+    from backend import booking
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(booking._update_booking_details(
+            una_cita, _payload(una_cita, hora="10:07"), None, source="chat"))
+    assert exc.value.status_code == 409

@@ -2854,6 +2854,11 @@ async def _update_booking_details(
         employee_id=target_employee["id"],
         exclude_booking_id=booking_row["id"],
         duration_minutes=service_duration,
+        # Ajustando a mano en el calendario (estirar la cita) la hora no tiene por
+        # que caer en la rejilla: el salon la mueve de cinco en cinco por arriba y
+        # por abajo. Lo que se sigue comprobando es que quepa en la jornada, que no
+        # caiga en un descanso y que no pise a nadie.
+        en_rejilla=duracion_pedida <= 0,
     ):
         raise HTTPException(status_code=409, detail="Ese horario ya no esta disponible. Elige otro tramo.")
 
