@@ -195,6 +195,9 @@ class BookingReschedulePayload(BaseModel):
     employee_id: str = Field(default="", max_length=80)
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
+    # Arrastrando el borde de la cita en el calendario se cambia lo que dura.
+    # 0 = la del catalogo (lo de siempre).
+    duracion_minutos: int = Field(default=0, ge=0, le=720)
 
 
 class BookingCancelPayload(BaseModel):
@@ -431,6 +434,12 @@ class BookingUpdatePayload(BaseModel):
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
     notas: str = Field(default="", max_length=500)
+    # Duracion a mano, para estirar o acortar una cita arrastrando su borde en el
+    # calendario. 0 = la del catalogo, que es lo de siempre. El salon lo pidio
+    # porque el tiempo real depende de la clienta: "el mismo color, a una le lleva
+    # media hora mas". Se guarda en `end_at`, que es de donde sale la
+    # disponibilidad, asi que el asistente se entera del cambio.
+    duracion_minutos: int = Field(default=0, ge=0, le=720)
 
 
 class AdminBookingResumen(BaseModel):

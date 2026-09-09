@@ -2753,6 +2753,7 @@ def _booking_update_payload_from_reschedule(
         fecha=data.fecha,
         hora=data.hora,
         notas=row["notas"] or "",
+        duracion_minutos=int(getattr(data, "duracion_minutos", 0) or 0),
     )
 
 
@@ -2810,6 +2811,13 @@ async def _update_booking_details(
         )
     service_row = agenda._find_service_by_name(booking_row["cliente_id"], data.servicio)
     service_duration = agenda._service_duration_minutes(booking_row["cliente_id"], data.servicio, target_employee)
+    # Duracion a mano (arrastrar el borde de la cita en el calendario). Manda sobre
+    # la del catalogo, porque la del catalogo es una media y el salon sabe lo que
+    # tarda ESA clienta. Se usa para TODO lo que viene detras -comprobar que cabe,
+    # y el `end_at` que se guarda-, asi que la agenda y el asistente ven lo mismo.
+    duracion_pedida = int(getattr(data, "duracion_minutos", 0) or 0)
+    if duracion_pedida > 0:
+        service_duration = max(5, min(720, duracion_pedida))
     service_id = service_row["slug"] if service_row else ""
     service_price = int(service_row["price_cents"]) if service_row else 0
     employee_changed = (target_employee["id"] or "") != (booking_row["employee_id"] or "")

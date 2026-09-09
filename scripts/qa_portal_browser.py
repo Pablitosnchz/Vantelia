@@ -39,7 +39,11 @@ def _wait_server(base_url: str) -> None:
 
 
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="vantelia-browser-qa-") as raw_runtime:
+    # OJO Windows: el temporal se borra A MANO y sin quejarse. Con
+    # TemporaryDirectory, uvicorn suelta el SQLite mas tarde que el borrado y el
+    # script acababa en error DESPUES de haber dicho PASS.
+    raw_runtime = tempfile.mkdtemp(prefix="vantelia-browser-qa-")
+    try:
         runtime = Path(raw_runtime)
         port = _free_port()
         base_url = f"http://127.0.0.1:{port}"
@@ -87,6 +91,7 @@ def main() -> int:
                 "REMINDER_RUN_INTERVAL_MINUTES": "0",
                 "WHATSAPP_ACCESS_TOKEN": "",
                 "SMTP_HOST": "",
+                "WEBHOOK_DEFAULT": "",
             }
         )
         os.environ.update(env)
@@ -108,6 +113,50 @@ def main() -> int:
             CID, PortalLocationPayload(name="Centro Browser B", address="Calle QA 2")
         )
 
+        # Catalogo y una cita para probar la agenda: escribir el servicio (en vez de
+        # buscarlo en un desplegable de 186) y estirar la cita arrastrando su borde.
+        import asyncio
+        import datetime as _dt
+
+        from backend import booking as _booking, db as _db
+
+        with _db._get_db_connection() as _cx:
+            _cols = [r[1] for r in _cx.execute("PRAGMA table_info(services)")]
+            _campo = "name" if "name" in _cols else "nombre"
+            for _slug, _nombre, _dur, _precio in (
+                ("mechas_balayage_corto", "Mechas o balayage-corto", 120, 8500),
+                ("mechas_balayage_largo", "Mechas o balayage-largo", 240, 13500),
+                ("corte_senora", "Corte senora", 20, 1800),
+            ):
+                _cx.execute(
+                    "INSERT OR REPLACE INTO services (cliente_id, slug, %s, duration_minutes,"
+                    " price_cents, is_active, created_at, updated_at)"
+                    " VALUES (?,?,?,?,?,1,datetime('now'),datetime('now'))" % _campo,
+                    (CID, _slug, _nombre, _dur, _precio),
+                )
+            _cx.commit()
+
+        # El tenant cierra los domingos: la cita se pone en el primer dia que abre,
+        # y el navegador avanza los dias que hagan falta.
+        # Manyana, no hoy: si el QA corre pasadas las 10:00 la cita seria pasada y
+        # el nucleo la rechaza (bien rechazada).
+        _hoy = _dt.date.today()
+        _dias = 1
+        while (_hoy + _dt.timedelta(days=_dias)).weekday() == 6:
+            _dias += 1
+        _fecha_cita = (_hoy + _dt.timedelta(days=_dias)).isoformat()
+        dias_hasta_la_cita = _dias
+        _emp = agenda._resolve_employee_for_booking(CID, "", require_active=False)
+        _cita = asyncio.new_event_loop().run_until_complete(
+            _booking._create_booking_core(
+                CID, employee_row=_emp, nombre="Clienta Arrastre", email="",
+                telefono="600000222", servicio="Corte senora", booking_date=_fecha_cita,
+                booking_time="10:00", notas="", source="portal_manual",
+                send_confirmation=False,
+            )
+        )
+        assert agenda._booking_row_duration_min(_cita, CID) == 20
+
         process = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", str(port)],
             cwd=str(REPO_ROOT),
@@ -124,6 +173,10 @@ def main() -> int:
                 console_errors = []
                 service_responses = []
                 page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+                # Una EXCEPCION de JS no siempre llega como console.error, y es peor:
+                # corta el render a medias. El 9-sep-2026 un "slotMin is not defined"
+                # dejo la vista Dia SIN CITAS pintadas y este QA lo daba por bueno.
+                page.on("pageerror", lambda err: console_errors.append("pageerror: %s" % err))
                 page.on(
                     "response",
                     lambda response: service_responses.append((response.request.method, response.status, response.url))
@@ -148,8 +201,13 @@ def main() -> int:
                 page.locator("#svcNombre").fill("Servicio Browser Retencion")
                 page.locator("#svcDuracion").fill("45")
                 page.locator("#svcPrecio").fill("75")
-                page.locator("#svcPaymentMode").select_option("payment_required")
-                page.locator("#svcPaymentType").select_option("preauth")
+                # El cobro ya no son dos desplegables sueltos: se elige UNA opcion en
+                # lenguaje del negocio y la UI rellena mode/type (campos ocultos). Este
+                # QA llevaba roto desde ese redisenyo -select_option sobre un input
+                # hidden no puede funcionar- y nadie lo vio porque no va en pytest.
+                page.locator("#svcCobro").select_option("retencion")
+                assert page.locator("#svcPaymentMode").input_value() == "payment_required"
+                assert page.locator("#svcPaymentType").input_value() == "preauth"
                 page.locator("#svcSaveBtn").click()
                 try:
                     page.wait_for_function(
@@ -208,11 +266,68 @@ def main() -> int:
                 assert page.locator("#page-informes").evaluate(
                     "(element) => element.scrollWidth <= element.clientWidth + 2"
                 )
+
+                # La agenda se prueba la ULTIMA y en pantalla de escritorio: arrastrar
+                # deja la pagina desplazada y el menu fuera de vista, y lo de arriba da
+                # por hecho que se esta donde estaba.
+                page.set_viewport_size({"width": 1500, "height": 950})
+                # ── Agenda: escribir el servicio y estirar la cita ─────────
+                # Las tres cosas que pidio el salon el 9-sep-2026 viendo su agenda
+                # de verdad: el servicio se ESCRIBE (tienen 186 y el desplegable no
+                # se puede usar), el cursor ya esta en ese campo al abrir, y la cita
+                # se estira arrastrando su borde como en su programa de siempre.
+                page.locator('.nav-item[data-tab="citas"]').click()
+                page.locator("#page-citas.active").wait_for()
+                page.locator("#citasNuevaBtn").click()
+                page.locator("#newBookingDrawer.open").wait_for()
+                assert page.evaluate("() => document.activeElement && document.activeElement.id") == "nbServicio", (
+                    "al abrir Nueva cita el cursor tiene que estar en el servicio"
+                )
+                page.keyboard.type("mech", delay=30)
+                page.wait_for_function("() => document.querySelectorAll('#nbSvcAc .nb-ac-item').length >= 2")
+                sugerencias = page.eval_on_selector_all("#nbSvcAc .nb-ac-item b", "els => els.map(e => e.textContent)")
+                assert all("mech" in s.lower() for s in sugerencias), sugerencias
+                # Dos palabras y en desorden: asi busca la gente, no por prefijo.
+                page.fill("#nbServicio", "")
+                page.keyboard.type("largo mech", delay=30)
+                page.wait_for_function("() => document.querySelectorAll('#nbSvcAc .nb-ac-item').length === 1")
+                page.keyboard.press("ArrowDown")
+                page.keyboard.press("Enter")
+                assert "largo" in page.input_value("#nbServicio").lower()
+                page.locator("#newBookingClose").click()
+
+                for _ in range(dias_hasta_la_cita):
+                    page.locator("#cdNext").click()
+                    page.wait_for_timeout(600)
+                page.wait_for_function("() => document.querySelectorAll('.cd-event').length >= 1")
+                evento = page.locator(".cd-event").first
+                evento.scroll_into_view_if_needed()
+                assert page.locator(".cd-ev-grip").count() >= 2, "la cita no tiene bordes para estirarla"
+                caja = page.locator(".cd-ev-grip.bot").first.bounding_box()
+                page.mouse.move(caja["x"] + caja["width"] / 2, caja["y"] + caja["height"] / 2)
+                page.mouse.down()
+                page.mouse.move(caja["x"] + caja["width"] / 2, caja["y"] + caja["height"] / 2 + 60, steps=12)
+                page.wait_for_selector(".cd-ev-dur")
+                with page.expect_response(lambda r: "/reschedule" in r.url) as guardado:
+                    page.mouse.up()
+                assert guardado.value.status == 200, guardado.value.status
+                page.wait_for_timeout(1500)
+                # Se vuelve a Informes: la parte de movil que viene detras da por
+                # hecho que se esta ahi.
+
                 browser.close()
 
                 if console_errors:
                     raise AssertionError(f"Errores de consola: {console_errors}")
-            print("PASS: Informes, filtros, graficos, servicios, centros, Ventas y responsive movil")
+            # Lo que de verdad importa del arrastre: que la cita OCUPE mas en la
+            # agenda. Si solo cambiara el dibujo, el asistente seguiria ofreciendo
+            # ese rato y meteria a otra clienta encima.
+            _final = _booking._load_booking_or_404(_cita["id"])
+            _dura = agenda._booking_row_duration_min(_final, CID)
+            assert _dura > 20, "estirar la cita no cambio lo que ocupa (%s min)" % _dura
+
+            print("PASS: Informes, filtros, graficos, servicios, centros, Ventas, "
+                  "agenda (servicio escrito + cita estirada a %d min) y responsive movil" % _dura)
             return 0
         finally:
             process.terminate()
@@ -220,6 +335,10 @@ def main() -> int:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 process.kill()
+    finally:
+        import shutil as _shutil
+
+        _shutil.rmtree(raw_runtime, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -764,7 +764,7 @@
     }
     .nb-ac.open { display:block; }
     .nb-ac-item { padding:8px 12px; cursor:pointer; }
-    .nb-ac-item:hover { background:var(--accent-soft); }
+    .nb-ac-item:hover, .nb-ac-item.sel { background:var(--accent-soft); }
     .nb-ac-item b { display:block; font-size:0.88rem; }
     .nb-ac-item span { display:block; font-size:0.76rem; color:var(--soft); }
     /* Marca del hueco bajo el cursor en la vista Dia: deja claro que se puede pinchar. */
@@ -849,6 +849,22 @@
     .cd-ev-tag { flex:0 0 auto; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
     .cd-ev-svc { font-size:0.72rem; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cd-event.compact { padding-top:3px; padding-bottom:3px; }
+    /* Bordes para estirar o acortar la cita con el raton, como en el programa de
+       toda la vida del salon. Solo se ven al pasar por encima: el bloque no puede
+       parecer un formulario. */
+    .cd-ev-grip { position:absolute; left:0; right:0; height:8px; cursor:ns-resize; z-index:8; touch-action:none; }
+    .cd-ev-grip.top { top:-2px; }
+    .cd-ev-grip.bot { bottom:-2px; }
+    .cd-ev-grip::after {
+      content:''; display:block; margin:2.5px auto 0; width:26px; height:3px;
+      border-radius:2px; background:var(--accent); opacity:0; transition:opacity .12s;
+    }
+    .cd-event:hover .cd-ev-grip::after { opacity:.8; }
+    .cd-event.resizing { box-shadow:0 0 0 2px var(--accent); z-index:9; }
+    .cd-ev-dur {
+      position:absolute; right:6px; bottom:4px; font-size:0.66rem; font-weight:800;
+      color:var(--accent); background:var(--panel-2); border-radius:5px; padding:1px 5px;
+    }
     .cd-event.compact .cd-ev-svc { display:none; }
     .cd-ev-pay { flex:0 0 auto; font-size:0.68rem; font-weight:800; margin-left:3px; }
     .cd-detail { margin-top:14px; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
@@ -4136,7 +4152,11 @@
       <span class="nb-num">1</span>
       <div class="nb-body">
         <label class="field-label">Servicio</label>
-        <select class="field-input" id="nbServicio"><option value="">Sin especificar</option></select>
+        <div class="nb-ac-wrap">
+          <input type="text" class="field-input" id="nbServicio" autocomplete="off"
+                 placeholder="Escribe el servicio (mechas, corte, alisado…)" />
+          <div class="nb-ac" id="nbSvcAc"></div>
+        </div>
       </div>
     </div>
 
@@ -7698,6 +7718,11 @@ async function openNewBookingDrawer(opts = {}) {
   campoFecha.value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
   document.getElementById('newBookingDrawer').classList.add('open');
   document.getElementById('newBookingOverlay').classList.add('open');
+  // A escribir directamente: quien coge citas todo el dia no quiere ir al raton
+  // para empezar (peticion del salon). Si venia con servicio prefijado se
+  // selecciona, asi que teclear lo sustituye.
+  const campoSvc = document.getElementById('nbServicio');
+  if (campoSvc) { campoSvc.focus(); campoSvc.select(); }
   await loadNbSlots(opts.time || '');
   // Se pincho un hueco pero ese tramo no admite el servicio elegido (p.ej. uno
   // de tres horas al final del dia): decirlo, no dejar el panel en silencio.
@@ -7707,38 +7732,94 @@ async function openNewBookingDrawer(opts = {}) {
   }
 }
 
+// El catalogo en memoria: la lista se escribe, no se despliega. Con 186 servicios
+// el desplegable era imposible de usar con el raton (peticion del salon, 9-sep-2026).
+let nbServicios = [];
+let nbSvcIdx = -1;
+
 async function loadNbServices() {
-  const sel = document.getElementById('nbServicio');
   try {
     const data = await api(`/servicios/${encodeURIComponent(state.cliente_id)}`);
     const list = data.servicios || data || [];
-    // Sin servicio no hay duracion real: la cita ocuparia el tramo minimo y se
-    // solaparia con la siguiente. Con catalogo, siempre hay uno elegido.
-    const opcion = s => {
-      const name = s.nombre || s.name || s.id || '';
-      const bits = [];
-      if (s.duration_minutes) bits.push(`${s.duration_minutes} min`);
-      if (s.price_label) bits.push(s.price_label);
-      const label = bits.length ? `${name} · ${bits.join(' · ')}` : name;
-      return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
-    };
-    // Catálogos largos agrupados por categoría; sin categorías, lista de siempre.
-    const usaCategorias = list.some(s => (s.category || '').trim());
-    let cuerpo;
-    if (usaCategorias) {
-      const grupos = new Map();
-      list.forEach(s => {
-        const clave = (s.category || '').trim() || 'Otros';
-        if (!grupos.has(clave)) grupos.set(clave, []);
-        grupos.get(clave).push(s);
-      });
-      cuerpo = [...grupos.entries()].map(([clave, items]) =>
-        `<optgroup label="${escapeHtml(clave)}">${items.map(opcion).join('')}</optgroup>`).join('');
-    } else {
-      cuerpo = list.map(opcion).join('');
-    }
-    sel.innerHTML = (list.length ? '' : '<option value="">Sin especificar</option>') + cuerpo;
-  } catch { sel.innerHTML = '<option value="">Sin especificar</option>'; }
+    nbServicios = list.map(s => ({
+      nombre: s.nombre || s.name || s.id || '',
+      dur: s.duration_minutes || 0,
+      precio: s.price_label || '',
+      cat: (s.category || '').trim(),
+    })).filter(s => s.nombre);
+  } catch { nbServicios = []; }
+}
+
+function nbSvcNorm(t) {
+  return (t || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function nbSvcCerrar() {
+  const ac = document.getElementById('nbSvcAc');
+  if (ac) { ac.classList.remove('open'); ac.innerHTML = ''; }
+  nbSvcIdx = -1;
+}
+
+// Casa por TODAS las palabras y en cualquier orden ("mechas largo" encuentra
+// "Mechas o balayage-largo"), y prioriza lo que EMPIEZA por lo escrito.
+function nbSvcSugerencias(q) {
+  const n = nbSvcNorm(q).trim();
+  if (!n) return nbServicios.slice(0, 8);
+  const palabras = n.split(/\s+/);
+  const empieza = [], dentro = [];
+  nbServicios.forEach(s => {
+    const heno = nbSvcNorm(s.nombre + ' ' + s.cat);
+    if (!palabras.every(p => heno.includes(p))) return;
+    (nbSvcNorm(s.nombre).startsWith(palabras[0]) ? empieza : dentro).push(s);
+  });
+  return empieza.concat(dentro).slice(0, 8);
+}
+
+function nbSvcPintar(lista) {
+  const ac = document.getElementById('nbSvcAc');
+  if (!ac) return;
+  if (!lista.length) { nbSvcCerrar(); return; }
+  ac.innerHTML = lista.map((s, i) => {
+    const bits = [];
+    if (s.dur) bits.push(`${s.dur} min`);
+    if (s.precio) bits.push(s.precio);
+    if (s.cat) bits.push(s.cat);
+    return `<div class="nb-ac-item${i === nbSvcIdx ? ' sel' : ''}" data-nbsvc="${i}">`
+      + `<b>${escapeHtml(s.nombre)}</b><span>${escapeHtml(bits.join(' · ') || 'sin duración configurada')}</span></div>`;
+  }).join('');
+  ac.classList.add('open');
+  ac.querySelectorAll('[data-nbsvc]').forEach(el => {
+    el.addEventListener('mousedown', (e) => {   // mousedown: antes del blur del input
+      e.preventDefault();
+      nbSvcElegir(lista[Number(el.dataset.nbsvc)].nombre);
+    });
+  });
+}
+
+function nbSvcElegir(nombre) {
+  const input = document.getElementById('nbServicio');
+  if (input) input.value = nombre;
+  nbSvcCerrar();
+  loadNbSlots();
+}
+
+function nbSvcBuscar() {
+  const input = document.getElementById('nbServicio');
+  if (!input) return;
+  nbSvcIdx = -1;
+  nbSvcPintar(nbSvcSugerencias(input.value));
+}
+
+// Lo escrito tiene que ser un servicio DEL CATALOGO: el backend reserva por
+// nombre. Si coincide entero se acepta; si solo hay una sugerencia, esa; si hay
+// varias, se le pide que elija en vez de mandar algo que no existe.
+function nbSvcResuelto() {
+  const escrito = (document.getElementById('nbServicio')?.value || '').trim();
+  if (!escrito) return '';
+  const exacto = nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito));
+  if (exacto) return exacto.nombre;
+  const sug = nbSvcSugerencias(escrito);
+  return sug.length === 1 ? sug[0].nombre : '';
 }
 
 function nbCloseAc() {
@@ -7786,7 +7867,7 @@ async function nbProximoHueco() {
   if (!base || base < hoy) base = hoy;
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Buscando el próximo hueco…</span>';
   const empId = document.getElementById('nbProf').value || '';
-  const servicio = document.getElementById('nbServicio').value || '';
+  const servicio = nbSvcResuelto();
   for (let i = 1; i <= 14; i++) {
     const d = new Date(base + 'T00:00:00');
     d.setDate(d.getDate() + i);
@@ -7855,7 +7936,7 @@ async function loadNbSlots(preselect = '') {
 
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Cargando huecos…</span>';
   try {
-    const servicio = document.getElementById('nbServicio').value || '';
+    const servicio = nbSvcResuelto();
     const qs = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(fecha)}`
       + (empId ? `&employee_id=${encodeURIComponent(empId)}` : '')
       + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '');
@@ -7896,7 +7977,32 @@ document.getElementById('newBookingClose').addEventListener('click', closeNewBoo
 document.getElementById('newBookingOverlay').addEventListener('click', closeNewBookingDrawer);
 document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
-document.getElementById('nbServicio').addEventListener('change', () => loadNbSlots());
+(() => {
+  const svc = document.getElementById('nbServicio');
+  if (!svc) return;
+  svc.addEventListener('input', nbSvcBuscar);
+  svc.addEventListener('focus', nbSvcBuscar);
+  svc.addEventListener('blur', () => setTimeout(nbSvcCerrar, 120));
+  svc.addEventListener('keydown', (e) => {
+    const ac = document.getElementById('nbSvcAc');
+    const abierto = ac && ac.classList.contains('open');
+    const lista = nbSvcSugerencias(svc.value);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!abierto) { nbSvcBuscar(); return; }
+      nbSvcIdx = e.key === 'ArrowDown'
+        ? Math.min(lista.length - 1, nbSvcIdx + 1)
+        : Math.max(0, nbSvcIdx - 1);
+      nbSvcPintar(lista);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const elegido = nbSvcIdx >= 0 && lista[nbSvcIdx] ? lista[nbSvcIdx].nombre : nbSvcResuelto();
+      if (elegido) nbSvcElegir(elegido);
+    } else if (e.key === 'Escape') {
+      nbSvcCerrar();
+    }
+  });
+})();
 document.getElementById('nbNombre').addEventListener('input', () => { nbSyncConfirm(); nbBuscarCliente(); });
 document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nbCloseAc, 180));
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
@@ -7905,7 +8011,7 @@ document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
     nombre: document.getElementById('nbNombre').value.trim(),
     email: document.getElementById('nbEmail').value.trim(),
     telefono: document.getElementById('nbTelefono').value.trim(),
-    servicio: document.getElementById('nbServicio').value,
+    servicio: nbSvcResuelto(),
     employee_id: document.getElementById('nbProf').value || '',
     fecha: document.getElementById('nbFecha').value,
     hora: document.getElementById('nbSlotSelected').value,
@@ -8727,6 +8833,14 @@ function renderCitasDay(){
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => openManageBookingModal(b));
       body.appendChild(btn);
+      if (est !== 'cancelled' && est !== 'completed' && est !== 'no_show' && hasPerm('agenda.create')) {
+        // OJO: el `slotMin` de arriba vive dentro del bloque del hueco vacio, no
+        // aqui. Se calcula igual pero en este ambito (lo cazo el navegador con un
+        // "slotMin is not defined" que dejaba la columna SIN CITAS pintadas).
+        const pasoRejilla = Number(c.emp && c.emp.slot_minutes)
+          || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
+        cdPonerBordes(btn, b, ev, body, startMin, pasoRejilla);
+      }
       // Los ratos de exposicion se pintan ENCIMA del bloque, en hueco: es la unica
       // forma de que se vea que ahi se puede meter a otra clienta. Sin esto el pack
       // parecia cuatro horas macizas y el negocio no las usaba.
@@ -8771,6 +8885,74 @@ function cdSelect(b){
   renderCitasDay();
   cdRenderDetail(b);
   document.getElementById('cdDetail').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// Estirar o acortar una cita arrastrando su borde. El salon lo hace asi en su
+// programa de siempre: la duracion del catalogo es una MEDIA y ellas saben lo que
+// tarda esa clienta. Lo que se guarda es el final real de la cita (`end_at`), que
+// es de donde sale la disponibilidad: el asistente se entera del cambio y deja de
+// ofrecer ese rato. Pedido el 9-sep-2026.
+function cdPonerBordes(btn, b, ev, body, startMin, slotMin){
+  const bid = b.booking_id || b.id;
+  if (!bid) return;
+  ['top','bot'].forEach(lado => {
+    const grip = document.createElement('div');
+    grip.className = 'cd-ev-grip ' + lado;
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();          // el clic es del borde, no de la cita
+      grip.setPointerCapture(e.pointerId);
+      const y0 = e.clientY;
+      const iniOrig = ev.startM, finOrig = ev.endM;
+      let ini = iniOrig, fin = finOrig;
+      // El final se mueve libre de 5 en 5; el PRINCIPIO se queda en la rejilla,
+      // porque una cita tiene que empezar en un hueco de verdad.
+      const paso = lado === 'bot' ? 5 : slotMin;
+      btn.classList.add('resizing');
+      const etiqueta = document.createElement('div');
+      etiqueta.className = 'cd-ev-dur';
+      btn.appendChild(etiqueta);
+      const pintar = () => {
+        btn.style.top = ((ini - startMin) * CD_PX_PER_MIN) + 'px';
+        btn.style.height = (Math.max(CD_MIN_BLOCK_H, (fin - ini) * CD_PX_PER_MIN) - 2) + 'px';
+        etiqueta.textContent = (fin - ini) + ' min';
+      };
+      const mover = (me) => {
+        const delta = Math.round(((me.clientY - y0) / CD_PX_PER_MIN) / paso) * paso;
+        if (lado === 'bot') fin = Math.max(iniOrig + 5, finOrig + delta);
+        else ini = Math.min(finOrig - 5, Math.max(startMin, iniOrig + delta));
+        pintar();
+      };
+      const soltar = async () => {
+        grip.removeEventListener('pointermove', mover);
+        grip.removeEventListener('pointerup', soltar);
+        grip.removeEventListener('pointercancel', soltar);
+        btn.classList.remove('resizing');
+        etiqueta.remove();
+        if (ini === iniOrig && fin === finOrig) return;
+        const cuerpo = {
+          fecha: b.fecha || b.booking_date || citasState.dayDate && cdDateKey(citasState.dayDate),
+          hora: cdMinsToHora(ini),
+          employee_id: b.employee_id || '',
+          duracion_minutos: fin - ini,
+        };
+        try {
+          await api(`/auth/bookings/${encodeURIComponent(bid)}/reschedule`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(cuerpo),
+          });
+          toast(`Cita de ${fin - ini} min`, 'success');
+        } catch (err) {
+          toast(err.message || 'No se ha podido cambiar la duración', 'error');
+        }
+        loadCitas();   // se repinta con lo que diga el servidor, no con lo arrastrado
+      };
+      grip.addEventListener('pointermove', mover);
+      grip.addEventListener('pointerup', soltar);
+      grip.addEventListener('pointercancel', soltar);
+    });
+    btn.appendChild(grip);
+  });
 }
 
 function cdSnapMins(body, clientY, startMin, slotMin){
