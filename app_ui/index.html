@@ -5990,13 +5990,24 @@ document.getElementById('waConnectBtn')?.addEventListener('click', async (ev) =>
       } catch { /* mensajes que no son del flujo */ }
     };
     window.addEventListener('message', onMessage);
-    // Embedded Signup v4 (v2 se retira el 15-oct-2026): solo config_id + extras.setup.
+    // Embedded Signup v4 (v2 se retira el 15-oct-2026).
+    //
+    // `featureType` es lo que pide COEXISTENCE, y es lo que hace que Meta ofrezca
+    // "conecta el numero que ya usas" (escaneando un QR desde la app del movil) en
+    // vez del alta clasica. Sin el, el asistente pedia "ingresar un nuevo numero"
+    // y cortaba con "este numero ya esta registrado en una cuenta de WhatsApp":
+    // justo lo que le pasa a CUALQUIER negocio que ya trabaja con su numero, que
+    // son todos. Visto el 9-sep-2026 probando el alta de verdad.
     const respuesta = await new Promise((resolve) => {
       FB.login(resolve, {
         config_id: st.es_config_id,
         response_type: 'code',
         override_default_response_type: true,
-        extras: { setup: {} },
+        extras: {
+          setup: {},
+          featureType: 'whatsapp_business_app_onboarding',
+          sessionInfoVersion: '3',
+        },
       });
     });
     window.removeEventListener('message', onMessage);
