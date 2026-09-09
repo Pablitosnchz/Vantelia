@@ -72,3 +72,6 @@ def test_el_endpoint_de_alta_tambien_lo_mira(api_module):  # noqa: F811
 
     fuente = inspect.getsource(portal_app)
     assert "embedded_signup_available(cliente_id)" in fuente
+    # Y la vuelta del registro alojado mira la lista aunque Meta ya haya
+    # redirigido: un enlace generado antes no puede colar un alta.
+    assert "signup_abierto_para(cliente_id)" in fuente

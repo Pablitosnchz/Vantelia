@@ -2178,7 +2178,7 @@ async def whatsapp_signup_callback(
             return _pagina_alta_whatsapp("No se ha podido conectar", str(exc.detail), ok=False)
     # Misma puerta que el boton del panel: si a este tenant todavia no se le
     # ofrece el alta, un enlace viejo tampoco vale.
-    if not wa_onboarding.embedded_signup_available(cliente_id):
+    if not wa_onboarding.signup_abierto_para(cliente_id):
         return _pagina_alta_whatsapp(
             "Todavia no disponible",
             "La conexion automatica de WhatsApp aun no esta abierta para tu cuenta. "

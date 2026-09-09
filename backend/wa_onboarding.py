@@ -52,6 +52,16 @@ def embedded_signup_available(cliente_id: str = "") -> bool:
             and getattr(settings, "WHATSAPP_APP_SECRET", "")
             and getattr(settings, "WHATSAPP_ES_CONFIG_ID", "")):
         return False
+    return signup_abierto_para(cliente_id)
+
+
+def signup_abierto_para(cliente_id: str = "") -> bool:
+    """Solo la lista de tenants, sin mirar si Meta esta configurado.
+
+    Lo usa la vuelta del registro alojado: si Meta ha redirigido hasta aqui es
+    que la app esta configurada, y lo unico que queda por comprobar es si a ESTE
+    negocio ya se le ofrece el alta.
+    """
     permitidos = [t.strip() for t in
                   str(getattr(settings, "WHATSAPP_ES_TENANTS", "") or "").split(",")
                   if t.strip()]
