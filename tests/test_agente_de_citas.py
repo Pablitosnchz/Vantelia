@@ -1034,26 +1034,33 @@ def test_anunciar_que_va_a_mirar_la_agenda_cuenta_como_no_mirarla(api_module):  
 
 
 def test_elegir_servicio_y_hora_ya_es_pedir_cita(api_module):  # noqa: F811
-    """El freno de "nadie acaba con una cita que no ha pedido" mira SUS palabras, y
+    """El freno de "nadie acaba con una cita que no ha pedido" miraba SUS palabras, y
     "quiero unas mechas" no lleva ninguna de las formas de pedir cita.
 
     Resultado, cazado por el humo y no por los 1.475 tests: rechazo la reserva de
     una clienta que habia elegido servicio, largo del pelo, dia y hora, y habia
     dado su nombre. A tener servicio Y hora en el estado solo se llega recorriendo
     la reserva entera: eso ES pedir cita, lo diga como lo diga.
-    """
-    import inspect
 
+    (9-sep-2026: la regla se comprueba por lo que HACE. Antes se miraba que el
+    bucle llevara escrita una condicion literal, y al mover el freno a
+    `_nadie_ha_pedido_esta_cita` -para poder probarlo con conversaciones reales-
+    el test salto sin que la regla se hubiera roto.)
+    """
     from backend import agent, reserva
 
     assert reserva.ha_pedido_cita("quiero unas mechas") is False, (
         "si algun dia esto cambia, este test deja de probar lo que cree"
     )
-    fuente = inspect.getsource(agent.responder)
-    trozo = fuente[fuente.index('llamada.function.name == "crear_cita"\n'
-                                '                        and not (estado.servicio'):]
-    assert "estado.servicio and estado.hora" in trozo[:200]
-
+    estado = reserva.Estado()
+    estado.servicio = "Mechas o balayage medio"
+    estado.hora = "11:00"
+    argumentos = {"servicio": estado.servicio, "fecha": "2026-09-15",
+                  "hora": estado.hora, "nombre": "Ana Ruiz"}
+    assert not agent._nadie_ha_pedido_esta_cita(
+        "demo", estado, "quiero unas mechas", [], "quiero unas mechas", argumentos), (
+        "con servicio y hora ya elegidos, el freno no puede decir que no ha pedido cita"
+    )
 
 def test_quien_solo_pregunta_el_horario_sigue_sin_llevarse_una_cita(api_module):  # noqa: F811
     """La mitad que protege, que es por lo que existe el freno: al negocio le deja

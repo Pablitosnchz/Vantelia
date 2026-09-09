@@ -2360,6 +2360,73 @@ def _le_ofrecieron_cita_y_dijo_que_si(historial: List[Dict[str, str]], mensaje: 
     return False
 
 
+def _hora_que_alguien_ha_nombrado(historial, estado, argumentos) -> bool:
+    """Esa hora ya estaba encima de la mesa: no se la ha sacado el modelo.
+
+    De lo que protege el freno es de que el modelo coja una cita a una hora que
+    NADIE ha nombrado. Asi que la pregunta correcta no es quien la dijo, sino si
+    se dijo: vale que salga de `consultar_disponibilidad`, que la escribiera el
+    asistente al ofrecerla, o que la dijera ella ("a las 15").
+
+    Esto sustituye a adivinar por frases, que es lo que fallaba: la lista tenia
+    "te reservo" y el asistente escribio "te reserve", una letra, y la clienta se
+    quedo sin cita despues de decir "si" tres veces (9-sep-2026).
+
+    El precio de ampliarlo: si el asistente ha escrito una hora por otro motivo
+    -"abrimos de 10:00 a 20:00"- y el modelo intenta reservar justo esa, el freno
+    ya no lo para. Se asume a proposito: en WhatsApp la cita no nace sin que ella
+    pulse el boton del resumen, y quedarse corto aqui costaba reservas de verdad.
+    """
+    hora = str((argumentos or {}).get("hora") or "").strip()
+    if not hora:
+        return False
+    if hora in list(getattr(estado, "huecos", None) or []):
+        return True
+    corta = hora[:-3] if hora.endswith(":00") else ""   # "15:00" -> "15", como lo dice la gente
+    for anterior in list(historial or [])[-10:]:
+        texto = str(anterior.get("content") or "")
+        if hora in texto:
+            return True
+        if corta and anterior.get("role") == "user" and re.search(
+                r"\b(a las|sobre las|las)\s+%s\b" % re.escape(corta), catalog_pick._norm(texto)):
+            return True
+    return False
+
+
+def _nadie_ha_pedido_esta_cita(cliente_id, estado, dicho_de_ella, historial, mensaje,
+                               argumentos) -> bool:
+    """Nadie acaba con una cita que no ha pedido. Decidido por HECHOS.
+
+    El freno existe porque el modelo cogia citas a quien solo preguntaba. Pero
+    decidia mirando las PALABRAS de ella, y ahi se colaba el caso legitimo: el
+    asistente propone hora y ella dice "si". Cada vez que el modelo redactaba el
+    ofrecimiento de otra forma, el freno bloqueaba una reserva de verdad y el
+    modelo improvisaba: medido el 9-sep-2026, salto CINCO veces seguidas en la
+    misma conversacion y la clienta acabo sin cita despues de decir "si" tres
+    veces.
+
+    Ahora se aparta ante cualquiera de estos HECHOS:
+      · ya hay servicio y hora en el estado (a eso solo se llega reservando),
+      · la intencion de reservar esta declarada,
+      · ella lo ha pedido con sus palabras,
+      · o ESA HORA YA ESTABA ENCIMA DE LA MESA (la ofrecimos nosotros o la
+        dijo ella): entonces no se la ha sacado el modelo de la manga.
+    """
+    from backend import reserva   # tardio: agent y reserva se importan en cadena
+
+    if estado.servicio and estado.hora:
+        return False
+    if estado.intencion == "reservar":
+        return False
+    if reserva.ha_pedido_cita(dicho_de_ella):
+        return False
+    if _le_ofrecieron_cita_y_dijo_que_si(historial, mensaje):
+        return False
+    if _hora_que_alguien_ha_nombrado(historial, estado, argumentos):
+        return False
+    return True
+
+
 def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
     """¿Se esta moviendo la cita a una hora que ni ha pedido ni se le ha ofrecido?
 
@@ -3870,10 +3937,15 @@ async def responder(
                 # elegido servicio, largo, dia y hora, y habia dado su nombre. Lo
                 # cazo el humo; los 1.475 tests no.
                 if (llamada.function.name == "crear_cita"
-                        and not (estado.servicio and estado.hora)
-                        and estado.intencion != "reservar"
-                        and not reserva.ha_pedido_cita(dicho_de_ella)
-                        and not _le_ofrecieron_cita_y_dijo_que_si(historial, mensaje)):
+                        and _nadie_ha_pedido_esta_cita(
+                            cliente_id, estado, dicho_de_ella, historial, mensaje,
+                            argumentos)
+                        # Red de seguridad: un freno que salta dos veces en la misma
+                        # conversacion ya no protege, bloquea. A la segunda se aparta
+                        # y la clienta llega al resumen con botones, que es donde
+                        # puede decir que no si de verdad no la queria.
+                        and getattr(estado, "veces_sin_pedirla", 0) < 2):
+                    estado.veces_sin_pedirla = getattr(estado, "veces_sin_pedirla", 0) + 1
                     resultado = {
                         "ok": False,
                         "error": ("No te ha pedido ninguna cita: solo esta preguntando. "

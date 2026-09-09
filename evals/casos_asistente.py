@@ -38,6 +38,25 @@ from __future__ import annotations
 
 # Cada caso corre en una conversacion limpia (telefono propio).
 CASOS = [
+    {
+        "id": "dice-que-si-y-acaba-en-cita",
+        "gravedad": "critico",
+        "solo_si": "sin_precio:mechas balayage color",
+        "por_que": ("Conversacion real del 9-sep-2026: le ofrecieron hora, dijo que si "
+                    "TRES veces y se quedo sin cita. El freno de 'cita sin pedirla' "
+                    "bloqueo la creacion cinco veces seguidas porque el asistente "
+                    "escribio 'te reserve' y la lista de frases tenia 'te reservo'."),
+        # El nombre va al final porque en el banco la clienta es DESCONOCIDA: por
+        # WhatsApp el telefono ya la identifica y no se lo piden. Lo que se mide es
+        # lo mismo: que decir "si" a una hora ofrecida termine en cita.
+        "mensajes": ["quiero un alisado", "no lo tengo claro", "manana",
+                     "a las 15", "si", "me llamo Ana Ruiz"],
+        # En WhatsApp la cita NACE al pulsar el boton del resumen, no antes: el
+        # final bueno de esta conversacion es el resumen para confirmar. Pedir
+        # aqui `agenda: crea` seria pedir que la cita naciera sin que ella la
+        # confirme, que es justo lo que el canal evita a proposito.
+        "debe": ["Resumen de tu cita", "Confirmamos"],
+    },
     # ─── La demo del 8-sep-2026, delante de la duenya ──────────────────────
     {
         "id": "palabra-suelta-no-es-un-servicio",
