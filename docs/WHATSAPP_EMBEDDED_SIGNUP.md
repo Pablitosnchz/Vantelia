@@ -42,15 +42,36 @@ Verification si algún día se quiere esa vía.
 Queda por comprobar lo único que decide de verdad: **dar de alta un número real**.
 Hasta hacerlo no se sabe si el acceso concedido basta.
 
-Orden para activarlo:
+### Montado el 9-sep-2026 (listo para la prueba)
 
-1. `.env` del VPS: `WHATSAPP_APP_ID`, `WHATSAPP_ES_CONFIG_ID`, `WHATSAPP_ES_PIN`.
-   En cuanto estén, **aparece el botón "Conectar mi WhatsApp"** en el portal de
-   TODOS los tenants.
-2. Suscribir el webhook de la app al campo **`smb_message_echoes`** (ver abajo).
-   Sin él el asistente no se calla cuando el negocio responde desde su móvil.
-3. Probar con un número **que no sea de un cliente**. Un cliente pulsando un
-   botón roto es peor que no tener botón.
+| Cosa | Estado |
+| --- | --- |
+| `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ES_CONFIG_ID` | ya estaban en el `.env` del VPS (el botón llevaba tiempo visible para TODOS) |
+| `WHATSAPP_ES_PIN` | `222222` |
+| `WHATSAPP_ES_TENANTS` | `metareview` — solo ese tenant ve el botón |
+| Webhook de la app | ya suscrito a `messages`, `flows`, `history`, `smb_app_state_sync`, **`smb_message_echoes`**, `account_update` |
+| Tenant de pruebas | `metareview`, plan subido a *business* (con `free` el plan no permite WhatsApp) |
+| Entrar al portal | `appreview@vantelia.es` en `app.vantelia.es/acceso` |
+
+La lista de tenants la miran los TRES caminos: el botón del panel, el endpoint
+que cierra el alta y la vuelta del registro alojado (un enlace generado antes
+tampoco cuela). Cuando el alta esté probada, se vacía `WHATSAPP_ES_TENANTS` y
+queda abierto a todos.
+
+### La prueba
+
+1. Entrar al portal como el tenant de pruebas → pestaña WhatsApp → "Conectar mi
+   WhatsApp".
+2. Meta pide el número y lo verifica.
+3. Al volver, el panel debe decir **Conectado** con el número.
+4. Escribir al número desde otro teléfono: contesta el asistente.
+5. Responder desde la app de WhatsApp Business del negocio: **el asistente tiene
+   que callarse solo** en esa conversación (eso es el eco).
+
+**Ojo con el número.** Coexistence exige que el número YA esté funcionando en la
+app de WhatsApp Business de un móvil; si es uno nuevo, lo que se prueba es el
+alta clásica y no el eco, que es justo lo que se le vende al cliente. Y Meta
+rechaza a menudo los números virtuales/VoIP.
 
 ## Estado anterior (31-ago-2026)
 

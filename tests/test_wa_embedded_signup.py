@@ -283,7 +283,12 @@ def test_el_estado_del_enlace_va_firmado_y_devuelve_el_tenant(api_module, _meta_
     estado = wa_onboarding.make_signup_state("demo")
 
     assert wa_onboarding.read_signup_state(estado) == "demo"
-    assert wa_onboarding.read_signup_state(estado[:-1] + "0") == ""   # firma tocada
+    # OJO: el caracter de reemplazo tiene que ser DISTINTO del que habia. Cambiarlo
+    # siempre por "0" hacia el test intermitente -una de cada tantas firmas acaba en
+    # "0" y el estado "manipulado" era el bueno-. Salto en la tanda del 9-sep-2026 y
+    # costo un rato descartar que fuera contaminacion entre tests.
+    otro = "1" if estado[-1] != "1" else "2"
+    assert wa_onboarding.read_signup_state(estado[:-1] + otro) == ""   # firma tocada
     assert wa_onboarding.read_signup_state("cualquier-cosa") == ""
 
 
