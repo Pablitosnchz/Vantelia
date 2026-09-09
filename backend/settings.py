@@ -82,6 +82,11 @@ WHATSAPP_DEMO_PUBLIC_NUMBER = os.getenv("WHATSAPP_DEMO_PUBLIC_NUMBER", "").strip
 WHATSAPP_APP_ID = os.getenv("WHATSAPP_APP_ID", "").strip()
 WHATSAPP_ES_CONFIG_ID = os.getenv("WHATSAPP_ES_CONFIG_ID", "").strip()
 WHATSAPP_ES_PIN = os.getenv("WHATSAPP_ES_PIN", "").strip()
+# Tenants a los que se les ofrece el alta self-service. Vacio = a todos.
+# Existe para poder PROBAR el alta sin que el boton le aparezca a un cliente
+# real: si el alta falla a medias, su numero se queda a medio configurar y
+# ese numero es con el que trabaja.
+WHATSAPP_ES_TENANTS = os.getenv("WHATSAPP_ES_TENANTS", "").strip()
 # Reserva como formulario dentro de WhatsApp (WhatsApp Flows). Sin las dos, el
 # canal sigue usando el flujo por mensajes de siempre.
 WHATSAPP_BOOKING_FLOW_ID = os.getenv("WHATSAPP_BOOKING_FLOW_ID", "").strip()

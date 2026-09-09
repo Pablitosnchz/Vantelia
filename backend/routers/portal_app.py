@@ -2080,7 +2080,7 @@ async def app_whatsapp_connect(
     """
     security._require_portal_min_role(user, "owner")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
-    if not wa_onboarding.embedded_signup_available():
+    if not wa_onboarding.embedded_signup_available(cliente_id):
         raise HTTPException(status_code=503, detail="La conexion automatica de WhatsApp no esta configurada.")
     return {"ok": True, "account": await _completar_alta_whatsapp(
         cliente_id,

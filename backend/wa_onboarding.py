@@ -38,13 +38,26 @@ MODE_COEXISTENCE = "coexistence"
 MODE_API = "api"
 
 
-def embedded_signup_available() -> bool:
-    """La UI solo ofrece el boton si Meta esta configurado de verdad."""
-    return bool(
-        getattr(settings, "WHATSAPP_APP_ID", "")
-        and getattr(settings, "WHATSAPP_APP_SECRET", "")
-        and getattr(settings, "WHATSAPP_ES_CONFIG_ID", "")
-    )
+def embedded_signup_available(cliente_id: str = "") -> bool:
+    """La UI solo ofrece el boton si Meta esta configurado de verdad.
+
+    `WHATSAPP_ES_TENANTS` permite abrirlo primero a UNO. Se puso el 8-sep-2026,
+    al aprobar Meta la revision: en cuanto se configuran las variables el boton
+    aparece en el portal de TODOS los tenants, y el alta todavia no se ha probado
+    con un numero real. Un cliente pulsando un boton que falla a medias se queda
+    con su numero -el que usa para trabajar- a medio configurar. Vacio = a todos,
+    que es como quedara cuando este probado.
+    """
+    if not (getattr(settings, "WHATSAPP_APP_ID", "")
+            and getattr(settings, "WHATSAPP_APP_SECRET", "")
+            and getattr(settings, "WHATSAPP_ES_CONFIG_ID", "")):
+        return False
+    permitidos = [t.strip() for t in
+                  str(getattr(settings, "WHATSAPP_ES_TENANTS", "") or "").split(",")
+                  if t.strip()]
+    if not permitidos:
+        return True
+    return bool(cliente_id) and cliente_id in permitidos
 
 
 # --- El enlace de alta que se le manda al negocio ---------------------------
@@ -98,7 +111,7 @@ def hosted_signup_url(cliente_id: str, *, base_url: str = "") -> str:
     `featureType=whatsapp_business_app_onboarding` es lo que activa Coexistence:
     el numero se queda en la app de WhatsApp Business de su movil.
     """
-    if not embedded_signup_available():
+    if not embedded_signup_available(cliente_id):
         return ""
     base = (base_url or str(getattr(settings, "APP_BASE_URL", "") or "")).rstrip("/")
     extras = {

@@ -75,7 +75,7 @@ def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResp
         cliente_id=cliente_id,
         enabled=enabled,
         phone_number_id=phone_number_id,
-        embedded_signup_available=wa_onboarding.embedded_signup_available(),
+        embedded_signup_available=wa_onboarding.embedded_signup_available(cliente_id),
         meta_app_id=settings.WHATSAPP_APP_ID,
         es_config_id=settings.WHATSAPP_ES_CONFIG_ID,
         connected_number=cuenta.get("display_phone_number", "") if cuenta else "",
