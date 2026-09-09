@@ -4090,6 +4090,17 @@
           <input type="date" class="field-input" id="nbFecha" />
         </div>
         <div id="nbSlots" class="nb-chips" style="margin-top:8px;"></div>
+        <!-- Apuntar a mano una hora fuera del horario publicado: el salon abre a
+             las 10:00 y algun dia entra a las ocho por un evento. Lo hacen ellas;
+             el asistente sigue sin poder salirse del horario. -->
+        <details class="nb-more" id="nbFueraWrap" style="margin-top:10px;">
+          <summary>Otra hora · también fuera de tu horario</summary>
+          <div class="nb-row" style="margin-top:8px; align-items:center;">
+            <input type="time" class="field-input" id="nbHoraLibre" step="300" />
+            <button class="btn btn-ghost" type="button" id="nbHoraLibreBtn" style="white-space:nowrap;">Usar esta hora</button>
+          </div>
+          <p class="panel-sub" id="nbFueraAviso" style="margin:6px 0 0; font-size:0.78rem;"></p>
+        </details>
       </div>
     </div>
 
@@ -7589,6 +7600,12 @@ async function openNewBookingDrawer(opts = {}) {
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
   document.getElementById('nbSlotSelected').value = '';
   nbHoraPedida = opts.time || '';
+  const libre = document.getElementById('nbHoraLibre');
+  if (libre) libre.value = opts.time || '';
+  const avisoFuera = document.getElementById('nbFueraAviso');
+  if (avisoFuera) avisoFuera.textContent = '';
+  const wrapFuera = document.getElementById('nbFueraWrap');
+  if (wrapFuera) wrapFuera.open = !!opts.fueraDeHorario;
   document.getElementById('nbConfirmBtn').disabled = true;
   const campoFecha = document.getElementById('nbFecha');
   campoFecha.min = cdDateKey(new Date());   // el backend rechaza fechas pasadas
@@ -7601,6 +7618,20 @@ async function openNewBookingDrawer(opts = {}) {
   const campoSvc = document.getElementById('nbServicio');
   if (campoSvc) { campoSvc.focus(); campoSvc.select(); }
   await loadNbSlots(opts.time || '');
+  // Vino de pinchar la franja de fuera de horario: esa hora no esta entre los
+  // huecos ofrecidos -por eso se pincho ahi-, asi que se deja puesta a mano en
+  // vez de decirle que "no encaja", que seria mentira.
+  if (opts.fueraDeHorario && opts.time && !document.getElementById('nbSlotSelected').value) {
+    document.getElementById('nbSlotSelected').value = opts.time;
+    const aviso = document.getElementById('nbFueraAviso');
+    if (aviso) {
+      aviso.textContent = `Cita a las ${opts.time}, fuera de tu horario habitual. `
+        + 'La coges tú: el asistente no ofrece esa hora.';
+    }
+    const pista = document.getElementById('nbHint');
+    if (pista) pista.textContent = '';
+    nbSyncConfirm();
+  }
 }
 
 // La hora que la persona ha pedido (pinchando un hueco en la agenda o eligiendo
@@ -7863,6 +7894,30 @@ function closeNewBookingDrawer() {
 document.getElementById('citasNuevaBtn').addEventListener('click', () => openNewBookingDrawer().catch(e => toast(e.message, 'error')));
 document.getElementById('newBookingClose').addEventListener('click', closeNewBookingDrawer);
 document.getElementById('newBookingOverlay').addEventListener('click', closeNewBookingDrawer);
+// Hora escrita a mano: vale cualquiera, tambien fuera del horario. El servidor
+// sigue comprobando lo que puede hacer dano (que no pise otra cita, un bloqueo o
+// el aforo); lo que se levanta es solo la rejilla de huecos ofrecidos.
+document.getElementById('nbHoraLibreBtn')?.addEventListener('click', () => {
+  const campo = document.getElementById('nbHoraLibre');
+  const hora = (campo?.value || '').trim();
+  const aviso = document.getElementById('nbFueraAviso');
+  if (!/^\d{2}:\d{2}$/.test(hora)) {
+    if (aviso) aviso.textContent = 'Escribe una hora, por ejemplo 08:30.';
+    return;
+  }
+  document.querySelectorAll('#nbSlots .filter-chip').forEach(c => c.classList.remove('active'));
+  document.getElementById('nbSlotSelected').value = hora;
+  nbHoraPedida = hora;
+  const ofrecido = [...document.querySelectorAll('#nbSlots .filter-chip')]
+    .some(c => c.textContent.trim() === hora);
+  if (aviso) {
+    aviso.textContent = ofrecido
+      ? `Cita a las ${hora}.`
+      : `Cita a las ${hora}, fuera de tu horario habitual. La coges tú: el asistente no ofrece esa hora.`;
+  }
+  nbSyncConfirm();
+});
+
 document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
 (() => {
@@ -8698,6 +8753,25 @@ function renderCitasDay(){
       const d = document.createElement('div'); d.className = opt.cls;
       d.style.top = (a*CD_PX_PER_MIN) + 'px'; d.style.height = ((b-a)*CD_PX_PER_MIN) + 'px';
       if (opt.label){ const s = document.createElement('span'); s.textContent = opt.label; d.appendChild(s); }
+      // Fuera del horario tambien se puede apuntar a mano: el salon abre a las
+      // 10:00 y algun dia entra a las ocho por un evento. Antes la franja se
+      // tragaba el clic y no habia forma de escribir esa cita. Los BLOQUEOS no:
+      // ahi hay un motivo puesto por el negocio.
+      if (opt.cls === 'cd-unavail' && hasPerm('agenda.create')) {
+        d.style.cursor = 'copy';
+        d.title = 'Fuera de tu horario · puedes apuntar una cita a mano';
+        d.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const paso = Number(c.emp && c.emp.slot_minutes)
+            || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
+          const mins = cdSnapMins(body, e.clientY, startMin, Math.min(paso, 15));
+          const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (prof || '');
+          openNewBookingDrawer({
+            date: c.dateKey, time: cdMinsToHora(mins), employeeId: empId,
+            fueraDeHorario: true,
+          }).catch(err => toast(err.message, 'error'));
+        });
+      }
       body.appendChild(d);
     };
     if (info.isClosed){ band(startMin, endMin, { cls:'cd-unavail' }); const n = document.createElement('div'); n.className = 'cd-closed'; n.textContent = 'No disponible'; body.appendChild(n); }
@@ -8723,7 +8797,17 @@ function renderCitasDay(){
       if ((b.booking_id || b.id) === citasState.selectedDayBookingId) btn.classList.add('selected');
       const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
-      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
+      // En las citas CORTAS (un tinte de 15 min) no cabe la segunda linea y el
+      // servicio desaparecia: se veia el nombre y nada mas. El salon lo pidio el
+      // 9-sep-2026 -"aunque sea de 15 minutos tengo que ver el nombre y el
+      // servicio"-, asi que ahi van los dos en la misma linea. Y el titulo lleva
+      // todo completo para cuando el bloque es tan estrecho que corta.
+      const quien = b.nombre || b.client_name || b.name || b.servicio || 'Cita';
+      const servicioCorto = String(b.servicio || '').trim();
+      const compacta = h < 46;
+      const linea = compacta && servicioCorto ? `${hora} · ${quien} · ${servicioCorto}` : `${hora} · ${quien}`;
+      btn.title = [hora, quien, servicioCorto, view.label].filter(Boolean).join(' · ');
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(linea)}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => {
         // Soltar el borde despues de estirar dispara un click sobre la cita, y
         // abria el panel de Gestionar cada vez. Se traga ese click y ya esta.

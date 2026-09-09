@@ -3200,9 +3200,16 @@ async def auth_create_booking(
                 detail="Se ha alcanzado el limite mensual de citas del plan.",
             )
 
+    # El mostrador apunta a mano, y a veces fuera del horario publicado: abren a
+    # las diez y ese dia entran a las ocho por un evento. Lo pidio el salon el
+    # 9-sep-2026 -"que la IA no coja citas fuera de horario me parece bien, esos
+    # horarios extra los hacemos nosotras, pero la agenda me tiene que dejar
+    # escribirlo"-. Lo que se sigue comprobando es lo que puede hacer dano: pisar
+    # otra cita, un bloqueo o el aforo del centro.
     if not await agenda._booking_slot_available(
         target_client_id, booking_date, booking_time,
         employee_id=employee_row["id"], duration_minutes=service_duration,
+        en_rejilla=False,
     ):
         raise HTTPException(
             status_code=409,
@@ -3222,6 +3229,7 @@ async def auth_create_booking(
         source="portal_manual",
         request=request,
         audit_extra={"role": user["role"], "user_id": user["id"]},
+        fuera_de_horario=True,
     )
     booking_id = booking_row["id"]
     if missing_reminder_contact:

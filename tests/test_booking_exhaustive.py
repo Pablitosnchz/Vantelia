@@ -259,23 +259,51 @@ def test_slot_at_or_after_day_end_not_offered(client: TestClient, api_module, ad
 
 
 def test_booking_before_day_start_rejected(client: TestClient, api_module, admin_cookies: dict):
-    """Intentar reservar a las 07:00 cuando day_start=09:00 debe devolver 409."""
+    """El MOSTRADOR puede apuntar antes de abrir; los canales publicos no.
+
+    Cambio de contrato pedido por el salon piloto el 9-sep-2026: "abrimos a las
+    10:00 pero a veces necesitamos abrir a las nueve o a las ocho por algun
+    evento... que la IA no coja citas fuera de sus horarios me parece bien, esos
+    horarios extras los hacemos nosotras, pero la agenda me tiene que permitir
+    escribirlo". Antes esto era un 409 para todo el mundo.
+
+    Lo que sigue cerrado para el mostrador: el pasado, los descansos, los dias
+    cerrados, los bloqueos y pisar otra cita.
+    """
     fecha = _next_weekday(3)
     employee_id = _make_employee(client, admin_cookies, day_start="09:00", day_end="18:00")
     try:
         r = _book(client, admin_cookies, fecha, "07:00", employee_id=employee_id)
-        assert r.status_code == 409
+        assert r.status_code == 200, r.text
+        booking_id = r.json().get("booking_id") or r.json().get("id")
+        if booking_id:
+            from backend import db
+
+            with db._get_db_connection() as cx:
+                cx.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+                cx.commit()
     finally:
         _delete_employee(client, admin_cookies, employee_id)
 
 
 def test_booking_at_day_end_rejected(client: TestClient, api_module, admin_cookies: dict):
-    """Reservar exactamente en day_end debe rechazarse (el servicio no cabe)."""
+    """Quedarse mas alla del cierre: lo mismo que entrar antes, y por lo mismo.
+
+    Al mostrador se le deja (se quedan ellas), a los canales publicos no. Ver
+    `test_booking_before_day_start_rejected` para el porque del cambio.
+    """
     fecha = _next_weekday(3)
     employee_id = _make_employee(client, admin_cookies, day_start="09:00", day_end="11:00", slot_minutes=30)
     try:
         r = _book(client, admin_cookies, fecha, "11:00", employee_id=employee_id)
-        assert r.status_code == 409
+        assert r.status_code == 200, r.text
+        booking_id = r.json().get("booking_id") or r.json().get("id")
+        if booking_id:
+            from backend import db
+
+            with db._get_db_connection() as cx:
+                cx.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+                cx.commit()
     finally:
         _delete_employee(client, admin_cookies, employee_id)
 

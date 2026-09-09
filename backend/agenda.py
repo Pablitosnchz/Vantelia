@@ -2965,17 +2965,88 @@ def _booking_conflicts_outside_schedule(
     return conflicts
 
 
+def _ese_dia_no_abren(cliente_id: str, fecha: str, employee_row) -> bool:
+    """Ese dia el negocio no abre (domingo y similares).
+
+    Apuntar a mano vale para ADELANTAR la apertura -abren a las diez y ese dia
+    entran a las ocho-, no para abrir un dia que esta cerrado entero. La clienta
+    lo pidio por horas, no por dias, y un dia cerrado se pinta "No disponible" de
+    arriba abajo: dejar caer una cita ahi seria una sorpresa. Si algun dia hacen
+    eventos en domingo, se abre quitando esta comprobacion.
+    """
+    try:
+        booking_cfg = _employee_schedule_from_row(employee_row)
+        dia = textnorm._parse_date(fecha)
+        return textnorm._weekday_hours(booking_cfg, dia.weekday()) is None
+    except Exception:  # noqa: BLE001 - ante la duda no se bloquea nada
+        return False
+
+
+def _pisa_un_descanso(cliente_id: str, start_min: int, end_min: int, employee_row) -> bool:
+    """El tramo cae en un descanso (el de la profesional o el general del negocio).
+
+    Los descansos SI se respetan aunque el mostrador apunte a mano fuera de
+    horario: abrir antes por un evento es una cosa, y meterle una clienta a otra
+    en mitad de su parada de comer es otra. El general cierra la agenda de todo el
+    equipo, asi que saltarselo no afecta solo a quien apunta.
+    """
+    try:
+        config = clients._get_client_config(cliente_id)
+        booking_cfg = _employee_schedule_from_row(employee_row)
+        descansos = _break_intervals_from_windows(booking_cfg.get("break_windows", []))
+        descansos.extend(_break_intervals_from_windows(_client_break_windows(config)))
+        return _interval_overlaps(start_min, end_min, descansos)
+    except Exception:  # noqa: BLE001 - ante la duda no se bloquea nada
+        return False
+
+
+def _ya_ha_pasado(cliente_id: str, fecha: str, start_min: int, employee_row) -> bool:
+    """Esa hora de ese dia ya paso, en la zona horaria del negocio."""
+    try:
+        booking_cfg = _employee_schedule_from_row(employee_row)
+        tz = ZoneInfo(booking_cfg["timezone"])
+        dia = textnorm._parse_date(fecha).date()
+        ahora = timeutils._utc_now().astimezone(tz)
+        if dia > ahora.date():
+            return False
+        if dia < ahora.date():
+            return True
+        return start_min < (ahora.hour * 60 + ahora.minute)
+    except Exception:  # noqa: BLE001 - ante la duda no se bloquea nada
+        return False
+
+
 async def _booking_slot_available(
     cliente_id: str, fecha: str, hora: str, *, employee_id: str = "",
     duration_minutes: Optional[int] = None, gap_json: str = "",
+    en_rejilla: bool = True,
 ) -> bool:
+    """El hueco esta libre. Con `en_rejilla=False` la hora NO tiene que ser uno de
+    los que se ofrecen: es para las citas que apunta el MOSTRADOR a mano.
+
+    Peticion del salon (9-sep-2026): "abrimos a las 10:00 pero a veces necesitamos
+    abrir a las ocho o a las nueve por un evento; que la agenda me deje escribirlo.
+    Que la IA no coja citas fuera de horario me parece bien, esos horarios extra
+    los hacemos nosotras". Lo que se sigue comprobando es lo que puede hacer dano:
+    que no pise otra cita, ni un bloqueo, ni el aforo del centro.
+    """
     employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
     dur = int(duration_minutes or _employee_schedule_from_row(employee_row)["slot_minutes"])
     start_min = textnorm._time_to_min(hora)
     if start_min is None:
         return False
-    grid = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=dur)
-    if hora not in grid:
+    if en_rejilla:
+        grid = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=dur)
+        if hora not in grid:
+            return False
+    # Fuera de horario NO significa "cualquier cosa": una cita en el pasado sigue
+    # siendo un error, no un horario extra. Se me colo al abrir esta puerta y lo
+    # cazo el test de siempre (aceptaba un 200 donde tenia que dar 409).
+    elif _ya_ha_pasado(cliente_id, fecha, start_min, employee_row):
+        return False
+    elif _pisa_un_descanso(cliente_id, start_min, start_min + dur, employee_row):
+        return False
+    elif _ese_dia_no_abren(cliente_id, fecha, employee_row):
         return False
     end_min = start_min + dur
     # Con esperas, solo cuentan los tramos en que la profesional trabaja: el resto

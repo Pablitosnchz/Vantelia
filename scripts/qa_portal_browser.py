@@ -329,6 +329,16 @@ def main() -> int:
                 page.wait_for_function("() => document.querySelectorAll('.cd-event').length >= 1")
                 evento = page.locator(".cd-event").first
                 evento.scroll_into_view_if_needed()
+                # Una cita corta (20 min) tiene que ensenyar nombre Y servicio: en el
+                # bloque no cabe la segunda linea y el servicio desaparecia
+                # ("aunque sea de 15 minutos tengo que ver el nombre y el servicio",
+                # el salon el 9-sep-2026).
+                texto_cita = page.locator(".cd-event").first.inner_text()
+                assert "Clienta Arrastre" in texto_cita, texto_cita
+                assert "Corte senora" in texto_cita, (
+                    "en una cita corta no se ve el servicio: %r" % texto_cita
+                )
+
                 assert page.locator(".cd-ev-grip").count() >= 2, "la cita no tiene bordes para estirarla"
                 # La altura se mide ANTES de empezar a arrastrar: durante el arrastre
                 # el bloque ya se ha estirado en pantalla y comparar contra eso no

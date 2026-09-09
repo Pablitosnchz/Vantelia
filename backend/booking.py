@@ -3060,6 +3060,10 @@ async def _create_booking_core(
     source: str,
     webhook_source: str = "",
     send_confirmation: bool = True,
+    # El mostrador puede apuntar a mano una cita FUERA del horario publicado (abren
+    # a las diez y ese dia entran a las ocho por un evento). Solo lo pasa el portal:
+    # los canales publicos no lo tocan y la IA sigue sin poder salirse del horario.
+    fuera_de_horario: bool = False,
     request: Optional[Request] = None,
     audit_extra: Optional[Dict[str, Any]] = None,
 ) -> sqlite3.Row:
@@ -3085,6 +3089,7 @@ async def _create_booking_core(
     if not await agenda._booking_slot_available(
         cliente_id, booking_date, booking_time,
         employee_id=employee_row["id"], duration_minutes=service_duration,
+        en_rejilla=not fuera_de_horario,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
