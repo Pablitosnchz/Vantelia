@@ -4,8 +4,8 @@ Espejo de outreach_campaign.py pero adaptado a DM IG y modo HIBRIDO COMPLIANT po
 no envia DMs automaticamente. Genera drafts marcados ready=1 para envio manual 1-clic
 desde panel admin via ig.me deep link.
 
-Solo si IG_AUTOSEND_ENABLED=true y existe scripts/instagram_autosend.py (opcional) se
-puede activar envio automatizado via Playwright (riesgo bloqueo cuenta Meta).
+El envio automatico por navegador se retiro el 9-sep-2026, despues de que Meta
+restringiera una cuenta de negocio por "automatizacion". Los DM salen a mano.
 
 Subcomandos:
   python scripts/instagram_campaign.py import   --csv outreach/ig_dental.csv
@@ -18,7 +18,7 @@ Subcomandos:
   python scripts/instagram_campaign.py stats
 
 Sin --send marca como draft pendiente (mode='draft'). Con --send queda como
-'pending_manual_send' salvo IG_AUTOSEND_ENABLED.
+'pending_manual_send' siempre.
 """
 
 from __future__ import annotations
@@ -194,7 +194,7 @@ def env_bool(name: str, default: bool) -> bool:
 
 
 def is_autosend_enabled() -> bool:
-    return env_bool("IG_AUTOSEND_ENABLED", False)
+    return False   # el envio automatico se retiro el 9-sep-2026 (restriccion de Meta)
 
 
 def _row_to_prospect(row: sqlite3.Row) -> IGProspect:
@@ -542,20 +542,7 @@ def cmd_send(args: argparse.Namespace) -> int:
     if not args.send and not args.test_to:
         return cmd_preview(args)
     if not is_autosend_enabled():
-        print("IG_AUTOSEND_ENABLED=false. Se generan drafts pendientes de envio manual desde el panel.")
-        return cmd_draft(args)
-    try:
-        from instagram_autosend import autosend_drafts  # type: ignore
-    except ImportError:
-        print("scripts/instagram_autosend.py no disponible. Instala playwright o desactiva IG_AUTOSEND_ENABLED.")
-        return 3
-    with closing(connect(args.db)) as conn:
-        rows = fetch_candidates(conn, args.stage, args.max, args.after_days)
-        drafts = [create_draft(conn, r, args.stage) for r in rows]
-        conn.commit()
-    sent = autosend_drafts(drafts, dry_run=not args.send)
-    print(f"Autosend: {sent} drafts procesados.")
-    return 0
+        print("Los DM se envian a mano desde la cola de Drafts del panel (un clic por ig.me).")
 
 
 def cmd_followup(args: argparse.Namespace) -> int:

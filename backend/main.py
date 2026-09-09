@@ -44,7 +44,6 @@ from backend import (
     tiktok,
     timeutils,
     voice,
-    wa_capture,
     whatsapp,
 )
 

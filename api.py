@@ -55,7 +55,6 @@ from backend import (
     tiktok as _b_tiktok,
     timeutils as _b_timeutils,
     voice as _b_voice,
-    wa_capture as _b_wa_capture,
     whatsapp as _b_whatsapp,
 )
 from backend.main import app  # noqa: F401  (contrato: uvicorn api:app)
@@ -89,7 +88,7 @@ _HOME_MODULES: tuple = (
     _rt_admin_core, _rt_public_booking, _rt_whatsapp_webhooks, _rt_admin_ops,
     _rt_admin_growth, _rt_admin_outreach, _rt_tracking, _rt_admin_captacion,
     _rt_voice_web, _rt_portal_commerce,
-    _b_main, _b_voice, _b_wa_capture, _b_instagram, _b_tiktok, _b_outreach, _b_growth, _b_billing,
+    _b_main, _b_voice, _b_instagram, _b_tiktok, _b_outreach, _b_growth, _b_billing,
     _b_portal, _b_onboarding, _b_whatsapp, _b_chat, _b_booking, _b_demo_agenda, _b_agenda, _b_rag,
     _b_channel_requests, _b_commerce, _b_analytics,
     _b_crm, _b_security, _b_emailing, _b_messaging, _b_stripe_gateway, _b_clients, _b_db,

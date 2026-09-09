@@ -34,11 +34,10 @@ from backend import (
     settings,
     tiktok,
     timeutils,
-    wa_capture,
 )
 from backend.instagram import (  # noqa: F401
     IGProfile, ig_create_draft, ig_deep_link, ig_discover_usernames,
-    ig_fetch_candidates, ig_is_autosend_enabled, ig_upsert_profile,
+    ig_fetch_candidates, ig_upsert_profile,
 )
 from backend.main import app
 
@@ -66,7 +65,8 @@ def outreach_record_reply(payload: OutreachReplyPayload):
 # === INSTAGRAM =======================================================
 # Captacion via Instagram DMs. Modo hibrido compliant por defecto:
 # discovery + drafts + envio manual 1-clic via ig.me deep link.
-# Autosend automatizado opt-in via IG_AUTOSEND_ENABLED (riesgo ban Meta).
+# El envio es SIEMPRE manual: automatizar los DM costo una restriccion de Meta
+# a una cuenta de negocio (9-sep-2026) y se retiro el codigo.
 # =====================================================================
 
 
@@ -155,14 +155,6 @@ class InstagramSendRequest(BaseModel):
     stage: str = "cold"
     max: int = 10
     dry_run: bool = True
-
-
-class InstagramSessionCookies(BaseModel):
-    sessionid: str = Field(..., min_length=10)
-    csrftoken: str = Field(..., min_length=10)
-    ds_user_id: str = Field(..., min_length=1)
-    mid: str = ""
-    rur: str = ""
 
 
 class InstagramSuppressRequest(BaseModel):
@@ -269,7 +261,6 @@ def instagram_stats():
         },
         "funnel": funnel,
         "reply_rate": round(reply_rate, 2),
-        "autosend_enabled": bool(instagram.IG_AVAILABLE and ig_is_autosend_enabled()),
         "in_window": instagram._ig_in_window(),
     }
 
@@ -849,124 +840,6 @@ def instagram_skip_draft(send_id: int, reason: str = "skip"):
 # ----- Autosend opt-in -----
 
 
-@app.post("/admin/instagram/send", dependencies=[Depends(security._require_admin_token)])
-def instagram_autosend(payload: InstagramSendRequest, background_tasks: BackgroundTasks):
-    if not ig_is_autosend_enabled():
-        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false. Usa /draft + envio manual.")
-    try:
-        from instagram_autosend import autosend_drafts  # type: ignore
-    except ImportError:
-        raise HTTPException(503, "scripts/instagram_autosend.py no disponible. Instala playwright.")
-    if payload.stage not in instagram.IG_STAGES:
-        raise HTTPException(400, "stage invalido")
-    with instagram._instagram_db() as conn:
-        rows = ig_fetch_candidates(conn, payload.stage, max(1, payload.max), 5)
-        drafts = [ig_create_draft(conn, r, payload.stage) for r in rows]
-        conn.commit()
-
-    def _run() -> None:
-        try:
-            autosend_drafts(drafts, dry_run=payload.dry_run)
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning(f"IG autosend error: {exc}")
-
-    background_tasks.add_task(_run)
-    return {"ok": True, "queued": len(drafts), "dry_run": payload.dry_run}
-
-
-# ----- Sesion Instagram (cookies pegadas desde navegador) -----
-
-
-@app.get("/admin/instagram/autosend/status", dependencies=[Depends(security._require_admin_token)])
-def instagram_autosend_status():
-    try:
-        from instagram_autosend import session_info  # type: ignore
-    except ImportError:
-        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
-    return {
-        "autosend_enabled": ig_is_autosend_enabled(),
-        "autonomous_autosend": instagram._ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False),
-        "session": session_info(),
-    }
-
-
-@app.post("/admin/instagram/autosend/connect", dependencies=[Depends(security._require_admin_token)])
-def instagram_autosend_connect(payload: InstagramSessionCookies):
-    try:
-        from instagram_autosend import save_session_from_cookies, session_info  # type: ignore
-    except ImportError:
-        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
-    try:
-        path = save_session_from_cookies(
-            sessionid=payload.sessionid,
-            csrftoken=payload.csrftoken,
-            ds_user_id=payload.ds_user_id,
-            mid=payload.mid,
-            rur=payload.rur,
-        )
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    return {"ok": True, "saved_at": str(path), "session": session_info()}
-
-
-@app.post("/admin/instagram/autosend/disconnect", dependencies=[Depends(security._require_admin_token)])
-def instagram_autosend_disconnect():
-    try:
-        from instagram_autosend import clear_session  # type: ignore
-    except ImportError:
-        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
-    removed = clear_session()
-    return {"ok": True, "removed": removed}
-
-
-@app.post("/admin/instagram/autosend/test", dependencies=[Depends(security._require_admin_token)])
-def instagram_autosend_test():
-    """Comprueba si la sesion guardada sigue valida pidiendo /accounts/edit/ a IG."""
-    try:
-        from instagram_autosend import session_info  # type: ignore
-    except ImportError:
-        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
-    info = session_info()
-    if not info.get("connected"):
-        return {"ok": False, "reason": "sin_sesion"}
-    sessionid = ""
-    csrftoken = ""
-    ds_user_id = info.get("ds_user_id") or ""
-    try:
-        state_path = Path(info.get("path") or "")
-        if state_path.exists():
-            data = json.loads(state_path.read_text(encoding="utf-8"))
-            for c in data.get("cookies", []):
-                if c.get("name") == "sessionid":
-                    sessionid = c.get("value") or ""
-                elif c.get("name") == "csrftoken":
-                    csrftoken = c.get("value") or ""
-    except Exception as exc:
-        raise HTTPException(500, f"No se pudo leer sesion: {exc}")
-    if not sessionid:
-        return {"ok": False, "reason": "sin_sessionid"}
-    cookies = {"sessionid": sessionid, "csrftoken": csrftoken, "ds_user_id": ds_user_id}
-    headers = {
-        "User-Agent": os.getenv("IG_AUTOSEND_USER_AGENT",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
-        "Accept-Language": "es-ES,es;q=0.9",
-        "X-IG-App-ID": "936619743392459",
-    }
-    try:
-        with httpx.Client(timeout=10.0, follow_redirects=False) as client:
-            r = client.get("https://www.instagram.com/api/v1/accounts/edit/web_form_data/",
-                           cookies=cookies, headers=headers)
-        ok = r.status_code == 200 and "username" in (r.text or "")
-        return {"ok": ok, "status_code": r.status_code,
-                "session": info,
-                "hint": "Cookies validas" if ok else "Cookies caducadas o cuenta bloqueada. Reconecta."}
-    except Exception as exc:
-        return {"ok": False, "reason": f"http_error: {exc}", "session": info}
-
-
-# ----- Suppressions -----
-
-
 @app.post("/admin/instagram/suppress", dependencies=[Depends(security._require_admin_token)])
 def instagram_suppress(payload: InstagramSuppressRequest):
     user = instagram._ig_resolve_username(payload.username)
@@ -1108,11 +981,11 @@ def instagram_autopilot_get():
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='draft' AND ready=1"
         ).fetchone()["c"]
     db_cap = int(cfg.get("daily_outreach_cap") or 0)
-    env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
+    env_cap = int(os.getenv("IG_DAILY_DRAFTS_CAP", "20") or 20)
     cfg["effective_daily_cap"] = db_cap if db_cap > 0 else env_cap
-    return {"config": cfg, "autosend_enabled": ig_is_autosend_enabled(),
+    return {"config": cfg,
             "autonomous_enabled": instagram._ig_env_bool("IG_AUTONOMOUS_ENABLED", False),
-            "autonomous_autosend": instagram._ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)}
+}
 
 
 @app.put("/admin/instagram/autopilot-config", dependencies=[Depends(security._require_admin_token)])
@@ -1179,30 +1052,13 @@ class InstagramCampaignStart(BaseModel):
 @app.get("/admin/instagram/campaign", dependencies=[Depends(security._require_admin_token)])
 def instagram_campaign_get():
     state = instagram._ig_campaign_state()
-    try:
-        from instagram_autosend import session_info  # type: ignore
-        session = session_info()
-    except Exception:
-        session = {"connected": False}
-    return {"campaign": state, "session": session,
-            "autosend_enabled": ig_is_autosend_enabled() if instagram.IG_AVAILABLE else False,
-            "autonomous_autosend": instagram._ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)}
+    return {"campaign": state}
 
 
 @app.post("/admin/instagram/campaign/start", dependencies=[Depends(security._require_admin_token)])
 def instagram_campaign_start(payload: InstagramCampaignStart):
     if not instagram.IG_AVAILABLE:
         raise HTTPException(503, "Modulo instagram no disponible")
-    if not ig_is_autosend_enabled():
-        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
-    try:
-        from instagram_autosend import session_info  # type: ignore
-        if not session_info().get("connected"):
-            raise HTTPException(412, "Sesion IG no conectada. Pega cookies primero.")
-    except HTTPException:
-        raise
-    except Exception:
-        pass
     instagram._ig_campaign_migrate()
     instagram._ig_campaign_update(
         target_count=int(payload.target_count),
@@ -1299,8 +1155,6 @@ def instagram_dm_templates_preview(variant: str = "A",
 
 @app.post("/admin/instagram/campaign/resume", dependencies=[Depends(security._require_admin_token)])
 def instagram_campaign_resume():
-    if not ig_is_autosend_enabled():
-        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
     instagram._ig_campaign_migrate()
     # Resume: si hay drafts pendientes, va directo a sending; si no, discovering.
     state = instagram._ig_campaign_state()
@@ -1353,268 +1207,6 @@ def instagram_replies_poll_now():
 # === END INSTAGRAM ===================================================
 
 
-# =====================================================================
-# === WHATSAPP OUTREACH ===============================================
-# Cold outbound por WhatsApp Web (Playwright, tu propio numero). Coge los
-# telefonos de los prospects de Captacion (outreach.db) — NO hace discovery
-# propio. Un unico mensaje por telefono (dedup). Envio automatico opt-in via
-# WA_AUTOSEND_ENABLED + numero vinculado por QR. Riesgo ban Meta: numero 2ario.
-# =====================================================================
-
-
-
-class WhatsAppMessagePayload(BaseModel):
-    message: str = Field(..., min_length=1, max_length=4000)
-
-
-class WhatsAppSendPayload(BaseModel):
-    count: int = Field(20, ge=1, le=200)
-    dry_run: bool = False
-
-
-
-
-
-
-
-
-
-
-@app.get("/admin/whatsapp/stats", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_stats():
-    with wa_capture._whatsapp_db() as conn:
-        s = wa_capture.wa_outreach.stats(conn)
-    return {"stats": s, "autosend_enabled": wa_capture._wa_autosend_enabled(),
-            "session": wa_capture._wa_session_info(), "progress": wa_capture._wa_send_progress()}
-
-
-@app.get("/admin/whatsapp/recent", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_recent(limit: int = 30):
-    with wa_capture._whatsapp_db() as conn:
-        return {"items": wa_capture.wa_outreach.recent(conn, limit)}
-
-
-@app.get("/admin/whatsapp/message", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_message_get():
-    with wa_capture._whatsapp_db() as conn:
-        tpl = wa_capture.wa_outreach.get_message_template(conn)
-    return {"message": tpl, "default": wa_capture.wa_outreach.DEFAULT_MESSAGE,
-            "placeholders_help": wa_capture.wa_outreach.PLACEHOLDERS_HELP}
-
-
-@app.put("/admin/whatsapp/message", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_message_put(payload: WhatsAppMessagePayload):
-    with wa_capture._whatsapp_db() as conn:
-        wa_capture.wa_outreach.set_message_template(conn, payload.message)
-    return {"ok": True}
-
-
-@app.post("/admin/whatsapp/send", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_send(payload: WhatsAppSendPayload, background_tasks: BackgroundTasks):
-    if not wa_capture.WA_AVAILABLE:
-        raise HTTPException(503, "Modulo whatsapp no disponible")
-    if not payload.dry_run:
-        if not wa_capture._wa_autosend_enabled():
-            raise HTTPException(412, "WA_AUTOSEND_ENABLED=false en el .env del servidor")
-        if not wa_capture._wa_session_info().get("connected"):
-            raise HTTPException(412, "WhatsApp no conectado. Vincula tu numero (QR) en Configuracion.")
-    target_count = int(payload.count)
-    candidate_limit = min(500, max(target_count, target_count * 4))
-    with wa_capture._whatsapp_db() as conn:
-        # Rellena una bolsa extra de candidatos: los numero_invalido no cuentan
-        # contra el objetivo de enviados reales.
-        existing = len(wa_capture.wa_outreach.fetch_queued(conn, candidate_limit))
-        need = max(0, candidate_limit - existing)
-        if need:
-            wa_capture.wa_outreach.enqueue(conn, need)
-        items = [{"phone": q["phone"], "message": q["message"]}
-                 for q in wa_capture.wa_outreach.fetch_queued(conn, candidate_limit)]
-    if not items:
-        return {"ok": True, "queued": 0, "detail": "No quedan telefonos nuevos por contactar."}
-
-    if not wa_capture._wa_send_job_lock.acquire(blocking=False):
-        raise HTTPException(409, "Ya hay un envio WhatsApp en curso. Espera a que termine antes de lanzar otro.")
-
-    with wa_capture._wa_send_lock:
-        wa_capture._wa_send_state.update({
-            "running": True,
-            "phase": "queued",
-            "requested": target_count,
-            "queued": target_count,
-            "candidates": len(items),
-            "attempted": 0,
-            "sent": 0,
-            "skipped": 0,
-            "current_phone": "",
-            "last_reason": "",
-            "dry_run": bool(payload.dry_run),
-            "started_at": timeutils._utc_now().isoformat(),
-            "finished_at": "",
-        })
-
-    def _run() -> None:
-        try:
-            from whatsapp_autosend import autosend_messages  # type: ignore
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("wa autosend no disponible: %s", exc)
-            with wa_capture._wa_send_lock:
-                wa_capture._wa_send_state.update({
-                    "running": False,
-                    "phase": "error",
-                    "last_reason": str(exc)[:160],
-                    "finished_at": timeutils._utc_now().isoformat(),
-                })
-            try:
-                wa_capture._wa_send_job_lock.release()
-            except RuntimeError:
-                pass
-            return
-
-        def _attempt(phone: str) -> None:
-            with wa_capture._wa_send_lock:
-                wa_capture._wa_send_state.update({"phase": "sending", "current_phone": phone, "last_reason": ""})
-            try:
-                with wa_capture.wa_outreach.connect() as c:
-                    wa_capture.wa_outreach.mark_sending(c, phone)
-            except Exception:
-                pass
-
-        def _mark(phone: str, ok: bool, reason: str) -> None:
-            with wa_capture._wa_send_lock:
-                wa_capture._wa_send_state["attempted"] = int(wa_capture._wa_send_state.get("attempted") or 0) + 1
-                if ok:
-                    wa_capture._wa_send_state["sent"] = int(wa_capture._wa_send_state.get("sent") or 0) + 1
-                else:
-                    wa_capture._wa_send_state["skipped"] = int(wa_capture._wa_send_state.get("skipped") or 0) + 1
-                wa_capture._wa_send_state.update({
-                    "phase": "skipping" if reason == "numero_invalido" else "pausing",
-                    "current_phone": phone,
-                    "last_reason": "" if ok else (reason or ""),
-                })
-            try:
-                with wa_capture.wa_outreach.connect() as c:
-                    if ok:
-                        wa_capture.wa_outreach.mark_sent(c, phone)
-                    else:
-                        wa_capture.wa_outreach.mark_skipped(c, phone, reason)
-            except Exception as exc:  # noqa: BLE001
-                settings.logger.warning("wa mark %s: %s", phone, exc)
-
-        try:
-            autosend_messages(
-                items,
-                dry_run=payload.dry_run,
-                on_result=_mark,
-                on_attempt=_attempt,
-                target_ok=target_count,
-            )
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("wa autosend error: %s", exc)
-            with wa_capture._wa_send_lock:
-                wa_capture._wa_send_state.update({"phase": "error", "last_reason": str(exc)[:160]})
-        finally:
-            with wa_capture._wa_send_lock:
-                if wa_capture._wa_send_state.get("phase") not in ("error",):
-                    wa_capture._wa_send_state["phase"] = "done"
-                wa_capture._wa_send_state.update({
-                    "running": False,
-                    "current_phone": "",
-                    "finished_at": timeutils._utc_now().isoformat(),
-                })
-            try:
-                wa_capture._wa_send_job_lock.release()
-            except RuntimeError:
-                pass
-
-    background_tasks.add_task(_run)
-    return {"ok": True, "queued": target_count, "target": target_count, "candidates": len(items), "dry_run": payload.dry_run}
-
-
-@app.get("/admin/whatsapp/session", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_session():
-    return {"session": wa_capture._wa_session_info(),
-            "autosend_enabled": wa_capture._wa_autosend_enabled(),
-            "login_running": bool(wa_capture._wa_login_state.get("running")),
-            "login_status": wa_capture._wa_login_state.get("status", ""),
-            "login_result": wa_capture._wa_login_state.get("result")}
-
-
-@app.post("/admin/whatsapp/connect", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_connect():
-    if not wa_capture.WA_AVAILABLE:
-        raise HTTPException(503, "Modulo whatsapp no disponible")
-    try:
-        from whatsapp_autosend import start_login_session  # type: ignore
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(503, f"whatsapp_autosend no disponible: {exc}")
-    with wa_capture._wa_login_lock:
-        if wa_capture._wa_login_state.get("running"):
-            return {"ok": True, "already_running": True}
-        wa_capture._wa_login_state.update({"running": True, "result": None, "status": "arrancando"})
-
-    def _login() -> None:
-        def _status(msg: str) -> None:
-            wa_capture._wa_login_state["status"] = msg
-        try:
-            res = start_login_session(timeout_sec=180, headless=True, on_status=_status)
-            wa_capture._wa_login_state["result"] = res
-        except Exception as exc:  # noqa: BLE001
-            wa_capture._wa_login_state["result"] = {"connected": False, "reason": str(exc)[:200]}
-        finally:
-            wa_capture._wa_login_state["running"] = False
-
-    threading.Thread(target=_login, name="wa-login", daemon=True).start()
-    return {"ok": True, "started": True}
-
-
-@app.get("/admin/whatsapp/qr", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_qr():
-    try:
-        from whatsapp_autosend import latest_qr_bytes  # type: ignore
-    except Exception:  # noqa: BLE001
-        raise HTTPException(503, "whatsapp_autosend no disponible")
-    data = latest_qr_bytes()
-    if not data:
-        raise HTTPException(404, "QR aun no disponible")
-    return Response(content=data, media_type="image/png",
-                    headers={"Cache-Control": "no-store"})
-
-
-@app.get("/admin/whatsapp/debug-shot", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_debug_shot():
-    """Ultima captura del navegador headless (diagnostico de envio)."""
-    try:
-        from whatsapp_autosend import latest_debug_bytes  # type: ignore
-    except Exception:  # noqa: BLE001
-        raise HTTPException(503, "whatsapp_autosend no disponible")
-    data = latest_debug_bytes()
-    if not data:
-        raise HTTPException(404, "Sin captura de debug todavia")
-    return Response(content=data, media_type="image/png",
-                    headers={"Cache-Control": "no-store"})
-
-
-@app.post("/admin/whatsapp/disconnect", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_disconnect():
-    try:
-        from whatsapp_autosend import clear_session  # type: ignore
-    except Exception:  # noqa: BLE001
-        raise HTTPException(503, "whatsapp_autosend no disponible")
-    removed = clear_session()
-    wa_capture._wa_login_state.update({"running": False, "result": None, "status": ""})
-    return {"ok": True, "removed": removed}
-
-
-@app.post("/admin/whatsapp/test", dependencies=[Depends(security._require_admin_token)])
-def whatsapp_test():
-    try:
-        from whatsapp_autosend import verify_session  # type: ignore
-    except Exception:  # noqa: BLE001
-        raise HTTPException(503, "whatsapp_autosend no disponible")
-    return verify_session(timeout_sec=40)
-
-
-# === END WHATSAPP ====================================================
 
 
 # =====================================================================

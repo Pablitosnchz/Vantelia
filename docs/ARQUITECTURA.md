@@ -21,7 +21,7 @@ api.py                      Shim de compatibilidad (~150 líneas). uvicorn api:a
    ├─ backend/routers/      19 módulos de endpoints (decoran app directamente).
    ├─ Dominios de negocio   chat, whatsapp, booking, demo_agenda, voice,
    │                        onboarding, billing, portal, crm, growth,
-   │                        outreach, instagram, tiktok, wa_capture
+   │                        outreach, instagram, tiktok
    ├─ Servicios             agenda, rag, security, emailing, messaging,
    │                        stripe_gateway, clients
    ├─ Infraestructura       db (esquema SQLite + conexión), appstate (estado
@@ -56,7 +56,7 @@ módulos transversales.
 | `backend/onboarding.py` | Provisioning self-serve de clientes. |
 | `backend/billing.py` | Suscripciones: checkout, sync Stripe, planes públicos. |
 | `backend/portal.py` | Payloads/serialización del panel admin y portal, stats, analytics. |
-| `backend/outreach.py`, `instagram.py`, `tiktok.py`, `wa_capture.py` | Captación B2B (los try/except de imports de `scripts/` viven aquí; flags `*_AVAILABLE`). `wa_capture` se llama así porque `wa_outreach` es el alias histórico del módulo de scripts. |
+| `backend/outreach.py`, `instagram.py`, `tiktok.py` | Captación B2B (los try/except de imports de `scripts/` viven aquí; flags `*_AVAILABLE`). `wa_capture.py` se retiró el 9-sep-2026 con el resto de la automatización de productos de Meta. |
 | `backend/voice.py` | Voz sobre OpenAI Realtime, por teléfono (Twilio) y por navegador (WebRTC): instrucciones, tools de cita y su despacho, OTP, llamadas salientes, cierre y etiquetado. |
 | `backend/growth.py` | Plan de escala (métricas growth_*). |
 | `backend/commerce.py` | Productos, bonos y tarjetas regalo + las páginas públicas del negocio (`/central`, `/tienda`, `/gift`, wallets). Nada se materializa al crear el checkout: lo hacen los `_finalize_*_payment` desde el webhook. |

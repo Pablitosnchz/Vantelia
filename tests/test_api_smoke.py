@@ -6328,46 +6328,6 @@ def test_instagram_draft_generation_skips_prior_dm_attempt(client: TestClient, a
     assert fresh_user in usernames
 
 
-def test_instagram_autosend_claim_skips_draft_on_resume(client: TestClient, api_module, monkeypatch):
-    scripts_dir = REPO_ROOT / "scripts"
-    if str(scripts_dir) not in sys.path:
-        sys.path.insert(0, str(scripts_dir))
-    monkeypatch.setenv("IG_DB_PATH", str(api_module._instagram_db_path()))
-    sys.modules.pop("instagram_autosend", None)
-    instagram_autosend = importlib.import_module("instagram_autosend")
-
-    username = "resume_claim_user"
-    with api_module._instagram_db() as conn:
-        now = api_module._instagram_now()
-        conn.execute(
-            """INSERT OR IGNORE INTO ig_prospects
-               (username, full_name, niche, city, status, source, created_at, updated_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (username, "Resume Claim User", "estetica", "Madrid", "queued", "test", now, now),
-        )
-        conn.execute(
-            """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
-               VALUES (?,?,?,?,?,?,?)""",
-            (username, "cold", "A", "hola desde test", "draft", 1, now),
-        )
-        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-        conn.commit()
-
-    before = instagram_autosend.fetch_pending_drafts(20)
-    assert any(d["id"] == send_id for d in before)
-
-    with api_module._instagram_db() as conn:
-        claimed = instagram_autosend._claim_send_attempt(conn, send_id)  # type: ignore[attr-defined]
-    assert claimed is not None
-
-    after = instagram_autosend.fetch_pending_drafts(20)
-    assert all(d["id"] != send_id for d in after)
-    with api_module._instagram_db() as conn:
-        row = conn.execute("SELECT mode, ready FROM ig_sends WHERE id=?", (send_id,)).fetchone()
-    assert row["mode"] == "sending"
-    assert row["ready"] == 0
-
-
 def test_tiktok_autosend_claim_skips_draft_on_resume(client: TestClient, api_module, monkeypatch):
     scripts_dir = REPO_ROOT / "scripts"
     if str(scripts_dir) not in sys.path:

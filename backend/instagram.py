@@ -3,8 +3,9 @@
 Espejo de `outreach.py` pero con una diferencia de fondo: automatizar DMs viola
 los terminos de Meta y arriesga la cuenta, asi que por defecto el sistema deja
 el mensaje ESCRITO y una persona lo manda con un clic (enlace `ig.me` con el
-texto ya puesto). El envio automatico existe (Playwright) pero esta detras de
-`IG_AUTOSEND_ENABLED`, apagado.
+texto ya puesto). El envio automatico por navegador SE RETIRO el 9-sep-2026:
+automatizar productos de Meta le costo una restriccion a una cuenta de negocio,
+y la cuenta es de lo que depende el WhatsApp de los clientes.
 
 Datos aparte de la DB principal: `storage/instagram/instagram.db`
 (`_instagram_db()`), con `scripts/instagram_campaign.py` como CLI.
@@ -27,7 +28,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import re
 import sqlite3
 import threading
@@ -55,7 +55,6 @@ try:
         fetch_candidates as ig_fetch_candidates,
         create_draft as ig_create_draft,
         upsert_profile as ig_upsert_profile,
-        is_autosend_enabled as ig_is_autosend_enabled,
     )
     from instagram_templates import (  # type: ignore
         IGProspect,
@@ -358,40 +357,6 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
 
         conn.commit()
 
-    # ---- AUTOSEND AUTOMATICO ----
-    # Solo si IG_AUTOSEND_ENABLED=true + IG_AUTONOMOUS_AUTOSEND=true. Riesgo ban Meta.
-    autosend_on = ig_is_autosend_enabled() and _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)
-    if autosend_on:
-        try:
-            from instagram_autosend import autosend_drafts, fetch_pending_drafts  # type: ignore
-            # Cap: DB.daily_outreach_cap (panel) tiene prioridad; fallback env IG_AUTOSEND_DAILY_CAP.
-            try:
-                db_cap = int((row["daily_outreach_cap"] if row else 0) or 0)
-            except Exception:
-                db_cap = 0
-            env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
-            cap = db_cap if db_cap > 0 else env_cap
-            # Cuenta enviados hoy con autosend para respetar tope diario.
-            today = timeutils._utc_now().date().isoformat()
-            with _instagram_db() as conn:
-                sent_today_auto = conn.execute(
-                    "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto' AND substr(coalesce(sent_at,drafted_at),1,10)=?",
-                    (today,),
-                ).fetchone()["c"]
-            remaining = max(0, cap - int(sent_today_auto or 0))
-            if remaining > 0:
-                pending = fetch_pending_drafts(remaining)
-                if pending:
-                    sent = autosend_drafts(pending, dry_run=False)
-                    stats["autosent"] = int(sent or 0)
-                    settings.logger.info("IG autopilot: autosend envio %s/%s drafts (cap %s, ya enviados %s)",
-                                sent, len(pending), cap, sent_today_auto)
-            else:
-                settings.logger.info("IG autopilot: cap diario alcanzado (%s/%s).", sent_today_auto, cap)
-        except ImportError:
-            settings.logger.warning("IG autopilot: instagram_autosend o playwright no disponible.")
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("IG autopilot: autosend error: %s", exc)
     return stats
 
 
@@ -590,34 +555,14 @@ def _ig_campaign_run_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
         settings.logger.info("[ig-campaign] drafts: %s nuevos (pending ahora %s)", drafted, pending_drafts + drafted)
         return {"action": "draft", "drafted": drafted}
 
-    # 3) Autosend uno
-    if pending_drafts > 0 and ig_is_autosend_enabled():
-        try:
-            from instagram_autosend import fetch_pending_drafts, autosend_drafts  # type: ignore
-        except ImportError:
-            _ig_campaign_update(status="paused", error_msg="autosend module no disponible")
-            return {"action": "error", "reason": "autosend_missing"}
-        _ig_campaign_update(status="sending")
-        drafts = fetch_pending_drafts(1)
-        if not drafts:
-            return {"action": "idle_no_drafts"}
-        try:
-            sent = autosend_drafts(drafts, dry_run=False)
-            settings.logger.info("[ig-campaign] autosend: %s/1 enviado", sent)
-            if sent == 0:
-                # autosend retorna 0 si falla → revisa si fue sesion expirada
-                return {"action": "send_failed"}
-            return {"action": "sent", "count": sent}
-        except RuntimeError as exc:
-            err = str(exc)[:200]
-            if "Sesion IG invalida" in err or "sesion_expirada" in err:
-                _ig_campaign_update(status="paused", error_msg=f"sesion expirada: {err}")
-                return {"action": "error", "reason": "session_expired"}
-            settings.logger.warning("[ig-campaign] autosend RuntimeError: %s", err)
-            return {"action": "error", "reason": err}
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("[ig-campaign] autosend error: %s", exc)
-            return {"action": "error", "reason": str(exc)[:120]}
+    # Aqui iba el ENVIO AUTOMATICO por Playwright, retirado el 9-sep-2026 tras
+    # una restriccion de Meta a una cuenta de negocio ("automatizacion que imita la
+    # actividad humana"). La campana se queda en dejar los DMs preparados; salen a
+    # mano desde la cola de Drafts, con un clic, por el enlace ig.me. Automatizar
+    # productos de Meta pone en riesgo la cuenta de la que depende el WhatsApp de
+    # los clientes, que es el activo del producto.
+    if pending_drafts > 0:
+        return {"action": "drafts_listos", "pending": pending_drafts}
 
     return {"action": "idle"}
 
@@ -640,14 +585,7 @@ def _ig_campaign_worker() -> None:
                 continue
             res = _ig_campaign_run_iteration(state)
             action = (res or {}).get("action", "")
-            if action == "sent":
-                # Delay humano entre envios
-                mn = int(os.getenv("IG_AUTOSEND_MIN_DELAY_SEC", "60") or 60)
-                mx = int(os.getenv("IG_AUTOSEND_MAX_DELAY_SEC", "240") or 240)
-                if mx < mn:
-                    mx = mn + 30
-                ig_campaign_stop.wait(random.uniform(mn, mx))
-            elif action == "completed":
+            if action == "completed":
                 settings.logger.info("[ig-campaign] objetivo alcanzado")
                 ig_campaign_stop.wait(60)
             elif action == "error":
