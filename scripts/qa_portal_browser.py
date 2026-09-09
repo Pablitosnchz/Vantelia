@@ -299,6 +299,33 @@ def main() -> int:
                 for _ in range(dias_hasta_la_cita):
                     page.locator("#cdNext").click()
                     page.wait_for_timeout(600)
+
+                # Pinchar un hueco vacio de la agenda y DESPUES elegir el servicio: la
+                # hora pinchada tiene que seguir puesta. Antes se perdia -los huecos se
+                # recargan al cambiar de servicio- y habia que volver a buscarla
+                # (reportado el 9-sep-2026 pinchando las 13:00 de una profesional).
+                # OJO: el primer `.cd-body` es la COLUMNA DE HORAS, no la de nadie.
+                cuerpo = page.locator(".cd-body").last
+                caja_col = cuerpo.bounding_box()
+                # Con `position` es Playwright quien desplaza la pagina: la columna es
+                # mas alta que la pantalla y un clic por coordenadas caia fuera.
+                cuerpo.click(position={"x": caja_col["width"] / 2, "y": caja_col["height"] / 2})
+                page.locator("#newBookingDrawer.open").wait_for()
+                page.wait_for_function("() => document.getElementById('nbSlotSelected').value !== ''")
+                hora_pinchada = page.locator("#nbSlotSelected").input_value()
+                assert hora_pinchada, "pinchar un hueco no dejo la hora puesta"
+                page.fill("#nbServicio", "")
+                page.keyboard.type("corte", delay=30)
+                page.wait_for_function("() => document.querySelectorAll('#nbSvcAc .nb-ac-item').length >= 1")
+                page.keyboard.press("ArrowDown")
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(1200)
+                assert page.locator("#nbSlotSelected").input_value() == hora_pinchada, (
+                    "elegir el servicio borro la hora que se habia pinchado (%s -> %s)"
+                    % (hora_pinchada, page.locator("#nbSlotSelected").input_value())
+                )
+                page.locator("#newBookingClose").click()
+
                 page.wait_for_function("() => document.querySelectorAll('.cd-event').length >= 1")
                 evento = page.locator(".cd-event").first
                 evento.scroll_into_view_if_needed()

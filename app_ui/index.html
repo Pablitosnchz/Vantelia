@@ -7712,6 +7712,7 @@ async function openNewBookingDrawer(opts = {}) {
   if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
   document.getElementById('nbSlotSelected').value = '';
+  nbHoraPedida = opts.time || '';
   document.getElementById('nbConfirmBtn').disabled = true;
   const campoFecha = document.getElementById('nbFecha');
   campoFecha.min = cdDateKey(new Date());   // el backend rechaza fechas pasadas
@@ -7724,13 +7725,14 @@ async function openNewBookingDrawer(opts = {}) {
   const campoSvc = document.getElementById('nbServicio');
   if (campoSvc) { campoSvc.focus(); campoSvc.select(); }
   await loadNbSlots(opts.time || '');
-  // Se pincho un hueco pero ese tramo no admite el servicio elegido (p.ej. uno
-  // de tres horas al final del dia): decirlo, no dejar el panel en silencio.
-  if (opts.time && !document.getElementById('nbSlotSelected').value) {
-    const hint = document.getElementById('nbHint');
-    if (hint) hint.textContent = `Las ${opts.time} no encajan con este servicio. Elige otra hora.`;
-  }
 }
+
+// La hora que la persona ha pedido (pinchando un hueco en la agenda o eligiendo
+// un chip). Se recuerda porque los huecos se RECARGAN al cambiar de servicio, de
+// profesional o de dia, y hasta ahora esa recarga borraba la eleccion: pinchabas
+// las 13:00 de Conchi, elegias el servicio y te quedabas sin hora (visto el
+// 9-sep-2026). Se vuelve a marcar sola si sigue libre.
+let nbHoraPedida = '';
 
 // El catalogo en memoria: la lista se escribe, no se despliega. Con 186 servicios
 // el desplegable era imposible de usar con el raton (peticion del salon, 9-sep-2026).
@@ -7914,6 +7916,9 @@ function nbAvisoDia(cont, texto, conAtajo) {
 }
 
 async function loadNbSlots(preselect = '') {
+  // Sin hora explicita se respeta la que ya habia pedido: cambiar el servicio no
+  // puede hacerle perder el hueco que acaba de pinchar en la agenda.
+  const quiere = preselect || nbHoraPedida;
   const cont = document.getElementById('nbSlots');
   const fecha = document.getElementById('nbFecha').value;
   const empId = document.getElementById('nbProf').value || '';
@@ -7959,11 +7964,18 @@ async function loadNbSlots(preselect = '') {
         cont.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('nbSlotSelected').value = hora;
+        nbHoraPedida = hora;
         nbSyncConfirm();
       });
       cont.appendChild(btn);
-      if (preselect && hora === preselect) btn.click();
+      if (quiere && hora === quiere) btn.click();
     });
+    // Pidio una hora y con este servicio ya no cabe (p.ej. uno de tres horas al
+    // final del dia): se dice, no se deja el panel en silencio.
+    if (quiere && !document.getElementById('nbSlotSelected').value) {
+      const hint = document.getElementById('nbHint');
+      if (hint) hint.textContent = `Las ${quiere} no encajan con este servicio. Elige otra hora.`;
+    }
   } catch(e) { cont.innerHTML = `<span class="panel-sub" style="margin:0;">${escapeHtml(e.message)}</span>`; }
 }
 
