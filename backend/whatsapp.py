@@ -1386,7 +1386,7 @@ def _wa_reiniciar_la_demo(cliente_id: str, from_number: str) -> None:
 
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
-    flow: appstate.WAFlowState, reconocido: bool = False,
+    flow: appstate.WAFlowState, reconocido: bool = False, request=None,
 ) -> None:
     """Resumen final con botones de confirmar, corregir datos o anadir nota.
 
@@ -1459,10 +1459,24 @@ async def _wa_send_booking_summary(
     botones.append(
         ("data_fix", "✏️ Otros datos") if reconocido else ("notes_write", "✍️ Anadir nota")
     )
+    cuerpo = chr(10).join(lineas)
     await messaging._send_whatsapp_buttons(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-        header="Confirmar cita", body=chr(10).join(lineas), buttons=botones,
+        header="Confirmar cita", body=cuerpo, buttons=botones,
     )
+    # El resumen es un mensaje mas de la conversacion y tiene que QUEDAR GUARDADO.
+    # No lo estaba: en el panel, la conversacion se cortaba justo antes de la
+    # confirmacion -el negocio veia "¿me confirmas?" y despues nada- y al leerla
+    # parecia que el asistente se habia quedado colgado. Es la regla de siempre:
+    # una rama de WhatsApp que responde sola registra lo que dice.
+    try:
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=to_number, request=request,
+            respuesta=cuerpo + chr(10) + "[✅ Confirmar] [❌ Cancelar]",
+            intent="resumen_para_confirmar",
+        )
+    except Exception as exc:  # noqa: BLE001 - el historial nunca tumba un envio
+        settings.logger.warning("[whatsapp] no se pudo registrar el resumen: %s", exc)
 
 
 async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) -> str:

@@ -2320,7 +2320,16 @@ def _horas_ya_ofrecidas(historial: List[Dict[str, str]]) -> set:
 _OFRECE_CITA = ("te la cojo", "te cojo cita", "quieres que te", "te reservo",
                 "te apunto", "te la reservo", "te la aparto", "te la guardo",
                 "confirmamos la cita", "te lo agendo", "te la agendo",
-                "quieres cita", "te vendria bien", "te la dejo cogida")
+                "quieres cita", "te vendria bien", "te la dejo cogida",
+                # Formas medidas en produccion el 9-sep-2026: el asistente PROPONE
+                # dia y hora y ella dice "si". Sin estas, el freno de "no te ha
+                # pedido cita" bloqueaba una reserva legitima y el asistente
+                # improvisaba volviendo a preguntar el servicio, despues de que
+                # ella lo hubiera elegido.
+                "te puedo ofrecer la cita", "te ofrezco la cita",
+                "te va bien esa hora", "te parece bien esa hora",
+                "te lo reservo", "para confirmar", "me confirmas",
+                "voy a reservar", "voy a agendar", "te la puedo dejar")
 
 
 def _le_ofrecieron_cita_y_dijo_que_si(historial: List[Dict[str, str]], mensaje: str) -> bool:
@@ -2335,11 +2344,19 @@ def _le_ofrecieron_cita_y_dijo_que_si(historial: List[Dict[str, str]], mensaje: 
 
     if not whatsapp._wa_dice_que_si(catalog_pick._norm(mensaje or "")):
         return False
+    # Se miran las TRES ultimas cosas que dijo el asistente, no solo la ultima: el
+    # ofrecimiento puede estar un mensaje mas atras porque entre medias haya
+    # contestado a otra cosa ("a las 12?" -> "a las 12 tengo disponibilidad").
+    vistos = 0
     for anterior in reversed(historial or []):
         if anterior.get("role") != "assistant":
             continue
         dicho = catalog_pick._norm(str(anterior.get("content") or ""))
-        return any(pista in dicho for pista in _OFRECE_CITA)
+        if any(pista in dicho for pista in _OFRECE_CITA):
+            return True
+        vistos += 1
+        if vistos >= 3:
+            break
     return False
 
 
