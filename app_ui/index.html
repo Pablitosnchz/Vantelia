@@ -753,6 +753,19 @@
     .nb-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
     .nb-chips:empty { display:none; }
     .nb-chips .filter-chip { cursor:pointer; }
+    /* Los huecos del dia, agrupados por franja y con altura acotada. Sueltos eran
+       44 fichas seguidas que se comian el panel entero y obligaban a barrer con la
+       vista para encontrar las cinco de la tarde. Mismo criterio que la central
+       publica (Manana / Tarde / Noche). */
+    #nbSlots { display:block; max-height:210px; overflow-y:auto; padding-right:4px; }
+    #nbSlots .nb-franja { margin-bottom:10px; }
+    #nbSlots .nb-franja:last-child { margin-bottom:0; }
+    #nbSlots .nb-franja-tit {
+      font-size:0.7rem; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--soft-2); margin:0 0 6px; font-weight:700;
+    }
+    #nbSlots .nb-franja-horas { display:flex; flex-wrap:wrap; gap:6px; }
+    #nbSlots .filter-chip { padding:5px 10px; font-size:0.8rem; }
     .nb-more { margin-top:10px; }
     .nb-more summary { cursor:pointer; font-size:0.82rem; color:var(--soft); }
     .nb-more > *:not(summary) { margin-top:8px; }
@@ -845,7 +858,8 @@
     .cd-event.cancelled { opacity:.62; }
     .cd-event.cancelled .cd-ev-name { text-decoration:line-through; }
     .cd-ev-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
-    .cd-ev-name { font-size:0.78rem; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cd-ev-name { font-size:0.78rem; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .cd-event.compact .cd-ev-name { font-size:0.74rem; }
     .cd-ev-tag { flex:0 0 auto; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
     .cd-ev-svc { font-size:0.72rem; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cd-event.compact { padding-top:3px; padding-bottom:3px; }
@@ -7863,19 +7877,46 @@ async function loadNbSlots(preselect = '') {
         : 'No queda ningún hueco ese día.', true);
       return;
     }
+    // Agrupados por franja y con la altura acotada: sueltos eran 44 fichas
+    // seguidas que se comian el panel. Mismo criterio que la central publica.
+    const franjas = [
+      { titulo: 'Mañana', hasta: 14 * 60, horas: [] },
+      { titulo: 'Tarde', hasta: 20 * 60, horas: [] },
+      { titulo: 'Noche', hasta: 24 * 60 + 60, horas: [] },
+    ];
     slots.forEach(s => {
       const hora = s.hora || s.time || String(s);
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'filter-chip'; btn.textContent = hora;
-      btn.addEventListener('click', () => {
-        cont.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById('nbSlotSelected').value = hora;
-        nbHoraPedida = hora;
-        nbSyncConfirm();
+      const minutos = (Number(hora.slice(0, 2)) || 0) * 60 + (Number(hora.slice(3, 5)) || 0);
+      (franjas.find(f => minutos < f.hasta) || franjas[franjas.length - 1]).horas.push(hora);
+    });
+    franjas.forEach(franja => {
+      if (!franja.horas.length) return;
+      const bloque = document.createElement('div');
+      bloque.className = 'nb-franja';
+      const titulo = document.createElement('p');
+      titulo.className = 'nb-franja-tit';
+      titulo.textContent = `${franja.titulo} · ${franja.horas.length}`;
+      const fila = document.createElement('div');
+      fila.className = 'nb-franja-horas';
+      franja.horas.forEach(hora => {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'filter-chip'; btn.textContent = hora;
+        btn.addEventListener('click', () => {
+          cont.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById('nbSlotSelected').value = hora;
+          nbHoraPedida = hora;
+          nbSyncConfirm();
+        });
+        fila.appendChild(btn);
+        if (quiere && hora === quiere) {
+          btn.click();
+          // Si la hora pedida cae en una franja de abajo, que se vea sin buscarla.
+          setTimeout(() => btn.scrollIntoView({ block: 'nearest' }), 0);
+        }
       });
-      cont.appendChild(btn);
-      if (quiere && hora === quiere) btn.click();
+      bloque.appendChild(titulo); bloque.appendChild(fila);
+      cont.appendChild(bloque);
     });
     // Pidio una hora y con este servicio ya no cabe (p.ej. uno de tres horas al
     // final del dia): se dice, no se deja el panel en silencio.
@@ -8805,9 +8846,18 @@ function renderCitasDay(){
       const quien = b.nombre || b.client_name || b.name || b.servicio || 'Cita';
       const servicioCorto = String(b.servicio || '').trim();
       const compacta = h < 46;
-      const linea = compacta && servicioCorto ? `${hora} · ${quien} · ${servicioCorto}` : `${hora} · ${quien}`;
+      // En una cita de 15 minutos cabe UNA linea, y ahi el servicio es lo que el
+      // salon necesita ver. Se le hace sitio quitando lo que ya se sabe por otro
+      // lado: el APELLIDO (con el nombre basta para reconocerla en el mostrador) y
+      // la etiqueta de estado, que el propio color del bloque ya dice. La marca de
+      // pago se queda, que esa no se deduce del color.
+      const quienCorto = compacta ? String(quien).split(/\s+/)[0] : quien;
+      const linea = compacta && servicioCorto
+        ? `${hora} · ${quienCorto} · ${servicioCorto}`
+        : `${hora} · ${quien}`;
+      const etiqueta = compacta ? cdPayMark(b) : escapeHtml(view.tag) + cdPayMark(b);
       btn.title = [hora, quien, servicioCorto, view.label].filter(Boolean).join(' · ');
-      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(linea)}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(linea)}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${etiqueta}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => {
         // Soltar el borde despues de estirar dispara un click sobre la cita, y
         // abria el panel de Gestionar cada vez. Se traga ese click y ya esta.

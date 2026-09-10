@@ -285,6 +285,18 @@ def main() -> int:
                 )
                 page.keyboard.type("mech", delay=30)
                 page.wait_for_function("() => document.querySelectorAll('#nbSvcAc .nb-ac-item').length >= 2")
+                # Los huecos van agrupados por franja y con la altura acotada: 44
+                # fichas seguidas se comian el panel entero (el salon, 10-sep-2026).
+                page.wait_for_function("() => document.querySelectorAll('#nbSlots .nb-franja').length >= 1")
+                alto_slots = page.evaluate(
+                    "() => document.getElementById('nbSlots').getBoundingClientRect().height")
+                assert alto_slots <= 230, "el selector de horas vuelve a ocupar media pantalla: %s" % alto_slots
+                franjas = page.eval_on_selector_all("#nbSlots .nb-franja-tit", "els => els.map(e => e.textContent)")
+                assert franjas, "los huecos no estan agrupados por franja"
+                import os as _os
+                _shots = _os.environ.get("QA_SHOTS_DIR")
+                if _shots:
+                    page.screenshot(path=_os.path.join(_shots, "nb_slots.png"))
                 sugerencias = page.eval_on_selector_all("#nbSvcAc .nb-ac-item b", "els => els.map(e => e.textContent)")
                 assert all("mech" in s.lower() for s in sugerencias), sugerencias
                 # Dos palabras y en desorden: asi busca la gente, no por prefijo.
@@ -334,10 +346,24 @@ def main() -> int:
                 # ("aunque sea de 15 minutos tengo que ver el nombre y el servicio",
                 # el salon el 9-sep-2026).
                 texto_cita = page.locator(".cd-event").first.inner_text()
-                assert "Clienta Arrastre" in texto_cita, texto_cita
+                # En la cita corta va el nombre de pila, no el apellido: el sitio se
+                # lo queda el servicio, que es lo que el salon necesita leer de un
+                # vistazo. El nombre completo sigue en el titulo (raton encima).
+                assert "Clienta" in texto_cita, texto_cita
+                assert "Clienta Arrastre" in page.locator(".cd-event").first.get_attribute("title")
                 assert "Corte senora" in texto_cita, (
                     "en una cita corta no se ve el servicio: %r" % texto_cita
                 )
+                # Y tiene que CABER: con el apellido y la etiqueta de estado, el
+                # servicio salia recortado ("10:00 - Ana - Cor...").
+                assert "SIN CONF" not in texto_cita, (
+                    "la etiqueta de estado le quita el sitio al servicio: %r" % texto_cita
+                )
+                recortado = page.evaluate("""() => {
+                    const n = document.querySelector('.cd-event .cd-ev-name');
+                    return n.scrollWidth > n.clientWidth + 2;
+                }""")
+                assert not recortado, "el texto de la cita corta sigue sin caber"
 
                 assert page.locator(".cd-ev-grip").count() >= 2, "la cita no tiene bordes para estirarla"
                 # La altura se mide ANTES de empezar a arrastrar: durante el arrastre
