@@ -166,7 +166,7 @@ def _book_portal(scenario, *, employee_id: str, servicio: str, hora: str, fecha:
         params=scenario["params"],
         cookies=scenario["cookies"],
         json={
-            "nombre": "Cliente QA",
+            "nombre": "Cliente QA Segundo",
             "email": "cliente@example.com",
             "telefono": "600000001",
             "servicio": servicio,

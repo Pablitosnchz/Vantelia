@@ -95,7 +95,7 @@ def _book(client, cookies, employee_id: str, service: str, time: str = "10:00"):
         params=PARAMS,
         cookies=cookies,
         json={
-            "nombre": "Cliente Edge",
+            "nombre": "Cliente Edge Segundo",
             "email": "edge@example.com",
             "telefono": "+34600999000",
             "servicio": service,

@@ -48,6 +48,8 @@ class WAFlowState:
     horas_pagina: int = 0
     horas_franja: str = ""
     nombre: str = ""
+    # Ya se le han pedido los apellidos una vez: no se insiste (10-sep-2026).
+    apellidos_pedidos: str = ""
     email: str = ""
     notas: str = ""
     booking_code: str = ""

@@ -862,7 +862,11 @@
     .cd-event.compact .cd-ev-name { font-size:0.74rem; }
     .cd-ev-tag { flex:0 0 auto; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
     .cd-ev-svc { font-size:0.72rem; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .cd-event.compact { padding-top:3px; padding-bottom:3px; }
+    /* En una cita corta el servicio ya NO se esconde: es obligatorio verlo. Lo que
+       se aprieta es el espacio, no la informacion. */
+    .cd-event.compact { padding:2px 6px 2px 8px; }
+    .cd-event.compact .cd-ev-name { font-size:0.72rem; line-height:1.15; }
+    .cd-event.compact .cd-ev-svc { font-size:0.68rem; line-height:1.15; }
     /* Bordes para estirar o acortar la cita con el raton, como en el programa de
        toda la vida del salon. Solo se ven al pasar por encima: el bloque no puede
        parecer un formulario. */
@@ -879,7 +883,6 @@
       position:absolute; right:6px; bottom:4px; font-size:0.66rem; font-weight:800;
       color:var(--accent); background:var(--panel-2); border-radius:5px; padding:1px 5px;
     }
-    .cd-event.compact .cd-ev-svc { display:none; }
     .cd-ev-pay { flex:0 0 auto; font-size:0.68rem; font-weight:800; margin-left:3px; }
     .cd-detail { margin-top:14px; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
     .cd-detail-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
@@ -4123,7 +4126,7 @@
       <div class="nb-body">
         <label class="field-label">Cliente</label>
         <div class="nb-ac-wrap">
-          <input type="text" class="field-input" id="nbNombre" placeholder="Nombre y apellidos" autocomplete="off" />
+          <input type="text" class="field-input" id="nbNombre" placeholder="Nombre y dos apellidos" autocomplete="off" />
           <div class="nb-ac" id="nbAc"></div>
         </div>
         <details class="nb-more">
@@ -7811,16 +7814,26 @@ async function nbProximoHueco() {
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">No hay huecos en los próximos 14 días.</span>';
 }
 
+// Nombre y DOS apellidos. El salon lo pidió el 10-sep-2026: en la agenda tienen
+// que distinguir a dos clientas que se llaman igual. Quien decide es el backend
+// (400 si faltan); esto solo lo dice antes para no dejar el boton en gris sin
+// explicacion.
+function tieneDosApellidos(nombre) {
+  return String(nombre || '').trim().split(/\s+/).filter(Boolean).length >= 3;
+}
+
 function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
-  document.getElementById('nbConfirmBtn').disabled = !(nombre && hora);
+  const completo = tieneDosApellidos(nombre);
+  document.getElementById('nbConfirmBtn').disabled = !(completo && hora);
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
   if (hint) {
-    hint.textContent = hora
-      ? (nombre ? '' : 'Falta el nombre del cliente.')
-      : 'Elige una hora libre.';
+    hint.textContent = !hora
+      ? 'Elige una hora libre.'
+      : (!nombre ? 'Falta el nombre del cliente.'
+        : (!completo ? 'Escribe el nombre y los dos apellidos.' : ''));
   }
 }
 
@@ -8420,7 +8433,13 @@ document.getElementById('calNext').addEventListener('click', async () => { citas
 document.getElementById('calToday').addEventListener('click', async () => { const n = new Date(); citasState.calYear = n.getFullYear(); citasState.calMonth = n.getMonth(); await fetchCitasCalData(); renderCalendar(); });
 
 // ── CITAS · Vista Día (timeline por profesional) ──────────────────────
-const CD_PX_PER_MIN = 1.4, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 22, CD_GENERAL_KEY = '__general__';
+// El dia se pinta MAS ALTO (antes 1.4 px/min) para que en una cita de 15
+// minutos quepan las dos lineas: nombre con sus dos apellidos y servicio.
+// Lo pidio el salon el 10-sep-2026 -"aunque sea de 15 minutos tiene que
+// verse el nombre y 2 apellidos y el servicio obligatoriamente"- aceptando
+// el scroll que trae: la columna ya vive dentro de `.cd-scroll`.
+// 15 min * 2.2 = 33 px, que es lo que ocupan las dos lineas apretadas.
+const CD_PX_PER_MIN = 2.2, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 32, CD_GENERAL_KEY = '__general__';
 const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled', no_show:'no_show' };
 
 function cdEstado(b){ return CD_ESTADO_NORM[b.estado || b.status] || 'pending'; }
@@ -8846,15 +8865,12 @@ function renderCitasDay(){
       const quien = b.nombre || b.client_name || b.name || b.servicio || 'Cita';
       const servicioCorto = String(b.servicio || '').trim();
       const compacta = h < 46;
-      // En una cita de 15 minutos cabe UNA linea, y ahi el servicio es lo que el
-      // salon necesita ver. Se le hace sitio quitando lo que ya se sabe por otro
-      // lado: el APELLIDO (con el nombre basta para reconocerla en el mostrador) y
-      // la etiqueta de estado, que el propio color del bloque ya dice. La marca de
-      // pago se queda, que esa no se deduce del color.
-      const quienCorto = compacta ? String(quien).split(/\s+/)[0] : quien;
-      const linea = compacta && servicioCorto
-        ? `${hora} · ${quienCorto} · ${servicioCorto}`
-        : `${hora} · ${quien}`;
+      // El nombre va SIEMPRE completo -nombre y dos apellidos- y el servicio en su
+      // linea: son los dos datos que el salon necesita leer de un vistazo, y por
+      // eso el dia se pinta mas alto. Lo unico que se quita en las cortas es la
+      // etiqueta de estado, que el color del bloque ya dice; la marca de pago se
+      // queda, que esa no se deduce del color.
+      const linea = `${hora} · ${quien}`;
       const etiqueta = compacta ? cdPayMark(b) : escapeHtml(view.tag) + cdPayMark(b);
       btn.title = [hora, quien, servicioCorto, view.label].filter(Boolean).join(' · ');
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(linea)}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${etiqueta}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
@@ -11981,6 +11997,12 @@ function openNewClientePanel() {
       source: 'manual',
     };
     if (!payload.name && !payload.email && !payload.phone) { toast('Indica al menos nombre, email o teléfono.', 'error'); return; }
+    // Mismo liston que al crear la cita: en la agenda hay que distinguir a dos
+    // clientas que se llaman igual. El backend lo rechaza igualmente (400).
+    if (payload.name && !tieneDosApellidos(payload.name)) {
+      toast('Escribe el nombre y los dos apellidos del cliente.', 'error');
+      return;
+    }
     const btn = document.getElementById('nuevoClienteSaveBtn'); btn.disabled = true; const o = btn.textContent; btn.textContent = 'Creando…';
     try {
       const r = await api('/auth/app/contacts', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });

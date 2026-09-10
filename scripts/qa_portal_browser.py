@@ -149,7 +149,7 @@ def main() -> int:
         _emp = agenda._resolve_employee_for_booking(CID, "", require_active=False)
         _cita = asyncio.new_event_loop().run_until_complete(
             _booking._create_booking_core(
-                CID, employee_row=_emp, nombre="Clienta Arrastre", email="",
+                CID, employee_row=_emp, nombre="Clienta Arrastre Perez", email="",
                 telefono="600000222", servicio="Corte senora", booking_date=_fecha_cita,
                 booking_time="10:00", notas="", source="portal_manual",
                 send_confirmation=False,
@@ -349,8 +349,9 @@ def main() -> int:
                 # En la cita corta va el nombre de pila, no el apellido: el sitio se
                 # lo queda el servicio, que es lo que el salon necesita leer de un
                 # vistazo. El nombre completo sigue en el titulo (raton encima).
-                assert "Clienta" in texto_cita, texto_cita
-                assert "Clienta Arrastre" in page.locator(".cd-event").first.get_attribute("title")
+                # Nombre COMPLETO y servicio, los dos visibles: es lo que el salon necesita
+                # leer de un vistazo y por eso el dia se pinta mas alto (10-sep-2026).
+                assert "Clienta Arrastre Perez" in texto_cita, texto_cita
                 assert "Corte senora" in texto_cita, (
                     "en una cita corta no se ve el servicio: %r" % texto_cita
                 )

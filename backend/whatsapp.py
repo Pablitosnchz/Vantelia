@@ -2056,12 +2056,16 @@ async def _wa_resumen_para_confirmar(
     # quince (11:45, 12:00). El modelo dio por buena esa hora -nadie se la habia
     # ofrecido-, el resumen salio con las 11:55 y al confirmar el nucleo la
     # rechazo. Aqui se corta antes y se le ofrecen las horas REALES.
-    if not await agenda._booking_slot_available(
-        cliente_id, estado.fecha, estado.hora,
-        employee_id=flow.employee_id or "",
-        duration_minutes=agenda._service_duration_minutes(
-            cliente_id, estado.servicio_exacto or estado.servicio),
-    ):
+    # Se comprueba contra los MISMOS huecos que se ofrecen (asignacion automatica
+    # incluida). Mirarlo contra un profesional concreto tumbaba reservas buenas: la
+    # hora estaba libre con otra companyera y el humo lo caso antes de llegar a
+    # produccion.
+    _, horas_libres = await agenda._public_slot_sets_for_day(
+        cliente_id, estado.fecha,
+        servicio=estado.servicio_exacto or estado.servicio,
+        location_id=flow.location_id or "",
+    )
+    if estado.hora not in horas_libres:
         texto = await _wa_hora_que_no_existe(cliente_id, estado.fecha, estado.hora)
         _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
                       respuesta=texto, intent="hora_no_disponible")
@@ -3397,9 +3401,23 @@ async def _handle_whatsapp_message(
         if len(nombre) < 2:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Necesito un nombre valido (minimo 2 caracteres).",
+                text="Necesito un nombre válido (mínimo 2 caracteres).",
             )
             return
+        # Solo el nombre de pila: se piden los apellidos UNA vez. A la segunda se
+        # acepta lo que diga -insistir por chat es donde se pierden reservas- y el
+        # equipo puede completarlo desde el panel.
+        if not textnorm.tiene_algun_apellido(nombre) and not flow.apellidos_pedidos:
+            flow.apellidos_pedidos = "1"
+            flow.nombre = nombre[:80]
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Gracias, %s. ¿Me dices también tus apellidos? 😊" % nombre[:40],
+            )
+            return
+        if flow.apellidos_pedidos == "1" and not textnorm.tiene_algun_apellido(nombre):
+            # Contesto a "¿tus apellidos?" con los apellidos sueltos: se juntan.
+            nombre = ("%s %s" % (flow.nombre, nombre)).strip()
         flow.nombre = nombre[:80]
         # El email ya no se pide: la confirmación sale por este mismo chat y pedirlo
         # costaba una interaccion a todo el mundo para que casi nadie lo diera. Si el

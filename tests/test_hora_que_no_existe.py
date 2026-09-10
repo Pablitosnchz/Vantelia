@@ -55,10 +55,13 @@ def test_el_resumen_comprueba_la_hora_antes_de_prometerla(api_module):  # noqa: 
     from backend import whatsapp
 
     fuente = inspect.getsource(whatsapp._wa_resumen_para_confirmar)
-    assert "_booking_slot_available" in fuente, (
+    # Contra los MISMOS huecos que se ofrecen: mirarlo contra un profesional
+    # concreto tumbaba reservas buenas -la hora estaba libre con otra companyera- y
+    # lo caso el humo antes de llegar a produccion.
+    assert "_public_slot_sets_for_day" in fuente, (
         "el resumen vuelve a prometer horas sin comprobarlas"
     )
-    assert fuente.index("_booking_slot_available") < fuente.index("_wa_send_booking_summary")
+    assert fuente.index("_public_slot_sets_for_day") < fuente.index("_wa_send_booking_summary")
 
 
 def test_el_mensaje_no_dice_que_se_ha_ocupado(api_module):  # noqa: F811

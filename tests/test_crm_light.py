@@ -88,7 +88,7 @@ def test_crm_portal_crud_and_contact_detail(client, portal_cookies):
         "/auth/app/contacts",
         cookies=portal_cookies,
         json={
-            "name": "Contacto Portal",
+            "name": "Contacto Portal Segundo",
             "email": f"portal-{suffix}@example.com",
             "phone": "",
             "status": "nuevo",
@@ -107,7 +107,7 @@ def test_crm_portal_crud_and_contact_detail(client, portal_cookies):
         f"/auth/app/contacts/{contact_id}",
         cookies=portal_cookies,
         json={
-            "name": "Contacto Portal",
+            "name": "Contacto Portal Segundo",
             "email": f"portal-{suffix}@example.com",
             "phone": "+34600111222",
             "status": "cliente",

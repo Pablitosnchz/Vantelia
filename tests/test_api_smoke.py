@@ -911,7 +911,7 @@ def _seed_past_booking(api_module, status: str = "confirmed") -> str:
     iso = lambda d: d.isoformat(timespec="seconds") + "Z"
     api_module._store_booking({
         "id": booking_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
-        "nombre": "Cliente Prueba", "email": "prueba@example.com", "telefono": "",
+        "nombre": "Cliente Prueba Segundo", "email": "prueba@example.com", "telefono": "",
         "servicio": "Consulta", "booking_date": start.date().isoformat(),
         "booking_time": start.strftime("%H:%M"), "notas": "", "status": status,
         "provider_name": "internal", "provider_status": status, "provider_booking_id": "",
@@ -979,7 +979,7 @@ def test_staff_can_create_booking_manually(client: TestClient, api_module):
         params={"cliente_id": "demo"},
         cookies=cookies,
         json={
-            "nombre": "Walk In", "email": "", "telefono": "600111222", "servicio": "",
+            "nombre": "Walk In Segundo", "email": "", "telefono": "600111222", "servicio": "",
             "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "manual",
         },
     )
@@ -990,7 +990,7 @@ def test_staff_can_create_booking_manually(client: TestClient, api_module):
         row = conn.execute(
             "SELECT status, source, nombre FROM bookings WHERE id = ?", (booking_id,)
         ).fetchone()
-    assert row == ("confirmed", "portal_manual", "Walk In")
+    assert row == ("confirmed", "portal_manual", "Walk In Segundo")
 
     # Mismo hueco/profesional otra vez -> conflicto.
     r2 = client.post(
@@ -998,7 +998,7 @@ def test_staff_can_create_booking_manually(client: TestClient, api_module):
         params={"cliente_id": "demo"},
         cookies=cookies,
         json={
-            "nombre": "Otro", "email": "", "telefono": "", "servicio": "",
+            "nombre": "Otro Cliente Segundo", "email": "", "telefono": "", "servicio": "",
             "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "",
         },
     )
@@ -1009,7 +1009,7 @@ def test_staff_can_create_booking_manually(client: TestClient, api_module):
         params={"cliente_id": "demo"},
         cookies=cookies,
         json={
-            "nombre": "Sin Contacto", "email": "", "telefono": "", "servicio": "",
+            "nombre": "Sin Contacto Segundo", "email": "", "telefono": "", "servicio": "",
             "employee_id": "", "fecha": fecha, "hora": "09:30", "notas": "",
         },
     )
@@ -1039,7 +1039,7 @@ def test_public_booking_requires_contact_but_accepts_phone_only(client: TestClie
         "/agendar",
         headers=origin,
         json={
-            "cliente_id": "demo", "nombre": "Sin Contacto", "email": "", "telefono": "",
+            "cliente_id": "demo", "nombre": "Sin Contacto Segundo", "email": "", "telefono": "",
             "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "",
         },
     )
@@ -1121,7 +1121,7 @@ def test_multilocation_isolation_and_crud(client: TestClient, api_module):
 
     booked = client.post(
         "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"nombre": "Cliente A", "email": "", "telefono": "600000001", "servicio": "",
+        json={"nombre": "Cliente A Segundo", "email": "", "telefono": "600000001", "servicio": "",
               "employee_id": emp_a["employee_id"], "fecha": fecha, "hora": "09:00", "notas": ""},
     )
     assert booked.status_code == 200, booked.text
@@ -1287,7 +1287,7 @@ def test_resources_capacity_limits_overlap(client: TestClient, api_module):
     # 1 sala para 2 profesionales.
     r = client.post(
         f"/auth/locations/{loc}/resources", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"name": "Sala unica"},
+        json={"name": "Sala unica Segundo"},
     )
     assert r.status_code == 200, r.text
     sala_id = r.json()["resource_id"]
@@ -1300,7 +1300,7 @@ def test_resources_capacity_limits_overlap(client: TestClient, api_module):
     # Cita con emp1 a las 09:00 ocupa la unica sala.
     booked = client.post(
         "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"nombre": "Aforo Cli", "email": "", "telefono": "600333444", "servicio": "",
+        json={"nombre": "Aforo Cli Segundo", "email": "", "telefono": "600333444", "servicio": "",
               "employee_id": emp1["employee_id"], "fecha": fecha, "hora": "09:00", "notas": ""},
     )
     assert booked.status_code == 200, booked.text
@@ -1333,7 +1333,7 @@ def test_resources_capacity_limits_overlap(client: TestClient, api_module):
     # Con una segunda sala, el mismo hueco vuelve a estar disponible.
     client.post(
         f"/auth/locations/{loc}/resources", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"name": "Sala dos"},
+        json={"name": "Sala dos Segundo"},
     )
     disp2 = client.get(
         "/disponibilidad",
@@ -2178,7 +2178,7 @@ def test_reschedule_via_drag_payload_moves_booking(client: TestClient, api_modul
         target += timedelta(days=1)
     fecha = target.isoformat()
     created = client.post("/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
-                          json={"nombre": "Drag Cliente", "email": "", "telefono": "600333111",
+                          json={"nombre": "Drag Cliente Segundo", "email": "", "telefono": "600333111",
                                 "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": ""})
     assert created.status_code == 200, created.text
     bid = created.json()["booking_id"]
@@ -2311,7 +2311,7 @@ def test_reschedule_changes_employee_and_preserves_payment(client: TestClient, a
     params = {"cliente_id": "demo"}
     # Segundo profesional.
     emp = client.post("/auth/employees", params=params, cookies=cookies,
-                      json={"name": "Pro Dos", "role_label": "", "color": "#ff8800"})
+                      json={"name": "Pro Dos Segundo", "role_label": "", "color": "#ff8800"})
     assert emp.status_code == 200, emp.text
     emp2 = emp.json().get("employee_id") or emp.json().get("id")
     target = datetime.utcnow().date() + timedelta(days=2)
@@ -2319,7 +2319,7 @@ def test_reschedule_changes_employee_and_preserves_payment(client: TestClient, a
         target += timedelta(days=1)
     fecha = target.isoformat()
     created = client.post("/auth/bookings", params=params, cookies=cookies,
-                          json={"nombre": "Resched Cliente", "email": "rs@example.com", "telefono": "600111222",
+                          json={"nombre": "Resched Cliente Segundo", "email": "rs@example.com", "telefono": "600111222",
                                 "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": ""})
     assert created.status_code == 200, created.text
     bid = created.json()["booking_id"]
@@ -2607,7 +2607,7 @@ def test_services_catalog_duration_and_overlap(client: TestClient, api_module):
     # Reserva con servicio de 60 min a las 09:00 (demo abre 09:00-10:00).
     r1 = client.post(
         "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"nombre": "A", "email": "", "telefono": "", "servicio": "Larga",
+        json={"nombre": "Ana Ruiz Segundo", "email": "", "telefono": "", "servicio": "Larga",
               "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": ""},
     )
     assert r1.status_code == 200, r1.text
@@ -2625,7 +2625,7 @@ def test_services_catalog_duration_and_overlap(client: TestClient, api_module):
     # Otra cita a las 09:30 solapa el bloque de 60 min -> conflicto.
     r2 = client.post(
         "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"nombre": "B", "email": "", "telefono": "", "servicio": "",
+        json={"nombre": "Bea Ruiz Segundo", "email": "", "telefono": "", "servicio": "",
               "employee_id": "", "fecha": fecha, "hora": "09:30", "notas": ""},
     )
     assert r2.status_code == 409
@@ -2703,7 +2703,7 @@ def test_service_duration_allows_adjacent_short_slot_but_blocks_long_overlap(cli
             params={"cliente_id": "demo"},
             cookies=cookies,
             json={
-                "nombre": "Reserva borde",
+                "nombre": "Reserva borde Segundo",
                 "email": "",
                 "telefono": "",
                 "servicio": short_name,
@@ -2851,7 +2851,7 @@ def test_schedule_break_filters_slots_by_service_duration(client: TestClient, ap
             params={"cliente_id": "demo"},
             cookies=cookies,
             json={
-                "nombre": "No cabe",
+                "nombre": "No cabe Segundo",
                 "email": "",
                 "telefono": "",
                 "servicio": long_name,
@@ -2925,7 +2925,7 @@ def test_schedule_break_rejects_future_booking_conflicts(client: TestClient, api
             params={"cliente_id": "demo"},
             cookies=cookies,
             json={
-                "nombre": "Reserva comida",
+                "nombre": "Reserva comida Segundo",
                 "email": "",
                 "telefono": "",
                 "servicio": service_name,
@@ -3014,7 +3014,7 @@ def test_today_availability_hides_past_slots_and_rejects_past_booking(
             params={"cliente_id": "demo"},
             cookies=cookies,
             json={
-                "nombre": "Tarde",
+                "nombre": "Tarde Cliente Segundo",
                 "email": "",
                 "telefono": "",
                 "servicio": "",
@@ -3105,7 +3105,7 @@ def test_booking_manage_page_renders_with_service_catalog(client: TestClient, ap
         target += timedelta(days=1)
     created = client.post(
         "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
-        json={"nombre": "Manage Test", "email": "", "telefono": "", "servicio": "",
+        json={"nombre": "Manage Test Segundo", "email": "", "telefono": "", "servicio": "",
               "employee_id": "", "fecha": target.isoformat(), "hora": "09:00", "notas": ""},
     )
     assert created.status_code == 200, created.text
@@ -3515,7 +3515,7 @@ def _build_booking_record(api_module, **overrides):
         "cliente_id": "demo",
         "employee_id": "",
         "employee_name": "",
-        "nombre": "Cliente Prueba",
+        "nombre": "Cliente Prueba Segundo",
         "email": "cliente@example.com",
         "telefono": "+34611222333",
         "servicio": "Consulta",

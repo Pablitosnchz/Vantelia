@@ -480,6 +480,21 @@ async def _ejecutar(
         argumentos["profesional"] = argumentos.get("profesional") or argumentos["nombre"]
         argumentos["nombre"] = ""
 
+    # Solo el nombre de pila: se le piden los apellidos antes de coger la cita. Lo
+    # decide el CODIGO, no el prompt, porque es lo que va a leer el salon en su
+    # agenda. Una sola vez: si insiste, la tool deja de pedirlo (`_sin_apellidos`
+    # se apaga con el aviso ya dado en el estado del canal).
+    if nombre == "crear_cita":
+        quien_nombre = str(argumentos.get("nombre") or (quien or {}).get("nombre", "")).strip()
+        if quien_nombre and not textnorm.tiene_algun_apellido(quien_nombre):
+            return {
+                "ok": False,
+                "error": "Falta el apellido: en la agenda del salon hace falta el nombre completo.",
+                "que_hacer": ("Preguntale sus apellidos en UNA frase corta y espera a que "
+                              "los diga. No te los inventes ni cojas la cita sin ellos."),
+                "conserva_los_datos": True,
+            }
+
     if nombre == "crear_cita" and remate_manual and _nombre_de_verdad(
         argumentos.get("nombre") or (quien or {}).get("nombre", "")
     ):

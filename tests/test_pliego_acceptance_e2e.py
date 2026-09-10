@@ -64,7 +64,7 @@ def acceptance(vantelia_env_factory):
         email="owner.pliego@example.com",
         password="owner-pass-123",
         role="client",
-        display_name="Propietaria QA",
+        display_name="Propietaria QA Segundo",
         cliente_id=CID,
         portal_role="owner",
     )
@@ -222,7 +222,7 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
         employee_id=employee_b["employee_id"],
         service=service["nombre"],
         time="10:00",
-        name="Cliente Pliego",
+        name="Cliente Pliego Segundo",
         email="cliente.pliego@example.com",
     )
     assert booking_response.status_code == 200, booking_response.text
@@ -253,7 +253,7 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
         employee_id=employee_b2["employee_id"],
         service=service["nombre"],
         time="10:15",
-        name="Cliente Solape",
+        name="Cliente Solape Segundo",
         email="solape@example.com",
     )
     assert blocked.status_code == 409
@@ -350,7 +350,7 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
         employee_id=employee_b["employee_id"],
         service=service["nombre"],
         time="11:00",
-        name="Cliente Gift",
+        name="Cliente Gift Segundo",
         email="gift@example.com",
     )
     assert gift_booking.status_code == 200, gift_booking.text
@@ -477,7 +477,7 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
         employee_id=employee_b["employee_id"],
         service=service["nombre"],
         time="10:00",
-        name="Cliente Reemplazo",
+        name="Cliente Reemplazo Segundo",
         email="reemplazo@example.com",
     )
     assert replacement.status_code == 200, replacement.text

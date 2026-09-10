@@ -896,6 +896,12 @@ async def app_contact_create(
 ) -> CRMContactPublic:
     security._require_portal_permission(user, "clients.edit")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    # Mismo liston que al crear la cita: nombre y dos apellidos.
+    if data.name and not textnorm.tiene_dos_apellidos(data.name):
+        raise HTTPException(
+            status_code=400,
+            detail="Escribe el nombre y los dos apellidos del cliente.",
+        )
     contact_id = crm._crm_upsert_contact(
         cliente_id, name=data.name, email=data.email, phone=data.phone,
         source=data.source or "manual", status=data.status, actor=f"user:{user['id']}",
@@ -3175,6 +3181,14 @@ async def auth_create_booking(
     nombre = textnorm._sanitize_text(data.nombre)
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre del cliente es obligatorio.")
+    # Nombre y DOS apellidos: lo pidio el salon el 10-sep-2026 porque en la agenda
+    # tienen que distinguir a dos clientas que se llaman igual. Aqui escribe el
+    # equipo, que se los sabe; por WhatsApp el liston es mas bajo a proposito.
+    if not textnorm.tiene_dos_apellidos(nombre):
+        raise HTTPException(
+            status_code=400,
+            detail="Escribe el nombre y los dos apellidos del cliente.",
+        )
     email = textnorm._normalize_email(data.email)
     telefono = textnorm._sanitize_text(data.telefono)
     servicio = textnorm._sanitize_text(data.servicio)

@@ -177,7 +177,7 @@ def _slots_map(client: TestClient, fecha: str, employee_id: str, servicio: str =
 
 
 def _book(client: TestClient, cookies: dict, fecha: str, hora: str, employee_id: str = "",
-          servicio: str = "", nombre: str = "Test") -> dict:
+          servicio: str = "", nombre: str = "Test Apellido Segundo") -> dict:
     r = client.post(
         "/auth/bookings",
         params={"cliente_id": "demo"},

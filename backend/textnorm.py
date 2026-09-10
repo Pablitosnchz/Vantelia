@@ -924,3 +924,30 @@ def _tono_prompt_block(config) -> str:
         return ""
     return "COMO TIENES QUE HABLAR (lo ha decidido el negocio):\n- " + "\n- ".join(lineas)
 
+def _palabras_del_nombre(nombre: str) -> list:
+    """Las palabras de un nombre, sin espacios de mas."""
+    return [p for p in str(nombre or "").split() if p]
+
+
+def tiene_algun_apellido(nombre: str) -> bool:
+    """El nombre trae al menos un apellido: "Ana Ruiz" si, "Ana" no.
+
+    Es el listón de los canales donde escribe la CLIENTA (WhatsApp): si solo da el
+    nombre de pila se le piden los apellidos UNA vez. Insistir mas por chat es
+    donde se pierden reservas.
+    """
+    return len(_palabras_del_nombre(nombre)) >= 2
+
+
+def tiene_dos_apellidos(nombre: str) -> bool:
+    """Nombre y DOS apellidos: "Ana Ruiz Perez".
+
+    Es el listón del MOSTRADOR (panel), que lo pidio el salon el 10-sep-2026: en
+    la agenda tienen que distinguir a dos clientas que se llaman igual, y ahi
+    escribe el equipo, que si los sabe.
+
+    Cuenta palabras, sin listas de particulas: "Ana de la Fuente Ruiz" son cinco y
+    pasa. Un nombre extranjero de dos palabras ("John Smith") NO pasa: es el precio
+    de la regla, y el equipo siempre puede escribir el segundo apellido o repetir.
+    """
+    return len(_palabras_del_nombre(nombre)) >= 3
