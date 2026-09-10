@@ -1486,6 +1486,27 @@ async def _wa_send_booking_summary(
         settings.logger.warning("[whatsapp] no se pudo registrar el resumen: %s", exc)
 
 
+async def _wa_hora_que_no_existe(cliente_id: str, fecha: str, hora: str) -> str:
+    """Esa hora no se puede coger: se dice la verdad y se ofrecen las que si.
+
+    Distinto de `_wa_ese_hueco_ya_no_esta`, que es para el hueco que SE OCUPO
+    entre el resumen y el boton. Aqui la hora no llego a existir nunca -la agenda
+    va de quince en quince y pidio las 11:55-, y decirle "se acaba de ocupar" es
+    mentirle: se queda pensando que ha tenido mala suerte cuando lo que pasa es
+    que esa hora no se ofrece.
+    """
+    try:
+        return await booking._reschedule_failure_text(
+            cliente_id,
+            {"error": "Las %s no las tengo, cariño." % hora},
+            fecha, hora,
+        )
+    except Exception as exc:  # noqa: BLE001 - nunca sin respuesta
+        settings.logger.warning("[whatsapp] sin alternativas para %s: %s", cliente_id, exc)
+        return ("Las %s no las tengo libres, cariño. Dime otra hora y te la miro."
+                % hora) + rag._call_us_line(cliente_id)
+
+
 async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) -> str:
     """El hueco se ha ocupado entre el resumen y el boton: se ofrecen otros REALES.
 
@@ -2025,6 +2046,33 @@ async def _wa_resumen_para_confirmar(
         return False
     if not (estado.servicio and estado.fecha and estado.hora):
         return False
+
+    # La hora TIENE que ser una que se pueda reservar de verdad, y se comprueba
+    # ANTES de ensenyar el resumen. El resumen es una promesa: si la hora no vale,
+    # la clienta lee "Confirmamos?", pulsa, y recibe un "ese hueco se acaba de
+    # ocupar" que ni siquiera es cierto.
+    #
+    # Paso el 10-sep-2026: pidio "hoy a las 11:55" y la agenda va de quince en
+    # quince (11:45, 12:00). El modelo dio por buena esa hora -nadie se la habia
+    # ofrecido-, el resumen salio con las 11:55 y al confirmar el nucleo la
+    # rechazo. Aqui se corta antes y se le ofrecen las horas REALES.
+    if not await agenda._booking_slot_available(
+        cliente_id, estado.fecha, estado.hora,
+        employee_id=flow.employee_id or "",
+        duration_minutes=agenda._service_duration_minutes(
+            cliente_id, estado.servicio_exacto or estado.servicio),
+    ):
+        texto = await _wa_hora_que_no_existe(cliente_id, estado.fecha, estado.hora)
+        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                      respuesta=texto, intent="hora_no_disponible")
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text=texto,
+        )
+        # La hora se suelta para que el siguiente turno no la arrastre.
+        estado.hora = ""
+        reserva.guardar(cliente_id, from_number, estado)
+        return True
 
     # El freno de "aqui no se dan precios" ya no esta aqui: vive pegado al resumen
     # (`_wa_freno_del_precio`), que es por donde pasan TODOS los caminos. Tenerlo
