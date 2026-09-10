@@ -161,12 +161,35 @@ async def _send_whatsapp_buttons(
     header: str = "",
     footer: str = "",
 ) -> bool:
+    # Se admiten (id, texto) y {"id":..., "title":...}: un sitio los pasaba como
+    # diccionario, al iterarlo salian las CLAVES, los dos botones se quedaban con
+    # el id "id" y Meta devolvia 400 "Duplicate button id". El mensaje no llegaba,
+    # la rama cortaba y la clienta pulsaba Confirmar sin que pasara nada.
+    # Normalizar aqui, que es por donde salen TODOS, mata la clase entera.
     btns = []
-    for btn_id, btn_label in buttons[:3]:
+    vistos = set()
+    for boton in list(buttons)[:3]:
+        if isinstance(boton, dict):
+            btn_id = str(boton.get("id") or "")
+            btn_label = str(boton.get("title") or boton.get("label") or "")
+        else:
+            btn_id, btn_label = str(boton[0]), str(boton[1])
+        if not btn_id or btn_id in vistos:
+            # Meta rechaza el mensaje ENTERO por un id repetido. Mejor mandar los
+            # que sirven que perder la conversacion.
+            settings.logger.error(
+                "[whatsapp] boton descartado por id vacio o repetido (%r) en %s",
+                btn_id, cliente_id,
+            )
+            continue
+        vistos.add(btn_id)
         btns.append({
             "type": "reply",
             "reply": {"id": btn_id[:256], "title": btn_label[:20]},
         })
+    if not btns:
+        settings.logger.error("[whatsapp] sin botones validos para %s", cliente_id)
+        return False
     interactive: Dict[str, Any] = {
         "type": "button",
         "body": {"text": body[:1024]},

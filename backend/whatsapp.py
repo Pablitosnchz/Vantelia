@@ -1460,10 +1460,17 @@ async def _wa_send_booking_summary(
         ("data_fix", "✏️ Otros datos") if reconocido else ("notes_write", "✍️ Anadir nota")
     )
     cuerpo = chr(10).join(lineas)
-    await messaging._send_whatsapp_buttons(
+    enviado = await messaging._send_whatsapp_buttons(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
         header="Confirmar cita", body=cuerpo, buttons=botones,
     )
+    if not enviado:
+        # Si Meta lo rechaza, el resumen NO existe para la clienta: registrarlo
+        # igual pintaba en el panel un mensaje que nadie recibio y hacia leer la
+        # conversacion al reves (me paso el 10-sep-2026 diagnosticando esto).
+        settings.logger.error(
+            "[whatsapp] el resumen para confirmar no salio (%s -> %s)", cliente_id, to_number)
+        return
     # El resumen es un mensaje mas de la conversacion y tiene que QUEDAR GUARDADO.
     # No lo estaba: en el panel, la conversacion se cortaba justo antes de la
     # confirmacion -el negocio veia "¿me confirmas?" y despues nada- y al leerla
@@ -3428,9 +3435,15 @@ async def _handle_whatsapp_message(
                            str(suya.get("booking_time") or ""),
                            _wa_fecha_humana(flow.fecha), flow.hora)
                     ),
+                    # TUPLAS (id, texto). Iban como diccionarios y al iterarlos
+                    # salian sus CLAVES: los dos botones acababan con el id "id",
+                    # Meta devolvia 400 "Duplicate button id", el aviso no llegaba
+                    # y la funcion cortaba ahi. Resultado: la clienta pulsaba
+                    # Confirmar y no pasaba NADA -ni cita ni mensaje- (visto el
+                    # 10-sep-2026). Solo saltaba a quien ya tenia otra cita viva.
                     buttons=[
-                        {"id": "dup_mover", "title": "Cambiar la que tengo"},
-                        {"id": "dup_crear", "title": "Quiero las dos"},
+                        ("dup_mover", "Cambiar la que tengo"),
+                        ("dup_crear", "Quiero las dos"),
                     ],
                 )
                 return
