@@ -60,6 +60,10 @@ def test_a_una_clienta_conocida_no_se_le_piden(api_module):  # noqa: F811
     assert _crear("Ana Ruiz", conocida="Ana Ruiz").get("pendiente_de_confirmacion") is True
 
 
+def test_a_una_conocida_con_solo_nombre_tampoco_se_le_piden(api_module):  # noqa: F811
+    assert _crear("Ana", conocida="Ana").get("pendiente_de_confirmacion") is True
+
+
 def test_el_nombre_completo_llega_al_resumen(api_module):  # noqa: F811
     from backend import reserva
 
