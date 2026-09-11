@@ -42,7 +42,7 @@ página de sincronía lo enseña tal cual.
 - **Testigo:** nadie
 - **Tarea:** ninguna abierta. «La primera que tengas» ya acaba en cita (ver «Lo último»).
 - **Rama:** main.
-- **Siguiente:** recordatorios por WhatsApp (plan listo en `docs/PLAN_RECORDATORIOS_WHATSAPP.md`). Astra tiene en el buzón la revisión de lo desplegado hoy: reprogramar (`5d05457`), mensaje ilegible (`33f274a`), avisos de sistema (`541020c`), «la primera que tengas» (`2dea1c2`, `9ae56f9`), la vuelta del asistente (`5531fc7`), «Corte de señora» (`3e9ed05`) y los dos apellidos por WhatsApp.
+- **Siguiente:** de los recordatorios por WhatsApp quedan el estado de la plantilla en el portal y el envío real (ver «Lo último» y el plan). Astra tiene en el buzón la revisión de todo lo desplegado hoy, recordatorios incluidos (`f6fa490`, `4fe20fc`, `57f6d45`).
 - **Espera a:** nada. Astra, sin créditos hasta las 20:46.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
@@ -118,6 +118,17 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   que escribe el modelo ya no cambia el servicio. Antes no se encontraba y la
   cita se cogía de 15 min (el paso de la agenda) en vez de 20, con un nombre que
   no existe en el catálogo.
+- **Recordatorios por WhatsApp fuera de la ventana de 24 h** (11-sep, `57f6d45`):
+  Meta solo deja escribir texto libre 24 h desde el último mensaje de la clienta,
+  así que un recordatorio del día antes casi siempre se perdía. Ahora sale como
+  plantilla (`vantelia_recordatorio_cita`, transaccional) de la cuenta del propio
+  negocio, con los mismos botones «Confirmo» y «Cancelar cita», que ya se
+  procesan al pulsarlos. La plantilla la da de alta y consulta el worker; en la
+  cuenta del +31 ya está creada y en revisión. Sin plantilla aprobada no sale por
+  WhatsApp: el aviso sigue por el siguiente canal y el motivo queda anotado.
+  Además, **las citas de demo ya no avisan ni llaman a nadie** (la cuenta de
+  revisión de Meta tiene 191 con móviles inventados). Cada plantilla fuera de
+  ventana la cobra Meta al negocio, que necesita método de pago allí.
 - **Dos apellidos por WhatsApp** (11-sep, decisión de Pablo): a una clienta nueva
   se le piden nombre y dos apellidos antes del resumen (freno en `crear_cita` del
   agente y en el flujo con listas, que junta lo que va diciendo; a la tercera se le
