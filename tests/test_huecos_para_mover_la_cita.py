@@ -177,6 +177,56 @@ def test_se_descuenta_la_cita_propia_y_se_respeta_su_duracion(agenda_de_dos):
             cx.commit()
 
 
+def test_el_nombre_publico_conserva_el_pack_de_la_cita(agenda_de_dos):
+    from backend import booking, db, timeutils, voice
+
+    propia, dia, _, _ = agenda_de_dos
+    with db._get_db_connection() as cx:
+        for slug, nombre, duracion, activo in (
+            ("prueba_suelto", "Prueba largo", 30, 0),
+            ("prueba_pack", "Pack Prueba largo", 60, 1),
+        ):
+            cx.execute(
+                "INSERT INTO services (cliente_id,slug,name,duration_minutes,price_cents,is_active,created_at) "
+                "VALUES ('demo',?,?,?,?,?,?)",
+                (slug, nombre, duracion, 3000, activo, timeutils._utc_now_iso()))
+        cx.commit()
+    try:
+        booking._update_booking_record(propia["id"], servicio="Pack Prueba largo")
+        oferta = consultar(propia, dia, hora="11:30", servicio="Prueba largo")
+        assert oferta["hora_disponible"], oferta
+        cambio = asyncio.run(voice._voice_reschedule_booking(
+            "demo", propia["booking_code"], dia, "11:30", servicio="Prueba largo",
+            from_number="600111222"))
+        assert cambio["ok"], cambio
+        assert booking._load_booking_or_404(propia["id"])["servicio"] == "Pack Prueba largo"
+    finally:
+        with db._get_db_connection() as cx:
+            cx.execute("DELETE FROM services WHERE cliente_id='demo' AND slug IN ('prueba_suelto','prueba_pack')")
+            cx.commit()
+
+
+def test_llamada_desde_otro_numero_admite_contacto_verificado(agenda_de_dos):
+    from backend import voice
+
+    propia, dia, _, _ = agenda_de_dos
+    args = {"fecha": dia, "hora": "09:00", "codigo_reserva": propia["booking_code"],
+            "telefono": "600111222"}
+    respuesta = asyncio.run(voice._voice_dispatch_tool(
+        "demo", "consultar_disponibilidad", json.dumps(args), from_number="600555555"))
+    assert respuesta["ok"], respuesta
+    assert not respuesta["hora_disponible"]
+
+
+def test_el_modelo_puede_aportar_contacto_en_la_consulta(api_module):
+    from backend import clients, voice
+
+    herramienta = next(t for t in voice._voice_booking_tools(
+        "demo", clients._get_client_config("demo")) if t["name"] == "consultar_disponibilidad")
+    propiedades = herramienta["parameters"]["properties"]
+    assert "telefono" in propiedades and "email" in propiedades
+
+
 @pytest.mark.parametrize("ajeno", [False, True], ids=["codigo-inexistente", "codigo-ajeno"])
 def test_codigo_invalido_no_devuelve_huecos_generales(agenda_de_dos, ajeno):
     propia, dia, _, crear = agenda_de_dos
