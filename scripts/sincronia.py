@@ -453,6 +453,8 @@ def _creditos_de_codex(fichero: pathlib.Path, ahora: dt.datetime) -> Dict[str, A
     # La hora del ultimo evento: el mtime del fichero no sirve, Codex lo tiene abierto
     # y Windows no lo actualiza hasta que lo cierra.
     ultima: Optional[dt.datetime] = None
+    cuando_fin: Optional[dt.datetime] = None
+    ultima_respuesta: Optional[dt.datetime] = None
     for linea in cola:
         try:
             fila = json.loads(linea)
@@ -460,20 +462,33 @@ def _creditos_de_codex(fichero: pathlib.Path, ahora: dt.datetime) -> Dict[str, A
             continue
         if not isinstance(fila, dict):
             continue
-        ultima = _fecha_de_evento(fila.get("timestamp")) or ultima
+        momento = _fecha_de_evento(fila.get("timestamp"))
+        ultima = momento or ultima
         datos = fila.get("payload")
         if not isinstance(datos, dict):
             continue
         if datos.get("type") == "task_complete":
-            ultimo_fin = datos
+            ultimo_fin, cuando_fin = datos, momento
         elif datos.get("type") == "token_count" and isinstance(datos.get("rate_limits"), dict):
             for nombre in ("primary", "secondary"):
                 ventana = datos["rate_limits"].get(nombre)
                 if isinstance(ventana, dict) and ventana.get("used_percent") is not None:
                     ventanas[nombre] = ventana
-    estado = _cuota_de_codex(ultimo_fin, ventanas, ahora)
+        elif _es_respuesta_de_astra(datos) and momento is not None:
+            ultima_respuesta = momento
+    estado = _cuota_de_codex(ultimo_fin, ventanas, ahora, cuando_fin, ultima_respuesta)
     estado["actividad"] = ultima
     return estado
+
+
+def _es_respuesta_de_astra(datos: Dict[str, Any]) -> bool:
+    """Astra ha dicho algo: si contesta, es que tiene creditos."""
+    if datos.get("type") == "message" and datos.get("role") == "assistant":
+        return True
+    if datos.get("type") == "agent_message":
+        return True
+    item = datos.get("item")
+    return datos.get("type") == "item_completed" and isinstance(item, dict) and item.get("type") == "AgentMessage"
 
 
 def _fecha_de_evento(texto: Any) -> Optional[dt.datetime]:
@@ -485,18 +500,25 @@ def _fecha_de_evento(texto: Any) -> Optional[dt.datetime]:
         return None
 
 
-def _cuota_de_codex(ultimo_fin: Dict[str, Any], ventanas: Dict[str, Dict[str, Any]],
-                    ahora: dt.datetime) -> Dict[str, Any]:
+def _cuota_de_codex(ultimo_fin: Dict[str, Any], ventanas: Dict[str, Dict[str, Any]], ahora: dt.datetime,
+                    cuando_fin: Optional[dt.datetime] = None,
+                    ultima_respuesta: Optional[dt.datetime] = None) -> Dict[str, Any]:
     error = ultimo_fin.get("error")
     if not isinstance(error, dict):
         return {"sin_creditos": False}
     mensaje = str(error.get("message") or "")
     if "usage_limit" not in str(error.get("codex_error_info") or "") and not _SIN_CREDITOS.search(mensaje):
         return {"sin_creditos": False}
+    # Si ha vuelto a contestar despues del error, tiene creditos (su turno de ahora
+    # aun no ha terminado, asi que el ultimo task_complete sigue siendo el del error).
+    if cuando_fin is not None and ultima_respuesta is not None and ultima_respuesta > cuando_fin:
+        return {"sin_creditos": False}
     renovaciones = [int(v["resets_at"]) for v in ventanas.values()
                     if float(v.get("used_percent") or 0) >= 100 and v.get("resets_at")]
+    # "try again at 3:30 PM" es la hora del dia del error, no la proxima 3:30 desde ahora:
+    # contada desde ahora, pasadas las 15:30 salia "sin creditos hasta manana".
     hasta = (dt.datetime.fromtimestamp(max(renovaciones), dt.timezone.utc) if renovaciones
-             else _a_las(mensaje, ahora))
+             else _a_las(mensaje, cuando_fin or ahora))
     if hasta is not None and hasta <= ahora:
         return {"sin_creditos": False}
     return {"sin_creditos": True, "hasta": _iso(hasta), "motivo": mensaje[:300]}

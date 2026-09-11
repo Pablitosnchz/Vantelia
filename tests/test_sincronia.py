@@ -468,6 +468,45 @@ def test_pasada_la_hora_de_renovacion_ya_no_cuenta_como_sin_creditos(repo, home)
     assert not _agente(sincronia.construir_foto(repo, ahora=ahora, home=home), "astra")["sin_creditos"]
 
 
+def _iso_evento(momento):
+    return momento.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+@necesita_git
+def test_si_astra_vuelve_a_contestar_despues_del_error_tiene_creditos(repo, home):
+    """Paso de verdad (11-sep): Astra trabajando y la pagina diciendo "sin creditos".
+
+    Mientras su turno no termina, el ultimo task_complete sigue siendo el del error;
+    lo que prueba que ya tiene cuota es que ha vuelto a contestar despues.
+    """
+    ahora = dt.datetime.now(dt.timezone.utc)
+    eventos = [dict(evento, timestamp=_iso_evento(ahora - dt.timedelta(hours=2)))
+               for evento in _se_acaba_la_cuota(ahora + dt.timedelta(hours=1))]
+    eventos.append({"timestamp": _iso_evento(ahora - dt.timedelta(minutes=1)), "type": "response_item",
+                    "payload": {"type": "message", "role": "assistant",
+                                "content": [{"type": "output_text", "text": "Voy a releer las reglas."}]}})
+    _sesion_codex(home, eventos)
+    assert not _agente(sincronia.construir_foto(repo, ahora=ahora, home=home), "astra")["sin_creditos"]
+
+
+@necesita_git
+def test_la_hora_de_try_again_se_cuenta_desde_el_error_y_no_desde_ahora(repo, home):
+    """"try again at 3:30 PM" es la hora del dia del error: pasadas las 15:30 salia "hasta manana"."""
+    local = dt.datetime.now().astimezone()
+    error = local.replace(hour=13, minute=42, second=0, microsecond=0)
+    _sesion_codex(home, [{"timestamp": _iso_evento(error), "type": "event_msg", "payload": {
+        "type": "task_complete", "error": {"message": "You've hit your usage limit. Try again at 3:30 PM.",
+                                           "codex_error_info": "usage_limit_exceeded"}}}])
+    # A las 15:47 ya ha pasado la hora: tiene creditos.
+    tarde = local.replace(hour=15, minute=47, second=0, microsecond=0)
+    assert not _agente(sincronia.construir_foto(repo, ahora=tarde, home=home), "astra")["sin_creditos"]
+    # A las 15:00 todavia no: sin creditos hasta las 15:30 de ESE dia.
+    antes = local.replace(hour=15, minute=0, second=0, microsecond=0)
+    astra = _agente(sincronia.construir_foto(repo, ahora=antes, home=home), "astra")
+    assert astra["sin_creditos"]
+    assert sincronia._desde_iso(astra["creditos_hasta"]).astimezone().strftime("%H:%M") == "15:30"
+
+
 @necesita_git
 def test_astra_sin_creditos_a_medias_es_rojo_y_dice_quien_sigue(repo, astra, home):
     ahora = dt.datetime.now(dt.timezone.utc)
