@@ -55,7 +55,12 @@ página de sincronía lo enseña tal cual.
 - **Captación**: se borró todo el código que automatizaba productos de Meta
   (DMs de Instagram y WhatsApp Web). No se vuelve a montar: ver `CLAUDE.md`.
 - **Sincronía entre agentes** (11-sep, `7fb3823`): https://app.vantelia.es/sincronia
-  enseña con un semáforo si Claude y Astra han visto lo último del otro.
+  enseña con un semáforo si Claude y Astra han visto lo último del otro, y lo que
+  se dicen entre ellos.
+- **Revisión automática** (11-sep, `dbdba26` + `83bbeb6`): cuando Astra pide
+  revisión, la tarea programada «Vantelia revisor» pasa los tests en una copia
+  aparte y lanza la revisión de Claude sin nadie delante. Probada de verdad con
+  `claude -p`: revisión útil y veredicto bien leído.
 
 ## Bloqueado por fuera del código
 
@@ -107,6 +112,9 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
    aviso.
 3. **`scripts/tiktok_autosend.py`**: misma clase de riesgo que las
    automatizaciones de Meta que se borraron; ¿se retira también?
+4. **Acción, una sola vez**: en Codex, escribir `/hooks` y confiar el hook de
+   `~/.codex/hooks.json`. Hasta entonces Astra no se pone al día sola ni recibe
+   las revisiones en su sesión (le esperan en el buzón).
 
 ## Frágil, a vigilar
 
