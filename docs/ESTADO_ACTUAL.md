@@ -37,10 +37,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** nadie
-- **Tarea:** ninguna abierta (la página de sincronía quedó desplegada y comprobada)
-- **Siguiente:** propuesta para Astra: el humo `reprogramar-mueve-la-cita` que a veces solo pasa al segundo intento, en `astra/reprogramar`
-- **Espera a:** Pablo (que lo encargue)
+- **Testigo:** Astra
+- **Tarea:** reproducir y corregir la reprogramación que a veces necesita dos intentos.
+- **Rama:** `astra/reprogramar`, worktree `E:/Vantelia-astra-reprogramar`.
+- **Siguiente:** medir el fallo y contrastar el recorrido con `booking._update_booking_details`; añadir una regresión de comportamiento.
+- **Espera a:** nadie para implementar; Claude recupera créditos a las 16:20 para revisar.
 
 ## Lo último en producción
 
