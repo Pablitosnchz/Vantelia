@@ -29,11 +29,10 @@ este fichero, de `git log` o de lo que Pablo le pase.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Claude
-- **Tarea:** página de sincronía (app.vantelia.es/sincronia)
-- **Rama:** main
-- **Siguiente:** desplegar y comprobarla en vivo
-- **Espera a:** nadie
+- **Testigo:** nadie
+- **Tarea:** ninguna abierta (la página de sincronía quedó desplegada y comprobada)
+- **Siguiente:** propuesta para Astra: el humo `reprogramar-mueve-la-cita` que a veces solo pasa al segundo intento, en `astra/reprogramar`
+- **Espera a:** Pablo (que lo encargue)
 
 ## Lo último en producción
 
@@ -53,6 +52,8 @@ página de sincronía lo enseña tal cual.
   exacto.
 - **Captación**: se borró todo el código que automatizaba productos de Meta
   (DMs de Instagram y WhatsApp Web). No se vuelve a montar: ver `CLAUDE.md`.
+- **Sincronía entre agentes** (11-sep, `7fb3823`): https://app.vantelia.es/sincronia
+  enseña con un semáforo si Claude y Astra han visto lo último del otro.
 
 ## Bloqueado por fuera del código
 
