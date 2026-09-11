@@ -969,3 +969,26 @@ def tiene_dos_apellidos(nombre: str) -> bool:
     de la regla, y el equipo siempre puede escribir el segundo apellido o repetir.
     """
     return len(_palabras_del_nombre(nombre)) >= 3
+
+
+def juntar_nombre(anterior: str, nuevo: str) -> str:
+    """Lo que ya dijo mas lo que anade: "Ana Ruiz" + "Pérez" = "Ana Ruiz Pérez".
+
+    Es la respuesta normal a "¿y tus apellidos?": solo lo que falta. Si repite el
+    nombre entero, vale lo nuevo; si repite el ultimo apellido que ya habia dado
+    ("Ruiz Pérez"), no se duplica.
+    """
+    viejo = str(anterior or "").split()
+    extra = str(nuevo or "").split()
+    if not viejo:
+        return " ".join(extra)
+    if not extra:
+        return " ".join(viejo)
+    nv = [normalizar(p) for p in viejo]
+    ne = [normalizar(p) for p in extra]
+    if ne[0] == nv[0]:
+        return " ".join(extra)
+    for solapa in range(min(len(nv), len(ne)), 0, -1):
+        if nv[-solapa:] == ne[:solapa]:
+            return " ".join(viejo + extra[solapa:])
+    return " ".join(viejo + extra)

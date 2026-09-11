@@ -49,8 +49,11 @@ def test_el_panel_rechaza_media_ficha(api_module):  # noqa: F811
     )
 
 
-def test_whatsapp_pide_los_apellidos_una_sola_vez(api_module):  # noqa: F811
-    """Pedirlos en bucle seria peor que aceptar media ficha."""
+def test_whatsapp_pide_los_apellidos_a_la_clienta_nueva(api_module):  # noqa: F811
+    """Por WhatsApp se piden hasta tenerlos (decision de Pablo, 11-sep-2026: dos
+    apellidos a la clienta nueva, como en el mostrador). El comportamiento lo
+    prueba `tests/test_dos_apellidos_por_whatsapp.py`; esto solo vigila que el
+    paso siga llevando la cuenta de lo ya pedido."""
     import inspect
 
     from backend import appstate, whatsapp
@@ -78,14 +81,15 @@ def test_el_agente_no_coge_la_cita_sin_apellido(api_module):  # noqa: F811
 
 
 def test_con_apellido_sigue_su_curso(api_module):  # noqa: F811
-    """El freno es para el nombre suelto, no para todo el mundo."""
+    """El freno es para el nombre incompleto, no para todo el mundo: con nombre y
+    dos apellidos (lo que se pide a una clienta nueva por WhatsApp) sigue."""
     import asyncio
 
     from backend import agent
 
     salida = asyncio.run(agent._ejecutar(
         "demo", "crear_cita",
-        {"servicio": "Corte", "fecha": "2026-09-15", "hora": "10:00", "nombre": "Ana Ruiz"},
+        {"servicio": "Corte", "fecha": "2026-09-15", "hora": "10:00", "nombre": "Ana Ruiz Pérez"},
         telefono="34600111222", remate_manual=True,
     ))
     assert "apellido" not in str(salida.get("error", "")).lower()

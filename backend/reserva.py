@@ -433,6 +433,15 @@ def _es_otro_servicio(guardado: str, pedido: str) -> bool:
     return a not in b and b not in a
 
 
+def _amplia_el_nombre(viejo: str, nuevo: str) -> bool:
+    """¿`nuevo` es `viejo` con algo mas detras? ("Ana Ruiz" -> "Ana Ruiz Pérez")"""
+    from backend import textnorm
+
+    antes = textnorm.normalizar(viejo).split()
+    despues = textnorm.normalizar(nuevo).split()
+    return len(despues) > len(antes) and despues[:len(antes)] == antes
+
+
 def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
                      resultado: Dict[str, Any], ahora: Any = None) -> None:
     """Actualiza el estado con lo que ha DEVUELTO una herramienta.
@@ -481,6 +490,11 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             estado.fecha_de_ella = True
         if str(argumentos.get("hora") or "").strip():
             estado.hora_del_codigo = False
+        # Si le faltaban apellidos y los ha dado, el nombre mas completo manda: el
+        # resumen tiene que salir con ellos (dos apellidos a clientas nuevas).
+        nombre_nuevo = str(argumentos.get("nombre") or "").strip()
+        if nombre_nuevo and estado.nombre and _amplia_el_nombre(estado.nombre, nombre_nuevo):
+            estado.nombre = nombre_nuevo
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if valor and not getattr(estado, clave, ""):
@@ -975,7 +989,8 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "") -> str:
     if (falta == "nombre" and estado.dia_le_da_igual and estado.hora_del_codigo
             and estado.fecha and estado.hora):
         return ("Le da igual el dia y ya tienes el primer hueco que hay: el %s a las "
-                "%s. Proponselo tal cual y pidele su nombre para apuntarla. NO mires "
+                "%s. Proponselo tal cual y pidele su nombre y sus dos apellidos para "
+                "apuntarla. NO mires "
                 "otros dias ni le ofrezcas una lista de horas."
                 % (_fecha_hablada(estado.fecha), estado.hora))
     return ""

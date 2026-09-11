@@ -490,12 +490,25 @@ async def _ejecutar(
         argumentos["profesional"] = argumentos.get("profesional") or argumentos["nombre"]
         argumentos["nombre"] = ""
 
-    # Solo el nombre de pila: se le piden los apellidos antes de coger la cita. Lo
-    # decide el CODIGO, no el prompt, porque es lo que va a leer el salon en su
-    # agenda. Una sola vez: si insiste, la tool deja de pedirlo (`_sin_apellidos`
-    # se apaga con el aviso ya dado en el estado del canal).
+    # Nombre y apellidos antes de coger la cita. Lo decide el CODIGO, no el prompt,
+    # porque es lo que va a leer el salon en su agenda. A una clienta NUEVA por
+    # WhatsApp se le piden los DOS apellidos, el mismo liston que el mostrador
+    # (decision de Pablo, 11-sep-2026); a una conocida, lo de siempre.
     if nombre == "crear_cita":
-        quien_nombre = str(argumentos.get("nombre") or (quien or {}).get("nombre", "")).strip()
+        conocida = str((quien or {}).get("nombre", "")).strip()
+        quien_nombre = str(argumentos.get("nombre") or conocida).strip()
+        if (quien_nombre and telefono and not conocida
+                and not textnorm.tiene_dos_apellidos(quien_nombre)):
+            return {
+                "ok": False,
+                "error": ("Faltan apellidos: a una clienta nueva se la apunta con nombre y "
+                          "dos apellidos."),
+                "que_hacer": ("Pidele sus dos apellidos en UNA frase corta (si ya ha dado "
+                              "uno, solo el segundo) y espera a que los diga. Cuando los "
+                              "tenga, llama a `crear_cita` con el nombre COMPLETO. No te "
+                              "los inventes ni cojas la cita sin ellos."),
+                "conserva_los_datos": True,
+            }
         if quien_nombre and not textnorm.tiene_algun_apellido(quien_nombre):
             return {
                 "ok": False,

@@ -3418,20 +3418,30 @@ async def _handle_whatsapp_message(
                 text="Necesito un nombre válido (mínimo 2 caracteres).",
             )
             return
-        # Solo el nombre de pila: se piden los apellidos UNA vez. A la segunda se
-        # acepta lo que diga -insistir por chat es donde se pierden reservas- y el
-        # equipo puede completarlo desde el panel.
-        if not textnorm.tiene_algun_apellido(nombre) and not flow.apellidos_pedidos:
-            flow.apellidos_pedidos = "1"
+        # A este paso solo llega una clienta NUEVA (a la conocida se la reconoce por
+        # el telefono). Nombre y DOS apellidos, como en el mostrador (decision de
+        # Pablo, 11-sep-2026): se piden hasta tenerlos. Lo normal es contestar solo
+        # con lo que falta, y se junta con lo que ya dijo.
+        if flow.apellidos_pedidos:
+            nombre = textnorm.juntar_nombre(flow.nombre, nombre)
+        if not textnorm.tiene_dos_apellidos(nombre):
+            veces = int(flow.apellidos_pedidos or 0) + 1
+            flow.apellidos_pedidos = str(veces)
             flow.nombre = nombre[:80]
+            if textnorm.tiene_algun_apellido(nombre):
+                texto = "Gracias, %s. ¿Y tu segundo apellido? 😊" % nombre[:60]
+            else:
+                texto = "Gracias, %s. ¿Me dices también tus dos apellidos? 😊" % nombre[:40]
+            if veces >= 3:
+                # A la tercera, una salida: que llame y lo apuntan ellas.
+                linea = clients.call_us_line(cliente_id)
+                if linea:
+                    texto = "%s\n\n%s" % (texto, linea)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Gracias, %s. ¿Me dices también tus apellidos? 😊" % nombre[:40],
+                text=texto,
             )
             return
-        if flow.apellidos_pedidos == "1" and not textnorm.tiene_algun_apellido(nombre):
-            # Contesto a "¿tus apellidos?" con los apellidos sueltos: se juntan.
-            nombre = ("%s %s" % (flow.nombre, nombre)).strip()
         flow.nombre = nombre[:80]
         # El email ya no se pide: la confirmación sale por este mismo chat y pedirlo
         # costaba una interaccion a todo el mundo para que casi nadie lo diera. Si el

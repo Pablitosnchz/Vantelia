@@ -444,7 +444,8 @@ def test_la_cita_la_confirma_la_clienta_no_el_modelo(client, api_module):  # noq
 
     frenada = asyncio.run(agent._ejecutar(
         "demo", "crear_cita",
-        {"servicio": "Corte", "fecha": "2026-09-01", "hora": "10:00", "nombre": "Marta Ruiz"},
+        # Nombre y dos apellidos: es una clienta nueva por WhatsApp.
+        {"servicio": "Corte", "fecha": "2026-09-01", "hora": "10:00", "nombre": "Marta Ruiz Gómez"},
         telefono="34600111000", remate_manual=True,
     ))
     assert frenada["pendiente_de_confirmacion"] is True
