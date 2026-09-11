@@ -39,11 +39,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Claude
-- **Tarea:** desplegar el arreglo de la reprogramación que a veces necesitaba dos intentos (lo hizo Astra en `astra/reprogramar`; Claude lo integró en main, `5d05457`).
+- **Testigo:** nadie
+- **Tarea:** ninguna abierta. El arreglo de reprogramar está en producción (`1268e4a`); en el humo del despliegue, reprogramar pasó a la primera.
 - **Rama:** main.
-- **Siguiente:** desplegar con el humo como barrera; después, que Astra revise la integración.
-- **Espera a:** Astra, sin créditos hasta las 20:46; la revisión le espera en el buzón.
+- **Siguiente:** que Astra revise la integración (`5d05457`, le espera en el buzón); propuesta para Claude: el intermitente nuevo de `corte-acaba-en-cita` (ver «Frágil»).
+- **Espera a:** Astra, sin créditos hasta las 20:46.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
@@ -85,6 +85,10 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
 - **Sin créditos** (11-sep, `3fd5e0b`): si uno se queda sin cuota lo sabe el otro
   solo (a Astra se le lee de su propia sesión de Codex, con la hora de vuelta) y
   sigue él; nada se pierde mientras tanto.
+- **Reprogramar a la primera** (11-sep, `5d05457`, en producción `1268e4a`): al
+  mover una cita solo se ofrecen horas de SU profesional y que el núcleo acepta
+  (antes se ofrecían huecos de otra y el cambio se rechazaba). Lo encontró y
+  arregló Astra; lo integró y desplegó Claude.
 
 ## Bloqueado por fuera del código
 
@@ -142,8 +146,14 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
 
 ## Frágil, a vigilar
 
-- En el humo, `reprogramar-mueve-la-cita` a veces solo pasa al segundo intento. Un
-  camino que necesita dos intentos es uno que falla a alguna clienta.
+- En el humo, `corte-acaba-en-cita` pasó al segundo intento en el despliegue de
+  `1268e4a` (1 de 5 despliegues el 11-sep; `reprogramar-mueve-la-cita`, el que
+  fallaba antes, ya salió a la primera). Traza del intento fallido: a «la primera
+  que tengas» enseña la lista de horas en vez de proponer la primera, añade la
+  pregunta del recargo del 25 % de Alicia, y con «sí, confirmo» no crea la cita
+  porque nadie ha fijado hora ni profesional. Es el camino de reservar, que el
+  arreglo de reprogramar no toca. Un camino que necesita dos intentos es uno que
+  falla a alguna clienta.
 - Cualquier sitio donde una lista de frases decide qué quiere decir la clienta.
 - La frontera con Meta: un payload mal formado corta la conversación sin error
   visible para nadie; solo sale en los logs del servidor.
