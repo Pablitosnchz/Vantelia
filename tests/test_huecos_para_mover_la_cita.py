@@ -96,6 +96,38 @@ def test_para_una_cita_nueva_siguen_valiendo_las_dos(agenda_de_dos):
     assert oferta["hora_disponible"], oferta
 
 
+@pytest.mark.parametrize("hora,aceptado", [("09:00", False), ("09:30", True)])
+def test_boton_mover_cuenta_el_resultado_real(agenda_de_dos, monkeypatch, hora, aceptado):
+    from backend import booking, messaging, whatsapp
+
+    propia, dia, _, _ = agenda_de_dos
+    enviados = []
+
+    async def enviar(*, text, **kwargs):
+        enviados.append(text)
+        return True
+
+    monkeypatch.setattr(messaging, "_send_whatsapp_text", enviar)
+    whatsapp._wa_clear_flow("demo", "600111222")
+    flow = whatsapp._wa_get_flow("demo", "600111222")
+    flow.flow = "booking_confirm"
+    flow.booking_code = propia["booking_code"]
+    flow.fecha, flow.hora = dia, hora
+    try:
+        asyncio.run(whatsapp._handle_whatsapp_message(
+            cliente_id="demo", phone_number_id="1234567890", from_number="600111222",
+            incoming_text="Mover la que tengo", interactive_id="dup_mover", request=None))
+        assert booking._load_booking_or_404(propia["id"])["booking_time"] == (hora if aceptado else "12:00")
+        assert enviados
+        if aceptado:
+            assert any("reprogramada correctamente" in texto.lower() for texto in enviados), enviados
+        else:
+            assert not any("te he cambiado" in texto.lower() for texto in enviados), enviados
+            assert any("disponible" in texto.lower() for texto in enviados), enviados
+    finally:
+        whatsapp._wa_clear_flow("demo", "600111222")
+
+
 def test_primer_hueco_conserva_la_profesional(agenda_de_dos):
     from backend import agenda
 
