@@ -14,9 +14,11 @@ mensajero.
 
 ## Cómo se trabaja ahora
 
-- **GPT-6 Astra (Codex) implementa**, en una rama `astra/<tarea>`.
-- **Claude Code revisa, aporta contexto y mide** (diff + tests + humo + banco), y
-  despliega después de revisar.
+- **Claude Code implementa y despliega** (decisión de Pablo, 11-sep por la tarde:
+  a Astra se le acabaron los créditos en una hora).
+- **GPT-6 Astra (Codex) revisa y hace encargos acotados** que Claude le pasa; le
+  llegan solos a su sesión. Si está sin créditos, Claude sigue con sus propios
+  instrumentos (tests + humo) y le deja la revisión esperando en el buzón.
 - **Pablo decide.** Reglas completas en `AGENTS.md`.
 - **¿Estáis sincronizados?** → https://app.vantelia.es/sincronia (semáforo, solo
   admin). Pablo no tiene que decir nada: los hooks de los dos agentes los ponen al

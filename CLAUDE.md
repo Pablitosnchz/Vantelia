@@ -791,10 +791,13 @@ codex review --base main           # una rama entera
 ```
 
 Codex (GPT-6 Astra, con el login de ChatGPT de Pablo: no gasta la clave del
-producto) toma sus instrucciones de `AGENTS.md`. Desde el 11-sep-2026 el reparto
-es al reves: **Astra implementa** en ramas `astra/<tarea>` y **Claude Code revisa,
-mide y despliega**; `codex review` sigue valiendo como segunda opinion sobre lo que
-escribe Claude. Astra no despliega ni toca secretos. `--commit` no admite prompt
+producto) toma sus instrucciones de `AGENTS.md`. Reparto desde el 11-sep-2026 por
+la tarde (decision de Pablo, a Astra se le acabo la cuota en una hora): **Claude
+Code implementa y despliega**; **Astra revisa** lo que Claude le pase
+(`--encargar claude astra "Revisa <sha>: ..."`, le llega a su sesion) y hace
+encargos acotados. Pedirle diffs concretos, no tareas que la hagan leer medio repo.
+Si esta sin creditos, seguir con tests + humo y dejarle la revision en el buzon;
+`codex review --commit` gasta de su misma cuota. Astra no despliega ni toca secretos. `--commit` no admite prompt
 propio, por eso las reglas viven en ese fichero. Tarda unos minutos: lanzarlo en
 segundo plano. Primer uso (11-sep-2026): cazo un test que comprobaba el ORDEN de
 las lineas en vez del comportamiento. Lo que diga se contrasta como cualquier

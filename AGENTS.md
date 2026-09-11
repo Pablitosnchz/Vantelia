@@ -12,10 +12,14 @@ cliente en HTML/JS vanilla, widget embebible, WhatsApp Cloud API y voz. El prime
 cliente real es un salón de peluquería; cada fallo que llega a producción lo ve
 una clienta de verdad.
 
-## Lee esto antes de tocar nada, en este orden
+## Qué leer (lo justo: tus créditos se gastan rápido)
+
+Siempre, lo primero: `docs/ESTADO_ACTUAL.md`. El resto, **solo lo que pida la
+tarea**, no todo de golpe en cada sesión (el 11-sep se te acabó la cuota en una
+hora, y buena parte se fue en releer documentación):
 
 1. `docs/ESTADO_ACTUAL.md` — **dónde estamos**: qué hay en producción, qué está
-   bloqueado, qué decisiones están pendientes y qué es frágil. Empieza aquí.
+   bloqueado, qué decisiones están pendientes y qué es frágil.
 2. `CLAUDE.md` — reglas de oro, arquitectura, qué hace cada módulo y por qué.
 3. `docs/MAPA_DEL_CODIGO.md` — "quiero cambiar X, ¿qué fichero abro?", por flujo.
 4. `docs/CAZA_DE_FALLOS.md` — las clases de fallo que YA han costado un incidente.
@@ -24,13 +28,21 @@ una clienta de verdad.
 7. `tests/README.md` — qué cubre cada test, y cuáles vigilan REGLAS.
 8. `docs/ARQUITECTURA.md` — mapa de módulos de `backend/`.
 
-## Reparto del trabajo (desde el 11-sep-2026)
+## Reparto del trabajo (desde el 11-sep-2026 por la tarde, decisión de Pablo)
 
-- **Tú (Codex / GPT-6 Astra) implementas.**
-- **Claude Code revisa, aporta contexto y mide**: lee tu diff, lo contrasta con
-  las trampas conocidas y pasa los instrumentos (tests, humo, banco) antes de que
-  se fusione. Si no sabes por qué algo está como está, pregunta: casi siempre hay
-  un incidente detrás, y suele estar escrito en `docs/CAZA_DE_FALLOS.md`.
+- **Claude Code implementa y despliega.** Es quien tiene más margen de uso.
+- **Tú (Codex / GPT-6 Astra) revisas y haces encargos acotados.** Te llegan solos
+  a tu sesión como «[Encargo de Claude Code…]»: revisar un commit concreto, medir
+  algo, una pieza pequeña. Ve al grano: el diff que te pasen y los ficheros que
+  toque, no todo el repo.
+- **Para revisar**: `git show <sha>` y lo que haga falta alrededor. Contesta con
+  `python scripts/sincronia.py --avisar astra claude "Revisión de <sha>: …"` en el
+  formato de «Si te piden revisar» (al final de este fichero). Sin caso concreto
+  no es un hallazgo; si no encuentras nada, dilo.
+- **Si te encarga implementar algo**, valen las reglas de abajo (tu rama,
+  commits pequeños, tests en verde, pedir revisión).
+- Si no sabes por qué algo está como está, pregúntale (`--pedir-ayuda`): casi
+  siempre hay un incidente detrás, y suele estar en `docs/CAZA_DE_FALLOS.md`.
 - **Pablo decide.**
 
 Reglas de trabajo, que existen porque dos agentes sobre el mismo repo se pisan:
