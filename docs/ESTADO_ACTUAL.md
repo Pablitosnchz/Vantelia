@@ -104,7 +104,11 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   hoy deja una hora de margen. En 6 conversaciones contra copia de producción:
   5 reservan con el primer "sí"; en la otra el modelo mezcló el día que
   encabezaba su lista con la hora elegida, la herramienta lo frenó (ninguna cita
-  mal cogida) y reservó al siguiente "sí". Guardarraíl para eso, en curso.
+  mal cogida) y reservó al siguiente "sí". Para esa mezcla, guardarraíl
+  (`reserva.dia_cambiado_con_la_hora_elegida`): si la llamada trae la hora elegida
+  con otro día que ella no ha dicho, manda el día que se le propuso. Con él, otras
+  6 conversaciones: las 6 al primer "sí" (la mezcla no se repitió; la cubre el
+  test).
 
 ## Bloqueado por fuera del código
 
