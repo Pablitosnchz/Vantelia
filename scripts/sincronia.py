@@ -72,8 +72,9 @@ _VEREDICTO = re.compile(r"VEREDICTO:\s*\**\s*(OK|CAMBIOS)\b", re.I)
 _UUID = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$", re.I)
 # Como avisan de que se acabo la cuota: Codex en su sesion ("You've hit your usage
 # limit ... try again at 3:30 PM"), Claude Code en la salida de claude -p ("Claude AI
-# usage limit reached|<epoch>" o "... resets 3pm").
-_SIN_CREDITOS = re.compile(r"usage limit|limit reached|hit your (?:usage )?limit|out of (?:extra )?usage|credit balance", re.I)
+# usage limit reached|<epoch>", "You've hit your session limit · resets 4:20pm").
+_SIN_CREDITOS = re.compile(
+    r"usage limit|session limit|limit reached|hit your (?:\w+ )?limit|out of (?:extra )?usage|credit balance", re.I)
 _A_LAS = re.compile(r"(?:try again at|resets?(?: at)?)\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)\b", re.I)
 _LIMITE_EPOCH = re.compile(r"limit reached\|(\d{10})")
 _ETIQUETAS = (
@@ -1276,11 +1277,15 @@ def _hacer_encargo(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejecu
                   % re.sub(r"\s+", " ", str(peticion.get("texto") or ""))[:60]], copia)
     finally:
         _quitar_copia(raiz, copia)
+        # Si se corto antes de hacer nada (sin creditos), no se deja una rama vacia
+        # colgando; si llego a hacer commits, se conserva para seguir.
+        if _git(["rev-list", "--count", base + ".." + rama], raiz, check=False).strip() in ("", "0"):
+            _git(["branch", "-D", rama], raiz, check=False)
     comun = {"responde_a": peticion["id"], "rama": peticion.get("rama"), "commit": base}
     para = peticion.get("de") or "astra"
-    hechos = _commits(raiz, [base + ".." + rama], limite=30)
+    hechos = _commits(raiz, [base + ".." + rama], limite=30) if _git_ok(
+        ["rev-parse", "--verify", "--quiet", "refs/heads/" + rama], raiz) else []
     if not hechos:
-        _git(["branch", "-D", rama], raiz, check=False)
         return _escribir_mensaje(raiz, "revisor", para, "entrega",
                                  ("No he llegado a cambiar nada.\n\n" + salida.strip())[:12000],
                                  veredicto="sin_cambios", **comun)

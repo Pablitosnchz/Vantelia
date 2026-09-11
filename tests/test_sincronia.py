@@ -487,6 +487,28 @@ class EjecutorSinCreditos(EjecutorFalso):
         self.llamadas.append(("claude", prompt))
         raise sincronia.SinCreditos("Claude AI usage limit reached")
 
+    def claude_escribe(self, arbol, prompt):
+        self.llamadas.append(("claude_escribe", prompt))
+        raise sincronia.SinCreditos("You've hit your session limit · resets 4:20pm (Europe/Madrid)")
+
+
+def test_reconoce_los_avisos_de_cuota_de_claude_de_verdad():
+    """Los dos textos que ha dado claude -p al quedarse sin cuota.
+
+    El 11-sep-2026 un encargo real se corto con "You've hit your session limit ·
+    resets 4:20pm" y, como solo se buscaba "usage limit", se dio por fallido en
+    vez de quedar esperando hasta las 16:20.
+    """
+    ahora = dt.datetime(2026, 9, 11, 13, 30, tzinfo=dt.timezone.utc)
+    sesion = "You've hit your session limit · resets 4:20pm (Europe/Madrid)"
+    assert sincronia._SIN_CREDITOS.search(sesion)
+    assert sincronia._hasta_de_claude(sesion, ahora).astimezone().strftime("%H:%M") == "16:20"
+    uso = "Claude AI usage limit reached|1789140000"
+    assert sincronia._SIN_CREDITOS.search(uso)
+    assert sincronia._hasta_de_claude(uso, ahora) == dt.datetime.fromtimestamp(1789140000, dt.timezone.utc)
+    # Una revision normal que habla de limites no es un aviso de cuota.
+    assert not sincronia._SIN_CREDITOS.search("El rate limit del endpoint /chat es de 20 por minuto.")
+
 
 @necesita_git
 def test_si_claude_esta_sin_creditos_la_revision_espera_y_no_se_pierde(repo, astra, home):
@@ -506,6 +528,15 @@ def test_si_claude_esta_sin_creditos_la_revision_espera_y_no_se_pierde(repo, ast
     vuelta = EjecutorFalso()
     sincronia.revisor(repo, ejecutor=vuelta, home=home)
     assert _tipos(vuelta)[:2] == ["pytest", "claude"]
+
+
+@necesita_git
+def test_un_encargo_cortado_por_creditos_espera_y_no_deja_ramas_vacias(repo, astra, home):
+    sincronia.encargar(astra, "astra", "claude", "x")
+    assert "sin créditos" in sincronia.revisor(repo, ejecutor=EjecutorSinCreditos(), home=home)
+    # Sigue pendiente (se hara al renovarse) y no queda una rama vacia colgando.
+    assert len(sincronia._pendientes(sincronia._buzon(sincronia._arboles(repo)))) == 1
+    assert "claude/encargo-" not in _git_salida(repo, "branch", "--list", "claude/*")
 
 
 @necesita_git
