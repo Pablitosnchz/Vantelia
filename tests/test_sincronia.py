@@ -170,6 +170,7 @@ def test_lo_que_hay_en_curso_sale_de_estado_actual(repo, home):
     (repo / "docs" / "ESTADO_ACTUAL.md").write_text(
         "# Estado\n\n## En curso\n\n"
         "- **Testigo:** Astra\n- **Tarea:** reprogramar a la primera\n"
+        "- **Rama:** `astra/reprogramar`\n"
         "- **Siguiente:** test que falle sin el arreglo\n\n"
         "## Otra seccion\n\n- **Tarea:** esta no es\n",
         encoding="utf-8",
@@ -177,6 +178,8 @@ def test_lo_que_hay_en_curso_sale_de_estado_actual(repo, home):
     en_curso = sincronia.construir_foto(repo, home=home)["en_curso"]
     assert en_curso["testigo"] == "Astra"
     assert en_curso["tarea"] == "reprogramar a la primera"
+    # La pagina lo pinta como texto: las marcas de markdown no pueden verse.
+    assert en_curso["rama"] == "astra/reprogramar"
     assert en_curso["siguiente"] == "test que falle sin el arreglo"
 
 

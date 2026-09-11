@@ -249,7 +249,8 @@ def _leer_en_curso(texto: str) -> Optional[Dict[str, str]]:
             casa = _LINEA_EN_CURSO.match(linea)
             if casa:
                 clave = casa.group(1).lower().replace(" ", "_")
-                datos[clave] = casa.group(2).strip("* ").strip()
+                # La pagina lo pinta como texto: sin las marcas de markdown.
+                datos[clave] = casa.group(2).replace("`", "").strip("* ").strip()
     return datos or None
 
 
