@@ -7,8 +7,10 @@ otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 Última actualización: 11-sep-2026, Claude Code (datos del piloto comprobados en
 producción).
 
-Los dos agentes **no se hablan directamente**: lo que uno sepa del otro sale de
-este fichero, de `git log` o de lo que Pablo le pase.
+Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
+fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
+revisión y avisos, que llegan solos a la sesión del otro): Pablo no hace de
+mensajero.
 
 ## Cómo se trabaja ahora
 
@@ -61,6 +63,9 @@ página de sincronía lo enseña tal cual.
   revisión, la tarea programada «Vantelia revisor» pasa los tests en una copia
   aparte y lanza la revisión de Claude sin nadie delante. Probada de verdad con
   `claude -p`: revisión útil y veredicto bien leído.
+- **Sin créditos** (11-sep, `3fd5e0b`): si uno se queda sin cuota lo sabe el otro
+  solo (a Astra se le lee de su propia sesión de Codex, con la hora de vuelta) y
+  sigue él; nada se pierde mientras tanto.
 
 ## Bloqueado por fuera del código
 
@@ -112,9 +117,9 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
    aviso.
 3. **`scripts/tiktok_autosend.py`**: misma clase de riesgo que las
    automatizaciones de Meta que se borraron; ¿se retira también?
-4. **Acción, una sola vez**: en Codex, escribir `/hooks` y confiar el hook de
-   `~/.codex/hooks.json`. Hasta entonces Astra no se pone al día sola ni recibe
-   las revisiones en su sesión (le esperan en el buzón).
+4. Hecho (11-sep): Pablo aprobó en Codex los hooks de Astra (`~/.codex/hooks.json`,
+   desde la terminal: la app de escritorio no tiene `/hooks`). Astra estaba sin
+   créditos hasta las 15:30; al volver, en una sesión nueva se pone al día sola.
 
 ## Frágil, a vigilar
 
