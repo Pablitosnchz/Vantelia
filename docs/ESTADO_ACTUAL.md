@@ -16,6 +16,24 @@ este fichero, de `git log` o de lo que Pablo le pase.
 - **Claude Code revisa, aporta contexto y mide** (diff + tests + humo + banco), y
   despliega después de revisar.
 - **Pablo decide.** Reglas completas en `AGENTS.md`.
+- **¿Estáis sincronizados?** → https://app.vantelia.es/sincronia (semáforo, solo
+  admin). Cada agente, al empezar, corre
+  `python scripts/sincronia.py --al-dia claude|astra`: ve lo nuevo del otro y
+  queda apuntado.
+- **Si a uno se le acaban los tokens**, el otro se pone al día y sigue en la MISMA
+  rama. Solo Claude despliega: si Claude no está, lo de Astra se queda en su rama
+  esperando revisión.
+
+## En curso
+
+Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
+página de sincronía lo enseña tal cual.
+
+- **Testigo:** Claude
+- **Tarea:** página de sincronía (app.vantelia.es/sincronia)
+- **Rama:** main
+- **Siguiente:** desplegar y comprobarla en vivo
+- **Espera a:** nadie
 
 ## Lo último en producción
 

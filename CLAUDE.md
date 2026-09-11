@@ -791,12 +791,36 @@ codex review --base main           # una rama entera
 ```
 
 Codex (GPT-6 Astra, con el login de ChatGPT de Pablo: no gasta la clave del
-producto) toma sus instrucciones de `AGENTS.md`: es revisor, no autor, y no
-despliega ni toca secretos. `--commit` no admite prompt propio, por eso las reglas
-viven en ese fichero. Tarda unos minutos: lanzarlo en segundo plano. Primer uso
-(11-sep-2026): cazo un test que comprobaba el ORDEN de las lineas en vez del
-comportamiento. Lo que diga se contrasta como cualquier hallazgo: con un test que
-falle sin el arreglo.
+producto) toma sus instrucciones de `AGENTS.md`. Desde el 11-sep-2026 el reparto
+es al reves: **Astra implementa** en ramas `astra/<tarea>` y **Claude Code revisa,
+mide y despliega**; `codex review` sigue valiendo como segunda opinion sobre lo que
+escribe Claude. Astra no despliega ni toca secretos. `--commit` no admite prompt
+propio, por eso las reglas viven en ese fichero. Tarda unos minutos: lanzarlo en
+segundo plano. Primer uso (11-sep-2026): cazo un test que comprobaba el ORDEN de
+las lineas en vez del comportamiento. Lo que diga se contrasta como cualquier
+hallazgo: con un test que falle sin el arreglo.
+
+**Sincronia entre los dos agentes (sep 2026).** No se ven: solo comparten el repo.
+Pablo mira en `https://app.vantelia.es/sincronia` (solo admin) si el agente que va
+a usar ha visto lo ultimo del otro. Todo sale de `scripts/sincronia.py`:
+
+- `--al-dia claude|astra`: ensena al agente lo nuevo de los demas (commits, trabajo
+  sin guardar, la seccion "En curso" de `docs/ESTADO_ACTUAL.md`) y deja constancia
+  en `.sincronia/<agente>.json`. A Claude se lo corre un hook SessionStart
+  (`.claude/settings.local.json`); volver a correrlo antes de revisar una rama de
+  Astra. Astra lo corre por regla de `AGENTS.md`.
+- Quien hizo cada commit sale de su firma: `Co-Authored-By: Claude` = Claude,
+  `Agente: astra` = Astra, lo demas = Pablo.
+- El PC de Pablo manda la foto cada 5 min (tarea programada de Windows "Vantelia
+  sincronia", `--enviar`) a `POST /admin/sincronia` con un token PROPIO
+  (`SINCRONIA_TOKEN`: en `.sincronia/token` y en el `.env` del VPS; no el de
+  admin). El servidor solo guarda la ultima foto y le anade el commit desplegado
+  (`VERSION.json`, lo escribe `deploy/deploy.ps1`). Pagina `admin_ui/sincronia.html`,
+  tests `tests/test_sincronia.py`.
+- Semaforo: rojo = cambios sin commit que nadie toca desde hace mas de 30 min
+  (alguien se quedo sin tokens a medias); amarillo = alguien trabajando ahora, o un
+  agente que aun no ha visto lo ultimo; verde = los dos al dia; gris = el PC no
+  manda la foto.
 
 ## Checklist antes de cerrar una tarea
 

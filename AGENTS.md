@@ -52,6 +52,26 @@ Reglas de trabajo, que existen porque dos agentes sobre el mismo repo se pisan:
 - **No toques producción ni secretos**: `.env`, claves SSH, tokens, `storage/`.
 - **Al cerrar una tarea, actualiza `docs/ESTADO_ACTUAL.md`**: es la memoria
   compartida entre los dos agentes. Lo que no esté ahí, el otro no lo sabe.
+- **Si Claude Code no está disponible** (sin tokens): sigues en tu rama, y en
+  «En curso» pones `Espera a: revisión de Claude`. Nada se despliega sin él.
+
+## Ponerse al día y dejar rastro (sincronía)
+
+Pablo cambia de agente cuando a uno se le acaban los tokens, y mira en
+https://app.vantelia.es/sincronia si el otro ha visto lo último. Esa página sale
+de hechos (git, ficheros sin guardar, cuándo se puso al día cada uno), no de lo
+que digas. Para que diga la verdad:
+
+- **Lo primero de cada sesión**: `python scripts/sincronia.py --al-dia astra`. Te
+  enseña lo que ha cambiado desde tu última vez (commits de Claude, trabajo sin
+  guardar, lo que hay en curso) y deja apuntado que lo has visto. Si Pablo te dice
+  «ponte al día», es esto. Si enseña commits nuevos, míralos antes de tocar nada.
+- **Firma tus commits**: la última línea del mensaje es `Agente: astra`. Sin ella
+  la página cree que el commit es de Pablo y no sabe que Claude tiene que verlo.
+- **Commits pequeños, uno por paso**, con una línea `Siguiente: …` antes de la
+  firma. Si te quedas sin tokens a mitad, el que entre pierde como mucho un paso.
+- **Mantén la sección «En curso» de `docs/ESTADO_ACTUAL.md`** (testigo, tarea,
+  rama, siguiente paso, a quién espera) cada vez que cambie, no solo al cerrar.
 
 ## Lo que más se rompe aquí (tenlo presente al programar)
 

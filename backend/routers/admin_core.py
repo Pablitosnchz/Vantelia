@@ -6,6 +6,8 @@ registro de rutas identico al monolito original.
 from __future__ import annotations
 
 import copy
+import json
+import os
 import re
 import secrets
 import time
@@ -15,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import (
     Cookie,
     Depends,
+    Header,
     HTTPException,
     Request,
     Response,
@@ -961,5 +964,86 @@ async def admin_chat_detail(session_id: str, cliente_id: str = "") -> ChatSessio
 )
 async def admin_run_booking_reminders(request: Request) -> AdminReminderRunResult:
     return await booking._run_booking_reminders(request)
+
+
+# --- Sincronia entre agentes (sep 2026) -----------------------------------------
+# Claude Code y GPT-6 Astra trabajan en el mismo repo sin verse. El PC de Pablo
+# calcula cada pocos minutos si estan al dia (scripts/sincronia.py) y manda aqui
+# la foto; /sincronia la pinta. El servidor no calcula nada: guarda la ultima
+# foto y le anade el commit desplegado, que es lo unico que solo sabe el.
+
+_SINCRONIA_MAX_BYTES = 256 * 1024
+
+
+def _sincronia_fichero():
+    return settings.STORAGE_DIR / "sincronia.json"
+
+
+def _sincronia_commit_desplegado() -> Dict[str, Any]:
+    """Commit con el que se construyo esta imagen (VERSION.json lo escribe deploy.ps1)."""
+    try:
+        datos = json.loads((settings.BASE_DIR / "VERSION.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def _sincronia_ahora() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@app.post("/admin/sincronia", include_in_schema=False)
+async def admin_sincronia_recibir(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    # Token propio y no el de admin: el que escribe la foto no puede leer nada mas.
+    if not settings.SINCRONIA_TOKEN:
+        raise HTTPException(status_code=503, detail="La sincronia no esta configurada en este servidor.")
+    token = ""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Falta el token de sincronia.")
+    if not secrets.compare_digest(token.encode("utf-8"), settings.SINCRONIA_TOKEN.encode("utf-8")):
+        raise HTTPException(status_code=403, detail="Token de sincronia invalido.")
+    cuerpo = await request.body()
+    if len(cuerpo) > _SINCRONIA_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="La foto de sincronia es demasiado grande.")
+    try:
+        foto = json.loads(cuerpo.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="La foto de sincronia no es JSON.")
+    if not isinstance(foto, dict):
+        raise HTTPException(status_code=400, detail="La foto de sincronia tiene que ser un objeto.")
+    fichero = _sincronia_fichero()
+    fichero.parent.mkdir(parents=True, exist_ok=True)
+    temporal = fichero.with_name(fichero.name + ".tmp")
+    temporal.write_text(
+        json.dumps({"recibida": _sincronia_ahora(), "foto": foto}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.replace(str(temporal), str(fichero))
+    return {"ok": True}
+
+
+@app.get("/admin/sincronia", dependencies=[Depends(security._require_admin_token)], include_in_schema=False)
+async def admin_sincronia_ver() -> JSONResponse:
+    try:
+        guardado = json.loads(_sincronia_fichero().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        guardado = {}
+    if not isinstance(guardado, dict):
+        guardado = {}
+    foto = guardado.get("foto")
+    return JSONResponse(
+        {
+            "ahora": _sincronia_ahora(),
+            "recibida": guardado.get("recibida") or "",
+            "foto": foto if isinstance(foto, dict) else None,
+            "produccion": _sincronia_commit_desplegado(),
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 

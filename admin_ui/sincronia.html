@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Sincronía · Vantelia</title>
+<style>
+  :root {
+    --suelo: #f3f4f7;
+    --papel: #ffffff;
+    --tinta: #0b132b;
+    --tinta-2: #475069;
+    --tinta-3: #7c849b;
+    --linea: #e2e5ec;
+    --acento: #087ea4;
+    --verde: #147a52;    --verde-fondo: #e2f2ea;
+    --amarillo: #8f5c08; --amarillo-fondo: #faefd7;
+    --rojo: #b3342b;     --rojo-fondo: #fae3e0;
+    --gris: #5f6780;     --gris-fondo: #e8eaf0;
+    --claude: #a94f2a;   --astra: #0b7a5e;   --pablo: #5f6780;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --suelo: #0b132b;
+      --papel: #111a35;
+      --tinta: #edf0f7;
+      --tinta-2: #b0b8cc;
+      --tinta-3: #7d879f;
+      --linea: #222d4d;
+      --acento: #52c3e3;
+      --verde: #4cd197;    --verde-fondo: #0f2f29;
+      --amarillo: #f2b84b; --amarillo-fondo: #33290f;
+      --rojo: #ff7b6f;     --rojo-fondo: #3b1c1e;
+      --gris: #9aa2b8;     --gris-fondo: #19223f;
+      --claude: #eb9068;   --astra: #45d0a2;   --pablo: #9aa2b8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--suelo);
+    color: var(--tinta);
+    font: 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .hoja {
+    max-width: 780px;
+    margin: 0 auto;
+    padding-block: 28px 48px;
+    padding-inline: 16px;
+    display: grid;
+    gap: 24px;
+  }
+  .cabecera { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .marca { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-3); }
+  .titulo { margin: 2px 0 0; font-size: 26px; line-height: 1.15; letter-spacing: -.01em; }
+  .sub { margin: 4px 0 0; color: var(--tinta-2); }
+  .refresco { display: flex; align-items: center; gap: 10px; color: var(--tinta-3); font-size: 13px; font-variant-numeric: tabular-nums; }
+  button {
+    font: inherit; font-size: 13px; color: var(--tinta);
+    background: var(--papel); border: 1px solid var(--linea); border-radius: 8px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--tinta-3); }
+  button:focus-visible, summary:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+  .veredicto {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start;
+    padding: 20px 22px; border-radius: 14px; background: var(--gris-fondo);
+  }
+  .veredicto h2 { margin: 0; font-size: 22px; line-height: 1.25; text-wrap: balance; }
+  .veredicto p { margin: 6px 0 0; color: var(--tinta-2); max-width: 64ch; }
+  .punto { width: 14px; height: 14px; margin-top: 7px; border-radius: 50%; background: var(--gris); }
+  .veredicto.verde { background: var(--verde-fondo); }
+  .veredicto.verde .punto { background: var(--verde); }
+  .veredicto.amarillo { background: var(--amarillo-fondo); }
+  .veredicto.amarillo .punto { background: var(--amarillo); }
+  .veredicto.rojo { background: var(--rojo-fondo); }
+  .veredicto.rojo .punto { background: var(--rojo); }
+
+  .bloque h3 {
+    margin: 0 0 10px; font-size: 12px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-3);
+  }
+  .panel { background: var(--papel); border: 1px solid var(--linea); border-radius: 12px; padding: 14px 16px; }
+  .pares { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  .pares dt { color: var(--tinta-3); }
+  .pares dd { margin: 0; overflow-wrap: anywhere; }
+  .agentes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .agente-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .estado { font-size: 13px; font-weight: 600; text-align: right; }
+  .estado.ok { color: var(--verde); }
+  .estado.aviso { color: var(--amarillo); }
+  .chip {
+    display: inline-block; font-size: 12px; font-weight: 600; line-height: 1.5;
+    padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap;
+  }
+  .chip-claude { color: var(--claude); }
+  .chip-astra { color: var(--astra); }
+  .chip-pablo { color: var(--pablo); }
+  .agente-cab .chip { font-size: 14px; padding: 1px 10px; }
+  .lista { list-style: none; margin: 0; padding: 0; }
+  .lista > li { padding: 9px 0; border-top: 1px solid var(--linea); }
+  .lista > li:first-child { border-top: 0; padding-top: 0; }
+  .lista > li:last-child { padding-bottom: 0; }
+  .commit {
+    display: grid; gap: 2px 10px; align-items: baseline;
+    grid-template-columns: auto auto 1fr auto;
+    grid-template-areas: "sha chip asunto cuando";
+  }
+  .commit .sha { grid-area: sha; }
+  .commit .chip { grid-area: chip; }
+  .commit .asunto { grid-area: asunto; min-width: 0; overflow-wrap: anywhere; }
+  .commit .cuando { grid-area: cuando; justify-self: end; }
+  .sha, .rama { font-family: var(--mono); font-size: 12.5px; color: var(--tinta-2); }
+  .cuando { color: var(--tinta-3); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .vacio { color: var(--tinta-3); }
+  .mini { font-size: 13px; color: var(--tinta-3); margin: 14px 0 6px; }
+  .arbol-cab { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .arbol-cab .cuando { margin-left: auto; }
+  .ficheros { margin: 4px 0 0; font-family: var(--mono); font-size: 12.5px; color: var(--tinta-2); overflow-wrap: anywhere; }
+  .ayuda { background: var(--papel); border: 1px solid var(--linea); border-radius: 12px; padding: 12px 16px; }
+  .ayuda summary { cursor: pointer; font-weight: 600; }
+  .ayuda ul { margin: 10px 0 2px; padding-left: 18px; color: var(--tinta-2); display: grid; gap: 8px; max-width: 68ch; }
+  .ayuda b { color: var(--tinta); }
+  .pie { margin: 0; color: var(--tinta-3); font-size: 13px; }
+  @media (max-width: 560px) {
+    .titulo { font-size: 22px; }
+    .veredicto { padding: 16px; }
+    .veredicto h2 { font-size: 19px; }
+    .commit { grid-template-columns: auto auto 1fr; grid-template-areas: "sha chip cuando" "asunto asunto asunto"; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .veredicto { transition: background-color .3s ease; }
+  }
+</style>
+</head>
+<body>
+<main class="hoja">
+  <header class="cabecera">
+    <div>
+      <p class="marca">Vantelia · interno</p>
+      <h1 class="titulo">Sincronía</h1>
+      <p class="sub">Claude Code y GPT-6 Astra, trabajando sobre el mismo repo</p>
+    </div>
+    <div class="refresco">
+      <span id="edad">Cargando…</span>
+      <button id="recargar" type="button">Actualizar</button>
+    </div>
+  </header>
+
+  <section id="veredicto" class="veredicto gris" aria-live="polite">
+    <span class="punto" aria-hidden="true"></span>
+    <div>
+      <h2 id="v-titulo">Mirando…</h2>
+      <p id="v-detalle"></p>
+    </div>
+  </section>
+
+  <section class="bloque">
+    <h3>En curso</h3>
+    <div class="panel"><dl id="en-curso" class="pares"></dl></div>
+  </section>
+
+  <section class="bloque">
+    <h3>Cada agente</h3>
+    <div id="agentes" class="agentes"></div>
+  </section>
+
+  <section class="bloque">
+    <h3>Trabajo sin guardar</h3>
+    <div class="panel"><ul id="arboles" class="lista"></ul></div>
+  </section>
+
+  <section class="bloque">
+    <h3>Pendiente</h3>
+    <div class="panel"><ul id="pendiente" class="lista"></ul></div>
+  </section>
+
+  <section class="bloque">
+    <h3>Últimos commits en main</h3>
+    <div class="panel"><ul id="commits" class="lista"></ul></div>
+  </section>
+
+  <details class="ayuda">
+    <summary>Cómo se lee esto</summary>
+    <ul>
+      <li>Cada agente, al empezar su sesión, <b>se pone al día</b>: lee lo que el otro ha hecho y queda apuntado. Por eso la página sabe quién ha visto qué sin fiarse de lo que digan.</li>
+      <li><b>Verde</b>: los dos han visto todo y no hay nada a medias. Puedes cambiar de agente cuando quieras.</li>
+      <li><b>Amarillo</b>: alguien está trabajando ahora mismo, o uno todavía no ha visto lo último (lo verá al empezar). Si cambias ya, dile al nuevo «ponte al día».</li>
+      <li><b>Rojo</b>: hay cambios sin guardar que nadie toca desde hace rato. Suele ser que a uno se le acabaron los tokens: dile al otro «ponte al día y sigue donde se quedó».</li>
+      <li><b>Gris</b>: tu PC no está mandando datos (apagado o la tarea programada parada), así que no se puede saber.</li>
+    </ul>
+  </details>
+
+  <p class="pie">La foto la manda tu PC cada 5 minutos, y en cuanto un agente se pone al día. La página se actualiza sola cada minuto.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var NOMBRES = { claude: 'Claude', astra: 'Astra', pablo: 'Pablo' };
+  var FOTO_VIEJA_MIN = 15;
+  var ETIQUETAS = [
+    ['testigo', 'Testigo'], ['tarea', 'Tarea'], ['rama', 'Rama'],
+    ['siguiente', 'Siguiente paso'], ['espera_a', 'Espera a']
+  ];
+  var ICONOS = { verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' };
+
+  function el(tag, clase, texto) {
+    var nodo = document.createElement(tag);
+    if (clase) nodo.className = clase;
+    if (texto !== undefined && texto !== null) nodo.textContent = texto;
+    return nodo;
+  }
+  function vaciar(nodo) { while (nodo.firstChild) nodo.removeChild(nodo.firstChild); }
+  function plural(n, uno, varios) { return n + ' ' + (n === 1 ? uno : varios); }
+
+  function hace(iso, ahora) {
+    if (!iso) return 'nunca';
+    var t = Date.parse(iso);
+    if (isNaN(t)) return '—';
+    var min = Math.round((ahora - t) / 60000);
+    if (min < 1) return 'ahora mismo';
+    if (min < 60) return 'hace ' + min + ' min';
+    var horas = Math.round(min / 60);
+    if (horas < 24) return 'hace ' + horas + ' h';
+    var d = new Date(t);
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) + ', ' +
+      d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function chip(agente) {
+    var clave = NOMBRES[agente] ? agente : 'pablo';
+    return el('span', 'chip chip-' + clave, NOMBRES[clave]);
+  }
+
+  function filaCommit(c, ahora) {
+    var li = el('li', 'commit');
+    li.appendChild(el('code', 'sha', c.corto));
+    li.appendChild(chip(c.agente));
+    li.appendChild(el('span', 'asunto', c.asunto));
+    li.appendChild(el('span', 'cuando', hace(c.fecha, ahora)));
+    return li;
+  }
+
+  function pintarVeredicto(color, titulo, detalle) {
+    document.getElementById('veredicto').className = 'veredicto ' + color;
+    document.getElementById('v-titulo').textContent = titulo;
+    document.getElementById('v-detalle').textContent = detalle || '';
+    document.title = (ICONOS[color] || '') + ' Sincronía · Vantelia';
+  }
+
+  function pintarEnCurso(enCurso) {
+    var dl = document.getElementById('en-curso');
+    vaciar(dl);
+    var hay = false;
+    if (enCurso) {
+      ETIQUETAS.forEach(function (par) {
+        if (!enCurso[par[0]]) return;
+        hay = true;
+        dl.appendChild(el('dt', null, par[1]));
+        dl.appendChild(el('dd', null, enCurso[par[0]]));
+      });
+    }
+    if (!hay) {
+      dl.appendChild(el('dt', null, '—'));
+      dl.appendChild(el('dd', 'vacio', 'Nada apuntado en la sección «En curso» de docs/ESTADO_ACTUAL.md.'));
+    }
+  }
+
+  function pintarAgentes(agentes, ahora) {
+    var contenedor = document.getElementById('agentes');
+    vaciar(contenedor);
+    agentes.forEach(function (ag) {
+      var tarjeta = el('article', 'panel agente');
+      var cabecera = el('header', 'agente-cab');
+      cabecera.appendChild(chip(ag.id));
+      var estado;
+      if (ag.estado === 'al_dia') estado = el('span', 'estado ok', 'Al día');
+      else if (ag.estado === 'nunca') estado = el('span', 'estado aviso', 'Nunca se ha puesto al día');
+      else estado = el('span', 'estado aviso', 'Le ' + (ag.no_vistos_total === 1 ? 'falta 1 cambio' : 'faltan ' + ag.no_vistos_total + ' cambios'));
+      cabecera.appendChild(estado);
+      tarjeta.appendChild(cabecera);
+
+      var datos = el('dl', 'pares');
+      datos.appendChild(el('dt', null, 'Se puso al día'));
+      datos.appendChild(el('dd', null, hace(ag.ultima_puesta_al_dia, ahora)));
+      datos.appendChild(el('dt', null, 'Última actividad'));
+      datos.appendChild(el('dd', null, hace(ag.ultima_actividad, ahora)));
+      tarjeta.appendChild(datos);
+
+      if (ag.no_vistos && ag.no_vistos.length) {
+        tarjeta.appendChild(el('p', 'mini', 'Todavía no ha visto:'));
+        var lista = el('ul', 'lista');
+        ag.no_vistos.forEach(function (c) { lista.appendChild(filaCommit(c, ahora)); });
+        var resto = (ag.no_vistos_total || 0) - ag.no_vistos.length;
+        if (resto > 0) lista.appendChild(el('li', 'vacio', '… y ' + resto + ' más'));
+        tarjeta.appendChild(lista);
+      }
+      contenedor.appendChild(tarjeta);
+    });
+  }
+
+  function pintarArboles(arboles, ahora) {
+    var lista = document.getElementById('arboles');
+    vaciar(lista);
+    var sucios = arboles.filter(function (a) { return a.sin_guardar_total; });
+    if (!sucios.length) {
+      lista.appendChild(el('li', 'vacio', 'Nada: todo está guardado en commits.'));
+      return;
+    }
+    sucios.forEach(function (a) {
+      var li = el('li');
+      var cabecera = el('div', 'arbol-cab');
+      cabecera.appendChild(el('strong', null, a.ruta));
+      cabecera.appendChild(el('code', 'rama', a.rama || 'sin rama'));
+      cabecera.appendChild(el('span', 'cuando', 'último cambio ' + hace(a.ultimo_cambio, ahora)));
+      li.appendChild(cabecera);
+      var texto = a.sin_guardar.join(' · ');
+      if (a.sin_guardar_total > a.sin_guardar.length) texto += ' … (' + a.sin_guardar_total + ' en total)';
+      li.appendChild(el('p', 'ficheros', texto));
+      lista.appendChild(li);
+    });
+  }
+
+  function pintarPendiente(foto, prod) {
+    var lista = document.getElementById('pendiente');
+    vaciar(lista);
+    (foto.ramas_sin_integrar || []).forEach(function (r) {
+      var li = el('li');
+      li.appendChild(el('code', 'rama', r.rama));
+      li.appendChild(document.createTextNode(' — ' + plural(r.commits, 'commit', 'commits') + ' sin revisar ni integrar en main.'));
+      lista.appendChild(li);
+    });
+
+    var main = foto.main || [];
+    var li = el('li');
+    if (!prod || !prod.commit) {
+      li.textContent = 'Producción: todavía no sé qué commit hay desplegado (se sabrá tras el próximo despliegue).';
+    } else {
+      var corto = String(prod.commit).slice(0, 7);
+      var idx = -1;
+      for (var i = 0; i < main.length; i++) { if (main[i].sha === prod.commit) { idx = i; break; } }
+      if (idx === 0) {
+        li.textContent = 'Producción está al día con main (' + corto + ').';
+      } else if (idx > 0) {
+        var conCodigo = main.slice(0, idx).filter(function (c) { return c.toca_codigo; }).length;
+        li.textContent = 'Producción va por ' + corto + ': ' + plural(idx, 'commit', 'commits') + ' de main sin desplegar' +
+          (conCodigo ? ' (' + conCodigo + ' con código).' : ' (solo documentación: no hace falta desplegar).');
+      } else {
+        li.textContent = 'Producción va por ' + corto + ', que no está entre los últimos 30 commits de main.';
+      }
+      if (prod.sucio) li.textContent += ' Se desplegó con cambios sin commit.';
+    }
+    lista.appendChild(li);
+  }
+
+  function pintarCommits(main, ahora) {
+    var lista = document.getElementById('commits');
+    vaciar(lista);
+    if (!main.length) { lista.appendChild(el('li', 'vacio', 'Sin datos.')); return; }
+    main.slice(0, 8).forEach(function (c) { lista.appendChild(filaCommit(c, ahora)); });
+  }
+
+  function pintar(datos) {
+    var ahora = Date.parse(datos.ahora) || Date.now();
+    var foto = datos.foto;
+    if (!foto) {
+      document.getElementById('edad').textContent = 'Sin datos';
+      pintarVeredicto('gris', 'Todavía no ha llegado ninguna foto',
+        'Tu PC la manda cada 5 minutos con la tarea programada «Vantelia sincronia». Si no llega, esa tarea no está corriendo.');
+      return;
+    }
+    var edadMin = (ahora - Date.parse(foto.generada)) / 60000;
+    document.getElementById('edad').textContent = 'Foto ' + hace(foto.generada, ahora);
+    var v = foto.veredicto || {};
+    if (!(edadMin <= FOTO_VIEJA_MIN)) {
+      pintarVeredicto('gris', 'No lo sé: la última foto es de ' + hace(foto.generada, ahora),
+        'Tu PC no está mandando datos (apagado, o la tarea programada parada). Lo de abajo es cómo estaba entonces.');
+    } else {
+      pintarVeredicto(v.color || 'gris', v.titulo || '—', v.detalle || '');
+    }
+    pintarEnCurso(foto.en_curso);
+    pintarAgentes(foto.agentes || [], ahora);
+    pintarArboles(foto.arboles || [], ahora);
+    pintarPendiente(foto, datos.produccion);
+    pintarCommits(foto.main || [], ahora);
+  }
+
+  function cargar() {
+    fetch('/admin/sincronia', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) { window.location.href = '/acceso?next=/sincronia'; return null; }
+        if (!r.ok) throw new Error('El servidor respondió ' + r.status + '.');
+        return r.json();
+      })
+      .then(function (datos) { if (datos) pintar(datos); })
+      .catch(function (error) {
+        pintarVeredicto('gris', 'No puedo leer la foto', String(error && error.message || error));
+      });
+  }
+
+  document.getElementById('recargar').addEventListener('click', cargar);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) cargar(); });
+  setInterval(cargar, 60000);
+  cargar();
+})();
+</script>
+</body>
+</html>

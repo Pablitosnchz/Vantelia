@@ -29,6 +29,7 @@ python -m pytest -k senal             # por nombre
 | Portal, roles y sesión | `test_sesion_deslizante.py`, `test_client_channels.py`, `test_admin_edge_cases_e2e.py` |
 | CRM | `test_crm_light.py` |
 | Captación (outreach / demos) | `test_captacion_autonoma.py`, `test_outreach_*.py`, `test_demo_conversion.py` |
+| Sincronía entre agentes (`scripts/sincronia.py`, página /sincronia) | `test_sincronia.py` — sobre repos git de verdad en `tmp_path` |
 | Cualquier cosa en `backend/` | `test_shim_compat.py` (el proxy de `api.py`) |
 
 ## Tests que vigilan reglas, no funcionalidad

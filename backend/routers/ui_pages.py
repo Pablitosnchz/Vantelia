@@ -197,6 +197,25 @@ async def demo_cliente(cliente_id: str, request: Request) -> HTMLResponse:
     return response
 
 
+@app.get("/sincronia", include_in_schema=False)
+async def sincronia_pagina(
+    portal_session: Optional[str] = Cookie(default=None, alias=settings.PORTAL_COOKIE_NAME),
+) -> Response:
+    """Semaforo de sincronia entre Claude Code y GPT-6 Astra. Solo admin.
+
+    La pagina no lleva datos: los pide a GET /admin/sincronia con la sesion.
+    """
+    user = security._get_authenticated_portal_user_or_none(portal_session)
+    if not user:
+        return RedirectResponse("/acceso?next=/sincronia")
+    if user["role"] != "admin":
+        return RedirectResponse("/app")
+    pagina = settings.ADMIN_UI_DIR / "sincronia.html"
+    if not pagina.exists():
+        raise HTTPException(status_code=404, detail="Pagina no disponible.")
+    return FileResponse(pagina, headers={"Cache-Control": "no-store"})
+
+
 
 
 @app.post("/demo/{cliente_id}/voice/session", include_in_schema=False)

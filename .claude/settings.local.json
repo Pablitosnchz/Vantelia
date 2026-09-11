@@ -11,5 +11,19 @@
       "Bash(curl -s \"https://www.vantelia.es/demo/\")",
       "Bash(git add *)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/scripts/sincronia.py\" --al-dia claude 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Sincronía: poniéndome al día"
+          }
+        ]
+      }
+    ]
   }
 }

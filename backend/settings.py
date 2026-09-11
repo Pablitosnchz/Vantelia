@@ -66,6 +66,10 @@ logging.basicConfig(
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
+# Token SOLO para que el PC de Pablo mande la foto de sincronia entre agentes
+# (scripts/sincronia.py -> POST /admin/sincronia). No abre nada mas: si se
+# filtra, lo peor que puede pasar es que alguien pinte un semaforo falso.
+SINCRONIA_TOKEN = os.getenv("SINCRONIA_TOKEN", "").strip()
 WEBHOOK_DEFAULT = os.getenv("WEBHOOK_DEFAULT", "").strip()
 WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
 WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()

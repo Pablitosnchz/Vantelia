@@ -1,6 +1,10 @@
 .env
 .env.*
 .gh_token
+# Sincronia entre agentes: fichajes y token del PC de Pablo (scripts/sincronia.py).
+.sincronia/
+# Lo escribe deploy.ps1 dentro del paquete; no vive en el repo.
+VERSION.json
 deploy/known_hosts
 deploy/ssh-askpass.cmd
 deploy/vantelia_deploy*

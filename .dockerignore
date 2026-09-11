@@ -9,3 +9,4 @@ storage/*
 !storage/.gitkeep
 .env
 .gh_token
+.sincronia

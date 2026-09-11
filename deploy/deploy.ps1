@@ -343,9 +343,25 @@ New-Item -ItemType Directory -Path $StageProjectPath -Force | Out-Null
 
 Invoke-RobocopyChecked -Source $ProjectRoot -Destination $StageProjectPath -ExtraArguments @(
     "/E",
-    "/XD", ".git", ".git-inner-backup", ".venv", ".venv311", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
+    "/XD", ".git", ".git-inner-backup", ".sincronia", ".venv", ".venv311", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
     "/XF", ".env", ".env.backup-*", ".env.ftp", "env.ftp", ".gh_token", "config.json", "ssh-askpass.cmd", "vantelia_deploy", "vantelia_deploy.pub", "vantelia_deploy_runtime", "vantelia_deploy_runtime.pub", "known_hosts", "hoja_llamadas_calientes.md", "whatsapp_calientes.md"
 )
+
+# Que commit va dentro de este paquete. /sincronia lo compara con main para decir
+# que falta por desplegar; "sucio" = habia cambios sin commitear al empaquetar.
+# Nunca tumba el despliegue: sin este fichero la pagina solo dice "no lo se".
+try {
+    $versionCommit = ((& git -C $ProjectRoot rev-parse HEAD) | Out-String).Trim()
+    $versionSucio = [bool](((& git -C $ProjectRoot status --porcelain --untracked-files=no) | Out-String).Trim())
+    $versionJson = @{
+        commit = $versionCommit
+        sucio  = $versionSucio
+        fecha  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    } | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText((Join-Path $StageProjectPath "VERSION.json"), $versionJson)
+} catch {
+    Write-Host "Aviso: no se pudo grabar VERSION.json ($_). Continuando..." -ForegroundColor Yellow
+}
 
 $tarArgs = @(
     '-czf',
