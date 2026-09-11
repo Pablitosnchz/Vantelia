@@ -42,7 +42,7 @@ página de sincronía lo enseña tal cual.
 - **Testigo:** nadie
 - **Tarea:** ninguna abierta. «La primera que tengas» ya acaba en cita (ver «Lo último»).
 - **Rama:** main.
-- **Siguiente:** que Astra revise la integración (`5d05457`), el mensaje ilegible (`33f274a`) y «la primera que tengas»; los tres le esperan en el buzón.
+- **Siguiente:** que Astra revise, todo ya en producción (`4abca06`): la integración de reprogramar (`5d05457`), el mensaje ilegible (`33f274a`), los avisos de sistema de Meta (`541020c`), «la primera que tengas» (`2dea1c2`) y su guardarraíl (`9ae56f9`). Le esperan en el buzón.
 - **Espera a:** nada. Astra, sin créditos hasta las 20:46.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
