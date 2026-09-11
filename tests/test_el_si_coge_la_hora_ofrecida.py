@@ -91,3 +91,43 @@ def test_con_la_hora_y_el_nombre_la_reserva_se_remata(api_module):  # noqa: F811
 
     assert reserva.que_falta(estado) == ""
     assert reserva.tool_que_remata(estado) == "crear_cita"
+
+
+def test_no_puede_ofrecer_una_hora_que_no_esta_en_los_huecos(api_module):  # noqa: F811
+    """Le dijo que tenia las 15:00 teniendo solo la manana. Se quedo sin cita.
+
+    Medido el 12-sep-2026 contra copia de produccion, el MISMO caso critico del
+    banco pero roto por otro sitio: el estado no anoto las 15:00 (bien) y la cita
+    imposible no nacio (bien), pero nadie contradijo al modelo cuando las ofrecio,
+    asi que ella dijo que si a una hora que no existia y lo supo tres turnos
+    despues.
+    """
+    from backend import agent, reserva
+
+    estado = _con_horas_ofrecidas()
+
+    # Lo que paso de verdad.
+    assert agent._ofrece_una_hora_que_no_tiene(
+        estado, "Mañana a las 15:00 tengo disponible la cita de Diagnóstico") == "15:00"
+    assert agent._ofrece_una_hora_que_no_tiene(
+        estado, "Solo necesito tus apellidos para reservarte mañana a las 15:00") == "15:00"
+
+    # Lo que NO puede frenar: ofrecer una de las suyas, o decirle que no la tiene
+    # (que es justo lo que queremos que acabe contestando).
+    assert agent._ofrece_una_hora_que_no_tiene(
+        estado, "Te reservo mañana a las 09:15, ¿te parece?") == ""
+    assert agent._ofrece_una_hora_que_no_tiene(
+        estado, "Las 15:00 no las tengo; tengo 09:00, 09:15 y 09:30") == ""
+    # Sin huecos sobre la mesa no hay nada con lo que contrastar.
+    assert agent._ofrece_una_hora_que_no_tiene(reserva.Estado(), "Te reservo a las 15:00") == ""
+
+
+def test_el_freno_de_la_hora_inventada_esta_enchufado(api_module):  # noqa: F811
+    """Un detector suelto no frena nada: tiene que mirarse en `responder`."""
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_ofrece_una_hora_que_no_tiene(estado, texto_final)" in fuente
+    assert "ofrecio_una_hora_que_no_tiene" in fuente

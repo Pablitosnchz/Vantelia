@@ -3319,6 +3319,63 @@ def _afirma_sobre_la_agenda(texto: str) -> bool:
     return any(frase in limpio for frase in _HABLA_DE_AGENDA)
 
 
+# Con estas se OFRECE una hora como libre. Decir que NO la hay tambien es hablar
+# de la agenda, pero eso ya lo mira `_afirma_sobre_la_agenda`: aqui solo interesa
+# lo que se ofrece, porque es lo que la clienta se cree y espera.
+_OFRECE_UNA_HORA = (
+    "tengo disponible", "tengo libre", "esta libre", "queda libre", "quedan libres",
+    "puedo ofrecerte", "te puedo dar", "te reservo", "te la reservo", "reservarte",
+    "te apunto", "apuntarte", "te parece bien", "te viene bien", "te encaja",
+)
+
+# Lo mismo en negativo: si lo que hace es decir que esa hora NO la tiene, el freno
+# no pinta nada (y es justo lo que queremos que acabe diciendo).
+_NIEGA_LA_HORA = (
+    "no tengo", "no la tengo", "no las tengo", "no me queda", "esta ocupada",
+    "esta cogida", "no hay hueco", "no queda",
+)
+
+
+def _ofrece_una_hora_que_no_tiene(estado: Any, texto: str) -> str:
+    """Ofrece como libre una hora que NO esta en los huecos que ya tenemos.
+
+    Medido contra una copia de produccion el 12-sep-2026, caso critico del banco
+    `dice-que-si-y-acaba-en-cita`:
+
+        IA     Manana tengo: 09:00, 09:15, 09:30, 09:45, 10:00
+        ELLA   a las 15
+        IA     Manana a las 15:00 tengo disponible la cita de Diagnostico   <-- falso
+        ELLA   si
+        IA     Solo necesito tus dos apellidos para reservarte manana a las 15:00
+        ELLA   me llamo Ana Ruiz Perez
+        IA     Las 15:00 no las tengo; ese dia tengo libres 09:00, 09:15...  <-- tres turnos tarde
+
+    La cita imposible no llego a nacer -el hueco se comprueba al crearla-, pero la
+    clienta se fue sin cita despues de decir que si. El estado hizo lo correcto:
+    `reserva._hora_coloquial` no anota una hora que no este en los huecos. Lo que
+    faltaba era contradecir al modelo EN EL TURNO en que se la inventa.
+
+    Devuelve la hora que se ofrece sin tenerla, o cadena vacia.
+    """
+    huecos = {str(h)[:5] for h in (getattr(estado, "huecos", None) or []) if h}
+    if not huecos:
+        return ""
+    limpio = catalog_pick._norm(texto or "")
+    if any(frase in limpio for frase in _NIEGA_LA_HORA):
+        return ""
+    if not any(frase in limpio for frase in _OFRECE_UNA_HORA):
+        return ""
+    # Hablar de SU cita ya tiene su propio freno (`_le_dice_una_hora_que_no_es_la
+    # _suya`): alli la referencia es la agenda, no los huecos de este turno.
+    if _ASEGURA_SU_CITA.search(limpio):
+        return ""
+    for h, m in _UNA_HORA.findall(texto or ""):
+        hora = "%02d:%s" % (int(h), m)
+        if hora not in huecos:
+            return hora
+    return ""
+
+
 # Como dice una clienta que ninguna opcion le sirve. El salon pidio que en ese
 # momento -y solo en ese- se le ofrezca llamar, porque ellas pueden cuadrar a mano
 # lo que el sistema no puede.
@@ -3657,6 +3714,27 @@ async def responder(
                         "content": ("Antes de decir nada sobre dias u horas, consulta "
                                     "`consultar_disponibilidad`. No afirmes que un dia "
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
+                    })
+                    continue
+                # 2 quater) Ofrece una hora que no esta en los huecos que ya
+                #    tenemos sobre la mesa. Se la ha sacado de la manga, y la
+                #    clienta dice que si a una hora que no existe: cuando la
+                #    herramienta la frena, ya se han gastado tres turnos.
+                fuera_de_los_huecos = _ofrece_una_hora_que_no_tiene(estado, texto_final)
+                if (fuera_de_los_huecos and not consultada
+                        and vuelta + 1 < MAX_VUELTAS):
+                    obligar = True
+                    traza.freno("ofrecio_una_hora_que_no_tiene")
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Las %s NO estan entre los huecos que tienes: %s. "
+                                    "No ofrezcas ninguna hora que no este en esa lista "
+                                    "ni des por buena la que te pida sin mirarla: "
+                                    "consulta `consultar_disponibilidad` y contesta con "
+                                    "lo que haya de verdad. Si esa hora no existe, dilo "
+                                    "y ofrecele las que si tienes."
+                                    % (fuera_de_los_huecos,
+                                       ", ".join(str(h) for h in (estado.huecos or [])))),
                     })
                     continue
                 # 2ter) Lo anuncia y no lo hace: si va a mirar la agenda, que la
