@@ -192,3 +192,15 @@ def test_un_audio_que_no_se_puede_escuchar_se_pide_por_escrito(enviados, monkeyp
     entrante, respuesta = whatsapp.TEXTOS_ILEGIBLE["audio"]
     assert enviados == [respuesta]
     assert historial[0][:2] == ("user", entrante)
+
+
+def test_un_aviso_de_sistema_de_meta_no_se_contesta(enviados):
+    """"Este cliente ha cambiado de numero" no lo ha escrito nadie: no se le contesta."""
+    telefono = "34600555005"
+    session_id = _sesion_limpia(telefono)
+
+    _recibir(_mensaje(telefono, "system", system={
+        "body": "El cliente ha cambiado de numero", "type": "customer_changed_number"}))
+
+    assert enviados == [], "se le ha contestado a un aviso de Meta"
+    assert _historial(session_id) == []

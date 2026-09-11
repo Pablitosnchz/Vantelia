@@ -3847,6 +3847,16 @@ async def _handle_whatsapp_webhook(
                     # que se estuviera hablando.
                     processed += 1
                     continue
+                elif message_type == "system":
+                    # Aviso de Meta, no algo que haya escrito nadie (p. ej. "este
+                    # cliente ha cambiado de numero"). Contestarle "no me ha llegado
+                    # bien tu mensaje" seria hablarle de algo que no ha mandado.
+                    settings.logger.info(
+                        "[whatsapp] aviso de sistema de Meta: %s",
+                        (message_payload.get("system") or {}).get("type") or "-",
+                    )
+                    processed += 1
+                    continue
                 elif message_type in ("image", "document", "sticker", "video"):
                     # No se baja el fichero: el asistente no ve fotos, y fingir que
                     # las entiende es peor que decir la verdad. Se marca y se trata
