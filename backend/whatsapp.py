@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, fotos, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, fotos, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding, wa_plantillas
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -3836,6 +3836,22 @@ async def _handle_whatsapp_webhook(
             value = change.get("value", {}) if isinstance(change, dict) else {}
             metadata = value.get("metadata", {}) if isinstance(value, dict) else {}
             phone_number_id = str(metadata.get("phone_number_id", "")).strip()
+
+            # Meta aprueba o rechaza una plantilla: no es un mensaje de nadie, no
+            # trae `phone_number_id` y el negocio sale del id de la WABA. Se
+            # apunta el estado para que el envio sepa si puede usarla y el portal
+            # pueda enseñar el motivo del rechazo.
+            if str(change.get("field") or "") == "message_template_status_update":
+                dueno = forced_cliente_id or wa_onboarding.client_for_waba(str(entry.get("id") or ""))
+                if dueno:
+                    wa_plantillas.actualizar_desde_webhook(dueno, value)
+                    processed += 1
+                else:
+                    settings.logger.warning(
+                        "[wa_plantillas] estado de plantilla de una WABA desconocida (%s)",
+                        entry.get("id") or "-",
+                    )
+                continue
 
             # Coexistence: el negocio sigue usando la app del movil y Meta nos manda
             # un ECO de lo que escribe su equipo desde ahi. Se guarda en la

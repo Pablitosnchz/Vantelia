@@ -200,6 +200,26 @@ def phone_client_map() -> Dict[str, str]:
     return mapping
 
 
+def client_for_waba(waba_id: str) -> str:
+    """cliente_id de la WABA ("" si no consta).
+
+    Los avisos que no son mensajes -el estado de una plantilla, por ejemplo- no
+    traen `phone_number_id`: Meta los manda con el id de la WABA en `entry.id`.
+    """
+    waba_id = str(waba_id or "").strip()
+    if not waba_id:
+        return ""
+    try:
+        with db._get_db_connection() as connection:
+            row = connection.execute(
+                "SELECT cliente_id FROM client_whatsapp_accounts WHERE waba_id = ? AND status = 'connected'",
+                (waba_id,),
+            ).fetchone()
+    except Exception:  # noqa: BLE001 - antes de la migracion la tabla puede no existir
+        return ""
+    return (row["cliente_id"] if row else "") or ""
+
+
 def save_account(
     cliente_id: str,
     *,

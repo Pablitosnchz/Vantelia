@@ -19,7 +19,7 @@ Que tabla guarda que:
 | Stripe del negocio | `client_payment_accounts`, `stripe_connected_accounts` |
 | Nuestro cobro al negocio | `subscriptions`, `message_usage_events` |
 | Canales de envio | `client_channel_settings`, `client_oauth_connections`, `client_channel_oauth_states`, `client_channel_audit`, `client_channel_requests`, `gmail_connections`, `gmail_oauth_states`, `oauth_states` |
-| WhatsApp propio | `client_whatsapp_accounts`, `wa_demo_codes`, `wa_demo_routes` |
+| WhatsApp propio | `client_whatsapp_accounts`, `wa_templates`, `wa_demo_codes`, `wa_demo_routes` |
 | CRM | `crm_contacts`, `crm_contact_links`, `crm_contact_audit` |
 | Demos y leads | `demo_tenants_registry`, `demo_registry_meta`, `demo_tenant_cleanup_queue`, `bot_leads`, `consulta_leads` |
 | Metricas | `analytics_events`, `ai_rebooking_log`, `growth_daily`, `growth_opportunities`, `growth_opportunity_audit`, `growth_plan_tasks`, `growth_weekly_reviews` |
@@ -1795,6 +1795,28 @@ def _init_database() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_client_whatsapp_phone "
             "ON client_whatsapp_accounts(phone_number_id, status)"
+        )
+
+        # Plantillas de WhatsApp aprobadas por Meta (backend/wa_plantillas.py).
+        # Fuera de la ventana de 24 h solo se puede escribir con una plantilla, y
+        # las plantillas viven en la WABA de CADA negocio: la de demo y la de cada
+        # cliente son objetos distintos, de ahi que la PK lleve el cliente_id.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wa_templates (
+                cliente_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'es',
+                status TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT '',
+                meta_id TEXT NOT NULL DEFAULT '',
+                motivo_rechazo TEXT NOT NULL DEFAULT '',
+                last_error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (cliente_id, name, language)
+            )
+            """
         )
 
         connection.execute(

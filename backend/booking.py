@@ -927,6 +927,103 @@ def _whatsapp_notice_text(booking_row: sqlite3.Row, kind: str = "confirmed") -> 
     return chr(10).join(lineas)
 
 
+def _wa_ventana_abierta(cliente_id: str, to_number: str) -> bool:
+    """¿Se le puede escribir texto libre? (<24 h desde su ultimo mensaje).
+
+    Import tardio de `whatsapp`: ese modulo importa este, y arriba seria un ciclo.
+    """
+    from backend import whatsapp
+
+    try:
+        return inbox.window_open(whatsapp._whatsapp_session_id(cliente_id, to_number))
+    except Exception:  # noqa: BLE001 - ante la duda, se trata como cerrada (plantilla)
+        return False
+
+
+def _wa_recordatorios_hoy(cliente_id: str) -> int:
+    """Plantillas de recordatorio ya mandadas hoy por este negocio (las paga el)."""
+    try:
+        with db._get_db_connection() as connection:
+            fila = connection.execute(
+                """
+                SELECT COUNT(*) AS total FROM booking_audit
+                WHERE cliente_id = ? AND event_type = 'reminder_whatsapp_template_sent'
+                  AND created_at >= ?
+                """,
+                (cliente_id, timeutils._utc_now_iso()[:10]),
+            ).fetchone()
+    except Exception:  # noqa: BLE001 - el tope no puede impedir un aviso
+        return 0
+    return int(fila["total"] if fila else 0)
+
+
+async def _enviar_recordatorio_con_plantilla(
+    booking_row: sqlite3.Row,
+    kind: str,
+    *,
+    phone_number_id: str,
+    to_number: str,
+) -> bool:
+    """Recordatorio fuera de la ventana de 24 h, con la plantilla del negocio.
+
+    Devuelve False cuando no se puede mandar, para que el aviso siga su camino por
+    el siguiente canal (email). Lo que NO puede pasar es que se pierda en silencio:
+    cada motivo queda en `booking_audit` como `reminder_whatsapp_skipped`.
+    """
+    from backend import wa_plantillas
+
+    cliente_id = booking_row["cliente_id"]
+
+    def _saltado(motivo: str) -> bool:
+        _record_booking_audit(
+            booking_row["id"], cliente_id, "reminder_whatsapp_skipped",
+            {"kind": kind, "reason": motivo},
+        )
+        return False
+
+    plantilla = wa_plantillas.estado(cliente_id)
+    if (plantilla.get("status") or "") != wa_plantillas.APROBADA:
+        # Sin plantilla aprobada no hay recordatorio por WhatsApp. El motivo -en
+        # revision, rechazada y por que, o ni siquiera dada de alta- se guarda
+        # para que el portal lo pueda enseñar.
+        return _saltado(
+            "plantilla_%s" % ((plantilla.get("status") or "sin_alta").lower())
+            + (": %s" % plantilla["motivo_rechazo"] if plantilla.get("motivo_rechazo") else "")
+        )
+
+    config = clients._get_client_config(cliente_id)
+    cap = int((config.get("reminders") or {}).get("whatsapp_cap_dia") or 0)
+    if cap > 0 and _wa_recordatorios_hoy(cliente_id) >= cap:
+        # Cada plantilla fuera de ventana la cobra Meta a la cuenta DEL NEGOCIO.
+        return _saltado("tope_diario:%d" % cap)
+
+    cuando = booking_row["booking_date"] or ""
+    try:
+        cuando = textnorm._format_date_es(textnorm._parse_date(cuando).date())
+    except Exception:  # noqa: BLE001 - si la fecha viene rara, se deja como esta
+        pass
+
+    payload = wa_plantillas.payload_recordatorio(
+        to_number=to_number,
+        booking_id=booking_row["id"],
+        nombre=(booking_row["nombre"] or "").split(" ")[0] or "hola",
+        servicio=textnorm.nombre_de_servicio_publico(booking_row["servicio"] or "tu cita"),
+        dia=cuando,
+        hora=booking_row["booking_time"] or "",
+        negocio=str(config.get("empresa") or "").strip() or str(config.get("nombre") or ""),
+    )
+    enviado = await messaging._send_whatsapp_payload(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+    )
+    if not enviado:
+        return _saltado("meta_rechazo_la_plantilla")
+    _record_booking_audit(
+        booking_row["id"], cliente_id, "reminder_whatsapp_template_sent",
+        {"kind": kind, "template": plantilla.get("name") or wa_plantillas.NOMBRE_RECORDATORIO},
+    )
+    return True
+
+
 async def _send_booking_whatsapp_reminder(
     booking_row: sqlite3.Row,
     kind: str,
@@ -971,6 +1068,12 @@ async def _send_booking_whatsapp_reminder(
     # Recordatorios: botones interactivos de confirmacion de asistencia.
     # La respuesta la procesa el webhook (bkok_/bkcancel_) y queda en booking_audit.
     if kind in ("reminder_24h", "reminder_2h") and booking_row["status"] in ("confirmed", "pending_review"):
+        if not _wa_ventana_abierta(booking_row["cliente_id"], to_number):
+            # Fuera de las 24 h de Meta el texto libre NO se entrega: hace falta
+            # una plantilla aprobada. Es el caso normal de un recordatorio.
+            return await _enviar_recordatorio_con_plantilla(
+                booking_row, kind, phone_number_id=phone_number_id, to_number=to_number,
+            )
         sent = await messaging._send_whatsapp_buttons(
             cliente_id=booking_row["cliente_id"],
             phone_number_id=phone_number_id,
