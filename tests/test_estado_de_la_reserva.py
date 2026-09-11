@@ -122,7 +122,10 @@ def test_con_el_dia_igual_y_huecos_se_coge_el_primero(estado, api_module):  # no
     reserva.anotar_lo_que_dice(estado, "el primer hueco que tengas")
     reserva.anotar_resultado(estado, "consultar_disponibilidad", {"fecha": "2026-09-01"},
                              {"ok": True, "huecos": ["10:00", "10:15"]})
-    assert "10:00" in reserva.instruccion(estado)
+    # Lo coge el CODIGO, no una instruccion al modelo (que la ignoraba y volvia a
+    # ensenar la lista: tests/test_la_primera_que_tengas.py).
+    assert (estado.fecha, estado.hora) == ("2026-09-01", "10:00")
+    assert reserva.que_falta(estado) == "nombre"
 
 
 # ─── El estado sale de las tools, no del modelo ────────────────────────────

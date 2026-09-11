@@ -420,6 +420,17 @@ cuesta, contestale con estos datos" y ganaba por ir DESPUES de la instruccion de
 dar precios. La nota ya no invita a dar precio cuando el negocio los oculta, la
 instruccion prohibe ese rodeo, y `sin_precio` va la ULTIMA de la guia.
 
+**"La primera que tengas" acaba en cita** (11-sep-2026,
+`tests/test_la_primera_que_tengas.py`). El codigo elegia el primer hueco (a ultima
+hora, hoy a diez minutos vista) mientras el modelo le ensenaba horas de OTRO dia, y
+el nombre solo entraba con `crear_cita`: le repetia la lista y se quedaba sin cita.
+Cuando la hora la elige el codigo (`hora_del_codigo` en el estado) y el modelo
+consulta otro dia, el estado sigue a ese dia; "me llamo X" entra al momento
+(`reserva.nombre_que_dice`, "soy" no cuenta) y con dia y hora puestos fuerza el
+cierre; el primer hueco de hoy deja `reserva.MARGEN_PRIMER_HUECO_MIN`. Lo que dijo
+ELLA (`fecha_de_ella`, su hora) no se toca. El humo no lo veia: el guion lleva un
+"si, confirmo" de sobra.
+
 Un caso del banco puede exigir un EFECTO en la agenda (`agenda`: crea/no_crea/
 cancela/cambia), no solo palabras: "listo, te he apuntado" sin cita es el fallo que
 mas caro sale. `con_cita: True` le deja una cita cogida antes de empezar y `{codigo}`

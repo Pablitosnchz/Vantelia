@@ -3445,6 +3445,9 @@ async def responder(
         cliente_id=cliente_id,
     )
     conocido = quien.get("nombre", "")
+    # La hora de alli, para no elegirle un hueco de hoy que ya no da tiempo.
+    ahora_negocio = reserva.ahora_local(
+        str((cfg.get("booking") or {}).get("timezone") or settings.DEFAULT_TIMEZONE))
 
     mensajes: List[Dict[str, Any]] = [
         {"role": "system", "content": _instrucciones(cliente_id, cfg, hoy, quien)},
@@ -3505,20 +3508,34 @@ async def responder(
                         if error:
                             raise ValueError("Falta identificar la cita antes de ofrecer otro hueco")
                         contexto_cita["booking_row"] = cita
+                    # Si ella ha dicho el dia, "la primera" es la primera de ESE dia.
+                    desde = estado.fecha if estado.fecha_de_ella else ""
                     dia, libres = await agenda.primer_dia_con_hueco(
                         cliente_id, servicio=estado.servicio_exacto or estado.servicio,
+                        desde=desde, dias=1 if desde else 21,
                         location_id=location_id, **contexto_cita)
+                    # "La primera que tengas" no puede ser dentro de diez minutos.
+                    libres = reserva.huecos_con_margen(dia, libres, ahora_negocio)
+                    if dia and not libres and not desde and ahora_negocio is not None:
+                        # Hoy ya no queda nada que de tiempo: desde manana.
+                        from datetime import timedelta
+
+                        dia, libres = await agenda.primer_dia_con_hueco(
+                            cliente_id, servicio=estado.servicio_exacto or estado.servicio,
+                            desde=(ahora_negocio.date() + timedelta(days=1)).isoformat(),
+                            location_id=location_id, **contexto_cita)
                 except Exception as exc:  # noqa: BLE001
                     settings.logger.warning("[agente] sin primer hueco (%s): %s", cliente_id, exc)
                     dia, libres = "", []
-                if dia:
+                if dia and libres:
                     estado.fecha_de_los_huecos = dia
                     estado.huecos = libres[:8]
                     consultada = True
-                    if not estado.fecha:
+                    if not estado.fecha or not estado.fecha_de_ella:
                         estado.fecha = dia
                     if not estado.hora:
                         estado.hora = libres[0]
+                        estado.hora_del_codigo = True
 
             aviso = ("" if estado.recargo_dicho
                      else _aviso_de_recargo(cliente_id, dicho_de_ella, estado.servicio))
@@ -4228,7 +4245,8 @@ async def responder(
                         mirada_la_cita = True
                 # El estado se llena SOLO con lo que DEVUELVEN las tools: es la
                 # verdad del servidor, no lo que el modelo crea haber entendido.
-                reserva.anotar_resultado(estado, llamada.function.name, argumentos, resultado)
+                reserva.anotar_resultado(estado, llamada.function.name, argumentos, resultado,
+                                         ahora=ahora_negocio)
                 reserva.anotar_intencion_por_tool(estado, llamada.function.name)
                 mensajes.append({
                     "role": "tool", "tool_call_id": llamada.id,

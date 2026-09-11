@@ -39,10 +39,10 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Claude
-- **Tarea:** el intermitente de `corte-acaba-en-cita` (ver «Frágil»). Recién desplegado: lo que Meta entrega sin contenido legible ya no se le cuela al modelo.
+- **Testigo:** nadie
+- **Tarea:** ninguna abierta. «La primera que tengas» ya acaba en cita (ver «Lo último»).
 - **Rama:** main.
-- **Siguiente:** que Astra revise la integración (`5d05457`) y el arreglo del mensaje ilegible; los dos le esperan en el buzón.
+- **Siguiente:** que Astra revise la integración (`5d05457`), el mensaje ilegible (`33f274a`) y «la primera que tengas»; los tres le esperan en el buzón.
 - **Espera a:** nada. Astra, sin créditos hasta las 20:46.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
@@ -95,6 +95,14 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   al mensaje siguiente repetía "no puedo leer mensajes que no estén en formato de
   texto". Ahora se pide que lo repita con una frase fija (también el audio que no
   se oye) y abrir el chat por primera vez (`request_welcome`) cuenta como saludo.
+  Los avisos de sistema de Meta (cambio de número) no se contestan.
+- **«La primera que tengas» acaba en cita** (11-sep): el código elegía el primer
+  hueco (a última hora, hoy a diez minutos vista) mientras el modelo le enseñaba
+  horas de otro día, y el nombre no se anotaba hasta `crear_cita`: le repetía la
+  lista y se quedaba sin cita. Ahora la hora del código sigue al día que ella lee,
+  "me llamo X" se anota al momento (se cierra en ese turno), y el primer hueco de
+  hoy deja una hora de margen. En 6 conversaciones contra copia de producción:
+  las 6 reservan con el primer "sí".
 
 ## Bloqueado por fuera del código
 
@@ -153,14 +161,12 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
 
 ## Frágil, a vigilar
 
-- En el humo, `corte-acaba-en-cita` pasó al segundo intento en el despliegue de
-  `1268e4a` (1 de 5 despliegues el 11-sep; `reprogramar-mueve-la-cita`, el que
-  fallaba antes, ya salió a la primera). Traza del intento fallido: a «la primera
-  que tengas» enseña la lista de horas en vez de proponer la primera, añade la
-  pregunta del recargo del 25 % de Alicia, y con «sí, confirmo» no crea la cita
-  porque nadie ha fijado hora ni profesional. Es el camino de reservar, que el
-  arreglo de reprogramar no toca. Un camino que necesita dos intentos es uno que
-  falla a alguna clienta.
+- El humo da por bueno lo que llega a la agenda, no cómo llega: `corte-acaba-en-cita`
+  "pasaba" 6 de 6 con la clienta viendo la lista de horas dos veces, gracias al
+  "sí, confirmo" de sobra del guion. Arreglado el fallo (ver «Lo último»), el
+  instrumento sigue sin verlo: leer las conversaciones, no solo el veredicto.
+- En el catálogo de Alicia conviven "Corte señora" (20 min) y "Corte de señora"
+  (15 min), y el asistente coge uno u otro. Preguntarle cuál vale.
 - Cualquier sitio donde una lista de frases decide qué quiere decir la clienta.
 - La frontera con Meta: un payload mal formado corta la conversación sin error
   visible para nadie; solo sale en los logs del servidor.

@@ -56,6 +56,8 @@ class Estado:
     huecos: List[str] = field(default_factory=list)   # los que se le han ofrecido
     fecha_de_los_huecos: str = ""  # de que dia son esos huecos (no es "el dia elegido")
     dia_le_da_igual: bool = False
+    hora_del_codigo: bool = False  # la hora la eligio el codigo ("la primera que tengas"), no ella
+    fecha_de_ella: bool = False    # el dia lo ha dicho ella (o viene en la cita que va a confirmar)
     hecho: bool = False          # la gestion se completo en esta conversacion
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
     cancelada: bool = False      # su cita se anulo: ya no esta en pie
@@ -218,6 +220,7 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
         estado.servicio_texto = ""
         estado.duracion = 0
         estado.hora = ""
+        estado.hora_del_codigo = False
         estado.huecos = []
         estado.ultimo_falta = ""
         estado.veces_falta = 0
@@ -251,9 +254,12 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
         # lo primero que hace quien ve un resumen equivocado, y no hacerle caso la
         # dejaba repitiendo "es el miercoles 26, no el jueves" hasta cansarse.
         fecha = textnorm._extract_date_from_text(mensaje or "", timezone_name or "Europe/Madrid")
+        if fecha:
+            estado.fecha_de_ella = True
         if fecha and fecha != estado.fecha:
             estado.fecha = fecha
             estado.hora = ""      # el hueco de otro dia no vale
+            estado.hora_del_codigo = False
             estado.huecos = []
         if not estado.hora:
             hora = textnorm._extract_time_from_text(mensaje or "")
@@ -261,15 +267,33 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
                 hora = _hora_coloquial(mensaje or "", estado.huecos)
             if hora:
                 estado.hora = hora
+                estado.hora_del_codigo = False
         # "la primera que tengas", "me da igual la hora": ELIGE EL CODIGO. Estaba
         # escrito como instruccion -"coge el primero"- y el modelo respondia
         # volviendo a ofrecerle la lista de horas, otra vez, y otra. Es el fallo
         # mas repetido de todas las mediciones, y en el caso mas simple que hay
         # (venir a cortarse el pelo) se llevaba la cita por delante.
         if not estado.hora and estado.dia_le_da_igual and estado.huecos:
-            estado.hora = estado.huecos[0]
-            if not estado.fecha and estado.fecha_de_los_huecos:
-                estado.fecha = estado.fecha_de_los_huecos
+            # Lo que empieza dentro de nada no es "la primera que tengas".
+            validos = huecos_con_margen(estado.fecha_de_los_huecos, estado.huecos,
+                                        ahora_local(timezone_name))
+            if validos:
+                estado.hora = validos[0]
+                estado.hora_del_codigo = True
+                if not estado.fecha and estado.fecha_de_los_huecos:
+                    estado.fecha = estado.fecha_de_los_huecos
+            else:
+                # Los de ese dia ya no dan tiempo: sin huecos sobre la mesa, el
+                # agente busca el siguiente de verdad (con margen).
+                estado.huecos = []
+        # "me llamo Ana Ruiz": el nombre entra en cuanto lo dice. Antes solo llegaba
+        # con la llamada a `crear_cita`, asi que con dia y hora ya puestos seguia
+        # "faltando el nombre", el codigo no forzaba el cierre y el modelo volvia a
+        # ofrecerle horas (humo `corte-acaba-en-cita`, 11-sep-2026: sin cita).
+        if not estado.nombre:
+            nombre = nombre_que_dice(mensaje or "")
+            if nombre:
+                estado.nombre = nombre
         if not estado.codigo:
             codigo = _codigo_en(mensaje or "")
             if codigo:
@@ -281,6 +305,96 @@ def _codigo_en(texto: str) -> str:
 
     encontrado = re.search(r"R-?\s?(\d{3,})", texto or "", re.IGNORECASE)
     return ("R-" + encontrado.group(1)) if encontrado else ""
+
+
+# Donde acaba un nombre dicho de corrido: "me llamo Ana y quiero un corte".
+_CORTA_EL_NOMBRE = {"y", "e", "para", "que", "quiero", "pero", "porque", "por",
+                    "gracias", "vale", "si", "no"}
+_NO_EMPIEZA_UN_NOMBRE = {"el", "la", "los", "las", "un", "una"}
+
+
+def nombre_que_dice(texto: str) -> str:
+    """El nombre, si lo dice con todas las letras ("me llamo Ana Ruiz").
+
+    Solo la formula, nada de adivinar: "soy de Elche" o "soy alergica" no son
+    nombres, asi que "soy" no cuenta. Si no hay formula, el nombre sigue llegando
+    como antes, en la llamada a `crear_cita`.
+    """
+    import re
+
+    from backend import agent, textnorm
+
+    encontrado = re.search(
+        r"\b(?:me llamo|mi nombre es)\s+([^\W\d_][\w'-]*(?:\s+[^\W\d_][\w'-]*){0,5})",
+        str(texto or ""), re.IGNORECASE,
+    )
+    if not encontrado:
+        return ""
+    palabras = []
+    for palabra in encontrado.group(1).split():
+        if textnorm._strip_accents(palabra.lower()) in _CORTA_EL_NOMBRE:
+            break
+        palabras.append(palabra)
+    if not palabras or palabras[0].lower() in _NO_EMPIEZA_UN_NOMBRE:
+        return ""
+    nombre = " ".join(palabras[:4])
+    if not agent._nombre_de_verdad(nombre):
+        return ""
+    if nombre == nombre.lower():
+        nombre = nombre.title()
+    return nombre[:80]
+
+
+def _fecha_hablada(fecha_iso: str) -> str:
+    """"martes 15 de septiembre", no el ISO crudo."""
+    from backend import textnorm
+
+    try:
+        return textnorm._format_date_es(textnorm._parse_date(fecha_iso).date())
+    except Exception:  # noqa: BLE001
+        return fecha_iso
+
+
+# "La primera que tengas" no puede ser dentro de diez minutos: entre el nombre y la
+# confirmacion pasan varios, y el hueco se pasa o no da tiempo a llegar.
+MARGEN_PRIMER_HUECO_MIN = 60
+
+
+def ahora_local(timezone_name: str = ""):
+    """La hora de ahora en la zona del negocio. None si no se sabe la zona.
+
+    Sin zona no se recorta nada: mejor no poner margen que ponerlo mal.
+    """
+    if not timezone_name:
+        return None
+    from backend import timeutils
+
+    try:
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:  # Python 3.8
+            from backports.zoneinfo import ZoneInfo
+        return timeutils._utc_now().astimezone(ZoneInfo(timezone_name))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def huecos_con_margen(dia: str, huecos: List[str], ahora,
+                      minutos: int = MARGEN_PRIMER_HUECO_MIN) -> List[str]:
+    """Los huecos de HOY que aun dan tiempo; los de otro dia, tal cual.
+
+    Medido el 11-sep-2026 (humo `corte-acaba-en-cita`): a las 17:35, a "la primera
+    que tengas" se le elegia hoy a las 17:45, y a las 17:55 hoy a las 18:00.
+    """
+    from datetime import timedelta
+
+    if not dia or ahora is None or dia != ahora.date().isoformat():
+        return list(huecos)
+    limite = ahora + timedelta(minutes=minutos)
+    if limite.date() != ahora.date():
+        return []
+    corte = limite.strftime("%H:%M")
+    return [h for h in huecos if str(h)[:5] >= corte]
 
 
 # ─── Lo que dicen las tools (la verdad del servidor) ───────────────────────
@@ -304,8 +418,12 @@ def _es_otro_servicio(guardado: str, pedido: str) -> bool:
 
 
 def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
-                     resultado: Dict[str, Any]) -> None:
-    """Actualiza el estado con lo que ha DEVUELTO una herramienta."""
+                     resultado: Dict[str, Any], ahora: Any = None) -> None:
+    """Actualiza el estado con lo que ha DEVUELTO una herramienta.
+
+    `ahora` es la hora del negocio (`ahora_local`): con ella no se elige por la
+    clienta un hueco de hoy que ya no da tiempo.
+    """
     if not isinstance(resultado, dict):
         return
     if resultado.get("pendiente_de_confirmacion"):
@@ -342,6 +460,11 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             valor = str(argumentos.get(clave) or "").strip()
             if valor:
                 setattr(estado, clave, valor)
+        # Lo que trae la cita que va a confirmar es suyo, no una eleccion del codigo.
+        if str(argumentos.get("fecha") or "").strip():
+            estado.fecha_de_ella = True
+        if str(argumentos.get("hora") or "").strip():
+            estado.hora_del_codigo = False
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if valor and not getattr(estado, clave, ""):
@@ -392,6 +515,19 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         if huecos:
             estado.huecos = huecos[:8]
             estado.fecha_de_los_huecos = fecha
+            # "La primera que tengas" con la hora puesta por el CODIGO: si el modelo
+            # acaba de mirar otro dia, lo que ella va a leer son las horas de ESE
+            # dia, y el estado tiene que decir lo mismo. Medido el 11-sep-2026: el
+            # codigo habia elegido hoy a las 17:45, el modelo le ofrecio el martes
+            # 15, y la conversacion acabo sin cita porque cada uno hablaba de un
+            # dia distinto. Lo que haya dicho ella -un dia, una hora- no se toca.
+            validos = huecos_con_margen(fecha, huecos, ahora)
+            if (validos and fecha and estado.dia_le_da_igual and estado.intencion == "reservar"
+                    and not estado.hecho and not estado.fecha_de_ella
+                    and (not estado.hora or estado.hora_del_codigo)):
+                estado.fecha = fecha
+                estado.hora = validos[0]
+                estado.hora_del_codigo = True
 
     elif tool == "consultar_cita":
         estado.codigo = str(resultado.get("codigo_reserva") or estado.codigo)
@@ -492,6 +628,8 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.huecos = []
     estado.fecha_de_los_huecos = ""
     estado.dia_le_da_igual = False
+    estado.hora_del_codigo = False
+    estado.fecha_de_ella = False
     estado.hecho = False
     estado.cancelada = False
     estado.ya_creada = False
@@ -816,4 +954,12 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "") -> str:
     if falta == "dia" and estado.dia_le_da_igual:
         return ("Le da igual el dia: mira los huecos del primer dia que abris y "
                 "ofrecele dos o tres horas. NO le preguntes que dia quiere.")
+    # El hueco ya lo ha elegido el codigo y solo falta su nombre. Sin decirselo, el
+    # modelo miraba otro dia y le volvia a ensenar la lista de horas.
+    if (falta == "nombre" and estado.dia_le_da_igual and estado.hora_del_codigo
+            and estado.fecha and estado.hora):
+        return ("Le da igual el dia y ya tienes el primer hueco que hay: el %s a las "
+                "%s. Proponselo tal cual y pidele su nombre para apuntarla. NO mires "
+                "otros dias ni le ofrezcas una lista de horas."
+                % (_fecha_hablada(estado.fecha), estado.hora))
     return ""
