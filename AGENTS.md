@@ -14,41 +14,48 @@ una clienta de verdad.
 
 ## Lee esto antes de tocar nada, en este orden
 
-1. `CLAUDE.md` — reglas de oro, arquitectura, qué hace cada módulo y por qué.
-2. `docs/MAPA_DEL_CODIGO.md` — "quiero cambiar X, ¿qué fichero abro?", por flujo.
-3. `docs/CAZA_DE_FALLOS.md` — las clases de fallo que YA han costado un incidente.
-   Si vas a revisar código, este es tu documento principal.
-4. `docs/COMO_PIENSA_EL_ASISTENTE.md` — antes de tocar cómo responde el asistente.
-5. `docs/COMO_SE_MIDE.md` — los instrumentos de medida y sus trampas.
-6. `tests/README.md` — qué cubre cada test, y cuáles vigilan REGLAS.
-7. `docs/ARQUITECTURA.md` — mapa de módulos de `backend/`.
+1. `docs/ESTADO_ACTUAL.md` — **dónde estamos**: qué hay en producción, qué está
+   bloqueado, qué decisiones están pendientes y qué es frágil. Empieza aquí.
+2. `CLAUDE.md` — reglas de oro, arquitectura, qué hace cada módulo y por qué.
+3. `docs/MAPA_DEL_CODIGO.md` — "quiero cambiar X, ¿qué fichero abro?", por flujo.
+4. `docs/CAZA_DE_FALLOS.md` — las clases de fallo que YA han costado un incidente.
+5. `docs/COMO_PIENSA_EL_ASISTENTE.md` — antes de tocar cómo responde el asistente.
+6. `docs/COMO_SE_MIDE.md` — los instrumentos de medida y sus trampas.
+7. `tests/README.md` — qué cubre cada test, y cuáles vigilan REGLAS.
+8. `docs/ARQUITECTURA.md` — mapa de módulos de `backend/`.
 
-## Tu papel aquí: revisor, no autor
+## Reparto del trabajo (desde el 11-sep-2026)
 
-El reparto es deliberado:
+- **Tú (Codex / GPT-6 Astra) implementas.**
+- **Claude Code revisa, aporta contexto y mide**: lee tu diff, lo contrasta con
+  las trampas conocidas y pasa los instrumentos (tests, humo, banco) antes de que
+  se fusione. Si no sabes por qué algo está como está, pregunta: casi siempre hay
+  un incidente detrás, y suele estar escrito en `docs/CAZA_DE_FALLOS.md`.
+- **Pablo decide.**
 
-- **Claude Code implementa, prueba y despliega.** Tiene el contexto del proyecto
-  y la memoria de los incidentes.
-- **Tú revisas y das una segunda opinión** sobre cambios concretos (un diff sin
-  commitear, una rama, un commit), antes de que se fusionen.
+Reglas de trabajo, que existen porque dos agentes sobre el mismo repo se pisan:
 
-Por tanto:
-
-- **No despliegues.** Nunca. Ni `deploy/deploy.ps1`, ni `docker compose`, ni nada
-  contra el VPS. Dos despliegues cruzados se pisan.
-- **No hagas `git push`, ni reescribas historia, ni cambies de rama** sin que te lo
-  pidan.
+- **Trabaja en una rama `astra/<tarea>`, nunca directamente en `main`.** Mejor aún
+  en un worktree propio: `git worktree add ../Vantelia-astra -b astra/<tarea>`.
+  Ninguna integración entre agentes resuelve conflictos: el último que escribe
+  gana y el otro pierde su trabajo sin enterarse.
+- **Un cambio, un commit**, con el POR QUÉ en el mensaje (mira `git log`: así
+  están escritos todos). El que revisa lee eso antes que el código.
+- **Antes de pedir revisión, `python -m pytest` en verde.** Si un test que vigila
+  una REGLA se pone rojo, léelo antes de "arreglarlo": suele tener razón él.
+- **Un test que no falla sin tu arreglo no prueba nada.** Compruébalo rompiendo el
+  arreglo a propósito. Y prueba COMPORTAMIENTO, no el orden de las líneas.
+- **No despliegues.** El despliegue lo lanza Claude Code después de revisar, y
+  tiene su propia puerta (humo + vuelta atrás automática). Dos despliegues
+  cruzados contra el mismo VPS se pisan.
+- **No hagas `git push` ni reescribas historia** sin que Pablo lo pida.
 - **No toques producción ni secretos**: `.env`, claves SSH, tokens, `storage/`.
-- **No edites ficheros en los que otro agente esté trabajando.** Ninguna de las
-  integraciones entre agentes resuelve conflictos: el último que escribe gana y
-  el otro pierde su trabajo sin enterarse. Si te piden cambios, que sea en tu propia
-  rama o `git worktree`.
+- **Al cerrar una tarea, actualiza `docs/ESTADO_ACTUAL.md`**: es la memoria
+  compartida entre los dos agentes. Lo que no esté ahí, el otro no lo sabe.
 
-## Qué buscar al revisar
+## Lo que más se rompe aquí (tenlo presente al programar)
 
-Estilo y nombres no importan. Importa lo que rompe algo que ve una clienta. Las
-clases que más se repiten en este repo (detalle y ejemplos reales en
-`docs/CAZA_DE_FALLOS.md`):
+Detalle y ejemplos reales en `docs/CAZA_DE_FALLOS.md`:
 
 - **Una lista de frases decidiendo una intención.** El modelo reescribe cada frase
   a su manera y la lista siempre pierde por una letra ("te reservo" estaba, "te
@@ -66,8 +73,6 @@ clases que más se repiten en este repo (detalle y ejemplos reales en
   no pasa por el núcleo es una bomba en los demás.
 - **Guardar en el historial lo que no se llegó a enviar.** El panel enseña a la
   dueña mensajes que la clienta nunca recibió.
-- **Un test que no falla sin el arreglo**, o que comprueba una línea literal del
-  código en vez del comportamiento.
 - **Reemplazos masivos**: un `"nombre"` en un test puede ser un servicio, no una
   persona.
 
@@ -82,6 +87,8 @@ clases que más se repiten en este repo (detalle y ejemplos reales en
 - Los tests nunca mandan emails reales: `tests/conftest.py` vacía las credenciales.
 - El entorno local es Python 3.8 (sin `removeprefix`, sin `dict | dict`); el
   despliegue corre en 3.11.
+- Dos funciones con el MISMO nombre en módulos distintos de `backend/` rompen el
+  shim de `api.py` (lo vigila `tests/test_shim_compat.py`).
 
 ## Cómo comprobar algo
 
@@ -94,16 +101,10 @@ python scripts/evaluar_asistente.py --db-copia <ruta_temporal>   # banco, con mo
 El banco y el humo hablan con el modelo de verdad y cuestan dinero; el banco
 EXIGE `--db-copia` para no escribir en la agenda de un negocio real.
 
-## Cómo entregar una revisión
+## Si te piden revisar (en vez de implementar)
 
-Para cada hallazgo:
-
-1. **Gravedad**: crítico (una clienta se queda sin cita, se inventa un precio, se
-   niega un servicio que existe, se escribe a quien no toca) / importante / menor.
-2. **Dónde**: `fichero:línea`.
-3. **El caso concreto**: qué escribe la clienta o qué pulsa, y qué pasa. Sin caso
-   concreto no es un hallazgo, es una sospecha.
-4. **Si algún test lo cazaría hoy.** Si no, cuál lo cazaría.
-
-Si no encuentras nada, dilo. Una revisión vacía y honesta vale más que una lista
-de sugerencias de estilo.
+Para cada hallazgo: **gravedad** (crítico = una clienta se queda sin cita, se
+inventa un precio, se niega un servicio que existe, se escribe a quien no toca /
+importante / menor), **dónde** (`fichero:línea`), **el caso concreto** que lo rompe
+y **si algún test lo cazaría hoy**. Sin caso concreto no es un hallazgo, es una
+sospecha. Si no encuentras nada, dilo.
