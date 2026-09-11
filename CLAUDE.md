@@ -780,6 +780,24 @@ tablas SQLite `growth_daily`, `growth_opportunities`, `growth_opportunity_audit`
 No asumir actividad no registrada. La operacion diaria se hace desde la seccion
 **Plan de escala** del panel admin; `scripts/scale_tracker.py` queda como respaldo.
 
+## Revision cruzada con GPT-6 Astra (sep 2026)
+
+Antes de cerrar un cambio con riesgo, segunda opinion de otro modelo:
+
+```powershell
+codex review --commit <SHA>        # un commit
+codex review --uncommitted         # lo que hay sin commitear
+codex review --base main           # una rama entera
+```
+
+Codex (GPT-6 Astra, con el login de ChatGPT de Pablo: no gasta la clave del
+producto) toma sus instrucciones de `AGENTS.md`: es revisor, no autor, y no
+despliega ni toca secretos. `--commit` no admite prompt propio, por eso las reglas
+viven en ese fichero. Tarda unos minutos: lanzarlo en segundo plano. Primer uso
+(11-sep-2026): cazo un test que comprobaba el ORDEN de las lineas en vez del
+comportamiento. Lo que diga se contrasta como cualquier hallazgo: con un test que
+falle sin el arreglo.
+
 ## Checklist antes de cerrar una tarea
 
 - El cambio esta en los archivos correctos y no toca secretos.

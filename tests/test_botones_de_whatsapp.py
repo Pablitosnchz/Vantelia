@@ -106,12 +106,45 @@ def test_el_aviso_de_cita_duplicada_manda_tuplas(api_module):  # noqa: F811
     assert '{"id": "dup_crear"' not in fuente
 
 
-def test_el_resumen_no_se_guarda_si_no_se_envia(api_module):  # noqa: F811
-    """El panel no puede ensenyar un mensaje que la clienta nunca recibio."""
-    import inspect
+def test_el_resumen_no_se_guarda_si_no_se_envia(api_module, monkeypatch):  # noqa: F811
+    """El panel no puede ensenyar un mensaje que la clienta nunca recibio.
 
-    from backend import whatsapp
+    Se prueba EJECUTANDO la funcion, no mirando el orden de las lineas. La
+    version anterior de este test comprobaba que el `if not enviado:` iba antes
+    de `_wa_registrar`, y habria seguido pasando aunque alguien quitara el
+    `return`. Lo cazo la revision cruzada con GPT-6 Astra (11-sep-2026), y es
+    justo la regla que el propio AGENTS.md pide vigilar.
+    """
+    from backend import appstate, messaging, whatsapp
 
-    fuente = inspect.getsource(whatsapp._wa_send_booking_summary)
-    assert "if not enviado:" in fuente
-    assert fuente.index("if not enviado:") < fuente.index("_wa_registrar")
+    registrados = []
+    monkeypatch.setattr(whatsapp, "_wa_registrar",
+                        lambda **kw: registrados.append(kw) or "sesion")
+
+    async def sin_freno(**kwargs):
+        return False
+
+    monkeypatch.setattr(whatsapp, "_wa_freno_del_precio", sin_freno)
+
+    async def rechazado(**kwargs):
+        return False
+
+    async def aceptado(**kwargs):
+        return True
+
+    def _flow():
+        flow = appstate.WAFlowState(cliente_id=CID, from_number="34600123456")
+        flow.nombre, flow.servicio = "Pablo Sanchez Ruiz", "Corte"
+        flow.fecha, flow.hora = "2026-09-01", "12:30"
+        return flow
+
+    monkeypatch.setattr(messaging, "_send_whatsapp_buttons", rechazado)
+    asyncio.run(whatsapp._wa_send_booking_summary(
+        cliente_id=CID, phone_number_id="PN", to_number="34600123456", flow=_flow()))
+    assert registrados == [], "se guardo en el historial un resumen que Meta rechazo"
+
+    monkeypatch.setattr(messaging, "_send_whatsapp_buttons", aceptado)
+    asyncio.run(whatsapp._wa_send_booking_summary(
+        cliente_id=CID, phone_number_id="PN", to_number="34600123456", flow=_flow()))
+    assert len(registrados) == 1, "el resumen enviado no quedo en el historial"
+    assert registrados[0].get("intent") == "resumen_para_confirmar"
