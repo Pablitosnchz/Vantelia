@@ -3911,6 +3911,17 @@ async def _handle_whatsapp_webhook(
                         continue
                     else:
                         incoming_text = ""
+                elif message_type == "button":
+                    # Boton de una PLANTILLA (quick reply). Meta NO lo manda como
+                    # `interactive`, sino como tipo propio con `button.payload`, y
+                    # hasta ahora caia en lo ilegible: la clienta pulsaba "Confirmo"
+                    # en el recordatorio y se le contestaba "no me ha llegado bien
+                    # tu mensaje". El payload es el MISMO id que en los botones
+                    # interactivos (`bkok_<id>` / `bkcancel_<id>`), asi que a partir
+                    # de aqui sigue el camino de siempre.
+                    boton = message_payload.get("button", {}) or {}
+                    interactive_id = str(boton.get("payload", "")).strip()
+                    incoming_text = str(boton.get("text", "")).strip()
                 elif message_type == "reaction":
                     # Un corazon a un mensaje no es una consulta. Contestarle
                     # "escribe tu consulta" es ruido, y encima rompe el hilo de lo
