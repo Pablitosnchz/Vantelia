@@ -509,7 +509,7 @@ async def _ejecutar(
                               "los inventes ni cojas la cita sin ellos."),
                 "conserva_los_datos": True,
             }
-        if quien_nombre and not textnorm.tiene_algun_apellido(quien_nombre):
+        if quien_nombre and not conocida and not textnorm.tiene_algun_apellido(quien_nombre):
             return {
                 "ok": False,
                 "error": "Falta el apellido: en la agenda del salon hace falta el nombre completo.",

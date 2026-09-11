@@ -2843,6 +2843,16 @@ def _load_booking_by_token_or_404(manage_token: str) -> sqlite3.Row:
     return row
 
 
+def _service_for_existing_booking(booking_row: sqlite3.Row, servicio: str = "") -> str:
+    """El nombre público de su pack sigue siendo el servicio de ESA cita."""
+    original = booking_row["servicio"] or ""
+    pedido = textnorm._sanitize_text(servicio or "")
+    publico = textnorm.nombre_de_servicio_publico(original)
+    if not pedido or textnorm._strip_accents(pedido.lower()) == textnorm._strip_accents(publico.lower()):
+        return original
+    return pedido  # Cambiar explícitamente a otro servicio sigue siendo posible.
+
+
 def _booking_update_payload_from_reschedule(
     row: sqlite3.Row, data: BookingReschedulePayload, *, servicio: str = "",
 ) -> BookingUpdatePayload:
@@ -2851,7 +2861,7 @@ def _booking_update_payload_from_reschedule(
         nombre=row["nombre"],
         email=row["email"],
         telefono=row["telefono"] or "",
-        servicio=servicio or (row["servicio"] or ""),
+        servicio=_service_for_existing_booking(row, servicio),
         employee_id=data.employee_id or (row["employee_id"] or ""),
         fecha=data.fecha,
         hora=data.hora,
@@ -2897,7 +2907,7 @@ async def _reschedule_slot_sets_for_day(
         return set(), set()
     employee = agenda._resolve_employee_for_booking(
         cliente_id, booking_row["employee_id"] or "", require_active=False)
-    servicio = textnorm._sanitize_text(servicio or booking_row["servicio"] or "")
+    servicio = _service_for_existing_booking(booking_row, servicio)
     if not agenda._service_name_allowed_for_employee(cliente_id, employee, servicio):
         return set(), set()
     duracion = agenda._service_duration_minutes(cliente_id, servicio, employee)
