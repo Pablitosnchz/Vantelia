@@ -2446,6 +2446,20 @@ async def _handle_whatsapp_message(
         )
         return
 
+    # Una persona del equipo acaba de atender esta conversacion (desde su app o
+    # desde el panel) y el asistente ha vuelto: un "hola" no es empezar de cero.
+    # Le soltaba la bienvenida con el menu a quien Alicia acababa de atender
+    # (peticion de Pablo, 11-sep-2026). Lo coge el agente, que tiene la
+    # conversacion entera, tambien lo que le escribio ella.
+    if (not iid and _wa_modo_conversacional(config)
+            and chat._message_is_pure_greeting(incoming_text)
+            and _wa_la_ha_atendido_una_persona(cliente_id, session_id)):
+        if await _wa_turno_del_agente(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            incoming_text=incoming_text, flow=flow, config=config, request=request,
+        ):
+            return
+
     # Un saludo o un "menu" SIEMPRE sacan del flujo, aunque haya un paso a medias.
     # Antes se protegia el flujo de todo y el cliente se quedaba encerrado: en el
     # paso de profesional, hasta "hola" respondia "No he reconocido el profesional".
@@ -3630,6 +3644,48 @@ async def _handle_whatsapp_message(
     )
 
 
+# Cuanto se calla el asistente cuando contesta alguien del equipo desde su app
+# (decision de Pablo, 11-sep-2026: una hora; antes eran dos).
+SILENCIO_TRAS_RESPONDER_MIN = 60
+
+
+def _wa_minutos_de_silencio(cliente_id: str) -> int:
+    """Minutos que se calla el asistente tras una respuesta del equipo desde la app.
+
+    Cada respuesta renueva el plazo, asi que vuelve a esa distancia del ULTIMO
+    mensaje. Configurable por negocio (`whatsapp.silencio_tras_responder_min`).
+    """
+    try:
+        config = clients._get_client_config(cliente_id)
+        valor = int((config.get("whatsapp") or {}).get("silencio_tras_responder_min") or 0)
+    except Exception:  # noqa: BLE001
+        valor = 0
+    return valor if valor > 0 else SILENCIO_TRAS_RESPONDER_MIN
+
+
+def _wa_la_ha_atendido_una_persona(cliente_id: str, session_id: str) -> bool:
+    """¿Ha contestado alguien del equipo en ESTA conversacion hace poco?
+
+    "Hace poco" es lo mismo que el agente sigue contando como la misma
+    conversacion cuando ha intervenido una persona (`agent.SILENCIO_CON_PERSONA`).
+    """
+    from backend import agent
+
+    try:
+        with db._get_db_connection() as connection:
+            fila = connection.execute(
+                "SELECT created_at FROM chat_messages WHERE session_id = ? AND cliente_id = ?"
+                " AND role = 'assistant' AND intent LIKE 'human%' ORDER BY id DESC LIMIT 1",
+                (session_id, cliente_id),
+            ).fetchone()
+    except Exception:  # noqa: BLE001 - una consulta fallida no puede tumbar el mensaje
+        return False
+    momento = timeutils._from_utc_iso(str(fila["created_at"] or "")) if fila else None
+    if momento is None:
+        return False
+    return (timeutils._utc_now() - momento).total_seconds() <= agent.SILENCIO_CON_PERSONA
+
+
 def _handle_whatsapp_echoes(
     phone_number_id: str,
     echoes: List[Dict[str, Any]],
@@ -3661,9 +3717,13 @@ def _handle_whatsapp_echoes(
             session_id=session_id, cliente_id=cliente_id,
             role="assistant", content=texto, intent="human_reply_app",
         )
+        # Vuelve solo a la hora de su ULTIMO mensaje (cada respuesta renueva el
+        # plazo). Con las 2 h de antes, a quien el equipo dejaba atendida no le
+        # contestaba nadie media tarde (decision de Pablo, 11-sep-2026).
         inbox.claim(
             session_id, cliente_id,
             agent_user_id="", agent_name="Equipo (WhatsApp)",
+            minutes=_wa_minutos_de_silencio(cliente_id),
         )
 
 

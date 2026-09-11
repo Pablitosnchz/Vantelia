@@ -51,6 +51,12 @@ MAX_HISTORIAL = 12
 # que ya usa el resto del producto para dar una sesion por cerrada.
 SILENCIO_QUE_CIERRA = settings.SESSION_TTL_SECONDS
 
+# Si ha intervenido una persona del equipo, media hora de silencio NO cierra la
+# conversacion: el asistente vuelve a la hora de la ultima respuesta de Alicia, y
+# lo hablado con ella tiene que seguir contando (Pablo, 11-sep-2026). Sin esto,
+# al volver ya no sabia de que iba el chat. Doce horas cubren una tarde entera.
+SILENCIO_CON_PERSONA = 12 * 3600
+
 
 def disponible(cliente_id: str) -> bool:
     """¿Se puede conversar con el modelo para este negocio?"""
@@ -3193,7 +3199,7 @@ def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
     try:
         with db._get_db_connection() as conexion:
             filas = conexion.execute(
-                "SELECT role, content, created_at FROM chat_messages"
+                "SELECT role, content, created_at, intent FROM chat_messages"
                 " WHERE session_id = ? AND cliente_id = ?"
                 " ORDER BY id DESC LIMIT ?",
                 (session_id, cliente_id, MAX_HISTORIAL),
@@ -3207,7 +3213,12 @@ def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
     for fila in filas:  # de mas reciente a mas antiguo
         momento = timeutils._from_utc_iso(str(fila["created_at"] or ""))
         if siguiente is not None and momento is not None:
-            if (siguiente - momento).total_seconds() > SILENCIO_QUE_CIERRA:
+            # Lo que quedo antes del silencio lo llevaba una persona del equipo
+            # (su respuesta, o lo que escribio la clienta mientras la atendia):
+            # la conversacion sigue abierta mucho mas tiempo.
+            con_persona = str(fila["intent"] or "").startswith("human")
+            limite = SILENCIO_CON_PERSONA if con_persona else SILENCIO_QUE_CIERRA
+            if (siguiente - momento).total_seconds() > limite:
                 break  # a partir de aqui ya es otra conversacion
         if momento is not None:
             siguiente = momento

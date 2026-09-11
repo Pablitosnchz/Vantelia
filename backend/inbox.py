@@ -152,7 +152,11 @@ def bot_is_muted(session_id: str) -> bool:
 def claim(session_id: str, cliente_id: str, *, agent_user_id: str, agent_name: str = "",
           minutes: int = DEFAULT_TAKEOVER_MINUTES) -> Dict[str, Any]:
     """El equipo toma la conversacion. Renovable: cada respuesta la prolonga."""
-    expires_at = timeutils._expires_at_in_hours(max(1, int(minutes or DEFAULT_TAKEOVER_MINUTES)) // 60 or 1)
+    from datetime import timedelta
+
+    # En minutos: la cuenta en horas redondeaba cualquier plazo corto a una hora.
+    plazo = max(1, int(minutes or DEFAULT_TAKEOVER_MINUTES))
+    expires_at = timeutils._to_utc_iso(timeutils._utc_now() + timedelta(minutes=plazo))
     now_iso = timeutils._utc_now_iso()
     with db._get_db_connection() as connection:
         connection.execute(
