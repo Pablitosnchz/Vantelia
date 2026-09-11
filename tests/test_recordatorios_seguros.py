@@ -125,3 +125,25 @@ def test_el_worker_de_recordatorios_refresca_las_plantillas(api_module, monkeypa
     asyncio.run(booking._run_booking_reminders())
 
     assert llamadas, "el worker tiene que dar de alta y consultar las plantillas"
+
+
+def test_un_fallo_de_meta_no_borra_el_motivo_del_rechazo(api_module, monkeypatch):  # noqa: F811
+    """Con la plantilla RECHAZADA, un fallo de red despues dejaba al negocio
+    viendo "rechazada" sin el motivo, que es justo lo que necesita para
+    arreglarla. Lo cazo otra sesion revisando este mismo trabajo."""
+    from backend import wa_plantillas
+
+    wa_plantillas.guardar_estado("demo", status="REJECTED", category="UTILITY",
+                                 meta_id="123", motivo_rechazo="INVALID_FORMAT")
+    monkeypatch.setattr(wa_plantillas, "_waba_y_token", lambda cliente_id: ("waba_x", "token_x"))
+
+    async def revienta(*args, **kwargs):
+        raise RuntimeError("Meta no contesta")
+
+    monkeypatch.setattr(wa_plantillas, "_buscar", revienta)
+    guardado = asyncio.run(wa_plantillas.asegurar("demo"))
+
+    assert guardado["status"] == "REJECTED"
+    assert guardado["motivo_rechazo"] == "INVALID_FORMAT"
+    assert guardado["meta_id"] == "123"
+    assert "Meta no contesta" in guardado["last_error"]

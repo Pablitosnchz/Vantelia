@@ -203,6 +203,23 @@ async def asegurar(
     Meta conteste mal): el problema queda en `last_error` y la plantilla sigue sin
     aprobar, que es lo que lee el envio.
     """
+    def _con_el_fallo(exc: Exception) -> Dict[str, Any]:
+        """Apunta el fallo SIN perder lo que ya se sabia de la plantilla.
+
+        Guardar solo el error dejaba una plantilla RECHAZADA sin su motivo en
+        cuanto fallaba la red una vez, y el motivo es justo lo que el negocio
+        necesita leer para arreglarla.
+        """
+        anterior = estado(cliente_id, name=name, language=language)
+        return guardar_estado(
+            cliente_id, name=name, language=language,
+            status=anterior.get("status", ""),
+            category=anterior.get("category", ""),
+            meta_id=anterior.get("meta_id", ""),
+            motivo_rechazo=anterior.get("motivo_rechazo", ""),
+            last_error=str(exc),
+        )
+
     waba_id, token = _waba_y_token(cliente_id)
     if not (waba_id and token):
         return guardar_estado(
@@ -214,9 +231,7 @@ async def asegurar(
         existentes = await _buscar(waba_id, token, name)
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[wa_plantillas] no se pudo consultar %s de %s: %s", name, cliente_id, exc)
-        return guardar_estado(cliente_id, name=name, language=language,
-                              status=estado(cliente_id, name=name, language=language).get("status", ""),
-                              last_error=str(exc))
+        return _con_el_fallo(exc)
 
     for plantilla in existentes:
         if str(plantilla.get("language") or "") != language:
@@ -241,7 +256,7 @@ async def asegurar(
         )
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[wa_plantillas] no se pudo crear %s en %s: %s", name, cliente_id, exc)
-        return guardar_estado(cliente_id, name=name, language=language, status="", last_error=str(exc))
+        return _con_el_fallo(exc)
 
     return guardar_estado(
         cliente_id, name=name, language=language,
