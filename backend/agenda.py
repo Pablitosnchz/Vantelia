@@ -3457,7 +3457,7 @@ async def _public_slot_sets_for_day(
 
 async def primer_dia_con_hueco(
     cliente_id: str, *, servicio: str = "", desde: str = "", dias: int = 21,
-    location_id: str = "",
+    location_id: str = "", booking_row: Optional[sqlite3.Row] = None,
 ):
     """El primer dia con hueco de verdad, mirando dia a dia. (fecha, huecos).
 
@@ -3477,8 +3477,14 @@ async def primer_dia_con_hueco(
     for salto in range(max(1, int(dias))):
         dia = (arranque + timedelta(days=salto)).isoformat()
         try:
-            _todos, libres = await _public_slot_sets_for_day(
-                cliente_id, dia, servicio=servicio, location_id=location_id)
+            if booking_row is not None:
+                from backend import booking
+
+                _todos, libres = await booking._reschedule_slot_sets_for_day(
+                    booking_row, dia, servicio=servicio)
+            else:
+                _todos, libres = await _public_slot_sets_for_day(
+                    cliente_id, dia, servicio=servicio, location_id=location_id)
         except Exception:  # noqa: BLE001 - un dia fuera de ventana no corta la busqueda
             continue
         if libres:

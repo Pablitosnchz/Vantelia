@@ -39,10 +39,17 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** nadie
-- **Tarea:** ninguna abierta (la página de sincronía quedó desplegada y comprobada)
-- **Siguiente:** propuesta para Astra: el humo `reprogramar-mueve-la-cita` que a veces solo pasa al segundo intento, en `astra/reprogramar`
-- **Espera a:** Pablo (que lo encargue)
+- **Testigo:** Astra
+- **Tarea:** reproducir y corregir la reprogramación que a veces necesita dos intentos.
+- **Rama:** `astra/reprogramar`, worktree `E:/Vantelia-astra-reprogramar`.
+- **Siguiente:** completar pytest y pedir revisión. Reproducido un desacuerdo: se ofrecen horas de B y al mover se conserva A, ocupada. Corregida la consulta específica de cita, incluida la búsqueda automática del primer hueco.
+- **Espera a:** pytest completo en curso; Claude tiene un encargo de cinco mediciones del humo con copia aislada vigente (recupera créditos a las 16:20). No se ha atribuido todavía el humo intermitente a esta causa sin su traza.
+
+Validación local de Astra: las tres regresiones iniciales fallaron sin el arreglo;
+el control de reserva nueva pasó. Con el arreglo pasan los ocho casos específicos
+(incluyen profesional, duración, exclusión propia, primer hueco automático y código
+ajeno/inexistente), y una selección de 99 pruebas de voz, agente y compatibilidad.
+Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
 
 ## Lo último en producción
 
