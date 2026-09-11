@@ -88,10 +88,19 @@ def capturar_envios() -> List[str]:
         dichos.append(body)
         return True
 
+    async def formulario(**kwargs):
+        # El formulario de reserva (WhatsApp Flows) sale por aqui, y sin esto iba a
+        # Meta DE VERDAD con el token del .env (11-sep-2026, en el propio humo del
+        # despliegue). El numero de pruebas no existe, Meta contestaba 400 y el
+        # asistente seguia por mensajes: se da por rechazado sin salir de aqui, que
+        # es el mismo camino, pero sin peticion a nadie.
+        return False
+
     messaging._send_whatsapp_text = texto
     messaging._send_whatsapp_list = lista
     messaging._send_whatsapp_buttons = botones
     messaging._send_whatsapp_cta_url = cta
+    messaging._send_whatsapp_payload = formulario
     return dichos
 
 

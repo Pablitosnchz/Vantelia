@@ -4,8 +4,8 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 11-sep-2026, Claude Code (datos del piloto comprobados en
-producción).
+Última actualización: 11-sep-2026 tarde, Claude Code (Coexistence desbloqueado;
+el +31 contesta con el asistente de Alicia).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
 fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
@@ -39,11 +39,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** nadie
-- **Tarea:** ninguna abierta. El arreglo de reprogramar está en producción (`1268e4a`); en el humo del despliegue, reprogramar pasó a la primera.
+- **Testigo:** Claude
+- **Tarea:** el intermitente de `corte-acaba-en-cita` (ver «Frágil»). Recién desplegado: lo que Meta entrega sin contenido legible ya no se le cuela al modelo.
 - **Rama:** main.
-- **Siguiente:** que Astra revise la integración (`5d05457`, le espera en el buzón); propuesta para Claude: el intermitente nuevo de `corte-acaba-en-cita` (ver «Frágil»).
-- **Espera a:** Astra, sin créditos hasta las 20:46.
+- **Siguiente:** que Astra revise la integración (`5d05457`) y el arreglo del mensaje ilegible; los dos le esperan en el buzón.
+- **Espera a:** nada. Astra, sin créditos hasta las 20:46.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
@@ -89,20 +89,27 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   mover una cita solo se ofrecen horas de SU profesional y que el núcleo acepta
   (antes se ofrecían huecos de otra y el cambio se rechazaba). Lo encontró y
   arregló Astra; lo integró y desplegó Claude.
+- **Mensaje ilegible por WhatsApp** (11-sep): el primer "hola" al +31 recién
+  conectado llegó de Meta sin texto, y al modelo se le pasaba una instrucción por
+  el hueco del texto de la clienta; quedaba en el historial como dicha por ella y
+  al mensaje siguiente repetía "no puedo leer mensajes que no estén en formato de
+  texto". Ahora se pide que lo repita con una frase fija (también el audio que no
+  se oye) y abrir el chat por primera vez (`request_welcome`) cuenta como saludo.
 
 ## Bloqueado por fuera del código
 
-- **Coexistence** (que un negocio conecte su propio número y siga usando su
-  móvil). La app de Meta está en modo desarrollo y los permisos de WhatsApp en
-  acceso ESTÁNDAR (solo activos propios). La verificación de acceso como
-  proveedor de tecnología ya está hecha; la revisión de la app para
-  `manage_app_solution` está EN CURSO (hasta 20 días) y el botón de publicar está
-  deshabilitado hasta que termine. Al escanear el QR, Meta responde "missing
-  required Graph API permissions for Cloud API companion pairing". Esto no lo
-  arregla el código.
-- El alta self-service de WhatsApp está limitada al tenant de pruebas
-  `metareview` (variable `WHATSAPP_ES_TENANTS`); el resto de clientes ven "escríbenos
-  y la activamos".
+- **Coexistence: DESBLOQUEADO (11-sep).** Meta aprobó la revisión de la app y
+  Pablo la publicó. El +31 97006546256 de Vantelia funciona en Coexistence (WA
+  Business en su móvil + asistente a la vez). Desde las ~17:00 ese número contesta
+  con el **asistente de Alicia**, solo lo que entra: sus avisos de cita siguen
+  saliendo por email, porque se le quitó WhatsApp de los canales de aviso para que
+  el "Vantelia" del +31 no escriba a sus clientas reales. Las citas de prueba por
+  el +31 caen en SU agenda real. Si alguien contesta desde WA Business, el
+  asistente se calla 2 h en ese chat (vuelve solo, o «Devolver al asistente» en
+  Conversaciones).
+- El alta self-service de WhatsApp sigue limitada al tenant de pruebas
+  `metareview` (variable `WHATSAPP_ES_TENANTS`). Conectar el número PROPIO de
+  Alicia pasa por añadirla ahí (ver decisión 1).
 - **Stripe de Alicia**: cuenta conectada pero `charges_enabled=0`,
   `payouts_enabled=0`, `details_submitted=0` (sin cambios desde el 27-ago). Los
   servicios con señal **se reservan sin cobrarla**. Se retoma después de Meta.
@@ -132,9 +139,9 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
 
 ## Decisiones pendientes de Pablo
 
-1. **Alicia**: esperar a Coexistence o arrancar ya con un número dedicado bajo la
-   cuenta de Vantelia (funciona hoy en modo desarrollo; se cambia a su número
-   cuando Meta apruebe).
+1. **Alicia con su propio número**: Meta ya lo permite. Falta decidir cuándo:
+   añadirla a `WHATSAPP_ES_TENANTS` y que conecte su número desde el portal
+   (sigue usando su móvil como siempre). Hasta entonces el +31 hace de número suyo.
 2. **Rigidez de los dos apellidos en el panel**: obligatorio a secas (lo actual),
    obligatorio con salida para quien de verdad no tiene segundo apellido, o solo
    aviso.

@@ -3697,6 +3697,56 @@ async def _wa_foto_recibida(
         inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Foto recibida")
 
 
+# (lo que queda en el historial, lo que se le contesta)
+TEXTOS_ILEGIBLE = {
+    "mensaje": (
+        "[mensaje que no se ha podido leer]",
+        "Perdona, no me ha llegado bien tu mensaje. ¿Me lo escribes otra vez?",
+    ),
+    "audio": (
+        "[audio que no se ha podido escuchar]",
+        "Perdona, no he podido escuchar tu audio. ¿Me lo escribes?",
+    ),
+}
+
+
+async def _wa_mensaje_ilegible(
+    *, cliente_id: str, phone_number_id: str, from_number: str, request, tipo: str,
+) -> None:
+    """Ha llegado algo sin contenido que podamos leer: se pide que lo repita.
+
+    Frase fija, sin pasar por el modelo: no hay nada que interpretar. Antes se le
+    pasaba al modelo una instruccion por el hueco del texto de la clienta y quedaba
+    en el historial como si ella la hubiera escrito. Caso real (11-sep-2026, primer
+    mensaje al numero recien pasado a Coexistence): a un "hola" que Meta entrego
+    ilegible le contesto "no puedo leer", y al siguiente mensaje, que si era texto,
+    "no puedo leer mensajes que no esten en formato de texto".
+    """
+    entrante, texto = TEXTOS_ILEGIBLE.get(tipo) or TEXTOS_ILEGIBLE["mensaje"]
+    session_id = _whatsapp_session_id(cliente_id, from_number)
+    inbox.remember_inbound_number(session_id, phone_number_id)
+    if inbox.bot_is_muted(session_id):
+        # Lo lleva una persona: solo queda en el historial, como cualquier mensaje.
+        rag._ensure_chat_session_record(
+            session_id, cliente_id, request,
+            origin_override="whatsapp:%s" % from_number,
+            user_agent_override="WhatsApp Cloud API",
+        )
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id,
+            role="user", content=entrante, intent="human_takeover",
+        )
+        return
+    _wa_registrar(
+        cliente_id=cliente_id, from_number=from_number, request=request,
+        entrante=entrante, respuesta=texto, intent="mensaje_ilegible",
+    )
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=from_number, text=texto,
+    )
+
+
 async def _handle_whatsapp_webhook(
     request: Request,
     *,
@@ -3755,6 +3805,7 @@ async def _handle_whatsapp_webhook(
                 interactive_id = ""
                 audio_media_id = ""
                 foto_recibida = False
+                ilegible = ""
                 if message_type == "text":
                     incoming_text = str(message_payload.get("text", {}).get("body", "")).strip()
                 elif message_type == "interactive":
@@ -3813,21 +3864,32 @@ async def _handle_whatsapp_webhook(
                     # el negocio se resuelve unas lineas mas abajo.
                     audio_media_id = str((message_payload.get("audio", {}) or {}).get("id") or "")
                     incoming_text = ""
+                elif message_type == "request_welcome":
+                    # Meta lo manda cuando alguien abre el chat por primera vez, antes
+                    # de escribir nada: es un saludo.
+                    incoming_text = "hola"
                 else:
-                    incoming_text = (
-                        "El usuario ha enviado un mensaje que no es texto. "
-                        "Responde de forma breve indicando que puede ayudarte si escribe su consulta."
+                    # `unsupported` (Meta no ha podido entregarnos el contenido) y
+                    # cualquier tipo nuevo. Antes se le pasaba al modelo una
+                    # INSTRUCCION por el hueco del texto de la clienta, y quedaba en
+                    # el historial como si la hubiera escrito ella (ver
+                    # `_wa_mensaje_ilegible`).
+                    settings.logger.warning(
+                        "[whatsapp] mensaje de tipo %r sin contenido legible (errores: %s)",
+                        message_type, message_payload.get("errors") or "-",
                     )
+                    ilegible = "mensaje"
+                    incoming_text = ""
 
                 if audio_media_id:
                     # Ya se sabe de que negocio es: se puede bajar el audio con SU
                     # token y transcribirlo. El texto sigue el mismo camino que si
                     # lo hubiera escrito, asi que no hay que tocar nada mas.
                     dicho = await wa_audio.escuchar(cliente_id, audio_media_id)
-                    incoming_text = dicho or (
-                        "El usuario ha enviado un audio que no se ha podido escuchar. "
-                        "Pidele con amabilidad que te lo escriba."
-                    )
+                    if dicho:
+                        incoming_text = dicho
+                    else:
+                        ilegible = "audio"
 
                 if demo_hub:
                     routing = wa_demo.resolve_incoming(phone_number_id, from_number, incoming_text)
@@ -3871,6 +3933,14 @@ async def _handle_whatsapp_webhook(
                         )
                         processed += 1
                         continue
+
+                if ilegible:
+                    await _wa_mensaje_ilegible(
+                        cliente_id=cliente_id, phone_number_id=phone_number_id,
+                        from_number=from_number, request=request, tipo=ilegible,
+                    )
+                    processed += 1
+                    continue
 
                 if foto_recibida:
                     await _wa_foto_recibida(
