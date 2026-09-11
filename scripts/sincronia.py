@@ -644,7 +644,8 @@ def _informe(
         if not (yo["no_vistos_total"] or mensajes or sin_guardar):
             return ""
 
-    lineas = ["== Sincronía: %s de %s ==" % ("novedades para" if solo_novedades else "puesta al día", yo["nombre"])]
+    titulo = ("novedades para %s" if solo_novedades else "puesta al día de %s") % yo["nombre"]
+    lineas = ["== Sincronía: %s ==" % titulo]
     if yo["estado"] == "nunca":
         lineas.append("Primera puesta al día: no hay registro de lo que viste antes. Lee docs/ESTADO_ACTUAL.md entero.")
     elif yo["no_vistos_total"]:
@@ -851,7 +852,9 @@ def _hacer_revision(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejec
         return _escribir_mensaje(raiz, "revisor", "astra", "revision",
                                  "No encuentro el commit %s en el repo." % commit[:7], veredicto="error", **comun)
     copia = pathlib.Path(tempfile.gettempdir()) / (PREFIJO_REVISION + secrets.token_hex(4))
-    _git(["worktree", "add", "--detach", str(copia), commit], raiz)
+    # site_exports/ tiene rutas que bajo %TEMP% pasan del limite de Windows: sin
+    # core.longpaths la copia sale a medias ("Filename too long").
+    _git(["-c", "core.longpaths=true", "worktree", "add", "--detach", str(copia), commit], raiz)
     try:
         tests_ok, resumen_tests = ejecutor.pytest(copia)
         base = _git(["merge-base", "main", commit], raiz).strip() or commit
@@ -863,7 +866,7 @@ def _hacer_revision(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejec
         salida = ejecutor.claude(copia, _prompt_revision(peticion, base, commits, estadistica, diff,
                                                          tests_ok, resumen_tests))
     finally:
-        _git(["worktree", "remove", "--force", str(copia)], raiz, check=False)
+        _git(["-c", "core.longpaths=true", "worktree", "remove", "--force", str(copia)], raiz, check=False)
         _git(["worktree", "prune"], raiz, check=False)
     dictamen = _leer_veredicto(salida) or "sin_veredicto"
     texto = salida.strip()
@@ -1121,8 +1124,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.al_dia:
             datos = _datos_del_hook() if args.hook else {}
-            cwd = str(datos.get("cwd") or "")
-            if args.hook and cwd and "vantelia" not in cwd.lower():
+            # Codex y Claude lanzan el hook en el directorio de la sesion: si el JSON no
+            # se deja leer, ese directorio dice igual de que proyecto es la sesion.
+            cwd = str(datos.get("cwd") or (os.getcwd() if args.hook else ""))
+            if args.hook and "vantelia" not in cwd.lower():
                 return 0  # hook de usuario en una sesion de otro proyecto: no es asunto nuestro
             desde = _desde_donde(cwd or None)
             informe = fichar(desde, args.al_dia, sesion=str(datos.get("session_id") or ""),

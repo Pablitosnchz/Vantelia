@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import importlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
@@ -346,6 +347,26 @@ def test_en_cada_mensaje_solo_habla_si_hay_algo_nuevo(repo, home, tmp_path):
     assert "¿Miras cómo quedó reprogramar?" in novedades
     assert "fix: reprogramar a la primera" in novedades
     assert sincronia.fichar(repo, "claude", home=home, solo_novedades=True) == ""
+
+
+def test_el_hook_de_una_sesion_de_otro_proyecto_no_ficha_a_nadie(monkeypatch, tmp_path):
+    """El hook de Astra es de usuario: salta tambien en sesiones que no son de Vantelia.
+
+    Si fichara ahi, la pagina diria que Astra esta al dia sin haber visto nada.
+    Paso de verdad: un JSON que no se dejaba leer hacia caer al directorio del
+    script y ficho a Astra en el repo de verdad.
+    """
+    otro = tmp_path / "otro-proyecto"
+    otro.mkdir()
+    monkeypatch.chdir(str(otro))
+    monkeypatch.setattr(sincronia, "fichar", lambda *a, **k: pytest.fail("ha fichado a Astra fuera de Vantelia"))
+    monkeypatch.setattr(sincronia, "_enviar_en_segundo_plano", lambda *a, **k: None)
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"cwd": str(otro), "session_id": "x"})))
+    assert sincronia.main(["--al-dia", "astra", "--hook"]) == 0
+    # JSON ilegible: manda el directorio donde se lanza el hook, que es el de la sesion.
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"cwd":"C:\\Users\\otro"}'))
+    assert sincronia.main(["--al-dia", "astra", "--hook"]) == 0
 
 
 @necesita_git
