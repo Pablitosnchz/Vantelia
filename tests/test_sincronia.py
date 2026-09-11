@@ -376,6 +376,17 @@ def test_el_hook_de_una_sesion_de_otro_proyecto_no_ficha_a_nadie(monkeypatch, tm
 
 
 @necesita_git
+def test_la_primera_vez_habla_aunque_venga_del_hook_de_cada_mensaje(repo, home):
+    # Una sesion abierta antes de la sincronia solo tiene el hook de cada mensaje:
+    # si callara por no haber "nada nuevo", nunca se enteraria de las reglas.
+    informe = sincronia.fichar(repo, "astra", home=home, solo_novedades=True)
+    assert "Primera puesta al día" in informe
+    assert "AGENTS.md" in informe
+    # A partir de ahi, solo lo nuevo.
+    assert sincronia.fichar(repo, "astra", home=home, solo_novedades=True) == ""
+
+
+@necesita_git
 def test_la_sesion_del_hook_se_recuerda(repo, astra, home):
     sincronia.fichar(astra, "astra", home=home, sesion="hilo-1")
     sincronia.fichar(astra, "astra", home=home)  # un fichaje sin sesion no la borra

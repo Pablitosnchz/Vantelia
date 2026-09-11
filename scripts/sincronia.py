@@ -806,6 +806,11 @@ def _informe(
     cambios_creditos: Optional[Dict[str, str]] = None,
 ) -> str:
     yo = _agente(antes, agente)
+    if yo["estado"] == "nunca":
+        # La primera vez siempre habla, aunque venga del hook de cada mensaje: una
+        # sesion abierta antes de la sincronia no conoce las reglas y no hay nada
+        # "nuevo" que la despierte.
+        solo_novedades = False
     sin_guardar = [a for a in antes.get("arboles") or [] if a.get("sin_guardar_total")]
     if solo_novedades:
         # En cada mensaje de Pablo: solo lo de los DEMAS que haya cambiado desde la ultima vez.
@@ -824,7 +829,8 @@ def _informe(
         a["id"]: "sin" for a in antes.get("agentes") or [] if a["id"] != agente and a.get("sin_creditos")}
     lineas.extend(_lineas_creditos(antes, agente, cuales))
     if yo["estado"] == "nunca":
-        lineas.append("Primera puesta al día: no hay registro de lo que viste antes. Lee docs/ESTADO_ACTUAL.md entero.")
+        lineas.append("Primera puesta al día: no hay registro de lo que viste antes. Relee AGENTS.md "
+                      "(sección «Sincronía»: han cambiado las reglas) y docs/ESTADO_ACTUAL.md entero.")
     elif yo["no_vistos_total"]:
         lineas.append("Commits nuevos de los demás desde tu última vez (%s):" % _hora_local(yo["ultima_puesta_al_dia"]))
         for commit in yo["no_vistos"]:
