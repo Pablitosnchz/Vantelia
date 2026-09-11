@@ -79,6 +79,7 @@ módulos transversales.
 | `backend/voice_engine.py` | `VoiceCallEngine`: el estado y TODA la lógica determinista de una llamada. El puente (`routers/voice_web.py`) solo mueve audio y delega. |
 | `backend/wa_flows.py` | Reserva como formulario dentro de WhatsApp (WhatsApp Flows): endpoint cifrado, `flow_token` firmado. Apagado por defecto. |
 | `backend/wa_onboarding.py` | Alta self-service del WhatsApp del negocio (Embedded Signup + Coexistence), con sus credenciales cifradas. |
+| `backend/wa_plantillas.py` | Plantillas de Meta por negocio (recordatorio de cita fuera de la ventana de 24 h): alta en su WABA, estado de aprobación y payload de envío. |
 | `backend/wa_demo.py` | Número de WhatsApp compartido para enseñar demos, con códigos de ruta por tenant. |
 | `backend/channel_requests.py` | Solicitudes asistidas de aprovisionamiento de canales. |
 | `backend/main.py` | App + middlewares + mounts + init de runtime + eventos. Importa los routers al final: **el orden de import = orden de registro de rutas**. |

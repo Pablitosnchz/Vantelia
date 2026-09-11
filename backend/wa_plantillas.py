@@ -253,6 +253,40 @@ async def asegurar(
     )
 
 
+# Cada cuanto se le pregunta a Meta. La app no esta suscrita al aviso de estado
+# (`message_template_status_update`), asi que preguntar es la forma de enterarse
+# de la aprobacion: cada hora mientras esta en revision, a diario una vez resuelta
+# (una aprobada puede pasar a PAUSED por calidad; una rechazada se puede editar).
+REFRESCO_EN_REVISION = 3600
+REFRESCO_RESUELTA = 24 * 3600
+_RESUELTAS = {APROBADA, "REJECTED", "DISABLED", "PAUSED"}
+
+
+async def refrescar_pendientes(ahora: Any = None) -> int:
+    """Alta y estado de la plantilla en cada negocio con su WhatsApp conectado.
+
+    Lo llama el worker de recordatorios. Devuelve cuantos negocios se han
+    consultado. Nunca lanza: un negocio que falla no frena a los demas.
+    """
+    from backend import wa_onboarding
+
+    ahora = ahora or timeutils._utc_now()
+    consultados = 0
+    for cliente_id in sorted(set(wa_onboarding.phone_client_map().values())):
+        actual = estado(cliente_id)
+        status = (actual.get("status") or "").upper()
+        cuando = timeutils._from_utc_iso(actual.get("updated_at") or "") if actual else None
+        espera = REFRESCO_RESUELTA if status in _RESUELTAS else REFRESCO_EN_REVISION
+        if cuando is not None and (ahora - cuando).total_seconds() < espera:
+            continue
+        try:
+            await asegurar(cliente_id)
+            consultados += 1
+        except Exception as exc:  # noqa: BLE001 - asegurar no lanza, pero por si acaso
+            settings.logger.warning("[wa_plantillas] no se pudo refrescar %s: %s", cliente_id, exc)
+    return consultados
+
+
 def actualizar_desde_webhook(cliente_id: str, value: Dict[str, Any]) -> Dict[str, Any]:
     """Aprobacion o rechazo que llega por `message_template_status_update`.
 

@@ -4253,6 +4253,10 @@ def _bookings_due_for_reminders(now_utc: datetime, *, limit: int = 5000) -> List
             WHERE status = 'confirmed'
               AND booking_date >= ?
               AND booking_date <= ?
+              -- Una cita de DEMO no avisa ni llama a nadie: sus telefonos son
+              -- inventados y pueden ser de personas reales. La agenda de la
+              -- cuenta de revision de Meta tiene 191 asi (11-sep-2026).
+              AND COALESCE(source, '') <> 'demo_seed'
             ORDER BY booking_date ASC, booking_time ASC
             LIMIT ?
             """,
@@ -5129,6 +5133,16 @@ def _reminder_calls_ok_now(cliente_id: str, rcfg: Optional[Dict[str, Any]] = Non
 async def _run_booking_reminders(request: Optional[Request] = None) -> AdminReminderRunResult:
     now_utc = timeutils._utc_now()
     _auto_confirm_pending_bookings()
+    # La plantilla del recordatorio por WhatsApp se da de alta en la cuenta de cada
+    # negocio conectado y se pregunta por su aprobacion. Sin esto no existia en
+    # ninguna parte y ningun recordatorio salia fuera de la ventana de 24 h. Nunca
+    # frena el resto del reparto.
+    try:
+        from backend import wa_plantillas
+
+        await wa_plantillas.refrescar_pendientes(now_utc)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[wa_plantillas] no se pudieron refrescar: %s", exc)
     rows = _bookings_due_for_reminders(now_utc)
     processed = 0
     sent_24h = 0

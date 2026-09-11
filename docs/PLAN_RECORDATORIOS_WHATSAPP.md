@@ -1,8 +1,17 @@
 # Plan: recordatorios de cita por WhatsApp (plantillas de Meta)
 
-**Estado:** plan, sin empezar. Pablo lo eligió como siguiente tarea el 11-sep-2026.
-Está escrito para ejecutarlo tal cual (Claude o Astra): qué existe, qué falta, en
-qué orden y cómo se prueba.
+**Estado (11-sep-2026, noche):** pasos 1-3 HECHOS (rama
+`claude/recordatorios-whatsapp`): botón de plantilla en el webhook, plantilla con
+envío fuera de ventana y email de respaldo, y alta + consulta de la aprobación
+desde el worker de recordatorios (`wa_plantillas.refrescar_pendientes`; no hace
+falta suscribirse a `message_template_status_update`). Además, las citas de demo
+ya no entran en el reparto de recordatorios ni de llamadas. **Pendiente:** paso 4
+(estado de la plantilla en el portal) y paso 5 (prueba real). Para las plantillas
+fuera de ventana, el negocio necesita un **método de pago en Meta** (WhatsApp
+Manager → pagos): sin él, Meta rechaza el envío y el aviso sigue por email.
+
+Escrito para ejecutarlo tal cual (Claude o Astra): qué existe, qué falta, en qué
+orden y cómo se prueba.
 
 ## Por qué hace falta
 
