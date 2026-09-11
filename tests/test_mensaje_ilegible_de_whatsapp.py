@@ -138,6 +138,21 @@ def test_lo_que_meta_no_entrega_se_pide_repetir(enviados):
     assert historial[0][:2] == ("user", entrante), historial
 
 
+def test_si_meta_rechaza_la_respuesta_no_se_inventa_en_el_historial(enviados, monkeypatch):
+    from backend import messaging, whatsapp
+
+    async def rechazar(**kwargs):
+        return False
+
+    monkeypatch.setattr(messaging, "_send_whatsapp_text", rechazar)
+    telefono = "34600555991"
+    session_id = _sesion_limpia(telefono)
+    _recibir(_mensaje(telefono, "unsupported"))
+    historial = _historial(session_id)
+    assert any(rol == "user" for rol, _, _ in historial)
+    assert not any(rol == "assistant" for rol, _, _ in historial), historial
+
+
 def test_si_la_lleva_una_persona_solo_se_guarda(enviados):
     """Con el equipo contestando desde el movil, el asistente no habla por encima."""
     from backend import inbox, whatsapp

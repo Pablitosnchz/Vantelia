@@ -1482,6 +1482,8 @@ def _voice_booking_tools(
                             "nueva (el titular ya esta verificado, no pidas nombre ni telefono)."
                         ),
                     },
+                    "telefono": {"type": "string", "description": "Teléfono de la reserva, si llama desde otro número y lo facilita para verificarse."},
+                    "email": {"type": "string", "description": "Email de la reserva, si lo facilita para verificar su identidad."},
                 },
                 "required": ["fecha", "fecha_texto", "servicio"] if service_required else ["fecha", "fecha_texto"],
             },

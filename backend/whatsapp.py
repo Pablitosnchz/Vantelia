@@ -3478,18 +3478,26 @@ async def _handle_whatsapp_message(
                 from_number=from_number, telefono=from_number,
             )
             _wa_clear_flow(cliente_id, from_number)
-            texto = str((resultado or {}).get("mensaje") or "").strip() or (
-                "Listo, te he cambiado la cita a %s a las %s."
-                % (_wa_fecha_humana(flow.fecha), flow.hora)
-            )
-            _wa_registrar(
-                cliente_id=cliente_id, from_number=from_number, request=request,
-                respuesta=texto, intent="booking_reschedule",
-            )
-            await messaging._send_whatsapp_text(
+            if (resultado or {}).get("ok"):
+                texto = str(resultado.get("mensaje") or "").strip() or (
+                    "Listo, te he cambiado la cita a %s a las %s."
+                    % (_wa_fecha_humana(flow.fecha), flow.hora)
+                )
+            else:
+                # Un rechazo del núcleo no es un cambio: antes el mensaje de
+                # éxito por defecto hacía creer que se había movido igualmente.
+                texto = str((resultado or {}).get("error") or "").strip() or (
+                    "No he podido confirmar el cambio de tu cita. Contacta con el negocio para revisarlo."
+                )
+            enviado = await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id,
                 to_number=from_number, text=texto,
             )
+            if enviado:
+                _wa_registrar(
+                    cliente_id=cliente_id, from_number=from_number, request=request,
+                    respuesta=texto, intent="booking_reschedule" if (resultado or {}).get("ok") else "booking_reschedule_failed",
+                )
             return
         if iid == "dup_crear":
             flow.duplicado_avisado = "1"
@@ -3809,12 +3817,17 @@ async def _wa_mensaje_ilegible(
         return
     _wa_registrar(
         cliente_id=cliente_id, from_number=from_number, request=request,
-        entrante=entrante, respuesta=texto, intent="mensaje_ilegible",
+        entrante=entrante, intent="mensaje_ilegible",
     )
-    await messaging._send_whatsapp_text(
+    enviado = await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id,
         to_number=from_number, text=texto,
     )
+    if enviado:
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=from_number, request=request,
+            respuesta=texto, intent="mensaje_ilegible",
+        )
 
 
 async def _handle_whatsapp_webhook(
