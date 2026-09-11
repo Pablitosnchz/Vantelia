@@ -819,6 +819,13 @@ a usar ha visto lo ultimo del otro. Todo sale de `scripts/sincronia.py`:
   `codex queue` (si no esta abierta, le llega al volver). Tests en rojo = CAMBIOS.
   `--pedir-despliegue` (Astra, solo si Pablo lo dice) integra en main y despliega
   SOLO si ese commit tiene revision OK y main esta limpio.
+- Creditos: si Astra se queda sin cuota lo dice su propia sesion de Codex
+  (`task_complete` con `usage_limit_exceeded` + `rate_limits` al 100 % con la hora
+  de renovacion). La pagina lo pinta, a Claude se lo cuenta el hook UNA vez ("hazlo
+  tu", y seguir en su rama si dejo algo a medias) y el revisor no le entrega nada
+  (se perderia en un turno fallido). Si el que se queda sin cuota es `claude -p`, la
+  revision NO se da por hecha: queda pendiente y se reintenta sola al renovarse
+  (`.sincronia/claude_limite.json`).
 - Quien hizo cada commit sale de su firma: `Co-Authored-By: Claude` = Claude,
   `Agente: astra` = Astra, lo demas = Pablo.
 - El PC de Pablo manda la foto cada 5 min (tarea programada de Windows "Vantelia

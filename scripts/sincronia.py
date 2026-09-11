@@ -32,6 +32,7 @@ es Pablo. Solo se despliega un commit que tenga una revisión OK de Claude.
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime as dt
 import json
 import os
@@ -62,6 +63,13 @@ CERROJO_CADUCA_H = 3
 _SIN_VENTANA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _VEREDICTO = re.compile(r"VEREDICTO:\s*\**\s*(OK|CAMBIOS)\b", re.I)
+_UUID = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$", re.I)
+# Como avisan de que se acabo la cuota: Codex en su sesion ("You've hit your usage
+# limit ... try again at 3:30 PM"), Claude Code en la salida de claude -p ("Claude AI
+# usage limit reached|<epoch>" o "... resets 3pm").
+_SIN_CREDITOS = re.compile(r"usage limit|limit reached|hit your (?:usage )?limit|out of (?:extra )?usage|credit balance", re.I)
+_A_LAS = re.compile(r"(?:try again at|resets?(?: at)?)\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)\b", re.I)
+_LIMITE_EPOCH = re.compile(r"limit reached\|(\d{10})")
 _ETIQUETAS = (
     ("testigo", "Testigo"),
     ("tarea", "Tarea"),
@@ -116,6 +124,30 @@ def _hora_local(texto: Any) -> str:
     if momento is None:
         return "nunca"
     return momento.astimezone().strftime("%d-%m %H:%M")
+
+
+def _hora_corta(texto: Any) -> str:
+    """"15:30" si es hoy; "12-09 15:30" si no."""
+    momento = _desde_iso(texto)
+    if momento is None:
+        return ""
+    local = momento.astimezone()
+    if local.date() == dt.datetime.now().astimezone().date():
+        return local.strftime("%H:%M")
+    return local.strftime("%d-%m %H:%M")
+
+
+def _a_las(texto: str, ahora: dt.datetime) -> Optional[dt.datetime]:
+    """"try again at 3:30 PM" / "resets 3pm": la proxima vez que el reloj local marque esa hora."""
+    casa = _A_LAS.search(texto or "")
+    if not casa:
+        return None
+    hora = int(casa.group(1)) % 12 + (12 if casa.group(3).lower() == "pm" else 0)
+    local = ahora.astimezone()
+    momento = local.replace(hour=hora, minute=int(casa.group(2) or 0), second=0, microsecond=0)
+    if momento <= local:
+        momento += dt.timedelta(days=1)
+    return momento.astimezone(dt.timezone.utc)
 
 
 # --- git ------------------------------------------------------------------------
@@ -368,23 +400,116 @@ def _cwd_de_la_sesion(fichero: pathlib.Path) -> str:
     return str(datos.get("cwd") or "") if isinstance(datos, dict) else ""
 
 
-def _ultima_actividad(home: pathlib.Path) -> Dict[str, Optional[dt.datetime]]:
-    """Cuando trabajo cada agente en Vantelia por ultima vez. Solo la hora, nunca el contenido."""
-    actividad: Dict[str, Optional[dt.datetime]] = {"claude": None, "astra": None}
-    for fichero in (home / ".claude" / "projects").glob("*antelia*/*.jsonl"):
-        actividad["claude"] = _mas_reciente(actividad["claude"], fichero)
+def _casa(home: Optional[pathlib.Path] = None) -> pathlib.Path:
+    # SINCRONIA_HOME deja a los tests fuera de las sesiones de verdad de este PC.
+    return pathlib.Path(home) if home else pathlib.Path(os.environ.get("SINCRONIA_HOME") or pathlib.Path.home())
+
+
+def _sesion_codex_de_vantelia(home: pathlib.Path) -> Optional[pathlib.Path]:
+    """La ultima sesion de Codex abierta en Vantelia (Codex tambien se usa para otras cosas)."""
     candidatos = []
     for fichero in (home / ".codex" / "sessions").glob("*/*/*/rollout-*.jsonl"):
         try:
             candidatos.append((fichero.stat().st_mtime, str(fichero)))
         except OSError:
             continue
-    # Codex tambien se usa para otras cosas: solo cuentan las sesiones abiertas en Vantelia.
     for _, ruta in sorted(candidatos, reverse=True)[:60]:
         if "vantelia" in _cwd_de_la_sesion(pathlib.Path(ruta)).lower():
-            actividad["astra"] = _mas_reciente(None, pathlib.Path(ruta))
-            break
-    return actividad
+            return pathlib.Path(ruta)
+    return None
+
+
+def _creditos_de_codex(fichero: pathlib.Path, ahora: dt.datetime) -> Dict[str, Any]:
+    """Si Astra se ha quedado sin creditos, lo dice su propia sesion de Codex.
+
+    Al acabarse la cuota, el turno termina con un `task_complete` cuyo error es
+    `usage_limit_exceeded`, y los `token_count` traen `rate_limits` con la ventana
+    al 100 % y cuando se renueva. Vuelve a tener creditos si un turno posterior
+    termina bien o si ya ha pasado la hora de la renovacion.
+    """
+    try:
+        with fichero.open(encoding="utf-8", errors="replace") as manejador:
+            cola = collections.deque(manejador, maxlen=400)
+    except OSError:
+        return {"sin_creditos": False}
+    ultimo_fin: Dict[str, Any] = {}
+    ventanas: Dict[str, Dict[str, Any]] = {}
+    # La hora del ultimo evento: el mtime del fichero no sirve, Codex lo tiene abierto
+    # y Windows no lo actualiza hasta que lo cierra.
+    ultima: Optional[dt.datetime] = None
+    for linea in cola:
+        try:
+            fila = json.loads(linea)
+        except ValueError:
+            continue
+        if not isinstance(fila, dict):
+            continue
+        ultima = _fecha_de_evento(fila.get("timestamp")) or ultima
+        datos = fila.get("payload")
+        if not isinstance(datos, dict):
+            continue
+        if datos.get("type") == "task_complete":
+            ultimo_fin = datos
+        elif datos.get("type") == "token_count" and isinstance(datos.get("rate_limits"), dict):
+            for nombre in ("primary", "secondary"):
+                ventana = datos["rate_limits"].get(nombre)
+                if isinstance(ventana, dict) and ventana.get("used_percent") is not None:
+                    ventanas[nombre] = ventana
+    estado = _cuota_de_codex(ultimo_fin, ventanas, ahora)
+    estado["actividad"] = ultima
+    return estado
+
+
+def _fecha_de_evento(texto: Any) -> Optional[dt.datetime]:
+    if not isinstance(texto, str) or not texto:
+        return None
+    try:
+        return dt.datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _cuota_de_codex(ultimo_fin: Dict[str, Any], ventanas: Dict[str, Dict[str, Any]],
+                    ahora: dt.datetime) -> Dict[str, Any]:
+    error = ultimo_fin.get("error")
+    if not isinstance(error, dict):
+        return {"sin_creditos": False}
+    mensaje = str(error.get("message") or "")
+    if "usage_limit" not in str(error.get("codex_error_info") or "") and not _SIN_CREDITOS.search(mensaje):
+        return {"sin_creditos": False}
+    renovaciones = [int(v["resets_at"]) for v in ventanas.values()
+                    if float(v.get("used_percent") or 0) >= 100 and v.get("resets_at")]
+    hasta = (dt.datetime.fromtimestamp(max(renovaciones), dt.timezone.utc) if renovaciones
+             else _a_las(mensaje, ahora))
+    if hasta is not None and hasta <= ahora:
+        return {"sin_creditos": False}
+    return {"sin_creditos": True, "hasta": _iso(hasta), "motivo": mensaje[:300]}
+
+
+def _agentes_fuera(home: pathlib.Path, ahora: dt.datetime) -> Dict[str, Dict[str, Any]]:
+    """Lo que se sabe de cada agente por sus propias sesiones: horas y cuota, nunca el contenido."""
+    estado: Dict[str, Dict[str, Any]] = {"claude": {"actividad": None}, "astra": {"actividad": None}}
+    for fichero in (home / ".claude" / "projects").glob("*antelia*/*.jsonl"):
+        estado["claude"]["actividad"] = _mas_reciente(estado["claude"]["actividad"], fichero)
+    sesion = _sesion_codex_de_vantelia(home)
+    if sesion is not None:
+        uuid = _UUID.search(sesion.name)
+        estado["astra"].update(_creditos_de_codex(sesion, ahora))
+        estado["astra"]["actividad"] = estado["astra"].get("actividad") or _mas_reciente(None, sesion)
+        estado["astra"]["sesion"] = uuid.group(1) if uuid else ""
+    return estado
+
+
+def _limite_de_claude(raiz: pathlib.Path, ahora: dt.datetime) -> Dict[str, Any]:
+    """Lo apunta el revisor cuando claude -p se queda sin cuota; caduca solo."""
+    try:
+        datos = json.loads((raiz / DIR_LOCAL / "claude_limite.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"sin_creditos": False}
+    hasta = _desde_iso(datos.get("hasta")) if isinstance(datos, dict) else None
+    if hasta is None or hasta <= ahora:
+        return {"sin_creditos": False}
+    return {"sin_creditos": True, "hasta": _iso(hasta), "motivo": str(datos.get("motivo") or "")[:300]}
 
 
 # --- el buzon -------------------------------------------------------------------
@@ -486,8 +611,17 @@ def veredicto(foto: Dict[str, Any], ahora: dt.datetime) -> Dict[str, str]:
             a_medias.append(arbol)
         else:
             trabajando.append(arbol)
+    sin_creditos = [a for a in foto.get("agentes") or [] if a.get("sin_creditos")]
     if a_medias:
         arbol = a_medias[0]
+        if (any(a["id"] == "astra" for a in sin_creditos)
+                and str(arbol.get("rama") or "").startswith("astra/")):
+            return {
+                "color": "rojo",
+                "titulo": "Astra se quedó sin créditos a medias",
+                "detalle": ("Tiene cambios sin guardar en %s. Escribe a Claude: se pone al día solo "
+                            "y sigue donde lo dejó." % arbol.get("rama")),
+            }
         return {
             "color": "rojo",
             "titulo": "Hay trabajo a medias sin guardar",
@@ -496,6 +630,18 @@ def veredicto(foto: Dict[str, Any], ahora: dt.datetime) -> Dict[str, str]:
                 "Si a alguien se le acabaron los tokens, el otro lo verá solo al empezar y seguirá donde se quedó."
                 % (arbol["ruta"], arbol.get("rama") or "sin rama", arbol["sin_guardar_total"], A_MEDIAS_MIN)
             ),
+        }
+    if sin_creditos:
+        agente = sin_creditos[0]
+        hasta = _hora_corta(agente.get("creditos_hasta"))
+        if agente["id"] == "astra":
+            detalle = "Si necesitas algo antes, escríbele a Claude: se pone al día solo y sigue él."
+        else:
+            detalle = "Las revisiones esperan en el buzón y se harán solas cuando vuelva; Astra puede seguir programando."
+        return {
+            "color": "amarillo",
+            "titulo": "%s está sin créditos%s" % (agente["nombre"], (" hasta las " + hasta) if hasta else ""),
+            "detalle": detalle,
         }
     if trabajando:
         arbol = trabajando[0]
@@ -536,7 +682,8 @@ def construir_foto(
     arboles_git = _arboles(raiz)
     ramas = _ramas(raiz)
     fichajes = _fichajes(arboles_git)
-    actividad = _ultima_actividad(pathlib.Path(home) if home else pathlib.Path.home())
+    fuera = _agentes_fuera(_casa(home), ahora)
+    fuera["claude"].update(_limite_de_claude(raiz, ahora))
 
     agentes = []
     for agente, nombre in AGENTES.items():
@@ -553,7 +700,10 @@ def construir_foto(
             "nombre": nombre,
             "estado": estado,
             "ultima_puesta_al_dia": (fichaje or {}).get("cuando"),
-            "ultima_actividad": _iso(actividad.get(agente)),
+            "ultima_actividad": _iso(fuera[agente].get("actividad")),
+            "sin_creditos": bool(fuera[agente].get("sin_creditos")),
+            "creditos_hasta": fuera[agente].get("hasta"),
+            "creditos_motivo": fuera[agente].get("motivo") or "",
             "no_vistos": (no_vistos or [])[:MAX_LISTA],
             "no_vistos_total": len(no_vistos or []),
         })
@@ -623,6 +773,28 @@ def _linea_mensaje(mensaje: Dict[str, Any], agente: str) -> str:
     return "  %s %s" % (cabecera, texto.replace("\n", "\n    "))
 
 
+def _lineas_creditos(foto: Dict[str, Any], agente: str, cuales: Dict[str, str]) -> List[str]:
+    """Que el otro se ha quedado sin cuota (o la ha recuperado), y que hacer con eso."""
+    lineas = []
+    for otro in foto.get("agentes") or []:
+        if otro["id"] == agente or otro["id"] not in cuales:
+            continue
+        if not otro.get("sin_creditos"):
+            lineas.append("%s vuelve a tener créditos." % otro["nombre"])
+            continue
+        hasta = _hora_corta(otro.get("creditos_hasta"))
+        if otro["id"] == "astra":
+            accion = ("Si Pablo te pide algo, hazlo tú sin esperarla; si dejó trabajo a medias, "
+                      "sigue en su rama. Cuéntaselo a Pablo en una línea.")
+        else:
+            accion = ("Tus revisiones esperan en el buzón y se harán solas cuando vuelva; "
+                      "sigue programando y cuéntaselo a Pablo en una línea.")
+        lineas.append("%s está SIN CRÉDITOS%s (%s). %s" % (
+            otro["nombre"], (" hasta las " + hasta) if hasta else "",
+            (otro.get("creditos_motivo") or "cuota agotada")[:140], accion))
+    return lineas
+
+
 def _informe(
     antes: Dict[str, Any],
     despues: Dict[str, Any],
@@ -631,6 +803,7 @@ def _informe(
     arbol: pathlib.Path,
     desde_marca: float,
     solo_novedades: bool,
+    cambios_creditos: Optional[Dict[str, str]] = None,
 ) -> str:
     yo = _agente(antes, agente)
     sin_guardar = [a for a in antes.get("arboles") or [] if a.get("sin_guardar_total")]
@@ -641,11 +814,15 @@ def _informe(
             return ultimo is not None and ultimo.timestamp() > desde_marca
         sin_guardar = [a for a in sin_guardar
                        if pathlib.Path(a["ruta"]).resolve() != arbol and _cambio_despues(a)]
-        if not (yo["no_vistos_total"] or mensajes or sin_guardar):
+        if not (yo["no_vistos_total"] or mensajes or sin_guardar or cambios_creditos):
             return ""
 
     titulo = ("novedades para %s" if solo_novedades else "puesta al día de %s") % yo["nombre"]
     lineas = ["== Sincronía: %s ==" % titulo]
+    # Al empezar, cualquiera que este sin cuota; en cada mensaje, solo si ha cambiado.
+    cuales = (cambios_creditos or {}) if solo_novedades else {
+        a["id"]: "sin" for a in antes.get("agentes") or [] if a["id"] != agente and a.get("sin_creditos")}
+    lineas.extend(_lineas_creditos(antes, agente, cuales))
     if yo["estado"] == "nunca":
         lineas.append("Primera puesta al día: no hay registro de lo que viste antes. Lee docs/ESTADO_ACTUAL.md entero.")
     elif yo["no_vistos_total"]:
@@ -700,6 +877,11 @@ def fichar(
     antes = construir_foto(desde, ahora=ahora, home=home)
     mensajes = [m for m in _buzon(_arboles(raiz))
                 if m.get("de") != agente and float(m.get("marca") or 0) > desde_marca]
+    # La cuota de los demas: se cuenta cuando cambia, no en cada mensaje.
+    creditos = {a["id"]: ((a.get("creditos_hasta") or "sin") if a.get("sin_creditos") else "")
+                for a in antes["agentes"] if a["id"] != agente}
+    vistos = anterior.get("creditos_vistos") if isinstance(anterior.get("creditos_vistos"), dict) else {}
+    cambios_creditos = {otro: estado for otro, estado in creditos.items() if vistos.get(otro, "") != estado}
     carpeta = arbol / DIR_LOCAL
     carpeta.mkdir(exist_ok=True)
     registro = {
@@ -710,10 +892,11 @@ def fichar(
         "arbol": str(arbol),
         # La sesion del hook es a donde se le entregan los avisos (codex queue).
         "sesion": sesion or anterior.get("sesion") or "",
+        "creditos_vistos": creditos,
     }
     (carpeta / ("%s.json" % agente)).write_text(json.dumps(registro, indent=2), encoding="utf-8")
     despues = construir_foto(desde, ahora=ahora, home=home)
-    return _informe(antes, despues, agente, mensajes, arbol, desde_marca, solo_novedades)
+    return _informe(antes, despues, agente, mensajes, arbol, desde_marca, solo_novedades, cambios_creditos)
 
 
 # --- el revisor ---------------------------------------------------------------------
@@ -729,6 +912,21 @@ def _una_linea(texto: str, limite: int = 900) -> str:
     # Viaja como argumento por el lanzador .cmd de codex: fuera lo que cmd.exe interpreta.
     limpio = re.sub(r'["%^&|<>]', "", texto.replace("\n", " "))
     return re.sub(r"\s+", " ", limpio).strip()[:limite]
+
+
+class SinCreditos(RuntimeError):
+    """claude -p se ha quedado sin cuota: la revision espera, no se da por hecha."""
+
+    def __init__(self, motivo: str, hasta: Optional[dt.datetime] = None):
+        super().__init__(motivo)
+        self.hasta = hasta
+
+
+def _hasta_de_claude(texto: str, ahora: dt.datetime) -> Optional[dt.datetime]:
+    casa = _LIMITE_EPOCH.search(texto or "")
+    if casa:
+        return dt.datetime.fromtimestamp(int(casa.group(1)), dt.timezone.utc)
+    return _a_las(texto, ahora)
 
 
 class Ejecutor:
@@ -766,9 +964,14 @@ class Ejecutor:
                 ajustes.unlink()
             except OSError:
                 pass
+        salida = resultado.stdout.decode("utf-8", "replace")
+        texto = (resultado.stderr.decode("utf-8", "replace") + "\n" + salida).strip()
+        # Sin cuota sale con error, o con un aviso corto en vez de la revision.
+        if _SIN_CREDITOS.search(texto) and (resultado.returncode != 0 or len(salida) < 400):
+            raise SinCreditos(texto[-300:], _hasta_de_claude(texto, _ahora()))
         if resultado.returncode != 0:
-            raise RuntimeError(resultado.stderr.decode("utf-8", "replace").strip()[-400:] or "claude terminó con error")
-        return resultado.stdout.decode("utf-8", "replace")
+            raise RuntimeError(texto[-400:] or "claude terminó con error")
+        return salida
 
     def desplegar(self, raiz: pathlib.Path) -> Tuple[bool, str]:
         registro = raiz / DIR_LOCAL / "despliegue.log"
@@ -933,13 +1136,21 @@ def _aviso_para_astra(respuesta: Dict[str, Any]) -> str:
             + " El detalle te sale al ponerte al día: python scripts/sincronia.py --al-dia astra")
 
 
-def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None) -> str:
+def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None,
+            home: Optional[pathlib.Path] = None) -> str:
     """Atiende la peticion mas antigua sin contestar. Una por pasada; nunca dos a la vez."""
     raiz = raiz_del_repo(desde)
     ejecutor = ejecutor or Ejecutor()
+    ahora = _ahora()
     pendientes = _pendientes(_buzon(_arboles(raiz)))
     if not pendientes:
         return "Nada pendiente."
+    limite = _limite_de_claude(raiz, ahora)
+    if limite["sin_creditos"]:
+        # Sin Claude no hay revision; un despliegue ya revisado no lo necesita.
+        pendientes = [p for p in pendientes if p.get("tipo") == "desplegar"]
+        if not pendientes:
+            return "Claude está sin créditos hasta las %s: las revisiones esperan." % _hora_corta(limite.get("hasta"))
     cerrojo = raiz / DIR_LOCAL / "revisor.lock"
     if not _coger_cerrojo(cerrojo):
         return "El revisor ya está con otra petición."
@@ -955,6 +1166,14 @@ def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None) -> str:
                 respuesta = _hacer_revision(raiz, peticion, ejecutor)
             else:
                 respuesta = _hacer_despliegue(raiz, peticion, ejecutor)
+        except SinCreditos as error:
+            # No es un fallo de la peticion: se queda pendiente y se reintenta al renovarse.
+            hasta = error.hasta or (ahora + dt.timedelta(minutes=30))
+            (raiz / DIR_LOCAL / "claude_limite.json").write_text(json.dumps({
+                "hasta": _iso(hasta), "motivo": str(error)[:300], "cuando": _iso(_ahora()),
+            }), encoding="utf-8")
+            return "Claude está sin créditos hasta las %s: la revisión de %s espera." % (
+                _hora_corta(_iso(hasta)), peticion.get("rama") or "")
         except Exception as error:  # que una peticion rota no se reintente para siempre
             tipo = "revision" if peticion.get("tipo") == "revisar" else "despliegue"
             respuesta = _escribir_mensaje(
@@ -966,8 +1185,14 @@ def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None) -> str:
                 fichero.unlink()
             except OSError:
                 pass
-    sesion = str((_fichajes(_arboles(raiz)).get("astra") or {}).get("sesion") or "")
-    entregado, detalle = ejecutor.entregar(sesion, _aviso_para_astra(respuesta))
+    astra = _agentes_fuera(_casa(home), _ahora())["astra"]
+    # La del hook si la hay; si no (hook sin aprobar), su ultima sesion de Codex en Vantelia.
+    sesion = str((_fichajes(_arboles(raiz)).get("astra") or {}).get("sesion") or astra.get("sesion") or "")
+    if astra.get("sin_creditos"):
+        # Entregarselo solo abriria un turno que falla y se perderia: le espera en el buzon.
+        entregado, detalle = False, "Astra está sin créditos; lo verá al volver"
+    else:
+        entregado, detalle = ejecutor.entregar(sesion, _aviso_para_astra(respuesta))
     return "%s %s → %s (%s)" % (
         peticion.get("tipo"), peticion.get("rama") or "", respuesta.get("veredicto"),
         "entregado a Astra" if entregado else "queda en el buzón: " + detalle[:120])
@@ -1060,6 +1285,8 @@ def _resumen_terminal(foto: Dict[str, Any]) -> str:
             estado = "%s (se puso al día %s)" % (
                 "al día" if agente["estado"] == "al_dia" else "le faltan %d cambio(s)" % agente["no_vistos_total"],
                 _hora_local(agente["ultima_puesta_al_dia"]))
+        if agente.get("sin_creditos"):
+            estado += " · SIN CRÉDITOS hasta %s" % (_hora_corta(agente.get("creditos_hasta")) or "?")
         lineas.append("%-7s %s · actividad %s" % (
             agente["nombre"] + ":", estado, _hora_local(agente["ultima_actividad"])))
     for arbol in foto["arboles"]:

@@ -124,6 +124,7 @@
   .arbol-cab .cuando { margin-left: auto; }
   .ficheros { margin: 4px 0 0; font-family: var(--mono); font-size: 12.5px; color: var(--tinta-2); overflow-wrap: anywhere; }
   .estado.mal { color: var(--rojo); }
+  .mal-texto { color: var(--rojo); font-weight: 600; }
   .mensaje-cab { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
   .mensaje-cab .cuando { margin-left: auto; }
   .flecha { color: var(--tinta-3); }
@@ -249,6 +250,15 @@
       d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   }
 
+  function horaCorta(iso) {
+    var t = Date.parse(iso);
+    if (isNaN(t)) return '';
+    var d = new Date(t);
+    var hora = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === new Date().toDateString()) return hora;
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) + ', ' + hora;
+  }
+
   function chip(agente) {
     var clave = NOMBRES[agente] ? agente : 'pablo';
     return el('span', 'chip chip-' + clave, NOMBRES[clave]);
@@ -307,6 +317,10 @@
       datos.appendChild(el('dd', null, hace(ag.ultima_puesta_al_dia, ahora)));
       datos.appendChild(el('dt', null, 'Última actividad'));
       datos.appendChild(el('dd', null, hace(ag.ultima_actividad, ahora)));
+      if (ag.sin_creditos) {
+        datos.appendChild(el('dt', null, 'Créditos'));
+        datos.appendChild(el('dd', 'mal-texto', ag.creditos_hasta ? 'Agotados hasta las ' + horaCorta(ag.creditos_hasta) : 'Agotados'));
+      }
       tarjeta.appendChild(datos);
 
       if (ag.no_vistos && ag.no_vistos.length) {

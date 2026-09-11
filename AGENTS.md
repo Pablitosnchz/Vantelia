@@ -85,6 +85,9 @@ quiere hacer de mensajero**. Todo esto pasa sin que él diga nada (canal y regla
   firma. Si te quedas sin tokens a mitad, el que entre pierde como mucho un paso.
 - **Mantén la sección «En curso» de `docs/ESTADO_ACTUAL.md`** (testigo, tarea,
   rama, siguiente paso, a quién espera) cada vez que cambie, no solo al cerrar.
+- **Si Claude se queda sin créditos**, el hook te lo dice: tus revisiones esperan en
+  el buzón y se hacen solas cuando vuelva. Sigue programando y cuéntaselo a Pablo.
+  Y al revés: si te quedas tú sin créditos, Claude lo sabe solo y sigue tu trabajo.
 - Una nota para Claude: `python scripts/sincronia.py --avisar astra claude "texto"`.
 
 ## Lo que más se rompe aquí (tenlo presente al programar)

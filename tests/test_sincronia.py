@@ -38,6 +38,12 @@ sincronia = _cargar_script()
 necesita_git = pytest.mark.skipif(shutil.which("git") is None, reason="sin git")
 
 
+@pytest.fixture(autouse=True)
+def _sin_sesiones_de_verdad(monkeypatch, tmp_path):
+    # Ni las sesiones de Codex ni las de Claude de este PC: cada test pone las suyas.
+    monkeypatch.setenv("SINCRONIA_HOME", str(tmp_path / "casa-vacia"))
+
+
 def _git(repo, *args):
     subprocess.run(
         ["git", "-c", "user.name=Prueba", "-c", "user.email=prueba@example.com",
@@ -374,6 +380,127 @@ def test_la_sesion_del_hook_se_recuerda(repo, astra, home):
     sincronia.fichar(astra, "astra", home=home, sesion="hilo-1")
     sincronia.fichar(astra, "astra", home=home)  # un fichaje sin sesion no la borra
     assert sincronia._fichajes(sincronia._arboles(repo))["astra"]["sesion"] == "hilo-1"
+
+
+# --- creditos: si uno se queda sin cuota, el otro lo sabe y sigue -----------------
+
+UUID_ASTRA = "11111111-2222-3333-4444-555555555555"
+TURNO_BIEN = {"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "Hecho."}}
+
+
+def _sesion_codex(home, eventos, uuid=UUID_ASTRA, cwd="E:\\Vantelia"):
+    carpeta = home / ".codex" / "sessions" / "2026" / "09" / "11"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    fichero = carpeta / ("rollout-2026-09-11T10-41-35-%s.jsonl" % uuid)
+    filas = [{"type": "session_meta", "payload": {"id": uuid, "cwd": cwd}}] + list(eventos)
+    fichero.write_text("\n".join(json.dumps(fila) for fila in filas) + "\n", encoding="utf-8")
+
+
+def _se_acaba_la_cuota(renueva):
+    """Lo que escribe Codex de verdad cuando Astra se queda sin creditos (11-sep-2026)."""
+    return [
+        {"type": "event_msg", "payload": {"type": "token_count", "rate_limits": {
+            "primary": {"used_percent": 100.0, "window_minutes": 300, "resets_at": int(renueva.timestamp())},
+            "secondary": {"used_percent": 16.0, "window_minutes": 10080,
+                          "resets_at": int(renueva.timestamp()) + 86400}}}},
+        {"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": None, "error": {
+            "message": "You've hit your usage limit. Upgrade to Pro or try again at 3:30 PM.",
+            "codex_error_info": "usage_limit_exceeded"}}},
+    ]
+
+
+@necesita_git
+def test_si_astra_se_queda_sin_creditos_claude_se_entera_una_vez(repo, home):
+    ahora = dt.datetime.now(dt.timezone.utc)
+    sincronia.fichar(repo, "claude", home=home)
+    _sesion_codex(home, _se_acaba_la_cuota(ahora + dt.timedelta(hours=2)))
+
+    foto = sincronia.construir_foto(repo, ahora=ahora, home=home)
+    astra = _agente(foto, "astra")
+    assert astra["sin_creditos"] and astra["creditos_hasta"]
+    assert foto["veredicto"]["titulo"].startswith("Astra está sin créditos")
+
+    novedades = sincronia.fichar(repo, "claude", home=home, solo_novedades=True)
+    assert "Astra está SIN CRÉDITOS" in novedades
+    assert "hazlo tú" in novedades
+    # No se repite en cada mensaje: ya lo sabe.
+    assert sincronia.fichar(repo, "claude", home=home, solo_novedades=True) == ""
+
+    # Cuando vuelve a trabajar, tambien se entera.
+    _sesion_codex(home, _se_acaba_la_cuota(ahora + dt.timedelta(hours=2)) + [TURNO_BIEN])
+    assert "Astra vuelve a tener créditos" in sincronia.fichar(repo, "claude", home=home, solo_novedades=True)
+
+
+@necesita_git
+def test_la_actividad_de_astra_sale_del_ultimo_evento_y_no_del_fichero(repo, home):
+    # Codex tiene el fichero abierto y Windows no le cambia la fecha hasta cerrarlo.
+    _sesion_codex(home, [dict(TURNO_BIEN, timestamp="2026-09-11T11:42:51.924Z")])
+    assert _agente(sincronia.construir_foto(repo, home=home), "astra")["ultima_actividad"] == "2026-09-11T11:42:51Z"
+
+
+@necesita_git
+def test_pasada_la_hora_de_renovacion_ya_no_cuenta_como_sin_creditos(repo, home):
+    ahora = dt.datetime.now(dt.timezone.utc)
+    _sesion_codex(home, _se_acaba_la_cuota(ahora - dt.timedelta(minutes=5)))
+    assert not _agente(sincronia.construir_foto(repo, ahora=ahora, home=home), "astra")["sin_creditos"]
+
+
+@necesita_git
+def test_astra_sin_creditos_a_medias_es_rojo_y_dice_quien_sigue(repo, astra, home):
+    ahora = dt.datetime.now(dt.timezone.utc)
+    _sesion_codex(home, _se_acaba_la_cuota(ahora + dt.timedelta(hours=2)))
+    fichero = astra / "backend" / "b.py"
+    fichero.write_text("y = 3\n", encoding="utf-8")
+    hace_una_hora = (ahora - dt.timedelta(hours=1)).timestamp()
+    os.utime(str(fichero), (hace_una_hora, hace_una_hora))
+    semaforo = sincronia.construir_foto(repo, ahora=ahora, home=home)["veredicto"]
+    assert semaforo["color"] == "rojo"
+    assert semaforo["titulo"] == "Astra se quedó sin créditos a medias"
+    assert "Claude" in semaforo["detalle"]
+
+
+class EjecutorSinCreditos(EjecutorFalso):
+    def claude(self, arbol, prompt):
+        self.llamadas.append(("claude", prompt))
+        raise sincronia.SinCreditos("Claude AI usage limit reached")
+
+
+@necesita_git
+def test_si_claude_esta_sin_creditos_la_revision_espera_y_no_se_pierde(repo, astra, home):
+    sincronia.pedir_revision(astra, "x")
+    assert "sin créditos" in sincronia.revisor(repo, ejecutor=EjecutorSinCreditos(), home=home)
+    assert len(sincronia._pendientes(sincronia._buzon(sincronia._arboles(repo)))) == 1
+    assert _agente(sincronia.construir_foto(repo, home=home), "claude")["sin_creditos"]
+
+    # Mientras dure, no se reintenta ni se gasta nada.
+    espera = EjecutorFalso()
+    assert "sin créditos" in sincronia.revisor(repo, ejecutor=espera, home=home)
+    assert espera.llamadas == []
+
+    # Pasada la hora, se hace sola.
+    (repo / ".sincronia" / "claude_limite.json").write_text(
+        json.dumps({"hasta": "2000-01-01T00:00:00Z"}), encoding="utf-8")
+    vuelta = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=vuelta, home=home)
+    assert _tipos(vuelta)[:2] == ["pytest", "claude"]
+
+
+@necesita_git
+def test_la_respuesta_busca_la_sesion_de_astra_y_no_la_despierta_sin_creditos(repo, astra, home):
+    # Sin hook aprobado no hay sesion apuntada: se usa su ultima sesion de Codex en Vantelia.
+    _sesion_codex(home, [TURNO_BIEN])
+    sincronia.pedir_revision(astra, "x")
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor, home=home)
+    assert ejecutor.llamadas[-1][:2] == ("entregar", UUID_ASTRA)
+
+    # Sin creditos, entregarselo solo abriria un turno que falla: le espera en el buzon.
+    _sesion_codex(home, _se_acaba_la_cuota(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)))
+    _commit(astra, "backend/c.py", "z = 1\n", "fix: otra" + ASTRA)
+    sincronia.pedir_revision(astra, "y")
+    otro = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=otro, home=home)
+    assert "entregar" not in _tipos(otro)
 
 
 # --- el servidor ---------------------------------------------------------------------
