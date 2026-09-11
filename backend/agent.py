@@ -3956,6 +3956,15 @@ async def responder(
                     argumentos = json.loads(llamada.function.arguments or "{}")
                 except (ValueError, TypeError):
                     argumentos = {}
+                # "La primera que tengas": la llamada lleva la hora que eligio el
+                # codigo pero OTRO dia (el primero de la lista que el modelo le
+                # habia ofrecido). Medido el 11-sep-2026: se le dijo "viernes 11 a
+                # las 19:15", la llamada llevaba "martes 15, 19:15" y ella leyo
+                # "las 19:15 no las tengo". Manda el dia que se le propuso.
+                if (llamada.function.name == "crear_cita"
+                        and reserva.dia_cambiado_con_la_hora_elegida(estado, argumentos)):
+                    argumentos["fecha"] = estado.fecha
+                    traza.freno("dia_de_la_hora_elegida")
                 # Nadie acaba con una cita que no ha pedido. Paso con quien solo
                 # preguntaba el horario: se iba con una cita que no sabia que
                 # tenia, y el negocio con un hueco ocupado por nadie.

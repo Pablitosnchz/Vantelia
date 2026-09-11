@@ -397,6 +397,21 @@ def huecos_con_margen(dia: str, huecos: List[str], ahora,
     return [h for h in huecos if str(h)[:5] >= corte]
 
 
+def dia_cambiado_con_la_hora_elegida(estado: Estado, argumentos: Dict[str, Any]) -> bool:
+    """¿La cita que va a crear el modelo mezcla la hora elegida con OTRO dia?
+
+    Solo cuando la hora la eligio el codigo ("la primera que tengas"), el dia no
+    lo ha dicho ella y la llamada trae ESA hora con un dia distinto: una mezcla,
+    no otra eleccion. Si cambia la hora, o el dia lo dijo ella, no se toca.
+    """
+    if not (estado.hora_del_codigo and estado.dia_le_da_igual and not estado.fecha_de_ella):
+        return False
+    fecha = str(argumentos.get("fecha") or "").strip()
+    hora = str(argumentos.get("hora") or "").strip()[:5]
+    return bool(estado.fecha and estado.hora and fecha and fecha != estado.fecha
+                and hora == estado.hora[:5])
+
+
 # ─── Lo que dicen las tools (la verdad del servidor) ───────────────────────
 
 def _es_otro_servicio(guardado: str, pedido: str) -> bool:

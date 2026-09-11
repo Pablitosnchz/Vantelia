@@ -194,3 +194,21 @@ def test_con_el_hueco_elegido_se_propone_y_se_pide_el_nombre(api_module):  # noq
 
     assert "17:45" in texto and "11 de septiembre" in texto
     assert "nombre" in texto and "NO mires otros dias" in texto
+
+
+def test_si_la_llamada_cambia_solo_el_dia_manda_el_que_se_le_propuso(api_module):  # noqa: F811
+    """Se le dijo "viernes 11 a las 19:15" y la llamada llevaba "martes 15, 19:15"."""
+    from backend import reserva
+
+    estado = _eligiendo_el_codigo()  # hoy 11 a las 17:45, elegida por el codigo
+    assert reserva.dia_cambiado_con_la_hora_elegida(
+        estado, {"fecha": "2026-09-15", "hora": "17:45"})
+    # Otra hora, o el mismo dia: eso es otra eleccion, no una mezcla.
+    assert not reserva.dia_cambiado_con_la_hora_elegida(
+        estado, {"fecha": "2026-09-15", "hora": "10:00"})
+    assert not reserva.dia_cambiado_con_la_hora_elegida(
+        estado, {"fecha": "2026-09-11", "hora": "17:45"})
+    # Si el dia lo dijo ella, manda ella.
+    estado.fecha_de_ella = True
+    assert not reserva.dia_cambiado_con_la_hora_elegida(
+        estado, {"fecha": "2026-09-15", "hora": "17:45"})
