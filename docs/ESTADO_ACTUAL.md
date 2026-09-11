@@ -39,11 +39,17 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra
-- **Tarea:** reproducir y corregir la reprogramación que a veces necesita dos intentos.
-- **Rama:** `astra/reprogramar`, worktree `E:/Vantelia-astra-reprogramar`.
-- **Siguiente:** completar pytest y pedir revisión. Reproducido un desacuerdo: se ofrecen horas de B y al mover se conserva A, ocupada. Corregida la consulta específica de cita, incluida la búsqueda automática del primer hueco.
-- **Espera a:** pytest completo en curso; Claude tiene un encargo de cinco mediciones del humo con copia aislada vigente (recupera créditos a las 16:20). No se ha atribuido todavía el humo intermitente a esta causa sin su traza.
+- **Testigo:** Claude
+- **Tarea:** desplegar el arreglo de la reprogramación que a veces necesitaba dos intentos (lo hizo Astra en `astra/reprogramar`; Claude lo integró en main, `5d05457`).
+- **Rama:** main.
+- **Siguiente:** desplegar con el humo como barrera; después, que Astra revise la integración.
+- **Espera a:** Astra, sin créditos hasta las 20:46; la revisión le espera en el buzón.
+
+Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
+contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
+el humo del caso contra una copia de producción no empeora (el fallo original es
+poco frecuente: 1 de 4 despliegues el 11-sep). Su worktree tiene cambios sin
+commit (`booking.py`, `voice.py` y el test) que no se han tocado.
 
 Validación local de Astra: las tres regresiones iniciales fallaron sin el arreglo;
 el control de reserva nueva pasó. Con el arreglo pasan los ocho casos específicos
