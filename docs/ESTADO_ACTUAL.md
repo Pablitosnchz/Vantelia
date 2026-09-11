@@ -4,7 +4,11 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 11-sep-2026, Claude Code.
+Última actualización: 11-sep-2026, Claude Code (datos del piloto comprobados en
+producción).
+
+Los dos agentes **no se hablan directamente**: lo que uno sepa del otro sale de
+este fichero, de `git log` o de lo que Pablo le pase.
 
 ## Cómo se trabaja ahora
 
@@ -45,6 +49,32 @@ otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 - El alta self-service de WhatsApp está limitada al tenant de pruebas
   `metareview` (variable `WHATSAPP_ES_TENANTS`); el resto de clientes ven "escríbenos
   y la activamos".
+- **Stripe de Alicia**: cuenta conectada pero `charges_enabled=0`,
+  `payouts_enabled=0`, `details_submitted=0` (sin cambios desde el 27-ago). Los
+  servicios con señal **se reservan sin cobrarla**. Se retoma después de Meta.
+
+## Piloto de Alicia: comprobado en producción (11-sep)
+
+Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
+"preguntas abiertas" de `docs/ALICIA_PENDIENTE.md` donde choquen.
+
+- **Señal**: 53 servicios activos la llevan. **Ninguno de menos de 50 €** (hay 91
+  activos por debajo, todos sin señal). La pregunta de agosto sigue igual: es
+  decisión de Alicia, no un fallo.
+- **Grey blending**: los sueltos de 75/90/105/120 min están desactivados; queda
+  activo "Grey blending corto-med" (90 min, 48 €). Packs: corto 370 min, medio
+  440, **largo 530, extra largo 495**. Que el largo dure más que el extra largo
+  hay que preguntárselo a ella (en agosto ya se vio que el "largo" usa pasos de
+  extra largo).
+- **Recogidos**: existen y están activos (medio recogido 20 min, con postizo 30,
+  recogido con postizo 40, pack maquillaje y recogido 170, pack maquillaje y
+  medio recogido 215). No se han revisado los pasos internos de los packs.
+- **Equipo**: Alicia tiene **0 servicios asignados a propósito**: lista vacía =
+  los hace todos (`agenda._services_for_employee`), y así los servicios nuevos le
+  entran solos. No "arreglarlo" poniéndole una lista. Lorena 190, Conchi 193,
+  Lucía 108, Jose 108.
+- Sin comprobar todavía: horario real de Lucía y Jose, y si Alicia ha probado la
+  última versión.
 
 ## Decisiones pendientes de Pablo
 
