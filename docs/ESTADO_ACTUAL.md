@@ -127,14 +127,17 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
 
 - **Coexistence: DESBLOQUEADO (11-sep).** Meta aprobó la revisión de la app y
   Pablo la publicó. El +31 97006546256 de Vantelia funciona en Coexistence (WA
-  Business en su móvil + asistente a la vez). Desde las ~17:00 ese número contesta
-  con el **asistente de Alicia**, solo lo que entra: sus avisos de cita siguen
-  saliendo por email, porque se le quitó WhatsApp de los canales de aviso para que
-  el "Vantelia" del +31 no escriba a sus clientas reales. Las citas de prueba por
-  el +31 caen en SU agenda real. Si alguien contesta desde WA Business, el
-  asistente se calla 1 h desde su último mensaje en ese chat (vuelve solo, sin
-  saludar de nuevo y sabiendo lo hablado; o «Devolver al asistente» en
-  Conversaciones).
+  Business en su móvil + asistente a la vez) y contesta con el **asistente de
+  Vantelia** (tenant `metareview`, "Clara"). Estuvo unas horas con el de Alicia y se
+  deshizo a petición de Pablo: su pestaña WhatsApp está limpia para que conecte el
+  suyo. Si alguien contesta desde WA Business, el asistente se calla 1 h desde su
+  último mensaje en ese chat (vuelve solo, sin saludar de nuevo y sabiendo lo
+  hablado; o «Devolver al asistente» en Conversaciones).
+- **Avisos de cita de Alicia: hoy no sale ninguno.** En el bloque que usa el motor
+  (`booking.message_template_channels`) tiene el email apagado y solo WhatsApp, y
+  WhatsApp no está conectado. Cuando conecte su número empezarán las
+  confirmaciones por WhatsApp; los recordatorios de 24 h casi nunca saldrán hasta
+  que haya plantillas (`docs/PLAN_RECORDATORIOS_WHATSAPP.md`).
 - El alta self-service de WhatsApp sigue limitada al tenant de pruebas
   `metareview` (variable `WHATSAPP_ES_TENANTS`). Conectar el número PROPIO de
   Alicia pasa por añadirla ahí (ver decisión 1).
@@ -167,13 +170,12 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
 
 ## Decisiones pendientes de Pablo
 
-1. **Alicia con su propio número: LISTO para que lo conecte** (11-sep). Le sale el
-   botón «Conectar WhatsApp» en la pestaña WhatsApp de su portal
-   (`WHATSAPP_ES_TENANTS=metareview,alicia_rincon_estilistas` en el `.env` del
-   VPS). Al conectar, su número sustituye al +31 (que vuelve al tenant de pruebas)
-   y su configuración pasa sola al número nuevo. Es la prueba de que el alta vale
-   para una empresa que no es la nuestra. Después: volver a poner WhatsApp en sus
-   canales de aviso cuando haya plantillas (punto 2).
+1. **Alicia con su propio número: LISTO para que lo conecte** (11-sep, comprobado
+   en producción). Le sale el botón «Conectar mi WhatsApp» en la pestaña WhatsApp
+   de su portal (`WHATSAPP_ES_TENANTS=metareview,alicia_rincon_estilistas` en el
+   `.env` del VPS). Al conectar, su configuración pasa sola al número nuevo. Es la
+   prueba de que el alta vale para una empresa que no es la nuestra. Después,
+   vigilar sus avisos (ver «Avisos de cita de Alicia» arriba) y el punto 2.
 2. **Siguiente gran tarea: recordatorios por WhatsApp** (plantillas de Meta). Plan
    para ejecutar tal cual en `docs/PLAN_RECORDATORIOS_WHATSAPP.md`.
 3. Decidido (11-sep): **dos apellidos obligatorios** en el panel y también por
