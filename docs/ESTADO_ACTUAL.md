@@ -17,12 +17,14 @@ este fichero, de `git log` o de lo que Pablo le pase.
   despliega después de revisar.
 - **Pablo decide.** Reglas completas en `AGENTS.md`.
 - **¿Estáis sincronizados?** → https://app.vantelia.es/sincronia (semáforo, solo
-  admin). Cada agente, al empezar, corre
-  `python scripts/sincronia.py --al-dia claude|astra`: ve lo nuevo del otro y
-  queda apuntado.
-- **Si a uno se le acaban los tokens**, el otro se pone al día y sigue en la MISMA
-  rama. Solo Claude despliega: si Claude no está, lo de Astra se queda en su rama
-  esperando revisión.
+  admin). Pablo no tiene que decir nada: los hooks de los dos agentes los ponen al
+  día solos al empezar y con cada mensaje suyo, y el agente le cuenta lo nuevo.
+- **Astra termina → Claude revisa solo.** Astra pide revisión, la tarea programada
+  «Vantelia revisor» pasa los tests en una copia aparte y lanza la revisión de
+  Claude, y la respuesta llega a la sesión de Astra, que se lo cuenta a Pablo.
+  Pablo solo dice «despliega», a cualquiera de los dos.
+- **Si a uno se le acaban los tokens**, el otro se pone al día solo y sigue en la
+  MISMA rama.
 
 ## En curso
 

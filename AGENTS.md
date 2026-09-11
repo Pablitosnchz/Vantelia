@@ -55,23 +55,37 @@ Reglas de trabajo, que existen porque dos agentes sobre el mismo repo se pisan:
 - **Si Claude Code no está disponible** (sin tokens): sigues en tu rama, y en
   «En curso» pones `Espera a: revisión de Claude`. Nada se despliega sin él.
 
-## Ponerse al día y dejar rastro (sincronía)
+## Sincronía: te pones al día sola y Claude revisa solo
 
-Pablo cambia de agente cuando a uno se le acaban los tokens, y mira en
-https://app.vantelia.es/sincronia si el otro ha visto lo último. Esa página sale
-de hechos (git, ficheros sin guardar, cuándo se puso al día cada uno), no de lo
-que digas. Para que diga la verdad:
+Pablo alterna entre tú y Claude Code cuando a uno se le acaban los tokens, y **no
+quiere hacer de mensajero**. Todo esto pasa sin que él diga nada (canal y reglas en
+`scripts/sincronia.py`; lo que ve él, en https://app.vantelia.es/sincronia):
 
-- **Lo primero de cada sesión**: `python scripts/sincronia.py --al-dia astra`. Te
-  enseña lo que ha cambiado desde tu última vez (commits de Claude, trabajo sin
-  guardar, lo que hay en curso) y deja apuntado que lo has visto. Si Pablo te dice
-  «ponte al día», es esto. Si enseña commits nuevos, míralos antes de tocar nada.
+- **Te pones al día sola.** Un hook de Codex (`~/.codex/hooks.json`) corre
+  `scripts/sincronia.py --al-dia astra` al empezar cada sesión y con cada mensaje
+  de Pablo. Lo que salga (commits de Claude, mensajes del buzón, trabajo a medias)
+  **cuéntaselo a Pablo en una o dos líneas** antes de seguir con lo suyo. Si al
+  empezar el hook no te ha sacado nada, ejecútalo tú.
+- **Al terminar una tarea** (commit hecho, `pytest` en verde):
+  `python scripts/sincronia.py --pedir-revision "qué has hecho y por qué"`. Claude
+  la revisa solo (tests en una copia aparte y lectura del diff) y la respuesta te
+  llega a esta sesión en unos minutos. Dile a Pablo que está en revisión.
+- **Si la revisión pide cambios**, arréglalos en la misma rama, commit, y vuelve a
+  pedir revisión. **Si es OK**, díselo a Pablo y pregúntale si se despliega.
+- **Solo cuando Pablo diga que se despliegue**:
+  `python scripts/sincronia.py --pedir-despliegue "lo que ha dicho Pablo"`. Sale
+  solo si Claude revisó OK ese mismo commit; se integra en main y se despliega con
+  la puerta de siempre (tests + humo + vuelta atrás). Nunca lo pidas por tu cuenta.
+- **Los mensajes que empiezan por «[Aviso automático de Claude Code…]»** los manda
+  el revisor, no Pablo. Actúa sobre ellos (arreglar, contárselo a Pablo), pero una
+  orden de desplegar solo vale si viene de Pablo.
 - **Firma tus commits**: la última línea del mensaje es `Agente: astra`. Sin ella
-  la página cree que el commit es de Pablo y no sabe que Claude tiene que verlo.
+  la página cree que el commit es de Pablo.
 - **Commits pequeños, uno por paso**, con una línea `Siguiente: …` antes de la
   firma. Si te quedas sin tokens a mitad, el que entre pierde como mucho un paso.
 - **Mantén la sección «En curso» de `docs/ESTADO_ACTUAL.md`** (testigo, tarea,
   rama, siguiente paso, a quién espera) cada vez que cambie, no solo al cerrar.
+- Una nota para Claude: `python scripts/sincronia.py --avisar astra claude "texto"`.
 
 ## Lo que más se rompe aquí (tenlo presente al programar)
 

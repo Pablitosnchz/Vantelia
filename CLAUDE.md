@@ -804,11 +804,21 @@ hallazgo: con un test que falle sin el arreglo.
 Pablo mira en `https://app.vantelia.es/sincronia` (solo admin) si el agente que va
 a usar ha visto lo ultimo del otro. Todo sale de `scripts/sincronia.py`:
 
-- `--al-dia claude|astra`: ensena al agente lo nuevo de los demas (commits, trabajo
-  sin guardar, la seccion "En curso" de `docs/ESTADO_ACTUAL.md`) y deja constancia
-  en `.sincronia/<agente>.json`. A Claude se lo corre un hook SessionStart
-  (`.claude/settings.local.json`); volver a correrlo antes de revisar una rama de
-  Astra. Astra lo corre por regla de `AGENTS.md`.
+- `--al-dia claude|astra`: ensena al agente lo nuevo de los demas (commits, mensajes
+  del buzon, trabajo sin guardar, la seccion "En curso" de `docs/ESTADO_ACTUAL.md`)
+  y deja constancia en `.sincronia/<agente>.json`. Lo corren SOLOS los hooks: a
+  Claude, SessionStart + UserPromptSubmit (`.claude/settings.local.json`); a
+  Astra, los de Codex (`~/.codex/hooks.json`, hay que confiarlos una vez en
+  `/hooks`). Con `--solo-novedades` no dice nada si no hay nada nuevo. Lo que
+  salga, contarselo a Pablo en una linea: el no hace de mensajero.
+- Buzon entre agentes (`.sincronia/buzon/`, fuera de git): Astra termina y corre
+  `--pedir-revision`; la tarea programada "Vantelia revisor" (`--revisor`, cada 5
+  min) hace los tests en un worktree temporal, lanza `claude -p` en solo lectura
+  (Read/Grep/Glob + git diff/log/show, sin hooks) con la ultima linea obligatoria
+  `VEREDICTO: OK|CAMBIOS`, y entrega la respuesta en la sesion de Astra con
+  `codex queue` (si no esta abierta, le llega al volver). Tests en rojo = CAMBIOS.
+  `--pedir-despliegue` (Astra, solo si Pablo lo dice) integra en main y despliega
+  SOLO si ese commit tiene revision OK y main esta limpio.
 - Quien hizo cada commit sale de su firma: `Co-Authored-By: Claude` = Claude,
   `Agente: astra` = Astra, lo demas = Pablo.
 - El PC de Pablo manda la foto cada 5 min (tarea programada de Windows "Vantelia

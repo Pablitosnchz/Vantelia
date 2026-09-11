@@ -2,28 +2,32 @@
 """Sincronía entre los agentes que trabajan en este repo (Claude Code y GPT-6 Astra).
 
 Los dos agentes no se ven: cada uno tiene su propia memoria y lo único que
-comparten es el repo. Este script contesta a la pregunta de Pablo -"si cambio de
-agente ahora, ¿el otro sabe lo que ha hecho el primero?"- mirando solo cosas que
-no dependen de lo que digan ellos: git, los worktrees y cuándo se puso al día
-cada uno por última vez.
+comparten es este PC y el repo. Este script hace de canal entre ellos y contesta a
+la pregunta de Pablo -"¿el otro sabe lo que ha hecho el primero?"- con hechos
+(git, ficheros sin guardar, cuándo se puso al día cada uno), no con lo que digan.
 
-    python scripts/sincronia.py --al-dia claude    lo primero de cada sesión
-    python scripts/sincronia.py --al-dia astra
-    python scripts/sincronia.py                    el semáforo, en la terminal
-    python scripts/sincronia.py --enviar           manda la foto a app.vantelia.es
+    --al-dia claude|astra [--hook] [--solo-novedades]
+        Ponerse al día: enseña al agente lo nuevo desde su última vez (commits y
+        mensajes de los demás, trabajo sin guardar, "En curso") y lo apunta. Lo
+        corren SOLOS los hooks de los dos agentes, al empezar y con cada mensaje
+        de Pablo (`.claude/settings.local.json` y `~/.codex/hooks.json`). --hook
+        lee por stdin el JSON del hook (apunta la sesión); --solo-novedades no
+        imprime nada si no hay nada nuevo.
+    --pedir-revision "qué"      Astra, al terminar una tarea: pide revisión.
+    --pedir-despliegue "qué"    Astra, cuando Pablo dice que se despliegue.
+    --avisar DE PARA "texto"    una nota cualquiera por el buzón.
+    --revisor                   lo corre la tarea programada "Vantelia revisor":
+                                atiende la petición más antigua (tests + revisión
+                                de Claude sin intervención, o fusión en main +
+                                despliegue) y entrega la respuesta en la sesión
+                                de Astra con `codex queue`.
+    --enviar                    manda la foto a app.vantelia.es/sincronia.
+    (sin nada)                  el semáforo, en la terminal.
 
-Ponerse al día ENSEÑA al agente lo que ha cambiado desde su última vez (commits
-de los demás, trabajo sin guardar, lo que hay en curso) y deja constancia en
-`.sincronia/<agente>.json` del árbol donde trabaja. Esa constancia es lo que
-permite decir "Claude ha visto todo lo de Astra" sin fiarse de su palabra.
-
-Quién hizo cada commit sale del mensaje: una línea `Co-Authored-By: Claude` es
-Claude, una línea `Agente: astra` es Astra, y lo demás es Pablo.
-
-El PC de Pablo manda la foto cada 5 minutos (tarea programada de Windows
-"Vantelia sincronia") a POST /admin/sincronia; el servidor solo la guarda y le
-añade qué commit está desplegado. La página es https://app.vantelia.es/sincronia.
-El token va en `.sincronia/token`, que no está en git.
+El buzón son ficheros en `.sincronia/buzon/` de cada árbol, fuera de git: los dos
+agentes están en el mismo PC. Quién hizo cada commit sale de su firma: una línea
+`Co-Authored-By: Claude` es Claude, una línea `Agente: astra` es Astra, y lo demás
+es Pablo. Solo se despliega un commit que tenga una revisión OK de Claude.
 """
 from __future__ import annotations
 
@@ -33,22 +37,31 @@ import json
 import os
 import pathlib
 import re
+import secrets
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 AGENTES = {"claude": "Claude", "astra": "Astra"}
+AUTORES = {"claude": "Claude", "astra": "Astra", "revisor": "Claude (revisión automática)", "pablo": "Pablo"}
 URL_POR_DEFECTO = "https://app.vantelia.es/admin/sincronia"
 PAGINA = "https://app.vantelia.es/sincronia"
 DIR_LOCAL = ".sincronia"
+PREFIJO_REVISION = "vantelia-revision-"
 # Cambios sin commit que nadie toca desde hace mas de esto: alguien se quedo a
 # medias (lo tipico, sin tokens). Si son mas recientes, esta trabajando ahora.
 A_MEDIAS_MIN = 30
 MAX_LISTA = 12
+MAX_BUZON_FOTO = 15
+CERROJO_CADUCA_H = 3
 _SIN_VENTANA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_VEREDICTO = re.compile(r"VEREDICTO:\s*\**\s*(OK|CAMBIOS)\b", re.I)
 _ETIQUETAS = (
     ("testigo", "Testigo"),
     ("tarea", "Tarea"),
@@ -56,6 +69,21 @@ _ETIQUETAS = (
     ("siguiente", "Siguiente"),
     ("espera_a", "Espera a"),
 )
+_TIPOS = {
+    "revisar": "pide revisión",
+    "revision": "revisión",
+    "desplegar": "pide desplegar",
+    "despliegue": "despliegue",
+    "nota": "nota",
+}
+_VEREDICTOS = {
+    "ok": "OK",
+    "cambios": "CAMBIOS",
+    "error": "NO SE PUDO",
+    "sin_veredicto": "SIN VEREDICTO",
+    "rechazado": "NO SE DESPLIEGA",
+    "fallo": "FALLÓ",
+}
 _LINEA_EN_CURSO = re.compile(
     r"^\s*[-*]?\s*\**\s*(testigo|tarea|rama|siguiente|espera a)\s*\**\s*:\s*\**\s*(.*?)\s*$",
     re.I,
@@ -107,6 +135,18 @@ def _git(args: List[str], cwd: pathlib.Path, check: bool = True) -> str:
     return resultado.stdout.decode("utf-8", "replace")
 
 
+def _git_ok(args: List[str], cwd: pathlib.Path) -> bool:
+    resultado = subprocess.run(
+        ["git"] + list(args),
+        cwd=str(cwd),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=_SIN_VENTANA,
+    )
+    return resultado.returncode == 0
+
+
 def raiz_del_repo(desde: pathlib.Path) -> pathlib.Path:
     """El repo PRINCIPAL, aunque se llame desde el worktree de Astra."""
     desde = pathlib.Path(desde).resolve()
@@ -137,7 +177,11 @@ def _arboles(raiz: pathlib.Path) -> List[Dict[str, Any]]:
             actual["perdido"] = True
     if actual:
         arboles.append(actual)
-    return [a for a in arboles if not a.get("perdido") and pathlib.Path(a["ruta"]).exists()]
+    # Las copias temporales del revisor no son trabajo de nadie.
+    return [
+        a for a in arboles
+        if not a.get("perdido") and PREFIJO_REVISION not in a["ruta"] and pathlib.Path(a["ruta"]).exists()
+    ]
 
 
 def _ramas(raiz: pathlib.Path) -> Dict[str, str]:
@@ -197,15 +241,7 @@ def _commits(raiz: pathlib.Path, rango: List[str], limite: int) -> List[Dict[str
 
 
 def _existe(raiz: pathlib.Path, sha: str) -> bool:
-    resultado = subprocess.run(
-        ["git", "cat-file", "-e", sha + "^{commit}"],
-        cwd=str(raiz),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=_SIN_VENTANA,
-    )
-    return resultado.returncode == 0
+    return _git_ok(["cat-file", "-e", sha + "^{commit}"], raiz)
 
 
 def _sin_guardar(ruta: pathlib.Path) -> Tuple[List[str], Optional[dt.datetime]]:
@@ -219,7 +255,7 @@ def _sin_guardar(ruta: pathlib.Path) -> Tuple[List[str], Optional[dt.datetime]]:
         if " -> " in fichero:
             fichero = fichero.split(" -> ", 1)[1].strip()
         fichero = fichero.strip('"')
-        # Los fichajes de este script no son trabajo de nadie.
+        # Los fichajes y el buzon de este script no son trabajo de nadie.
         if fichero == DIR_LOCAL or fichero.startswith(DIR_LOCAL + "/"):
             continue
         ficheros.append(fichero)
@@ -232,6 +268,12 @@ def _sin_guardar(ruta: pathlib.Path) -> Tuple[List[str], Optional[dt.datetime]]:
         if ultimo is None or momento > ultimo:
             ultimo = momento
     return ficheros, ultimo
+
+
+def _cambios_seguidos(arbol: pathlib.Path) -> List[str]:
+    """Cambios sin commit en ficheros que git ya sigue (lo nuevo sin anadir no cuenta)."""
+    salida = _git(["status", "--porcelain", "--untracked-files=no"], arbol, check=False)
+    return [linea[3:].strip() for linea in salida.splitlines() if len(linea) > 3]
 
 
 # --- lo que no es git -----------------------------------------------------------
@@ -283,7 +325,7 @@ def _fichajes(arboles: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
                 continue
             if not isinstance(datos, dict):
                 continue
-            if agente not in fichajes or str(datos.get("cuando") or "") > str(fichajes[agente].get("cuando") or ""):
+            if agente not in fichajes or float(datos.get("marca") or 0) > float(fichajes[agente].get("marca") or 0):
                 fichajes[agente] = datos
     return fichajes
 
@@ -345,6 +387,92 @@ def _ultima_actividad(home: pathlib.Path) -> Dict[str, Optional[dt.datetime]]:
     return actividad
 
 
+# --- el buzon -------------------------------------------------------------------
+
+def _escribir_mensaje(arbol: pathlib.Path, de: str, para: str, tipo: str, texto: str, **extra: Any) -> Dict[str, Any]:
+    carpeta = pathlib.Path(arbol) / DIR_LOCAL / "buzon"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    marca = time.time()
+    momento = dt.datetime.fromtimestamp(marca, dt.timezone.utc)
+    ident = "%s-%s-%s" % (momento.strftime("%Y%m%dT%H%M%S%f"), de, secrets.token_hex(3))
+    mensaje: Dict[str, Any] = {
+        "id": ident,
+        "marca": marca,
+        "cuando": _iso(momento),
+        "de": de,
+        "para": para,
+        "tipo": tipo,
+        "texto": (texto or "").strip(),
+    }
+    mensaje.update({clave: valor for clave, valor in extra.items() if valor not in (None, "")})
+    (carpeta / (ident + ".json")).write_text(json.dumps(mensaje, ensure_ascii=False, indent=2), encoding="utf-8")
+    return mensaje
+
+
+def _buzon(arboles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Todos los mensajes de todos los arboles, del mas antiguo al mas nuevo."""
+    mensajes: Dict[str, Dict[str, Any]] = {}
+    for arbol in arboles:
+        for fichero in (pathlib.Path(arbol["ruta"]) / DIR_LOCAL / "buzon").glob("*.json"):
+            try:
+                mensaje = json.loads(fichero.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(mensaje, dict) and mensaje.get("id"):
+                mensajes[str(mensaje["id"])] = mensaje
+    return sorted(mensajes.values(), key=lambda m: float(m.get("marca") or 0))
+
+
+def _pendientes(mensajes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Peticiones de revision o despliegue que nadie ha contestado todavia."""
+    contestadas = {m.get("responde_a") for m in mensajes if m.get("responde_a")}
+    return [m for m in mensajes if m.get("tipo") in ("revisar", "desplegar") and m.get("id") not in contestadas]
+
+
+def avisar(desde: pathlib.Path, de: str, para: str, texto: str) -> Dict[str, Any]:
+    return _escribir_mensaje(_arbol_de(desde), de, para, "nota", texto)
+
+
+def _pedir(desde: pathlib.Path, tipo: str, texto: str, de: str = "astra") -> Tuple[bool, str]:
+    arbol = _arbol_de(desde)
+    cambios = _cambios_seguidos(arbol)
+    if cambios:
+        return False, ("No: hay %d cambio(s) sin commit en %s (%s). Haz commit y vuelve a pedirlo: "
+                       "se revisa y se despliega lo que está en un commit, no lo que está a medias."
+                       % (len(cambios), arbol, ", ".join(cambios[:4])))
+    rama = _git(["rev-parse", "--abbrev-ref", "HEAD"], arbol).strip()
+    commit = _git(["rev-parse", "HEAD"], arbol).strip()
+    _escribir_mensaje(arbol, de, "claude", tipo, texto, rama=rama, commit=commit)
+    if tipo == "revisar":
+        return True, ("Revisión pedida para %s (%s). Claude la hace solo en unos minutos (tests + revisión) "
+                      "y la respuesta te llega aquí; no hace falta que Pablo haga nada." % (rama, commit[:7]))
+    return True, ("Despliegue pedido para %s (%s). Solo sale si Claude revisó OK ese mismo commit; "
+                  "el resultado te llega aquí." % (rama, commit[:7]))
+
+
+def pedir_revision(desde: pathlib.Path, texto: str) -> Tuple[bool, str]:
+    return _pedir(desde, "revisar", texto)
+
+
+def pedir_despliegue(desde: pathlib.Path, texto: str) -> Tuple[bool, str]:
+    return _pedir(desde, "desplegar", texto)
+
+
+def _mensaje_para_foto(mensaje: Dict[str, Any]) -> Dict[str, Any]:
+    datos = {clave: mensaje.get(clave) for clave in ("id", "cuando", "de", "para", "tipo", "rama", "veredicto")}
+    datos["commit"] = str(mensaje.get("commit") or "")[:7]
+    datos["texto"] = str(mensaje.get("texto") or "")[:1500]
+    return {clave: valor for clave, valor in datos.items() if valor}
+
+
+def _estado_revisor(raiz: pathlib.Path) -> Optional[Dict[str, Any]]:
+    try:
+        datos = json.loads((raiz / DIR_LOCAL / "revisor.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return datos if isinstance(datos, dict) else None
+
+
 # --- la foto --------------------------------------------------------------------
 
 def veredicto(foto: Dict[str, Any], ahora: dt.datetime) -> Dict[str, str]:
@@ -365,7 +493,7 @@ def veredicto(foto: Dict[str, Any], ahora: dt.datetime) -> Dict[str, str]:
             "titulo": "Hay trabajo a medias sin guardar",
             "detalle": (
                 "En %s (%s) hay %d cambio(s) sin commit que nadie toca desde hace más de %d min. "
-                "Si a alguien se le acabaron los tokens, dile al otro: «ponte al día y sigue donde se quedó»."
+                "Si a alguien se le acabaron los tokens, el otro lo verá solo al empezar y seguirá donde se quedó."
                 % (arbol["ruta"], arbol.get("rama") or "sin rama", arbol["sin_guardar_total"], A_MEDIAS_MIN)
             ),
         }
@@ -391,10 +519,7 @@ def veredicto(foto: Dict[str, Any], ahora: dt.datetime) -> Dict[str, str]:
         return {
             "color": "amarillo",
             "titulo": "Casi: " + "; ".join(partes),
-            "detalle": (
-                "Cada uno se pone al día solo al empezar su sesión. "
-                "Si vas a cambiar de agente ahora, dile primero: «ponte al día»."
-            ),
+            "detalle": "Cada uno se pone al día solo en cuanto le escribes. No tienes que decirle nada.",
         }
     return {
         "color": "verde",
@@ -453,6 +578,7 @@ def construir_foto(
             if cuenta.isdigit() and int(cuenta):
                 sin_integrar.append({"rama": rama, "commits": int(cuenta)})
 
+    mensajes = _buzon(arboles_git)
     foto: Dict[str, Any] = {
         "version": 1,
         "generada": _iso(ahora),
@@ -461,6 +587,9 @@ def construir_foto(
         "agentes": agentes,
         "arboles": arboles,
         "ramas_sin_integrar": sin_integrar,
+        "buzon": [_mensaje_para_foto(m) for m in reversed(mensajes[-MAX_BUZON_FOTO:])],
+        "pendientes": len(_pendientes(mensajes)),
+        "revisor": _estado_revisor(raiz),
         "main": _commits(raiz, ["main"], limite=30) if "main" in ramas else [],
     }
     foto["veredicto"] = veredicto(foto, ahora)
@@ -473,61 +602,372 @@ def _agente(foto: Dict[str, Any], agente: str) -> Dict[str, Any]:
     return next(a for a in foto["agentes"] if a["id"] == agente)
 
 
-def _nombre(agente: str) -> str:
-    return AGENTES.get(agente, "Pablo")
+def _nombre(autor: str) -> str:
+    return AUTORES.get(autor, autor.capitalize() if autor else "Pablo")
 
 
-def _informe(antes: Dict[str, Any], despues: Dict[str, Any], agente: str) -> str:
+def _linea_mensaje(mensaje: Dict[str, Any], agente: str) -> str:
+    tipo = _TIPOS.get(str(mensaje.get("tipo")), "nota")
+    etiqueta = _VEREDICTOS.get(str(mensaje.get("veredicto") or ""), "")
+    donde = ""
+    if mensaje.get("rama"):
+        donde = " %s (%s)" % (mensaje["rama"], str(mensaje.get("commit") or "")[:7])
+    # A quien va dirigido lo lee entero: una revision con cambios hay que poder aplicarla.
+    limite = 4000 if mensaje.get("para") == agente else 600
+    texto = str(mensaje.get("texto") or "")
+    if len(texto) > limite:
+        texto = texto[:limite] + " …"
+    cabecera = "[%s → %s · %s%s%s]" % (
+        _nombre(str(mensaje.get("de") or "")), _nombre(str(mensaje.get("para") or "")), tipo,
+        (" " + etiqueta) if etiqueta else "", donde)
+    return "  %s %s" % (cabecera, texto.replace("\n", "\n    "))
+
+
+def _informe(
+    antes: Dict[str, Any],
+    despues: Dict[str, Any],
+    agente: str,
+    mensajes: List[Dict[str, Any]],
+    arbol: pathlib.Path,
+    desde_marca: float,
+    solo_novedades: bool,
+) -> str:
     yo = _agente(antes, agente)
-    lineas = ["== Sincronía: puesta al día de %s ==" % yo["nombre"]]
+    sin_guardar = [a for a in antes.get("arboles") or [] if a.get("sin_guardar_total")]
+    if solo_novedades:
+        # En cada mensaje de Pablo: solo lo de los DEMAS que haya cambiado desde la ultima vez.
+        def _cambio_despues(a: Dict[str, Any]) -> bool:
+            ultimo = _desde_iso(a.get("ultimo_cambio"))
+            return ultimo is not None and ultimo.timestamp() > desde_marca
+        sin_guardar = [a for a in sin_guardar
+                       if pathlib.Path(a["ruta"]).resolve() != arbol and _cambio_despues(a)]
+        if not (yo["no_vistos_total"] or mensajes or sin_guardar):
+            return ""
+
+    lineas = ["== Sincronía: %s de %s ==" % ("novedades para" if solo_novedades else "puesta al día", yo["nombre"])]
     if yo["estado"] == "nunca":
         lineas.append("Primera puesta al día: no hay registro de lo que viste antes. Lee docs/ESTADO_ACTUAL.md entero.")
     elif yo["no_vistos_total"]:
-        lineas.append("Lo nuevo de los demás desde tu última vez (%s):" % _hora_local(yo["ultima_puesta_al_dia"]))
+        lineas.append("Commits nuevos de los demás desde tu última vez (%s):" % _hora_local(yo["ultima_puesta_al_dia"]))
         for commit in yo["no_vistos"]:
             lineas.append("  %s [%s] %s" % (commit["corto"], _nombre(commit["agente"]), commit["asunto"]))
         resto = yo["no_vistos_total"] - len(yo["no_vistos"])
         if resto > 0:
             lineas.append("  … y %d más (git log)" % resto)
-        lineas.append("Míralos (git show <sha>) antes de tocar nada.")
-    else:
+        lineas.append("Míralos (git show <sha>) antes de tocar lo mismo.")
+    elif not solo_novedades:
         lineas.append("Nada nuevo de los demás en git desde tu última vez (%s)." % _hora_local(yo["ultima_puesta_al_dia"]))
-    for arbol in antes.get("arboles") or []:
-        if arbol.get("sin_guardar_total"):
-            muestra = ", ".join(arbol["sin_guardar"][:6])
-            if arbol["sin_guardar_total"] > 6:
-                muestra += " …"
-            lineas.append("Sin guardar en %s (%s): %s" % (arbol["ruta"], arbol.get("rama") or "sin rama", muestra))
-    en_curso = antes.get("en_curso")
-    if en_curso:
-        piezas = ["%s: %s" % (etiqueta, en_curso[clave]) for clave, etiqueta in _ETIQUETAS if en_curso.get(clave)]
-        lineas.append("En curso (docs/ESTADO_ACTUAL.md) — " + " · ".join(piezas))
-    else:
-        lineas.append("En curso: no hay nada apuntado en docs/ESTADO_ACTUAL.md.")
-    for rama in antes.get("ramas_sin_integrar") or []:
-        lineas.append("Rama sin integrar en main: %s (%d commit%s)"
-                      % (rama["rama"], rama["commits"], "" if rama["commits"] == 1 else "s"))
-    semaforo = despues["veredicto"]
-    lineas.append("Semáforo: %s. %s" % (semaforo["titulo"], semaforo["detalle"]))
-    lineas.append("Queda apuntado que lo has visto. Pablo lo ve en %s" % PAGINA)
+    if mensajes:
+        lineas.append("Mensajes nuevos en el buzón:")
+        lineas.extend(_linea_mensaje(m, agente) for m in mensajes)
+    for a in sin_guardar:
+        muestra = ", ".join(a["sin_guardar"][:6]) + (" …" if a["sin_guardar_total"] > 6 else "")
+        lineas.append("Sin guardar en %s (%s): %s" % (a["ruta"], a.get("rama") or "sin rama", muestra))
+    if not solo_novedades:
+        en_curso = antes.get("en_curso")
+        if en_curso:
+            piezas = ["%s: %s" % (etiqueta, en_curso[clave]) for clave, etiqueta in _ETIQUETAS if en_curso.get(clave)]
+            lineas.append("En curso (docs/ESTADO_ACTUAL.md) — " + " · ".join(piezas))
+        else:
+            lineas.append("En curso: no hay nada apuntado en docs/ESTADO_ACTUAL.md.")
+        for rama in antes.get("ramas_sin_integrar") or []:
+            lineas.append("Rama sin integrar en main: %s (%d commit%s)"
+                          % (rama["rama"], rama["commits"], "" if rama["commits"] == 1 else "s"))
+        semaforo = despues["veredicto"]
+        lineas.append("Semáforo: %s. %s" % (semaforo["titulo"], semaforo["detalle"]))
+    lineas.append("Cuéntale a Pablo en una o dos líneas lo que le afecte de esto: él no tiene que pedírtelo. "
+                  "(Queda apuntado que lo has visto; Pablo lo ve en %s)" % PAGINA)
     return "\n".join(lineas)
 
 
 def fichar(
-    desde: pathlib.Path, agente: str, ahora: Optional[dt.datetime] = None, home: Optional[pathlib.Path] = None
+    desde: pathlib.Path,
+    agente: str,
+    ahora: Optional[dt.datetime] = None,
+    home: Optional[pathlib.Path] = None,
+    sesion: str = "",
+    solo_novedades: bool = False,
 ) -> str:
     """Pone al dia al agente: le devuelve lo que tiene que leer y deja constancia de que lo vio."""
     if agente not in AGENTES:
         raise ValueError("Agente desconocido: %s" % agente)
     ahora = ahora or _ahora()
-    antes = construir_foto(desde, ahora=ahora, home=home)
+    raiz = raiz_del_repo(desde)
     arbol = _arbol_de(desde)
+    anterior = _fichajes(_arboles(raiz)).get(agente) or {}
+    desde_marca = float(anterior.get("marca") or 0)
+    antes = construir_foto(desde, ahora=ahora, home=home)
+    mensajes = [m for m in _buzon(_arboles(raiz))
+                if m.get("de") != agente and float(m.get("marca") or 0) > desde_marca]
     carpeta = arbol / DIR_LOCAL
     carpeta.mkdir(exist_ok=True)
-    registro = {"agente": agente, "cuando": _iso(ahora), "vio": _ramas(raiz_del_repo(desde)), "arbol": str(arbol)}
+    registro = {
+        "agente": agente,
+        "cuando": _iso(ahora),
+        "marca": time.time(),
+        "vio": _ramas(raiz),
+        "arbol": str(arbol),
+        # La sesion del hook es a donde se le entregan los avisos (codex queue).
+        "sesion": sesion or anterior.get("sesion") or "",
+    }
     (carpeta / ("%s.json" % agente)).write_text(json.dumps(registro, indent=2), encoding="utf-8")
     despues = construir_foto(desde, ahora=ahora, home=home)
-    return _informe(antes, despues, agente)
+    return _informe(antes, despues, agente, mensajes, arbol, desde_marca, solo_novedades)
+
+
+# --- el revisor ---------------------------------------------------------------------
+
+def _python_con_consola() -> str:
+    ejecutable = pathlib.Path(sys.executable)
+    if ejecutable.name.lower() == "pythonw.exe" and ejecutable.with_name("python.exe").exists():
+        return str(ejecutable.with_name("python.exe"))
+    return str(ejecutable)
+
+
+def _una_linea(texto: str, limite: int = 900) -> str:
+    # Viaja como argumento por el lanzador .cmd de codex: fuera lo que cmd.exe interpreta.
+    limpio = re.sub(r'["%^&|<>]', "", texto.replace("\n", " "))
+    return re.sub(r"\s+", " ", limpio).strip()[:limite]
+
+
+class Ejecutor:
+    """Lo que el revisor hace fuera de git. Los tests lo cambian por uno falso."""
+
+    def pytest(self, arbol: pathlib.Path) -> Tuple[bool, str]:
+        extra = os.environ.get("SINCRONIA_PYTEST_ARGS", "").split()
+        resultado = subprocess.run(
+            [_python_con_consola(), "-m", "pytest", "-q", "-p", "no:cacheprovider"] + extra,
+            cwd=str(arbol), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            creationflags=_SIN_VENTANA, timeout=45 * 60,
+        )
+        lineas = resultado.stdout.decode("utf-8", "replace").strip().splitlines()
+        fallos = [linea for linea in lineas if linea.startswith(("FAILED", "ERROR"))][:20]
+        return resultado.returncode == 0, "\n".join(fallos + lineas[-1:])
+
+    def claude(self, arbol: pathlib.Path, prompt: str) -> str:
+        ejecutable = shutil.which("claude")
+        if not ejecutable:
+            raise RuntimeError("no encuentro el comando claude en este PC")
+        ajustes = pathlib.Path(tempfile.gettempdir()) / ("sincronia-ajustes-%s.json" % secrets.token_hex(4))
+        # Sin hooks: la copia temporal no es una sesion de trabajo de nadie.
+        ajustes.write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
+        try:
+            resultado = subprocess.run(
+                [ejecutable, "-p", "--output-format", "text", "--permission-mode", "dontAsk",
+                 "--settings", str(ajustes),
+                 "--disallowedTools", "Edit", "Write", "NotebookEdit",
+                 "--allowedTools", "Read", "Grep", "Glob", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)"],
+                input=prompt.encode("utf-8"), cwd=str(arbol), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                creationflags=_SIN_VENTANA, timeout=30 * 60,
+            )
+        finally:
+            try:
+                ajustes.unlink()
+            except OSError:
+                pass
+        if resultado.returncode != 0:
+            raise RuntimeError(resultado.stderr.decode("utf-8", "replace").strip()[-400:] or "claude terminó con error")
+        return resultado.stdout.decode("utf-8", "replace")
+
+    def desplegar(self, raiz: pathlib.Path) -> Tuple[bool, str]:
+        registro = raiz / DIR_LOCAL / "despliegue.log"
+        with registro.open("wb") as salida:
+            resultado = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(raiz / "deploy" / "deploy.ps1")],
+                cwd=str(raiz), stdin=subprocess.DEVNULL, stdout=salida, stderr=subprocess.STDOUT,
+                creationflags=_SIN_VENTANA, timeout=90 * 60,
+            )
+        cola = registro.read_bytes().decode("utf-8", "replace").strip().splitlines()[-12:]
+        return resultado.returncode == 0, "\n".join(cola)
+
+    def entregar(self, sesion: str, texto: str) -> Tuple[bool, str]:
+        ejecutable = shutil.which("codex")
+        if not ejecutable or not sesion:
+            return False, "sin codex o sin sesión de Astra apuntada"
+        resultado = subprocess.run(
+            [ejecutable, "queue", "--thread", sesion, "--message", _una_linea(texto)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            creationflags=_SIN_VENTANA, timeout=60,
+        )
+        salida = resultado.stdout.decode("utf-8", "replace").strip()
+        # codex queue sale con 0 aunque no encuentre la sesion: manda lo que dice.
+        return resultado.returncode == 0 and "error" not in salida.lower(), salida
+
+
+def _coger_cerrojo(cerrojo: pathlib.Path) -> bool:
+    cerrojo.parent.mkdir(parents=True, exist_ok=True)
+    for _ in range(2):
+        try:
+            descriptor = os.open(str(cerrojo), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                viejo = time.time() - cerrojo.stat().st_mtime > CERROJO_CADUCA_H * 3600
+            except OSError:
+                viejo = True
+            if not viejo:
+                return False
+            try:
+                cerrojo.unlink()
+            except OSError:
+                return False
+            continue
+        os.write(descriptor, str(os.getpid()).encode("ascii"))
+        os.close(descriptor)
+        return True
+    return False
+
+
+def _prompt_revision(peticion: Dict[str, Any], base: str, commits: List[Dict[str, Any]],
+                     estadistica: str, diff: str, tests_ok: bool, resumen_tests: str) -> str:
+    lista = "\n".join("- %s %s" % (c["corto"], c["asunto"]) for c in commits) or "- (ninguno)"
+    return (
+        "Eres el revisor de Vantelia. GPT-6 Astra pide revisión de la rama %s (commit %s): «%s».\n\n"
+        "Lee primero CLAUDE.md, la sección «Si te piden revisar» de AGENTS.md y docs/CAZA_DE_FALLOS.md. "
+        "Revisa SOLO estos cambios (desde %s). Puedes leer cualquier fichero y usar git diff/log/show. "
+        "No edites nada: tu salida es la revisión.\n\n"
+        "Commits:\n%s\n\nFicheros:\n%s\n\n"
+        "Tests (los ha ejecutado el sistema en esta misma copia): %s\n%s\n\n"
+        "Diff (puede venir recortado; el completo con git diff %s %s):\n```diff\n%s\n```\n\n"
+        "Responde en español, para Astra: cada hallazgo con gravedad (crítico / importante / menor), "
+        "fichero:línea, el caso concreto que lo rompe y si algún test lo cazaría. Sin caso concreto no es un "
+        "hallazgo. Si no hay nada, dilo en una línea.\n"
+        "La ÚLTIMA línea tiene que ser exactamente «VEREDICTO: OK» (se puede desplegar) "
+        "o «VEREDICTO: CAMBIOS» (hay que arreglar algo antes)."
+        % (peticion.get("rama"), str(peticion.get("commit"))[:7], peticion.get("texto"), base[:7], lista,
+           estadistica.strip() or "(sin cambios)", "VERDES" if tests_ok else "ROJOS", resumen_tests,
+           base[:7], str(peticion.get("commit"))[:7], diff)
+    )
+
+
+def _leer_veredicto(salida: str) -> Optional[str]:
+    casados = _VEREDICTO.findall(salida or "")
+    return casados[-1].lower() if casados else None
+
+
+def _hacer_revision(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejecutor) -> Dict[str, Any]:
+    commit = str(peticion.get("commit") or "")
+    comun = {"responde_a": peticion["id"], "rama": peticion.get("rama"), "commit": commit}
+    if not _SHA.match(commit) or not _existe(raiz, commit):
+        return _escribir_mensaje(raiz, "revisor", "astra", "revision",
+                                 "No encuentro el commit %s en el repo." % commit[:7], veredicto="error", **comun)
+    copia = pathlib.Path(tempfile.gettempdir()) / (PREFIJO_REVISION + secrets.token_hex(4))
+    _git(["worktree", "add", "--detach", str(copia), commit], raiz)
+    try:
+        tests_ok, resumen_tests = ejecutor.pytest(copia)
+        base = _git(["merge-base", "main", commit], raiz).strip() or commit
+        commits = _commits(raiz, [base + ".." + commit], limite=30)
+        estadistica = _git(["diff", "--stat", base, commit], raiz)
+        diff = _git(["diff", base, commit], raiz)
+        if len(diff) > 60000:
+            diff = diff[:60000] + "\n… (recortado)"
+        salida = ejecutor.claude(copia, _prompt_revision(peticion, base, commits, estadistica, diff,
+                                                         tests_ok, resumen_tests))
+    finally:
+        _git(["worktree", "remove", "--force", str(copia)], raiz, check=False)
+        _git(["worktree", "prune"], raiz, check=False)
+    dictamen = _leer_veredicto(salida) or "sin_veredicto"
+    texto = salida.strip()
+    if not tests_ok:
+        # Con tests en rojo no se despliega, diga lo que diga la lectura del diff.
+        dictamen = "cambios"
+        texto = "Tests en ROJO en tu rama:\n%s\n\n%s" % (resumen_tests, texto)
+    return _escribir_mensaje(raiz, "revisor", "astra", "revision", texto[:12000], veredicto=dictamen, **comun)
+
+
+def _hacer_despliegue(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejecutor) -> Dict[str, Any]:
+    commit = str(peticion.get("commit") or "")
+    comun = {"responde_a": peticion["id"], "rama": peticion.get("rama"), "commit": commit}
+
+    def _no(texto: str) -> Dict[str, Any]:
+        return _escribir_mensaje(raiz, "revisor", "astra", "despliegue", texto, veredicto="rechazado", **comun)
+
+    revisado = any(
+        m.get("tipo") == "revision" and m.get("commit") == commit and m.get("veredicto") == "ok"
+        for m in _buzon(_arboles(raiz))
+    )
+    if not revisado:
+        return _no("No despliego %s: ese commit no tiene una revisión OK de Claude. Pide revisión primero "
+                   "(si has hecho commits después de la revisión, hay que revisar el último)." % commit[:7])
+    if _git(["rev-parse", "--abbrev-ref", "HEAD"], raiz).strip() != "main":
+        return _no("No despliego: el árbol principal (%s) no está en main." % raiz)
+    cambios = _cambios_seguidos(raiz)
+    if cambios:
+        return _no("No despliego: hay cambios sin guardar en main (%s). Alguien está trabajando ahí; "
+                   "que Claude lo integre a mano." % ", ".join(cambios[:4]))
+    if not _git_ok(["merge-base", "--is-ancestor", commit, "main"], raiz):
+        mensaje = ("Merge %s: %s\n\nIntegrado y desplegado a peticion de Pablo, tras revision OK de Claude.\n\n"
+                   "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+                   % (peticion.get("rama") or commit[:7], (peticion.get("texto") or "").strip()[:200]))
+        try:
+            _git(["merge", "--no-ff", "-m", mensaje, commit], raiz)
+        except RuntimeError as error:
+            _git(["merge", "--abort"], raiz, check=False)
+            return _no("No despliego: la fusión con main da conflicto. Que Claude lo integre a mano. (%s)"
+                       % str(error)[-300:])
+    ok, resumen = ejecutor.desplegar(raiz)
+    texto = ("Desplegado en producción." if ok
+             else "El despliegue falló y se volvió atrás solo; producción sigue como estaba.") + "\n" + resumen
+    return _escribir_mensaje(raiz, "revisor", "astra", "despliegue", texto, veredicto="ok" if ok else "fallo", **comun)
+
+
+def _aviso_para_astra(respuesta: Dict[str, Any]) -> str:
+    donde = "%s (%s)" % (respuesta.get("rama") or "tu rama", str(respuesta.get("commit") or "")[:7])
+    dictamen = respuesta.get("veredicto")
+    if respuesta.get("tipo") == "revision":
+        cuerpos = {
+            "ok": "He revisado %s: OK, tests en verde. Díselo a Pablo y pregúntale si lo despliego." % donde,
+            "cambios": ("He revisado %s: hay cosas que arreglar. Arréglalas en la misma rama y vuelve a pedir "
+                        "revisión; cuéntaselo a Pablo en una línea." % donde),
+        }
+        cuerpo = cuerpos.get(dictamen, "No he podido cerrar la revisión de %s. Díselo a Pablo." % donde)
+    else:
+        cuerpos = {
+            "ok": "Desplegado %s en producción. Díselo a Pablo." % donde,
+            "fallo": "El despliegue de %s falló y se volvió atrás solo. Díselo a Pablo." % donde,
+        }
+        cuerpo = cuerpos.get(dictamen, "No he desplegado %s: te explico por qué en el buzón. Díselo a Pablo." % donde)
+    return ("[Aviso automático de Claude Code, no lo escribe Pablo] " + cuerpo
+            + " El detalle te sale al ponerte al día: python scripts/sincronia.py --al-dia astra")
+
+
+def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None) -> str:
+    """Atiende la peticion mas antigua sin contestar. Una por pasada; nunca dos a la vez."""
+    raiz = raiz_del_repo(desde)
+    ejecutor = ejecutor or Ejecutor()
+    pendientes = _pendientes(_buzon(_arboles(raiz)))
+    if not pendientes:
+        return "Nada pendiente."
+    cerrojo = raiz / DIR_LOCAL / "revisor.lock"
+    if not _coger_cerrojo(cerrojo):
+        return "El revisor ya está con otra petición."
+    peticion = pendientes[0]
+    estado = raiz / DIR_LOCAL / "revisor.json"
+    try:
+        estado.write_text(json.dumps({
+            "haciendo": peticion.get("tipo"), "rama": peticion.get("rama"),
+            "commit": str(peticion.get("commit") or "")[:7], "desde": _iso(_ahora()),
+        }), encoding="utf-8")
+        try:
+            if peticion.get("tipo") == "revisar":
+                respuesta = _hacer_revision(raiz, peticion, ejecutor)
+            else:
+                respuesta = _hacer_despliegue(raiz, peticion, ejecutor)
+        except Exception as error:  # que una peticion rota no se reintente para siempre
+            tipo = "revision" if peticion.get("tipo") == "revisar" else "despliegue"
+            respuesta = _escribir_mensaje(
+                raiz, "revisor", "astra", tipo, "No pude atender la petición: %s" % error, veredicto="error",
+                responde_a=peticion["id"], rama=peticion.get("rama"), commit=peticion.get("commit"))
+    finally:
+        for fichero in (estado, cerrojo):
+            try:
+                fichero.unlink()
+            except OSError:
+                pass
+    sesion = str((_fichajes(_arboles(raiz)).get("astra") or {}).get("sesion") or "")
+    entregado, detalle = ejecutor.entregar(sesion, _aviso_para_astra(respuesta))
+    return "%s %s → %s (%s)" % (
+        peticion.get("tipo"), peticion.get("rama") or "", respuesta.get("veredicto"),
+        "entregado a Astra" if entregado else "queda en el buzón: " + detalle[:120])
 
 
 # --- enviar -----------------------------------------------------------------------
@@ -565,11 +1005,11 @@ def enviar(desde: pathlib.Path, url: Optional[str] = None, token: Optional[str] 
     return "Enviada (%s): %s" % (codigo, foto["veredicto"]["titulo"])
 
 
-def _anotar_envio(raiz: pathlib.Path, resultado: str) -> None:
+def _anotar(raiz: pathlib.Path, fichero: str, resultado: str) -> None:
     try:
         carpeta = raiz / DIR_LOCAL
         carpeta.mkdir(exist_ok=True)
-        (carpeta / "envio.log").write_text("%s %s\n" % (_iso(_ahora()), resultado), encoding="utf-8")
+        (carpeta / fichero).write_text("%s %s\n" % (_iso(_ahora()), resultado), encoding="utf-8")
     except OSError:
         pass
 
@@ -624,6 +1064,10 @@ def _resumen_terminal(foto: Dict[str, Any]) -> str:
         lineas.append("Árbol %s (%s): %s" % (arbol["ruta"], arbol["rama"] or "sin rama", estado))
     for rama in foto["ramas_sin_integrar"]:
         lineas.append("Sin integrar en main: %s (%d)" % (rama["rama"], rama["commits"]))
+    if foto.get("revisor"):
+        lineas.append("Revisor: %s %s desde %s" % (foto["revisor"].get("haciendo"), foto["revisor"].get("rama"),
+                                                     _hora_local(foto["revisor"].get("desde"))))
+    lineas.append("Peticiones sin contestar: %d · mensajes en el buzón: %d" % (foto["pendientes"], len(foto["buzon"])))
     lineas.append("Página: %s" % PAGINA)
     return "\n".join(lineas)
 
@@ -642,10 +1086,19 @@ def _preparar_salida() -> None:
                 pass
 
 
-def _desde_donde() -> pathlib.Path:
+def _datos_del_hook() -> Dict[str, Any]:
+    try:
+        crudo = sys.stdin.read() if sys.stdin is not None else ""
+        datos = json.loads(crudo or "{}")
+    except (ValueError, OSError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def _desde_donde(cwd: Optional[str] = None) -> pathlib.Path:
     """El arbol desde el que se llama; si no es un repo, el del propio script."""
     try:
-        return _arbol_de(pathlib.Path.cwd())
+        return _arbol_de(pathlib.Path(cwd) if cwd else pathlib.Path.cwd())
     except (RuntimeError, OSError):
         return pathlib.Path(__file__).resolve().parents[1]
 
@@ -653,28 +1106,62 @@ def _desde_donde() -> pathlib.Path:
 def main(argv: Optional[List[str]] = None) -> int:
     _preparar_salida()
     parser = argparse.ArgumentParser(description="Sincronía entre Claude Code y GPT-6 Astra.")
-    parser.add_argument("--al-dia", choices=sorted(AGENTES), help="ponerse al día (lo primero de cada sesión)")
+    parser.add_argument("--al-dia", choices=sorted(AGENTES), help="ponerse al día")
+    parser.add_argument("--hook", action="store_true", help="lo llama un hook: lee su JSON por stdin")
+    parser.add_argument("--solo-novedades", action="store_true", help="no imprimir nada si no hay nada nuevo")
+    parser.add_argument("--pedir-revision", metavar="QUE", help="Astra pide a Claude que revise su rama")
+    parser.add_argument("--pedir-despliegue", metavar="QUE", help="Astra pide desplegar lo revisado")
+    parser.add_argument("--avisar", nargs=3, metavar=("DE", "PARA", "TEXTO"), help="dejar una nota en el buzón")
+    parser.add_argument("--revisor", action="store_true", help="atender la petición pendiente más antigua")
     parser.add_argument("--enviar", action="store_true", help="mandar la foto a app.vantelia.es")
     parser.add_argument("--json", action="store_true", help="imprimir la foto entera en JSON")
     args = parser.parse_args(argv)
-    # La tarea programada arranca en System32: para enviar vale el repo del script.
-    desde = pathlib.Path(__file__).resolve().parents[1] if args.enviar else _desde_donde()
+    # Las tareas programadas arrancan en System32: para ellas vale el repo del script.
+    del_script = pathlib.Path(__file__).resolve().parents[1]
     try:
         if args.al_dia:
-            print(fichar(desde, args.al_dia))
+            datos = _datos_del_hook() if args.hook else {}
+            cwd = str(datos.get("cwd") or "")
+            if args.hook and cwd and "vantelia" not in cwd.lower():
+                return 0  # hook de usuario en una sesion de otro proyecto: no es asunto nuestro
+            desde = _desde_donde(cwd or None)
+            informe = fichar(desde, args.al_dia, sesion=str(datos.get("session_id") or ""),
+                             solo_novedades=args.solo_novedades)
+            if informe:
+                print(informe)
             _enviar_en_segundo_plano(desde)
             return 0
-        if args.enviar:
-            resultado = enviar(desde)
-            _anotar_envio(raiz_del_repo(desde), resultado)
+        if args.pedir_revision is not None or args.pedir_despliegue is not None:
+            desde = _desde_donde()
+            if args.pedir_revision is not None:
+                ok, texto = pedir_revision(desde, args.pedir_revision)
+            else:
+                ok, texto = pedir_despliegue(desde, args.pedir_despliegue)
+            print(texto)
+            if ok:
+                _enviar_en_segundo_plano(desde)
+            return 0 if ok else 1
+        if args.avisar:
+            de, para, texto = args.avisar
+            avisar(_desde_donde(), de.lower(), para.lower(), texto)
+            print("Nota dejada en el buzón para %s." % _nombre(para.lower()))
+            return 0
+        if args.revisor:
+            resultado = revisor(del_script)
+            _anotar(raiz_del_repo(del_script), "revisor.log", resultado)
             print(resultado)
             return 0
-        foto = construir_foto(desde)
+        if args.enviar:
+            resultado = enviar(del_script)
+            _anotar(raiz_del_repo(del_script), "envio.log", resultado)
+            print(resultado)
+            return 0
+        foto = construir_foto(_desde_donde())
         print(json.dumps(foto, ensure_ascii=False, indent=2) if args.json else _resumen_terminal(foto))
         return 0
     except (RuntimeError, OSError, ValueError) as error:
         print("Sincronía: no se pudo mirar el repo (%s)." % error)
-        # Ponerse al dia corre al arrancar una sesion: si falla, que no la tumbe.
+        # Ponerse al dia corre desde los hooks: si falla, que no tumbe la sesion.
         return 0 if args.al_dia else 1
 
 

@@ -123,6 +123,15 @@
   .arbol-cab { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
   .arbol-cab .cuando { margin-left: auto; }
   .ficheros { margin: 4px 0 0; font-family: var(--mono); font-size: 12.5px; color: var(--tinta-2); overflow-wrap: anywhere; }
+  .estado.mal { color: var(--rojo); }
+  .mensaje-cab { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+  .mensaje-cab .cuando { margin-left: auto; }
+  .flecha { color: var(--tinta-3); }
+  .tipo { font-size: 13px; color: var(--tinta-2); }
+  .texto { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--tinta-2); font-size: 14px; }
+  details.texto summary { cursor: pointer; }
+  details.texto[open] summary { margin-bottom: 6px; }
+  .revisando { color: var(--acento); font-weight: 600; }
   .ayuda { background: var(--papel); border: 1px solid var(--linea); border-radius: 12px; padding: 12px 16px; }
   .ayuda summary { cursor: pointer; font-weight: 600; }
   .ayuda ul { margin: 10px 0 2px; padding-left: 18px; color: var(--tinta-2); display: grid; gap: 8px; max-width: 68ch; }
@@ -172,6 +181,11 @@
   </section>
 
   <section class="bloque">
+    <h3>Lo que se dicen</h3>
+    <div class="panel"><ul id="buzon" class="lista"></ul></div>
+  </section>
+
+  <section class="bloque">
     <h3>Trabajo sin guardar</h3>
     <div class="panel"><ul id="arboles" class="lista"></ul></div>
   </section>
@@ -189,7 +203,8 @@
   <details class="ayuda">
     <summary>Cómo se lee esto</summary>
     <ul>
-      <li>Cada agente, al empezar su sesión, <b>se pone al día</b>: lee lo que el otro ha hecho y queda apuntado. Por eso la página sabe quién ha visto qué sin fiarse de lo que digan.</li>
+      <li>Cada agente <b>se pone al día solo</b> al empezar y con cada mensaje tuyo: lee lo que el otro ha hecho y queda apuntado. No tienes que decirles nada.</li>
+      <li>Cuando Astra termina, <b>pide revisión</b>; Claude la revisa solo (tests en una copia aparte y lectura del cambio) y se lo dice a Astra, que te lo cuenta. Tú solo dices «despliega» a cualquiera de los dos.</li>
       <li><b>Verde</b>: los dos han visto todo y no hay nada a medias. Puedes cambiar de agente cuando quieras.</li>
       <li><b>Amarillo</b>: alguien está trabajando ahora mismo, o uno todavía no ha visto lo último (lo verá al empezar). Si cambias ya, dile al nuevo «ponte al día».</li>
       <li><b>Rojo</b>: hay cambios sin guardar que nadie toca desde hace rato. Suele ser que a uno se le acabaron los tokens: dile al otro «ponte al día y sigue donde se quedó».</li>
@@ -360,6 +375,58 @@
     lista.appendChild(li);
   }
 
+  var TIPOS = { revisar: 'pide revisión', revision: 'revisión', desplegar: 'pide desplegar', despliegue: 'despliegue', nota: 'nota' };
+  var VEREDICTOS = {
+    ok: ['OK', 'ok'], cambios: ['Cambios', 'aviso'], error: ['No se pudo', 'mal'],
+    sin_veredicto: ['Sin veredicto', 'aviso'], rechazado: ['No se despliega', 'aviso'], fallo: ['Falló', 'mal']
+  };
+
+  function chipAutor(autor) {
+    if (autor === 'revisor') return el('span', 'chip chip-claude', 'Claude (auto)');
+    return chip(autor);
+  }
+
+  function pintarBuzon(foto, ahora) {
+    var lista = document.getElementById('buzon');
+    vaciar(lista);
+    if (foto.revisor) {
+      lista.appendChild(el('li', 'revisando', 'Claude está ' +
+        (foto.revisor.haciendo === 'desplegar' ? 'desplegando ' : 'revisando ') + (foto.revisor.rama || '') +
+        ' (empezó ' + hace(foto.revisor.desde, ahora) + ').'));
+    } else if (foto.pendientes) {
+      lista.appendChild(el('li', 'vacio', (foto.pendientes === 1 ? 'Una petición espera' : foto.pendientes + ' peticiones esperan') +
+        ' al revisor, que pasa cada 5 minutos.'));
+    }
+    var mensajes = foto.buzon || [];
+    if (!mensajes.length) {
+      if (!foto.revisor && !foto.pendientes) lista.appendChild(el('li', 'vacio', 'Todavía no se han dicho nada.'));
+      return;
+    }
+    mensajes.forEach(function (m) {
+      var li = el('li');
+      var cabecera = el('div', 'mensaje-cab');
+      cabecera.appendChild(chipAutor(m.de));
+      cabecera.appendChild(el('span', 'flecha', '→'));
+      cabecera.appendChild(chipAutor(m.para));
+      cabecera.appendChild(el('span', 'tipo', TIPOS[m.tipo] || 'nota'));
+      var v = VEREDICTOS[m.veredicto];
+      if (v) cabecera.appendChild(el('span', 'estado ' + v[1], v[0]));
+      if (m.rama) cabecera.appendChild(el('code', 'rama', m.rama + (m.commit ? ' · ' + m.commit : '')));
+      cabecera.appendChild(el('span', 'cuando', hace(m.cuando, ahora)));
+      li.appendChild(cabecera);
+      var texto = m.texto || '';
+      if (texto.length > 220) {
+        var detalle = el('details', 'texto');
+        detalle.appendChild(el('summary', null, texto.slice(0, 200).replace(/\s+/g, ' ') + '…'));
+        detalle.appendChild(document.createTextNode(texto));
+        li.appendChild(detalle);
+      } else if (texto) {
+        li.appendChild(el('p', 'texto', texto));
+      }
+      lista.appendChild(li);
+    });
+  }
+
   function pintarCommits(main, ahora) {
     var lista = document.getElementById('commits');
     vaciar(lista);
@@ -387,6 +454,7 @@
     }
     pintarEnCurso(foto.en_curso);
     pintarAgentes(foto.agentes || [], ahora);
+    pintarBuzon(foto, ahora);
     pintarArboles(foto.arboles || [], ahora);
     pintarPendiente(foto, datos.produccion);
     pintarCommits(foto.main || [], ahora);

@@ -18,9 +18,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/scripts/sincronia.py\" --al-dia claude 2>/dev/null || true",
+            "command": "python \"$CLAUDE_PROJECT_DIR/scripts/sincronia.py\" --al-dia claude --hook 2>/dev/null || true",
             "timeout": 30,
             "statusMessage": "Sincronía: poniéndome al día"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/scripts/sincronia.py\" --al-dia claude --hook --solo-novedades 2>/dev/null || true",
+            "timeout": 20
           }
         ]
       }

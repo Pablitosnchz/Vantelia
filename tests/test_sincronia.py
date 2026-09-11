@@ -62,6 +62,9 @@ def repo(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "-c", "init.defaultBranch=main", "init", "-q"], cwd=str(repo), check=True)
+    # El revisor fusiona en main con el git del propio script: necesita identidad.
+    _git(repo, "config", "user.name", "Prueba")
+    _git(repo, "config", "user.email", "prueba@example.com")
     _commit(repo, "backend/a.py", "x = 1\n", "feat: inicio" + CLAUDE)
     return repo
 
@@ -181,6 +184,175 @@ def test_lo_que_hay_en_curso_sale_de_estado_actual(repo, home):
     # La pagina lo pinta como texto: las marcas de markdown no pueden verse.
     assert en_curso["rama"] == "astra/reprogramar"
     assert en_curso["siguiente"] == "test que falle sin el arreglo"
+
+
+# --- el buzon y el revisor: se hablan sin que Pablo haga de mensajero ---------------
+
+class EjecutorFalso:
+    """Hace de pytest, de Claude, del despliegue y de codex queue sin salir del test."""
+
+    def __init__(self, tests_ok=True, respuesta="Sin hallazgos.\nVEREDICTO: OK", despliegue_ok=True):
+        self.tests_ok = tests_ok
+        self.respuesta = respuesta
+        self.despliegue_ok = despliegue_ok
+        self.llamadas = []
+
+    def pytest(self, arbol):
+        self.llamadas.append(("pytest", str(arbol)))
+        assert (pathlib.Path(arbol) / "backend").exists(), "los tests tienen que correr sobre una copia con el codigo"
+        return self.tests_ok, "1 passed" if self.tests_ok else "FAILED tests/test_x.py::test_y\n1 failed"
+
+    def claude(self, arbol, prompt):
+        self.llamadas.append(("claude", prompt))
+        return self.respuesta
+
+    def desplegar(self, raiz):
+        self.llamadas.append(("desplegar", str(raiz)))
+        return self.despliegue_ok, "Despliegue completado"
+
+    def entregar(self, sesion, texto):
+        self.llamadas.append(("entregar", sesion, texto))
+        return True, ""
+
+
+def _tipos(ejecutor):
+    return [llamada[0] for llamada in ejecutor.llamadas]
+
+
+def _git_salida(repo, *args):
+    return subprocess.run(["git"] + list(args), cwd=str(repo), check=True,
+                          stdout=subprocess.PIPE).stdout.decode("utf-8", "replace")
+
+
+def _ultimo_mensaje(repo):
+    return sincronia._buzon(sincronia._arboles(repo))[-1]
+
+
+@pytest.fixture()
+def astra(repo, tmp_path):
+    """El worktree de Astra, con un commit suyo listo para revisar."""
+    arbol = tmp_path / "repo-astra"
+    _git(repo, "worktree", "add", "-b", "astra/tarea", str(arbol))
+    _commit(arbol, "backend/b.py", "y = 2\n", "fix: reprogramar a la primera" + ASTRA)
+    return arbol
+
+
+@necesita_git
+def test_astra_pide_revision_y_claude_la_contesta_solo(repo, astra, home):
+    sincronia.fichar(astra, "astra", home=home, sesion="hilo-de-astra")
+    ok, _ = sincronia.pedir_revision(astra, "reprogramar a la primera")
+    assert ok
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor)
+
+    assert _tipos(ejecutor) == ["pytest", "claude", "entregar"]
+    assert "fix: reprogramar a la primera" in ejecutor.llamadas[1][1]  # Claude ve los commits de Astra
+    assert ejecutor.llamadas[2][1] == "hilo-de-astra"                 # y la respuesta va a SU sesion
+    respuesta = _ultimo_mensaje(repo)
+    assert (respuesta["tipo"], respuesta["veredicto"]) == ("revision", "ok")
+    # La copia temporal donde corrieron los tests no se queda colgando.
+    assert sincronia.PREFIJO_REVISION not in _git_salida(repo, "worktree", "list")
+
+    # Contestada: la siguiente pasada del revisor no la repite.
+    otra = EjecutorFalso()
+    assert sincronia.revisor(repo, ejecutor=otra) == "Nada pendiente."
+    assert otra.llamadas == []
+
+    # A Astra le llega en su siguiente mensaje, sin que Pablo diga nada.
+    assert "revisión OK" in sincronia.fichar(astra, "astra", home=home, solo_novedades=True)
+
+
+@necesita_git
+def test_con_tests_en_rojo_la_revision_es_cambios_aunque_claude_diga_ok(repo, astra):
+    sincronia.pedir_revision(astra, "x")
+    sincronia.revisor(repo, ejecutor=EjecutorFalso(tests_ok=False))
+    respuesta = _ultimo_mensaje(repo)
+    assert respuesta["veredicto"] == "cambios"
+    assert "FAILED tests/test_x.py::test_y" in respuesta["texto"]
+
+
+@necesita_git
+def test_sin_la_linea_de_veredicto_no_cuenta_como_ok(repo, astra):
+    sincronia.pedir_revision(astra, "x")
+    sincronia.revisor(repo, ejecutor=EjecutorFalso(respuesta="Parece que esta bien."))
+    assert _ultimo_mensaje(repo)["veredicto"] == "sin_veredicto"
+
+
+@necesita_git
+def test_no_se_pide_revision_de_algo_a_medias(astra):
+    (astra / "backend" / "b.py").write_text("y = 3\n", encoding="utf-8")
+    ok, texto = sincronia.pedir_revision(astra, "x")
+    assert not ok
+    assert "sin commit" in texto
+
+
+@necesita_git
+def test_no_se_despliega_lo_que_claude_no_ha_revisado(repo, astra):
+    sincronia.pedir_despliegue(astra, "Pablo dice que si")
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor)
+    assert "desplegar" not in _tipos(ejecutor)
+    assert _ultimo_mensaje(repo)["veredicto"] == "rechazado"
+
+
+@necesita_git
+def test_un_commit_despues_de_la_revision_obliga_a_revisar_otra_vez(repo, astra):
+    sincronia.pedir_revision(astra, "x")
+    sincronia.revisor(repo, ejecutor=EjecutorFalso())
+    _commit(astra, "backend/c.py", "z = 1\n", "fix: otra cosa" + ASTRA)
+    sincronia.pedir_despliegue(astra, "Pablo dice que si")
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor)
+    assert "desplegar" not in _tipos(ejecutor)
+
+
+@necesita_git
+def test_lo_revisado_se_integra_en_main_y_se_despliega(repo, astra):
+    sincronia.pedir_revision(astra, "reprogramar")
+    sincronia.revisor(repo, ejecutor=EjecutorFalso())
+    sincronia.pedir_despliegue(astra, "Pablo dice que si")
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor)
+    assert _tipos(ejecutor) == ["desplegar", "entregar"]
+    commit_de_astra = _git_salida(repo, "rev-parse", "astra/tarea").strip()
+    assert subprocess.run(["git", "merge-base", "--is-ancestor", commit_de_astra, "main"],
+                          cwd=str(repo)).returncode == 0
+    assert _ultimo_mensaje(repo)["veredicto"] == "ok"
+
+
+@necesita_git
+def test_con_trabajo_sin_guardar_en_main_no_se_despliega(repo, astra):
+    sincronia.pedir_revision(astra, "x")
+    sincronia.revisor(repo, ejecutor=EjecutorFalso())
+    (repo / "backend" / "a.py").write_text("x = 5\n", encoding="utf-8")
+    sincronia.pedir_despliegue(astra, "Pablo dice que si")
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor)
+    assert "desplegar" not in _tipos(ejecutor)
+    assert "sin guardar en main" in _ultimo_mensaje(repo)["texto"]
+
+
+@necesita_git
+def test_en_cada_mensaje_solo_habla_si_hay_algo_nuevo(repo, home, tmp_path):
+    sincronia.fichar(repo, "claude", home=home)
+    assert sincronia.fichar(repo, "claude", home=home, solo_novedades=True) == ""
+
+    otro = tmp_path / "repo-astra"
+    _git(repo, "worktree", "add", "-b", "astra/tarea", str(otro))
+    _commit(otro, "backend/b.py", "y = 2\n", "fix: reprogramar a la primera" + ASTRA)
+    sincronia.avisar(otro, "astra", "claude", "¿Miras cómo quedó reprogramar?")
+
+    novedades = sincronia.fichar(repo, "claude", home=home, solo_novedades=True)
+    assert "¿Miras cómo quedó reprogramar?" in novedades
+    assert "fix: reprogramar a la primera" in novedades
+    assert sincronia.fichar(repo, "claude", home=home, solo_novedades=True) == ""
+
+
+@necesita_git
+def test_la_sesion_del_hook_se_recuerda(repo, astra, home):
+    sincronia.fichar(astra, "astra", home=home, sesion="hilo-1")
+    sincronia.fichar(astra, "astra", home=home)  # un fichaje sin sesion no la borra
+    assert sincronia._fichajes(sincronia._arboles(repo))["astra"]["sesion"] == "hilo-1"
 
 
 # --- el servidor ---------------------------------------------------------------------
