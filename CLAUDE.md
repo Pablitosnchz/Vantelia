@@ -819,6 +819,14 @@ a usar ha visto lo ultimo del otro. Todo sale de `scripts/sincronia.py`:
   `codex queue` (si no esta abierta, le llega al volver). Tests en rojo = CAMBIOS.
   `--pedir-despliegue` (Astra, solo si Pablo lo dice) integra en main y despliega
   SOLO si ese commit tiene revision OK y main esta limpio.
+- No solo revisar: Astra me pregunta (`--pedir-ayuda`: `claude -p` en solo
+  lectura sobre su commit, respuesta a su sesion) o me encarga trabajo
+  (`--encargar astra claude`: `claude -p` con Edit/Write solo en su copia, tests y
+  commits, sin red ni despliegue, en una rama `claude/encargo-*` que parte de su
+  ultimo commit; lo que quede sin commit se guarda como `wip:`). Yo le encargo a
+  ella con `--encargar claude astra "..."` (le llega al momento con codex queue):
+  cuando Pablo me pida algo que se pueda repartir, repartirlo. El revisor atiende
+  primero despliegues y revisiones, luego preguntas y encargos.
 - Creditos: si Astra se queda sin cuota lo dice su propia sesion de Codex
   (`task_complete` con `usage_limit_exceeded` + `rate_limits` al 100 % con la hora
   de renovacion). La pagina lo pinta, a Claude se lo cuenta el hook UNA vez ("hazlo

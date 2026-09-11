@@ -15,6 +15,11 @@ la pregunta de Pablo -"¿el otro sabe lo que ha hecho el primero?"- con hechos
         imprime nada si no hay nada nuevo.
     --pedir-revision "qué"      Astra, al terminar una tarea: pide revisión.
     --pedir-despliegue "qué"    Astra, cuando Pablo dice que se despliegue.
+    --pedir-ayuda "pregunta"    Astra pregunta a Claude (contexto, dónde, por qué,
+                                segunda opinión); contesta solo, sin tocar nada.
+    --encargar DE PARA "tarea"  un agente le encarga trabajo al otro. A Claude: lo
+                                hace solo en su rama claude/encargo-*. A Astra: le
+                                llega a su sesión al momento.
     --avisar DE PARA "texto"    una nota cualquiera por el buzón.
     --revisor                   lo corre la tarea programada "Vantelia revisor":
                                 atiende la petición más antigua (tests + revisión
@@ -44,6 +49,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
@@ -82,6 +88,10 @@ _TIPOS = {
     "revision": "revisión",
     "desplegar": "pide desplegar",
     "despliegue": "despliegue",
+    "ayuda": "pide ayuda",
+    "respuesta": "respuesta",
+    "encargo": "encargo",
+    "entrega": "entrega",
     "nota": "nota",
 }
 _VEREDICTOS = {
@@ -91,7 +101,12 @@ _VEREDICTOS = {
     "sin_veredicto": "SIN VEREDICTO",
     "rechazado": "NO SE DESPLIEGA",
     "fallo": "FALLÓ",
+    "hecho": "HECHO",
+    "sin_cambios": "SIN CAMBIOS",
 }
+# Lo que el revisor le atiende a Claude, lo rapido primero; y como se llama su respuesta.
+_PRIORIDAD = {"desplegar": 0, "revisar": 1, "ayuda": 2, "encargo": 3}
+_RESPUESTA = {"desplegar": "despliegue", "revisar": "revision", "ayuda": "respuesta", "encargo": "entrega"}
 _LINEA_EN_CURSO = re.compile(
     r"^\s*[-*]?\s*\**\s*(testigo|tarea|rama|siguiente|espera a)\s*\**\s*:\s*\**\s*(.*?)\s*$",
     re.I,
@@ -549,30 +564,43 @@ def _buzon(arboles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _pendientes(mensajes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Peticiones de revision o despliegue que nadie ha contestado todavia."""
+    """Lo que le han pedido a Claude y nadie ha contestado todavia, lo rapido primero."""
     contestadas = {m.get("responde_a") for m in mensajes if m.get("responde_a")}
-    return [m for m in mensajes if m.get("tipo") in ("revisar", "desplegar") and m.get("id") not in contestadas]
+    pendientes = [m for m in mensajes
+                  if m.get("tipo") in _PRIORIDAD and m.get("para") == "claude" and m.get("id") not in contestadas]
+    return sorted(pendientes, key=lambda m: (_PRIORIDAD[m["tipo"]], float(m.get("marca") or 0)))
 
 
 def avisar(desde: pathlib.Path, de: str, para: str, texto: str) -> Dict[str, Any]:
     return _escribir_mensaje(_arbol_de(desde), de, para, "nota", texto)
 
 
+_PEDIDO = {
+    "revisar": ("Revisión pedida para %s (%s). Claude la hace solo en unos minutos (tests + revisión) "
+                "y la respuesta te llega aquí; no hace falta que Pablo haga nada."),
+    "desplegar": ("Despliegue pedido para %s (%s). Solo sale si Claude revisó OK ese mismo commit; "
+                  "el resultado te llega aquí."),
+    "ayuda": "Pregunta enviada a Claude desde %s (%s). Contesta solo en unos minutos, aquí mismo.",
+    "encargo": ("Encargo enviado a Claude desde %s (%s). Lo hace en su propia rama, sin tocar la tuya, "
+                "y te avisa aquí al terminar."),
+}
+
+
 def _pedir(desde: pathlib.Path, tipo: str, texto: str, de: str = "astra") -> Tuple[bool, str]:
     arbol = _arbol_de(desde)
     cambios = _cambios_seguidos(arbol)
-    if cambios:
+    if cambios and tipo in ("revisar", "desplegar"):
         return False, ("No: hay %d cambio(s) sin commit en %s (%s). Haz commit y vuelve a pedirlo: "
                        "se revisa y se despliega lo que está en un commit, no lo que está a medias."
                        % (len(cambios), arbol, ", ".join(cambios[:4])))
     rama = _git(["rev-parse", "--abbrev-ref", "HEAD"], arbol).strip()
     commit = _git(["rev-parse", "HEAD"], arbol).strip()
     _escribir_mensaje(arbol, de, "claude", tipo, texto, rama=rama, commit=commit)
-    if tipo == "revisar":
-        return True, ("Revisión pedida para %s (%s). Claude la hace solo en unos minutos (tests + revisión) "
-                      "y la respuesta te llega aquí; no hace falta que Pablo haga nada." % (rama, commit[:7]))
-    return True, ("Despliegue pedido para %s (%s). Solo sale si Claude revisó OK ese mismo commit; "
-                  "el resultado te llega aquí." % (rama, commit[:7]))
+    aviso = ""
+    if cambios:
+        aviso = (" Ojo: tienes %d cambio(s) sin commit; Claude parte de tu último commit (%s) y no los verá."
+                 % (len(cambios), commit[:7]))
+    return True, _PEDIDO[tipo] % (rama, commit[:7]) + aviso
 
 
 def pedir_revision(desde: pathlib.Path, texto: str) -> Tuple[bool, str]:
@@ -583,8 +611,29 @@ def pedir_despliegue(desde: pathlib.Path, texto: str) -> Tuple[bool, str]:
     return _pedir(desde, "desplegar", texto)
 
 
+def pedir_ayuda(desde: pathlib.Path, texto: str) -> Tuple[bool, str]:
+    return _pedir(desde, "ayuda", texto)
+
+
+def encargar(desde: pathlib.Path, de: str, para: str, texto: str,
+             ejecutor: Optional["Ejecutor"] = None, home: Optional[pathlib.Path] = None) -> Tuple[bool, str]:
+    """Un agente le encarga trabajo al otro: trabajan a la vez, no solo uno revisa al otro."""
+    if para == "claude":
+        return _pedir(desde, "encargo", texto, de=de)
+    if para != "astra":
+        return False, "Solo se le puede encargar algo a claude o a astra."
+    arbol = _arbol_de(desde)
+    mensaje = _escribir_mensaje(arbol, de, "astra", "encargo", texto,
+                                rama=_git(["rev-parse", "--abbrev-ref", "HEAD"], arbol).strip(),
+                                commit=_git(["rev-parse", "HEAD"], arbol).strip())
+    entregado, detalle = _entregar_a_astra(raiz_del_repo(desde), _aviso_para_astra(mensaje), ejecutor or Ejecutor(), home)
+    return True, ("Encargo entregado a Astra en su sesión." if entregado
+                  else "Encargo dejado en el buzón de Astra (%s)." % detalle)
+
+
 def _mensaje_para_foto(mensaje: Dict[str, Any]) -> Dict[str, Any]:
-    datos = {clave: mensaje.get(clave) for clave in ("id", "cuando", "de", "para", "tipo", "rama", "veredicto")}
+    datos = {clave: mensaje.get(clave)
+             for clave in ("id", "cuando", "de", "para", "tipo", "rama", "rama_claude", "veredicto")}
     datos["commit"] = str(mensaje.get("commit") or "")[:7]
     datos["texto"] = str(mensaje.get("texto") or "")[:1500]
     return {clave: valor for clave, valor in datos.items() if valor}
@@ -760,7 +809,9 @@ def _linea_mensaje(mensaje: Dict[str, Any], agente: str) -> str:
     tipo = _TIPOS.get(str(mensaje.get("tipo")), "nota")
     etiqueta = _VEREDICTOS.get(str(mensaje.get("veredicto") or ""), "")
     donde = ""
-    if mensaje.get("rama"):
+    if mensaje.get("rama_claude"):
+        donde = " %s" % mensaje["rama_claude"]
+    elif mensaje.get("rama"):
         donde = " %s (%s)" % (mensaje["rama"], str(mensaje.get("commit") or "")[:7])
     # A quien va dirigido lo lee entero: una revision con cambios hay que poder aplicarla.
     limite = 4000 if mensaje.get("para") == agente else 600
@@ -915,8 +966,10 @@ def _python_con_consola() -> str:
 
 
 def _una_linea(texto: str, limite: int = 900) -> str:
-    # Viaja como argumento por el lanzador .cmd de codex: fuera lo que cmd.exe interpreta.
-    limpio = re.sub(r'["%^&|<>]', "", texto.replace("\n", " "))
+    # Viaja como argumento por el lanzador .cmd de codex: fuera lo que cmd.exe interpreta,
+    # y sin tildes (la pagina de codigos de la consola las estropea por el camino).
+    ascii_ = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    limpio = re.sub(r'["%^&|<>]', "", ascii_.replace("\n", " "))
     return re.sub(r"\s+", " ", limpio).strip()[:limite]
 
 
@@ -949,21 +1002,37 @@ class Ejecutor:
         fallos = [linea for linea in lineas if linea.startswith(("FAILED", "ERROR"))][:20]
         return resultado.returncode == 0, "\n".join(fallos + lineas[-1:])
 
+    LECTURA = ["Read", "Grep", "Glob", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)"]
+    # Encargos: escribir en su copia (dontAsk niega lo que pida permiso fuera de ella),
+    # tests y commits. Ni red, ni despliegue, ni nada mas.
+    ESCRITURA = LECTURA + ["Edit", "Write", "Bash(git status*)", "Bash(git add *)", "Bash(git commit *)",
+                           "Bash(python -m pytest *)", "Bash(python -m pyflakes *)"]
+
     def claude(self, arbol: pathlib.Path, prompt: str) -> str:
+        """Revisiones y preguntas: solo lectura."""
+        return self._claude(arbol, prompt, escribir=False)
+
+    def claude_escribe(self, arbol: pathlib.Path, prompt: str) -> str:
+        """Encargos: trabaja en su copia y hace commits en su rama."""
+        return self._claude(arbol, prompt, escribir=True)
+
+    def _claude(self, arbol: pathlib.Path, prompt: str, escribir: bool) -> str:
         ejecutable = shutil.which("claude")
         if not ejecutable:
             raise RuntimeError("no encuentro el comando claude en este PC")
         ajustes = pathlib.Path(tempfile.gettempdir()) / ("sincronia-ajustes-%s.json" % secrets.token_hex(4))
         # Sin hooks: la copia temporal no es una sesion de trabajo de nadie.
         ajustes.write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
+        orden = [ejecutable, "-p", "--output-format", "text", "--permission-mode", "dontAsk",
+                 "--settings", str(ajustes)]
+        if not escribir:
+            orden += ["--disallowedTools", "Edit", "Write", "NotebookEdit"]
+        orden += ["--allowedTools"] + (self.ESCRITURA if escribir else self.LECTURA)
         try:
             resultado = subprocess.run(
-                [ejecutable, "-p", "--output-format", "text", "--permission-mode", "dontAsk",
-                 "--settings", str(ajustes),
-                 "--disallowedTools", "Edit", "Write", "NotebookEdit",
-                 "--allowedTools", "Read", "Grep", "Glob", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)"],
+                orden,
                 input=prompt.encode("utf-8"), cwd=str(arbol), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                creationflags=_SIN_VENTANA, timeout=30 * 60,
+                creationflags=_SIN_VENTANA, timeout=(60 if escribir else 30) * 60,
             )
         finally:
             try:
@@ -1122,9 +1191,123 @@ def _hacer_despliegue(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ej
     return _escribir_mensaje(raiz, "revisor", "astra", "despliegue", texto, veredicto="ok" if ok else "fallo", **comun)
 
 
+def _copia_temporal(raiz: pathlib.Path, ref: str, rama_nueva: str = "", en_rama: bool = False) -> pathlib.Path:
+    """Un worktree en %TEMP% para trabajar sin tocar el arbol de nadie."""
+    copia = pathlib.Path(tempfile.gettempdir()) / (PREFIJO_REVISION + secrets.token_hex(4))
+    orden = ["-c", "core.longpaths=true", "worktree", "add"]
+    if rama_nueva:
+        orden += ["-b", rama_nueva, str(copia), ref]
+    elif en_rama:
+        orden += [str(copia), ref]
+    else:
+        orden += ["--detach", str(copia), ref]
+    _git(orden, raiz)
+    return copia
+
+
+def _quitar_copia(raiz: pathlib.Path, copia: pathlib.Path) -> None:
+    _git(["-c", "core.longpaths=true", "worktree", "remove", "--force", str(copia)], raiz, check=False)
+    _git(["worktree", "prune"], raiz, check=False)
+
+
+def _commit_de_la_peticion(raiz: pathlib.Path, peticion: Dict[str, Any]) -> str:
+    commit = str(peticion.get("commit") or "")
+    if _SHA.match(commit) and _existe(raiz, commit):
+        return commit
+    return _git(["rev-parse", "main"], raiz).strip()
+
+
+def _prompt_ayuda(peticion: Dict[str, Any]) -> str:
+    return (
+        "Eres Claude Code, compañero de GPT-6 Astra en Vantelia. Astra te pide ayuda desde la rama %s "
+        "(commit %s; esta copia es ese commit): «%s».\n\n"
+        "Lee CLAUDE.md y lo que haga falta del repo (docs/MAPA_DEL_CODIGO.md dice dónde está cada cosa; "
+        "docs/CAZA_DE_FALLOS.md, las trampas que ya costaron un incidente). Contesta en español, útil y "
+        "concreto: dónde está (fichero:línea), por qué está así si hay un incidente detrás, qué harías tú y "
+        "qué riesgos ves. Si no se puede contestar mirando el repo (datos de producción, una decisión de "
+        "Pablo), dilo claro y di quién puede. No edites nada."
+        % (peticion.get("rama"), str(peticion.get("commit"))[:7], peticion.get("texto"))
+    )
+
+
+def _prompt_encargo(peticion: Dict[str, Any], rama: str, base: str) -> str:
+    return (
+        "Eres Claude Code, compañero de GPT-6 Astra en Vantelia. Astra te encarga: «%s».\n\n"
+        "Trabajas en una copia aparte, en tu propia rama %s, que parte de su commit %s. Lee CLAUDE.md "
+        "(reglas del repo) y docs/CAZA_DE_FALLOS.md (trampas).\n"
+        "- Commits pequeños, cada uno con el porqué y la línea final "
+        "«Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>».\n"
+        "- Corre los tests que toquen (python -m pytest tests/<fichero>): un test que no falla sin el "
+        "arreglo no prueba nada.\n"
+        "- No despliegues, no uses la red y no toques secretos (.env, tokens) ni storage/.\n"
+        "- Si algo no se puede hacer bien desde aquí, no lo fuerces: explícalo.\n"
+        "Al terminar, resume para Astra en pocas líneas: qué has hecho, qué falta y cómo integrarlo."
+        % (peticion.get("texto"), rama, base[:7])
+    )
+
+
+def _hacer_ayuda(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejecutor) -> Dict[str, Any]:
+    commit = _commit_de_la_peticion(raiz, peticion)
+    copia = _copia_temporal(raiz, commit)
+    try:
+        salida = ejecutor.claude(copia, _prompt_ayuda(peticion))
+    finally:
+        _quitar_copia(raiz, copia)
+    return _escribir_mensaje(raiz, "revisor", peticion.get("de") or "astra", "respuesta", salida.strip()[:12000],
+                             responde_a=peticion["id"], rama=peticion.get("rama"), commit=commit)
+
+
+def _hacer_encargo(raiz: pathlib.Path, peticion: Dict[str, Any], ejecutor: Ejecutor) -> Dict[str, Any]:
+    base = _commit_de_la_peticion(raiz, peticion)
+    rama = "claude/encargo-" + str(peticion["id"])[-6:]
+    # Si un intento anterior se corto (sin creditos), se sigue donde se quedo.
+    if _git_ok(["rev-parse", "--verify", "--quiet", "refs/heads/" + rama], raiz):
+        copia = _copia_temporal(raiz, rama, en_rama=True)
+    else:
+        copia = _copia_temporal(raiz, base, rama_nueva=rama)
+    try:
+        salida = ejecutor.claude_escribe(copia, _prompt_encargo(peticion, rama, base))
+        if _sin_guardar(copia)[0]:
+            # Lo que quede sin commit se guarda: si no, se iria con la copia temporal.
+            _git(["add", "-A"], copia)
+            _git(["commit", "-q", "-m",
+                  "wip: %s (sin terminar; lo guarda el revisor para que no se pierda)\n\n"
+                  "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+                  % re.sub(r"\s+", " ", str(peticion.get("texto") or ""))[:60]], copia)
+    finally:
+        _quitar_copia(raiz, copia)
+    comun = {"responde_a": peticion["id"], "rama": peticion.get("rama"), "commit": base}
+    para = peticion.get("de") or "astra"
+    hechos = _commits(raiz, [base + ".." + rama], limite=30)
+    if not hechos:
+        _git(["branch", "-D", rama], raiz, check=False)
+        return _escribir_mensaje(raiz, "revisor", para, "entrega",
+                                 ("No he llegado a cambiar nada.\n\n" + salida.strip())[:12000],
+                                 veredicto="sin_cambios", **comun)
+    lista = "\n".join("- %s %s" % (c["corto"], c["asunto"]) for c in hechos)
+    texto = ("Hecho en la rama %s (parte de tu commit %s):\n%s\n\nPara usarlo: git merge %s en tu rama, "
+             "y pide revisión como siempre.\n\n%s" % (rama, base[:7], lista, rama, salida.strip()))
+    return _escribir_mensaje(raiz, "revisor", para, "entrega", texto[:12000],
+                             veredicto="hecho", rama_claude=rama, **comun)
+
+
 def _aviso_para_astra(respuesta: Dict[str, Any]) -> str:
     donde = "%s (%s)" % (respuesta.get("rama") or "tu rama", str(respuesta.get("commit") or "")[:7])
     dictamen = respuesta.get("veredicto")
+    pie = " El detalle te sale al ponerte al día: python scripts/sincronia.py --al-dia astra"
+    if respuesta.get("tipo") == "encargo":
+        return ("[Encargo de Claude Code, no lo escribe Pablo] " + str(respuesta.get("texto") or "")
+                + " Trátalo como una tarea más, salvo que choque con lo que te haya pedido Pablo (entonces "
+                "pregúntale), y cuéntaselo a Pablo en una línea." + pie)
+    if respuesta.get("tipo") == "respuesta":
+        return ("[Aviso automático de Claude Code, no lo escribe Pablo] He contestado tu pregunta: "
+                + re.sub(r"\s+", " ", str(respuesta.get("texto") or ""))[:450] + pie)
+    if respuesta.get("tipo") == "entrega":
+        rama = respuesta.get("rama_claude") or ""
+        cuerpo = ("He hecho tu encargo en la rama %s. Intégralo con git merge %s en tu rama y pide revisión "
+                  "como siempre; cuéntaselo a Pablo en una línea." % (rama, rama) if dictamen == "hecho"
+                  else "No he podido completar tu encargo: te explico por qué en el buzón.")
+        return "[Aviso automático de Claude Code, no lo escribe Pablo] " + cuerpo + pie
     if respuesta.get("tipo") == "revision":
         cuerpos = {
             "ok": "He revisado %s: OK, tests en verde. Díselo a Pablo y pregúntale si lo despliego." % donde,
@@ -1138,8 +1321,18 @@ def _aviso_para_astra(respuesta: Dict[str, Any]) -> str:
             "fallo": "El despliegue de %s falló y se volvió atrás solo. Díselo a Pablo." % donde,
         }
         cuerpo = cuerpos.get(dictamen, "No he desplegado %s: te explico por qué en el buzón. Díselo a Pablo." % donde)
-    return ("[Aviso automático de Claude Code, no lo escribe Pablo] " + cuerpo
-            + " El detalle te sale al ponerte al día: python scripts/sincronia.py --al-dia astra")
+    return "[Aviso automático de Claude Code, no lo escribe Pablo] " + cuerpo + pie
+
+
+def _entregar_a_astra(raiz: pathlib.Path, texto: str, ejecutor: Ejecutor,
+                      home: Optional[pathlib.Path] = None) -> Tuple[bool, str]:
+    astra = _agentes_fuera(_casa(home), _ahora())["astra"]
+    # La del hook si la hay; si no (hook sin aprobar), su ultima sesion de Codex en Vantelia.
+    sesion = str((_fichajes(_arboles(raiz)).get("astra") or {}).get("sesion") or astra.get("sesion") or "")
+    if astra.get("sin_creditos"):
+        # Entregarselo solo abriria un turno que falla y se perderia: le espera en el buzon.
+        return False, "Astra está sin créditos; lo verá al volver"
+    return ejecutor.entregar(sesion, texto)
 
 
 def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None,
@@ -1156,7 +1349,8 @@ def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None,
         # Sin Claude no hay revision; un despliegue ya revisado no lo necesita.
         pendientes = [p for p in pendientes if p.get("tipo") == "desplegar"]
         if not pendientes:
-            return "Claude está sin créditos hasta las %s: las revisiones esperan." % _hora_corta(limite.get("hasta"))
+            return ("Claude está sin créditos hasta las %s: lo que le habéis pedido espera."
+                    % _hora_corta(limite.get("hasta")))
     cerrojo = raiz / DIR_LOCAL / "revisor.lock"
     if not _coger_cerrojo(cerrojo):
         return "El revisor ya está con otra petición."
@@ -1168,22 +1362,28 @@ def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None,
             "commit": str(peticion.get("commit") or "")[:7], "desde": _iso(_ahora()),
         }), encoding="utf-8")
         try:
-            if peticion.get("tipo") == "revisar":
+            tipo = peticion.get("tipo")
+            if tipo == "revisar":
                 respuesta = _hacer_revision(raiz, peticion, ejecutor)
-            else:
+            elif tipo == "desplegar":
                 respuesta = _hacer_despliegue(raiz, peticion, ejecutor)
+            elif tipo == "ayuda":
+                respuesta = _hacer_ayuda(raiz, peticion, ejecutor)
+            else:
+                respuesta = _hacer_encargo(raiz, peticion, ejecutor)
         except SinCreditos as error:
             # No es un fallo de la peticion: se queda pendiente y se reintenta al renovarse.
             hasta = error.hasta or (ahora + dt.timedelta(minutes=30))
             (raiz / DIR_LOCAL / "claude_limite.json").write_text(json.dumps({
                 "hasta": _iso(hasta), "motivo": str(error)[:300], "cuando": _iso(_ahora()),
             }), encoding="utf-8")
-            return "Claude está sin créditos hasta las %s: la revisión de %s espera." % (
-                _hora_corta(_iso(hasta)), peticion.get("rama") or "")
+            return "Claude está sin créditos hasta las %s: %s de %s espera." % (
+                _hora_corta(_iso(hasta)), _TIPOS.get(str(peticion.get("tipo")), "la petición"),
+                peticion.get("rama") or "")
         except Exception as error:  # que una peticion rota no se reintente para siempre
-            tipo = "revision" if peticion.get("tipo") == "revisar" else "despliegue"
             respuesta = _escribir_mensaje(
-                raiz, "revisor", "astra", tipo, "No pude atender la petición: %s" % error, veredicto="error",
+                raiz, "revisor", peticion.get("de") or "astra", _RESPUESTA.get(str(peticion.get("tipo")), "nota"),
+                "No pude atender la petición: %s" % error, veredicto="error",
                 responde_a=peticion["id"], rama=peticion.get("rama"), commit=peticion.get("commit"))
     finally:
         for fichero in (estado, cerrojo):
@@ -1191,14 +1391,7 @@ def revisor(desde: pathlib.Path, ejecutor: Optional[Ejecutor] = None,
                 fichero.unlink()
             except OSError:
                 pass
-    astra = _agentes_fuera(_casa(home), _ahora())["astra"]
-    # La del hook si la hay; si no (hook sin aprobar), su ultima sesion de Codex en Vantelia.
-    sesion = str((_fichajes(_arboles(raiz)).get("astra") or {}).get("sesion") or astra.get("sesion") or "")
-    if astra.get("sin_creditos"):
-        # Entregarselo solo abriria un turno que falla y se perderia: le espera en el buzon.
-        entregado, detalle = False, "Astra está sin créditos; lo verá al volver"
-    else:
-        entregado, detalle = ejecutor.entregar(sesion, _aviso_para_astra(respuesta))
+    entregado, detalle = _entregar_a_astra(raiz, _aviso_para_astra(respuesta), ejecutor, home)
     return "%s %s → %s (%s)" % (
         peticion.get("tipo"), peticion.get("rama") or "", respuesta.get("veredicto"),
         "entregado a Astra" if entregado else "queda en el buzón: " + detalle[:120])
@@ -1347,6 +1540,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--solo-novedades", action="store_true", help="no imprimir nada si no hay nada nuevo")
     parser.add_argument("--pedir-revision", metavar="QUE", help="Astra pide a Claude que revise su rama")
     parser.add_argument("--pedir-despliegue", metavar="QUE", help="Astra pide desplegar lo revisado")
+    parser.add_argument("--pedir-ayuda", metavar="PREGUNTA", help="Astra pregunta algo a Claude (contesta solo)")
+    parser.add_argument("--encargar", nargs=3, metavar=("DE", "PARA", "TAREA"), help="encargar trabajo al otro agente")
     parser.add_argument("--avisar", nargs=3, metavar=("DE", "PARA", "TEXTO"), help="dejar una nota en el buzón")
     parser.add_argument("--revisor", action="store_true", help="atender la petición pendiente más antigua")
     parser.add_argument("--enviar", action="store_true", help="mandar la foto a app.vantelia.es")
@@ -1369,12 +1564,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(informe)
             _enviar_en_segundo_plano(desde)
             return 0
-        if args.pedir_revision is not None or args.pedir_despliegue is not None:
+        if args.pedir_revision is not None or args.pedir_despliegue is not None or args.pedir_ayuda is not None:
             desde = _desde_donde()
             if args.pedir_revision is not None:
                 ok, texto = pedir_revision(desde, args.pedir_revision)
-            else:
+            elif args.pedir_despliegue is not None:
                 ok, texto = pedir_despliegue(desde, args.pedir_despliegue)
+            else:
+                ok, texto = pedir_ayuda(desde, args.pedir_ayuda)
+            print(texto)
+            if ok:
+                _enviar_en_segundo_plano(desde)
+            return 0 if ok else 1
+        if args.encargar:
+            de, para, tarea = args.encargar
+            desde = _desde_donde()
+            ok, texto = encargar(desde, de.lower(), para.lower(), tarea)
             print(texto)
             if ok:
                 _enviar_en_segundo_plano(desde)

@@ -27,6 +27,10 @@ mensajero.
   Pablo solo dice «despliega», a cualquiera de los dos.
 - **Si a uno se le acaban los tokens**, el otro se pone al día solo y sigue en la
   MISMA rama.
+- **No solo revisar: trabajan juntos.** Astra le pregunta a Claude
+  (`--pedir-ayuda`) o le encarga trabajo en paralelo (`--encargar astra claude`,
+  lo hace en su rama `claude/encargo-…`), y Claude a ella (`--encargar claude
+  astra`). Todo llega solo a la sesión del otro.
 
 ## En curso
 

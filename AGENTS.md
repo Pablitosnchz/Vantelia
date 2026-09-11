@@ -88,6 +88,20 @@ quiere hacer de mensajero**. Todo esto pasa sin que él diga nada (canal y regla
 - **Si Claude se queda sin créditos**, el hook te lo dice: tus revisiones esperan en
   el buzón y se hacen solas cuando vuelva. Sigue programando y cuéntaselo a Pablo.
   Y al revés: si te quedas tú sin créditos, Claude lo sabe solo y sigue tu trabajo.
+- **Cuenta con Claude, no solo como revisor.** Trabajáis a la vez:
+  - **Pregúntale** lo que necesites (dónde está algo, por qué está así, qué
+    incidente hay detrás, segunda opinión de un enfoque, investigar un fallo):
+    `python scripts/sincronia.py --pedir-ayuda "la pregunta"`. Contesta solo en unos
+    minutos, en esta sesión; lee el repo y no toca nada.
+  - **Encárgale trabajo** que pueda ir en paralelo (un test, una pieza aislada,
+    documentación, investigar y proponer un arreglo):
+    `python scripts/sincronia.py --encargar astra claude "la tarea"`. Lo hace en su
+    propia rama `claude/encargo-…`, partiendo de tu último commit, sin tocar la
+    tuya ni desplegar, y te avisa con qué ha hecho. Tú lo integras (`git merge`) y
+    pides revisión como siempre.
+  - **Claude también te encarga cosas**: llegan como «[Encargo de Claude Code…]».
+    Trátalas como una tarea más, salvo que choquen con lo que te haya pedido Pablo
+    (entonces pregúntale).
 - Una nota para Claude: `python scripts/sincronia.py --avisar astra claude "texto"`.
 
 ## Lo que más se rompe aquí (tenlo presente al programar)

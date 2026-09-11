@@ -198,11 +198,23 @@ def test_lo_que_hay_en_curso_sale_de_estado_actual(repo, home):
 class EjecutorFalso:
     """Hace de pytest, de Claude, del despliegue y de codex queue sin salir del test."""
 
-    def __init__(self, tests_ok=True, respuesta="Sin hallazgos.\nVEREDICTO: OK", despliegue_ok=True):
+    def __init__(self, tests_ok=True, respuesta="Sin hallazgos.\nVEREDICTO: OK", despliegue_ok=True,
+                 hace_commit=True):
         self.tests_ok = tests_ok
         self.respuesta = respuesta
         self.despliegue_ok = despliegue_ok
+        self.hace_commit = hace_commit
         self.llamadas = []
+
+    def claude_escribe(self, arbol, prompt):
+        """Hace un encargo de verdad en la copia: escribe un fichero y, si toca, lo commitea."""
+        self.llamadas.append(("claude_escribe", prompt))
+        (pathlib.Path(arbol) / "docs").mkdir(exist_ok=True)
+        (pathlib.Path(arbol) / "docs" / "ENCARGO.md").write_text("hecho\n", encoding="utf-8")
+        if self.hace_commit:
+            _git(arbol, "add", "docs/ENCARGO.md")
+            _git(arbol, "commit", "-q", "-m", "docs: encargo" + CLAUDE)
+        return "Hecho: un documento."
 
     def pytest(self, arbol):
         self.llamadas.append(("pytest", str(arbol)))
@@ -512,6 +524,73 @@ def test_la_respuesta_busca_la_sesion_de_astra_y_no_la_despierta_sin_creditos(re
     otro = EjecutorFalso()
     sincronia.revisor(repo, ejecutor=otro, home=home)
     assert "entregar" not in _tipos(otro)
+
+
+# --- no solo revisar: se preguntan y se encargan trabajo -----------------------------
+
+@necesita_git
+def test_astra_pregunta_y_claude_contesta_solo_sin_tocar_nada(repo, astra, home):
+    ok, _ = sincronia.pedir_ayuda(astra, "¿Dónde se valida el hueco al reprogramar?")
+    assert ok
+    ejecutor = EjecutorFalso(respuesta="En agenda._booking_slot_available_for_reschedule.")
+    sincronia.revisor(repo, ejecutor=ejecutor, home=home)
+    # Solo lectura: ni tests, ni escribir.
+    assert _tipos(ejecutor) == ["claude", "entregar"]
+    assert "¿Dónde se valida el hueco al reprogramar?" in ejecutor.llamadas[0][1]
+    respuesta = _ultimo_mensaje(repo)
+    assert (respuesta["tipo"], respuesta["para"]) == ("respuesta", "astra")
+    assert "contestado tu pregunta" in ejecutor.llamadas[1][2]
+
+
+@necesita_git
+def test_un_encargo_de_astra_lo_hace_claude_en_su_propia_rama(repo, astra, home):
+    de_astra = _git_salida(repo, "rev-parse", "astra/tarea").strip()
+    ok, _ = sincronia.encargar(astra, "astra", "claude", "Documenta el flujo de reprogramar")
+    assert ok
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor, home=home)
+    assert _tipos(ejecutor) == ["claude_escribe", "entregar"]
+
+    entrega = _ultimo_mensaje(repo)
+    assert (entrega["tipo"], entrega["veredicto"]) == ("entrega", "hecho")
+    rama = entrega["rama_claude"]
+    assert rama.startswith("claude/encargo-")
+    # Parte del trabajo de Astra y trae lo de Claude; ni su rama ni main se tocan.
+    assert _git_salida(repo, "log", "-1", "--format=%s", rama).strip() == "docs: encargo"
+    assert subprocess.run(["git", "merge-base", "--is-ancestor", de_astra, rama], cwd=str(repo)).returncode == 0
+    assert _git_salida(repo, "rev-parse", "astra/tarea").strip() == de_astra
+    assert "git merge " + rama in ejecutor.llamadas[1][2]
+
+
+@necesita_git
+def test_un_encargo_a_medias_no_se_pierde(repo, astra, home):
+    sincronia.encargar(astra, "astra", "claude", "x")
+    sincronia.revisor(repo, ejecutor=EjecutorFalso(hace_commit=False), home=home)
+    entrega = _ultimo_mensaje(repo)
+    assert entrega["veredicto"] == "hecho"
+    assert _git_salida(repo, "log", "-1", "--format=%s", entrega["rama_claude"]).startswith("wip:")
+
+
+@necesita_git
+def test_claude_le_encarga_cosas_a_astra_y_le_llegan_a_su_sesion(repo, home):
+    _sesion_codex(home, [TURNO_BIEN])
+    ejecutor = EjecutorFalso()
+    ok, texto = sincronia.encargar(repo, "claude", "astra", "Mira por qué falla el humo de reprogramar",
+                                   ejecutor=ejecutor, home=home)
+    assert ok and "entregado" in texto
+    assert ejecutor.llamadas[0][:2] == ("entregar", UUID_ASTRA)
+    assert "Encargo de Claude Code" in ejecutor.llamadas[0][2]
+    # Es para Astra: el revisor no se lo queda.
+    assert sincronia._pendientes(sincronia._buzon(sincronia._arboles(repo))) == []
+
+
+@necesita_git
+def test_el_revisor_atiende_antes_lo_rapido(repo, astra, home):
+    sincronia.encargar(astra, "astra", "claude", "algo largo")
+    sincronia.pedir_revision(astra, "x")
+    ejecutor = EjecutorFalso()
+    sincronia.revisor(repo, ejecutor=ejecutor, home=home)
+    assert _tipos(ejecutor)[0] == "pytest"  # la revision va antes que el encargo
 
 
 # --- el servidor ---------------------------------------------------------------------

@@ -389,10 +389,18 @@
     lista.appendChild(li);
   }
 
-  var TIPOS = { revisar: 'pide revisión', revision: 'revisión', desplegar: 'pide desplegar', despliegue: 'despliegue', nota: 'nota' };
+  var TIPOS = {
+    revisar: 'pide revisión', revision: 'revisión', desplegar: 'pide desplegar', despliegue: 'despliegue',
+    ayuda: 'pregunta', respuesta: 'respuesta', encargo: 'encargo', entrega: 'entrega', nota: 'nota'
+  };
   var VEREDICTOS = {
     ok: ['OK', 'ok'], cambios: ['Cambios', 'aviso'], error: ['No se pudo', 'mal'],
-    sin_veredicto: ['Sin veredicto', 'aviso'], rechazado: ['No se despliega', 'aviso'], fallo: ['Falló', 'mal']
+    sin_veredicto: ['Sin veredicto', 'aviso'], rechazado: ['No se despliega', 'aviso'], fallo: ['Falló', 'mal'],
+    hecho: ['Hecho', 'ok'], sin_cambios: ['Sin cambios', 'aviso']
+  };
+  var HACIENDO = {
+    revisar: 'revisando ', desplegar: 'desplegando ',
+    ayuda: 'contestando una pregunta de Astra desde ', encargo: 'haciendo un encargo de Astra desde '
   };
 
   function chipAutor(autor) {
@@ -405,7 +413,7 @@
     vaciar(lista);
     if (foto.revisor) {
       lista.appendChild(el('li', 'revisando', 'Claude está ' +
-        (foto.revisor.haciendo === 'desplegar' ? 'desplegando ' : 'revisando ') + (foto.revisor.rama || '') +
+        (HACIENDO[foto.revisor.haciendo] || 'con ') + (foto.revisor.rama || '') +
         ' (empezó ' + hace(foto.revisor.desde, ahora) + ').'));
     } else if (foto.pendientes) {
       lista.appendChild(el('li', 'vacio', (foto.pendientes === 1 ? 'Una petición espera' : foto.pendientes + ' peticiones esperan') +
@@ -425,7 +433,8 @@
       cabecera.appendChild(el('span', 'tipo', TIPOS[m.tipo] || 'nota'));
       var v = VEREDICTOS[m.veredicto];
       if (v) cabecera.appendChild(el('span', 'estado ' + v[1], v[0]));
-      if (m.rama) cabecera.appendChild(el('code', 'rama', m.rama + (m.commit ? ' · ' + m.commit : '')));
+      if (m.rama_claude) cabecera.appendChild(el('code', 'rama', m.rama_claude));
+      else if (m.rama) cabecera.appendChild(el('code', 'rama', m.rama + (m.commit ? ' · ' + m.commit : '')));
       cabecera.appendChild(el('span', 'cuando', hace(m.cuando, ahora)));
       li.appendChild(cabecera);
       var texto = m.texto || '';
