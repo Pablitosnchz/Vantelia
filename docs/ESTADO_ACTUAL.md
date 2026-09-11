@@ -102,7 +102,9 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   lista y se quedaba sin cita. Ahora la hora del código sigue al día que ella lee,
   "me llamo X" se anota al momento (se cierra en ese turno), y el primer hueco de
   hoy deja una hora de margen. En 6 conversaciones contra copia de producción:
-  las 6 reservan con el primer "sí".
+  5 reservan con el primer "sí"; en la otra el modelo mezcló el día que
+  encabezaba su lista con la hora elegida, la herramienta lo frenó (ninguna cita
+  mal cogida) y reservó al siguiente "sí". Guardarraíl para eso, en curso.
 
 ## Bloqueado por fuera del código
 
