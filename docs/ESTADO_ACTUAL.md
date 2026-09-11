@@ -42,7 +42,7 @@ página de sincronía lo enseña tal cual.
 - **Testigo:** nadie
 - **Tarea:** ninguna abierta. «La primera que tengas» ya acaba en cita (ver «Lo último»).
 - **Rama:** main.
-- **Siguiente:** que Astra revise, todo ya en producción (`4abca06`): la integración de reprogramar (`5d05457`), el mensaje ilegible (`33f274a`), los avisos de sistema de Meta (`541020c`), «la primera que tengas» (`2dea1c2`) y su guardarraíl (`9ae56f9`). Le esperan en el buzón.
+- **Siguiente:** recordatorios por WhatsApp (plan listo en `docs/PLAN_RECORDATORIOS_WHATSAPP.md`). Astra tiene en el buzón la revisión de lo desplegado hoy: reprogramar (`5d05457`), mensaje ilegible (`33f274a`), avisos de sistema (`541020c`), «la primera que tengas» (`2dea1c2`, `9ae56f9`), la vuelta del asistente (`5531fc7`), «Corte de señora» (`3e9ed05`) y los dos apellidos por WhatsApp.
 - **Espera a:** nada. Astra, sin créditos hasta las 20:46.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
@@ -118,6 +118,10 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   que escribe el modelo ya no cambia el servicio. Antes no se encontraba y la
   cita se cogía de 15 min (el paso de la agenda) en vez de 20, con un nombre que
   no existe en el catálogo.
+- **Dos apellidos por WhatsApp** (11-sep, decisión de Pablo): a una clienta nueva
+  se le piden nombre y dos apellidos antes del resumen (freno en `crear_cita` del
+  agente y en el flujo con listas, que junta lo que va diciendo; a la tercera se le
+  ofrece llamar). A una clienta conocida no se le pide nada.
 
 ## Bloqueado por fuera del código
 
@@ -163,17 +167,30 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
 
 ## Decisiones pendientes de Pablo
 
-1. **Alicia con su propio número**: Meta ya lo permite. Falta decidir cuándo:
-   añadirla a `WHATSAPP_ES_TENANTS` y que conecte su número desde el portal
-   (sigue usando su móvil como siempre). Hasta entonces el +31 hace de número suyo.
-2. **Rigidez de los dos apellidos en el panel**: obligatorio a secas (lo actual),
-   obligatorio con salida para quien de verdad no tiene segundo apellido, o solo
-   aviso.
-3. **`scripts/tiktok_autosend.py`**: misma clase de riesgo que las
-   automatizaciones de Meta que se borraron; ¿se retira también?
-4. Hecho (11-sep): Pablo aprobó en Codex los hooks de Astra (`~/.codex/hooks.json`,
-   desde la terminal: la app de escritorio no tiene `/hooks`). Astra estaba sin
-   créditos hasta las 15:30; al volver, en una sesión nueva se pone al día sola.
+1. **Alicia con su propio número: LISTO para que lo conecte** (11-sep). Le sale el
+   botón «Conectar WhatsApp» en la pestaña WhatsApp de su portal
+   (`WHATSAPP_ES_TENANTS=metareview,alicia_rincon_estilistas` en el `.env` del
+   VPS). Al conectar, su número sustituye al +31 (que vuelve al tenant de pruebas)
+   y su configuración pasa sola al número nuevo. Es la prueba de que el alta vale
+   para una empresa que no es la nuestra. Después: volver a poner WhatsApp en sus
+   canales de aviso cuando haya plantillas (punto 2).
+2. **Siguiente gran tarea: recordatorios por WhatsApp** (plantillas de Meta). Plan
+   para ejecutar tal cual en `docs/PLAN_RECORDATORIOS_WHATSAPP.md`.
+3. Decidido (11-sep): **dos apellidos obligatorios** en el panel y también por
+   WhatsApp a las clientas nuevas; a las conocidas no se les pide nada.
+4. **Anotado para más adelante** (Pablo, 11-sep: "con el resto ya seguiremos"):
+   - `scripts/tiktok_autosend.py`: misma clase de riesgo que las automatizaciones
+     de Meta que se borraron; ¿se retira?
+   - Rotar `WHATSAPP_APP_SECRET` (se imprimió en claro el 9-sep): lo lleva Pablo.
+   - Stripe de Alicia sin activar: Pablo se lo pide a ella.
+   - Preguntar a Alicia: grey blending "largo" (530 min) dura más que el "extra
+     largo" (495); horario real de Lucía y Jose.
+   - El formulario de reserva dentro de WhatsApp (Flows) está en borrador y en la
+     WABA de Vantelia: en números de otros negocios no sale (sigue por mensajes).
+   - Aviso al negocio de un mensaje normal (hoy solo cuando piden persona) y push.
+   - Esfuerzo de razonamiento de Astra (con `xhigh` gasta la cuota en una hora).
+5. Hecho (11-sep): Pablo aprobó en Codex los hooks de Astra (`~/.codex/hooks.json`,
+   desde la terminal: la app de escritorio no tiene `/hooks`).
 
 ## Frágil, a vigilar
 
