@@ -286,6 +286,18 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
                 # Los de ese dia ya no dan tiempo: sin huecos sobre la mesa, el
                 # agente busca el siguiente de verdad (con margen).
                 estado.huecos = []
+        # Un "si" a las horas que le ACABAN de ofrecer es elegirlas. Banco de casos
+        # `dice-que-si-y-acaba-en-cita` (conversacion real del 9-sep-2026): le
+        # ofrecieron la manana, dijo "si", y el modelo volvio a recitar la lista
+        # -otra vez mas despues de que ella diera su nombre- y se quedo sin cita.
+        if not estado.hora and estado.huecos and _dice_que_si(mensaje):
+            validos = huecos_con_margen(estado.fecha_de_los_huecos, estado.huecos,
+                                        ahora_local(timezone_name))
+            if validos:
+                estado.hora = validos[0]
+                estado.hora_del_codigo = True
+                if not estado.fecha and estado.fecha_de_los_huecos:
+                    estado.fecha = estado.fecha_de_los_huecos
         # "me llamo Ana Ruiz": el nombre entra en cuanto lo dice. Antes solo llegaba
         # con la llamada a `crear_cita`, asi que con dia y hora ya puestos seguia
         # "faltando el nombre", el codigo no forzaba el cierre y el modelo volvia a
@@ -298,6 +310,21 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
             codigo = _codigo_en(mensaje or "")
             if codigo:
                 estado.codigo = codigo
+
+
+def _dice_que_si(mensaje: str) -> bool:
+    """El MISMO "si" que reconoce el canal, no uno propio.
+
+    `whatsapp._wa_dice_que_si` ya distingue un si de un "si, pero mejor a las 5".
+    Tener aqui otra lista seria tener dos criterios y arreglar el mismo caso raro
+    en dos sitios.
+    """
+    from backend import catalog_pick, whatsapp
+
+    try:
+        return bool(whatsapp._wa_dice_que_si(catalog_pick._norm(mensaje or "")))
+    except Exception:  # noqa: BLE001 - reconocer un si no puede tumbar la conversacion
+        return False
 
 
 def _codigo_en(texto: str) -> str:
