@@ -49,8 +49,11 @@ CASOS = [
         # El nombre va al final porque en el banco la clienta es DESCONOCIDA: por
         # WhatsApp el telefono ya la identifica y no se lo piden. Lo que se mide es
         # lo mismo: que decir "si" a una hora ofrecida termine en cita.
+        # Nombre y DOS apellidos desde el 11-sep-2026 (decision de Pablo): a una
+        # clienta nueva se le piden los dos, asi que con uno solo esta conversacion
+        # se quedaba en "¿y tu segundo apellido?" y no llegaba a medir lo suyo.
         "mensajes": ["quiero un alisado", "no lo tengo claro", "manana",
-                     "a las 15", "si", "me llamo Ana Ruiz"],
+                     "a las 15", "si", "me llamo Ana Ruiz Perez"],
         # En WhatsApp la cita NACE al pulsar el boton del resumen, no antes: el
         # final bueno de esta conversacion es el resumen para confirmar. Pedir
         # aqui `agenda: crea` seria pedir que la cita naciera sin que ella la
@@ -307,7 +310,11 @@ CASOS = [
         "mensajes": [
             "hola quiero cita para un corte de señora",
             "el primer hueco que tengas",
-            "me llamo Marta Ruiz",
+            # Nombre y dos apellidos: es una clienta NUEVA por WhatsApp
+            # (decision de Pablo, 11-sep-2026). Con uno solo, esta conversacion se
+            # quedaba en "¿y tu segundo apellido?" y no medía si la cita acaba en
+            # la agenda, que es lo suyo.
+            "me llamo Marta Ruiz Gomez",
             "si, confirmo",
         ],
         "agenda": "crea",
@@ -417,7 +424,10 @@ CASOS = [
             "tambien quisiera hacer el elumen",
             "he pensado que quiero un alisado",
             "el jueves por la tarde me viene bien",
-            "me llamo Ana Ruiz",
+            # Con un solo apellido este caso pasaba por el motivo equivocado: lo
+            # frenaba la pregunta de los apellidos, no el freno de varios
+            # servicios que es lo que viene a vigilar.
+            "me llamo Ana Ruiz Perez",
         ],
         # No hay ningun servicio de su catalogo que cubra las cuatro cosas, asi
         # que lo correcto es NO reservar y decirle que lo cuadren por telefono.

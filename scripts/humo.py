@@ -72,7 +72,7 @@ CASOS: List[Dict[str, Any]] = [
         # nada roto. Se comprobo: fallaba igual en la version anterior. Una clienta
         # de verdad aguanta una pregunta mas; el guion tambien debe.
         "mensajes": ["hola, quiero cita para un corte de senora",
-                     "la primera que tengas", "me llamo Ana Ruiz",
+                     "la primera que tengas", "me llamo Ana Ruiz Perez",
                      "si, confirmo", "si, confirmo"],
         "espera": "cita_viva",
     },
@@ -81,7 +81,7 @@ CASOS: List[Dict[str, Any]] = [
         "por_que": ("Al separar 'mechas o balayage' en dos opciones, contestar 'mechas' "
                     "dejo de resolver y la conversacion entraba en bucle."),
         "mensajes": ["quiero unas mechas", "mechas", "lo tengo medio",
-                     "la primera que tengas", "me llamo Ana Ruiz", "si, confirmo"],
+                     "la primera que tengas", "me llamo Ana Ruiz Perez", "si, confirmo"],
         "espera": "cita_viva",
     },
     {
@@ -90,7 +90,7 @@ CASOS: List[Dict[str, Any]] = [
                     "pelo. Acabar con el tratamiento de cuatro horas es el fallo caro."),
         "mensajes": ["cuanto me costarian unas mechas?", "lo tengo medio",
                      "vale, cogeme cita", "la primera que tengas",
-                     "me llamo Ana Ruiz", "si, confirmo"],
+                     "me llamo Ana Ruiz Perez", "si, confirmo"],
         "espera": "cita_de_diagnostico_o_ninguna",
     },
     {
