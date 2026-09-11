@@ -2120,6 +2120,11 @@ async def _voice_check_availability(
     hora: str = "",
     fecha_texto: str = "",
     reschedule: bool = False,
+    *,
+    codigo_reserva: str = "",
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
 ) -> Dict[str, Any]:
     config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config or not _voice_booking_enabled(cliente_id, config):
@@ -2130,13 +2135,24 @@ async def _voice_check_availability(
         agenda._validate_booking_window(cliente_id, day)
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
+    cita = None
+    if codigo_reserva:
+        cita, error = await _voice_lookup_for_mutation(
+            cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email)
+        if error:
+            return error
+        reschedule = True
     try:
-        all_slots, available = await agenda._public_slot_sets_for_day(
-            cliente_id,
-            fecha,
-            servicio=textnorm._sanitize_text(servicio or ""),
-            location_id=location_id,
-        )
+        if cita is not None:
+            all_slots, available = await booking._reschedule_slot_sets_for_day(
+                cita, fecha, servicio=servicio)
+        else:
+            all_slots, available = await agenda._public_slot_sets_for_day(
+                cliente_id,
+                fecha,
+                servicio=textnorm._sanitize_text(servicio or ""),
+                location_id=location_id,
+            )
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[voice] disponibilidad fallo (%s): %s", cliente_id, exc)
         return {"ok": False, "error": "No se pudo consultar la disponibilidad."}
@@ -3101,6 +3117,10 @@ async def _voice_dispatch_tool_impl(
             str(args.get("hora", "")),
             str(args.get("fecha_texto", "")),
             reschedule=bool(str(args.get("codigo_reserva", "")).strip()),
+            codigo_reserva=str(args.get("codigo_reserva") or "").strip(),
+            from_number=from_number,
+            telefono=str(args.get("telefono") or ""),
+            email=str(args.get("email") or ""),
         )
     if name == "crear_cita":
         # El telefono del canal vale como el dictado: por WhatsApp y por el chat el

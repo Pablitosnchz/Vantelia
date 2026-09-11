@@ -459,9 +459,13 @@ async def _ejecutar(
     telefono: str, location_id: str = "", ya_creadas: Optional[set] = None,
     quien: Optional[Dict[str, str]] = None, remate_manual: bool = False,
     dicho: str = "",
+    codigo_reprogramar: str = "",
 ) -> Dict[str, Any]:
     """Ejecuta una tool. Nunca lanza: un fallo se devuelve como resultado."""
     argumentos = _normalizar_argumentos(argumentos)
+    if nombre == "consultar_disponibilidad" and codigo_reprogramar:
+        # Sale del estado verificado, no de que el modelo recuerde pasar el código.
+        argumentos["codigo_reserva"] = codigo_reprogramar
     if nombre == "buscar_servicio":
         return _tool_buscar_servicio(cliente_id, argumentos, location_id=location_id)
 
@@ -3492,9 +3496,18 @@ async def responder(
                 from backend import agenda
 
                 try:
+                    contexto_cita = {}
+                    if estado.intencion == "reprogramar":
+                        from backend import voice
+
+                        cita, error = await voice._voice_lookup_for_mutation(
+                            cliente_id, estado.codigo, from_number=telefono)
+                        if error:
+                            raise ValueError("Falta identificar la cita antes de ofrecer otro hueco")
+                        contexto_cita["booking_row"] = cita
                     dia, libres = await agenda.primer_dia_con_hueco(
                         cliente_id, servicio=estado.servicio_exacto or estado.servicio,
-                        location_id=location_id)
+                        location_id=location_id, **contexto_cita)
                 except Exception as exc:  # noqa: BLE001
                     settings.logger.warning("[agente] sin primer hueco (%s): %s", cliente_id, exc)
                     dia, libres = "", []
@@ -4141,6 +4154,7 @@ async def responder(
                         cliente_id, llamada.function.name, argumentos,
                         telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
                         quien=quien, remate_manual=remate_manual, dicho=dicho_de_ella,
+                        codigo_reprogramar=(estado.codigo if estado.intencion == "reprogramar" else ""),
                     )
                 traza.tool(llamada.function.name, argumentos,
                            ok=bool(resultado.get("ok", True)),

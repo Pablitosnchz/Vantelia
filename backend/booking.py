@@ -33,7 +33,7 @@ import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from html import escape
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import httpx
 from fastapi import HTTPException, Request, status
@@ -2778,6 +2778,39 @@ def _minutos_que_ocupa_ahora(booking_row: sqlite3.Row) -> int:
             booking_row["cliente_id"], booking_row["servicio"] or "", None))
     except Exception:  # noqa: BLE001
         return 0
+
+
+async def _reschedule_slot_sets_for_day(
+    booking_row: sqlite3.Row, fecha: str, *, servicio: str = "",
+) -> Tuple[Set[str], Set[str]]:
+    """Huecos para mover ESTA cita, con la misma validación que al actualizarla.
+
+    La disponibilidad pública une profesionales; mover conserva el de la cita.
+    Ofrecer las horas de otra persona prometía un cambio que el núcleo rechazaba.
+    También se excluye la propia cita del aforo y de los solapes.
+    """
+    cliente_id = booking_row["cliente_id"]
+    if booking_row["status"] in ("cancelled", "completed", "no_show"):
+        return set(), set()
+    employee = agenda._resolve_employee_for_booking(
+        cliente_id, booking_row["employee_id"] or "", require_active=False)
+    servicio = textnorm._sanitize_text(servicio or booking_row["servicio"] or "")
+    if not agenda._service_name_allowed_for_employee(cliente_id, employee, servicio):
+        return set(), set()
+    duracion = agenda._service_duration_minutes(cliente_id, servicio, employee)
+    slots = await agenda._available_slots_for_day(
+        cliente_id, fecha, employee_id=employee["id"], duration_minutes=duracion)
+    libres: Set[str] = set()
+    for hora in slots:
+        if (fecha == booking_row["booking_date"] and hora == booking_row["booking_time"]
+                and servicio == (booking_row["servicio"] or "")):
+            continue  # Dejarla igual no es reprogramarla.
+        if await agenda._booking_slot_available_for_reschedule(
+            cliente_id, fecha, hora, employee_id=employee["id"],
+            exclude_booking_id=booking_row["id"], duration_minutes=duracion,
+        ):
+            libres.add(hora)
+    return set(slots), libres
 
 
 async def _update_booking_details(
