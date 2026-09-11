@@ -661,6 +661,24 @@ def normalizar(texto: str) -> str:
     return " ".join("".join(c for c in limpio if not unicodedata.combining(c)).split())
 
 
+# Palabras que no distinguen un servicio de otro: "Corte de señora" es "Corte señora".
+_CONECTORES = {"de", "del", "la", "el", "los", "las", "para", "con", "y", "e",
+               "a", "al", "un", "una"}
+
+
+def clave_sin_conectores(texto: str) -> str:
+    """El nombre normalizado y sin palabras de enlace, para casar variaciones.
+
+    Paso de verdad (11-sep-2026): el modelo escribio "Corte de señora" y el
+    catalogo tiene "Corte señora". No se encontraba, la duracion caia al paso de
+    la agenda (15 min en vez de 20) y la cita se cogia con un nombre que no existe.
+    """
+    import re
+
+    plano = re.sub(r"[^a-z0-9 ]+", " ", normalizar(texto))
+    return " ".join(p for p in plano.split() if p not in _CONECTORES)
+
+
 def _strip_accents(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", text or "") if unicodedata.category(c) != "Mn")
 

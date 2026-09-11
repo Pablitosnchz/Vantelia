@@ -109,6 +109,15 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   con otro día que ella no ha dicho, manda el día que se le propuso. Con él, otras
   6 conversaciones: las 6 al primer "sí" (la mezcla no se repitió; la cubre el
   test).
+- **El asistente vuelve a la hora** (11-sep, decisión de Pablo): tras contestar el
+  equipo desde WhatsApp Business se calla 1 h desde su último mensaje (antes 2 h;
+  por negocio, `whatsapp.silencio_tras_responder_min`). Al volver, un "hola" no
+  saca la bienvenida con el menú: lo coge el agente, que conserva lo hablado (su
+  historial ya no se corta a la media hora si ha intervenido una persona).
+- **"Corte de señora" es "Corte señora"** (11-sep): un "de" de más en el nombre
+  que escribe el modelo ya no cambia el servicio. Antes no se encontraba y la
+  cita se cogía de 15 min (el paso de la agenda) en vez de 20, con un nombre que
+  no existe en el catálogo.
 
 ## Bloqueado por fuera del código
 
@@ -119,7 +128,8 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   saliendo por email, porque se le quitó WhatsApp de los canales de aviso para que
   el "Vantelia" del +31 no escriba a sus clientas reales. Las citas de prueba por
   el +31 caen en SU agenda real. Si alguien contesta desde WA Business, el
-  asistente se calla 2 h en ese chat (vuelve solo, o «Devolver al asistente» en
+  asistente se calla 1 h desde su último mensaje en ese chat (vuelve solo, sin
+  saludar de nuevo y sabiendo lo hablado; o «Devolver al asistente» en
   Conversaciones).
 - El alta self-service de WhatsApp sigue limitada al tenant de pruebas
   `metareview` (variable `WHATSAPP_ES_TENANTS`). Conectar el número PROPIO de

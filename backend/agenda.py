@@ -692,6 +692,18 @@ def _find_service_by_name(cliente_id: str, name: str) -> Optional[sqlite3.Row]:
         for candidate in rows:
             if _service_match_key(candidate["name"]) == key:
                 return candidate
+    # "Corte de señora" es "Corte señora": el modelo mete o quita un "de" y, sin
+    # esto, no se encontraba el servicio, la duracion caia al paso de la agenda y
+    # la cita se cogia con un nombre que no existe. Ultimo intento, y solo si deja
+    # UN candidato (preferido el activo): con dos no se adivina.
+    clave = textnorm.clave_sin_conectores(name_clean)
+    if clave:
+        iguales = [c for c in rows if textnorm.clave_sin_conectores(c["name"]) == clave]
+        activos = [c for c in iguales if int(c["is_active"] or 0)]
+        if len(activos) == 1:
+            return activos[0]
+        if len(iguales) == 1:
+            return iguales[0]
     return None
 
 

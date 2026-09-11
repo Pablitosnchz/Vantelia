@@ -423,10 +423,11 @@ def _es_otro_servicio(guardado: str, pedido: str) -> bool:
     minutos y de casi cuatro horas-, por eso aqui solo se decide "es otro" cuando
     ninguno contiene al otro.
     """
-    from backend import catalog_pick
+    from backend import textnorm
 
-    a = catalog_pick._norm(guardado or "")
-    b = catalog_pick._norm(pedido or "")
+    # Sin palabras de enlace: "Corte de señora" es "Corte señora" (11-sep-2026).
+    a = textnorm.clave_sin_conectores(guardado or "")
+    b = textnorm.clave_sin_conectores(pedido or "")
     if not a or not b:
         return bool(b) and not a
     return a not in b and b not in a
