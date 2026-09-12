@@ -44,12 +44,17 @@ def _payload(booking, **cambios):
 
 @pytest.fixture
 def una_cita(api_module):  # noqa: F811
-    """Una cita real de mañana, creada por el mismo nucleo que usa el portal."""
+    """Una cita futura en día abierto, creada por el núcleo del portal."""
     import datetime
 
     from backend import agenda, booking, db, timeutils
 
-    fecha = (timeutils._utc_now().date() + datetime.timedelta(days=1)).isoformat()
+    dia = timeutils._utc_now().date() + datetime.timedelta(days=1)
+    # El negocio de la fixture cierra el domingo: ejecutar la suite un sábado
+    # no debe impedir preparar los once casos de duración y disponibilidad.
+    if dia.weekday() == 6:
+        dia += datetime.timedelta(days=1)
+    fecha = dia.isoformat()
     empleado = agenda._resolve_employee_for_booking(CID, "", require_active=False)
     creada = asyncio.run(booking._create_booking_core(
         CID, employee_row=empleado, nombre="Clienta Prueba", email="c@example.com",
