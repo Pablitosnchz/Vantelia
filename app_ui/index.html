@@ -5484,6 +5484,7 @@ async function loadKeywordRules() {
   try { data = await api('/auth/app/keyword-rules'); }
   catch { card.style.display = 'none'; return; }
   const items = data.items || [];
+  if (!data.enabled && !items.length) { card.style.display = 'none'; return; }
   card.style.display = '';
   document.getElementById('kwrEnabled').checked = !!data.enabled;
   if (!items.length) {
@@ -5675,7 +5676,6 @@ async function loadBusinessRules() {
   try { data = await api('/auth/app/business-rules'); }
   catch { card.style.display = 'none'; return; }
   const items = data.items || [];
-  if (!data.enabled && !items.length) { card.style.display = 'none'; return; }
   card.style.display = '';
   document.getElementById('brEnabled').checked = !!data.enabled;
   brFamiliasDisponibles = data.familias || [];
