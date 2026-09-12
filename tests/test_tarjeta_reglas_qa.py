@@ -17,12 +17,13 @@ def test_reglas_de_negocio_visibles_y_palabras_clave_sin_activar_ocultas():
         funciones.append(html[inicio:html.index("\n}", inicio) + 2])
     prueba = """
 const assert = require('assert');
-const nodos = Object.fromEntries(['brCard','brList','brEnabled','brStatus','brFamiliasHint',
+const nodos = Object.fromEntries(['brCard','brList','brEnabled','brDosApellidos','brStatus','brFamiliasHint',
     'brIntenciones','kwrCard','kwrList','kwrEnabled'].map(id => [id, {
         style: {display:'none'}, dataset: {}, innerHTML:'', checked:false }]));
 const document = {getElementById: id => nodos[id]};
 const api = async () => ({enabled:false, items:[], familias:[], intenciones:[]});
 let brFamiliasDisponibles = [];
+const state = {};
 const BR_INTENCION_LABEL = {};
 const escapeHtml = x => x;
 """ + "\n".join(funciones) + """

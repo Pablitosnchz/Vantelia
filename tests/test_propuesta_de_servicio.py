@@ -3,7 +3,7 @@ from dataclasses import asdict
 
 import pytest
 
-from backend import appstate, reserva
+from backend import reserva
 
 
 def preparar(estado):
@@ -61,12 +61,12 @@ def test_confirmacion_y_acuse_repetidos_son_inertes():
 
 
 @pytest.mark.parametrize("tenant,conversacion", [("otro", "uno"), ("salon", "dos")])
-def test_no_se_acepta_en_otro_tenant_o_conversacion(monkeypatch, tenant, conversacion):
-    monkeypatch.setattr(appstate, "ESTADOS_DE_RESERVA", {}, raising=False)
+def test_no_se_acepta_en_otro_tenant_o_conversacion(api_module, tenant, conversacion):
     estado = reserva.cargar("salon", "uno")
     estado.intencion = "reservar"
     propuesta = preparar(estado)
     reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "mensaje-1")
+    reserva.guardar("salon", "uno", estado)
     otro = reserva.cargar(tenant, conversacion)
     otro.intencion = "reservar"
     preparar(otro)

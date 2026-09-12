@@ -516,6 +516,7 @@ async def _ejecutar(
         conocida = str((quien or {}).get("nombre", "")).strip()
         quien_nombre = str(argumentos.get("nombre") or conocida).strip()
         if (quien_nombre and telefono and not conocida
+                and clients.exige_dos_apellidos(cliente_id)
                 and not textnorm.tiene_dos_apellidos(quien_nombre)):
             return {
                 "ok": False,
@@ -1013,49 +1014,23 @@ _AFIRMA_A_SECAS = re.compile(
     r"([ ,.!]+(si|porfa|por favor|gracias|claro|vale|please|mejor))*[ ,.!]*$")
 
 
-def _ultimo_del_asistente(mensajes) -> str:
-    """Lo ultimo que dijo el asistente, para saber a que esta contestando ella."""
-    for mensaje in reversed(list(mensajes or [])):
-        try:
-            if mensaje.get("role") == "assistant" and mensaje.get("content"):
-                return str(mensaje.get("content"))
-        except AttributeError:  # noqa: PERF203 - objetos del SDK, no dicts
-            continue
-    return ""
-
-
 def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str, estado=None) -> bool:
-    """Le ha ofrecido el diagnostico y ella ha dicho que si.
+    """Continúa una alternativa ya aceptada y aún vigente.
 
-    Visto en produccion el 8-sep-2026:
-
-        IA    ...  Te gustaria que te agende una cita de diagnostico?
-        ELLA  si
-        IA    Ahora, para manana, necesito saber como tienes el pelo de largo
-
-    El "si" no estaba atado a nada: pedir el diagnostico solo contaba si ella
-    escribia la palabra. Tuvo que decirlo entero -"quiero el diagnostico"- dos
-    turnos despues para que se lo cogieran. Un si a una pregunta que acabas de
-    hacer es la forma mas normal de pedir algo, y era la unica que no valia.
+    Interpretar una respuesta libre corresponde a responder_propuesta; este
+    atajo no crea aceptación leyendo una pregunta antigua del asistente.
     """
     # Los recorridos migrados tienen una aceptación explícita. Nunca volver a
     # inferirla del texto anterior del bot, incluso si la oferta fue rechazada.
     if getattr(estado, "propuesta_servicio", None) is not None:
-        return (estado.propuesta_servicio.estado == "aceptada"
-                and bool(_AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or ""))))
-    if not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or "")):
-        return False
-    previo = _ultimo_del_asistente(mensajes)
-    if "?" not in previo:
-        return False
-    if not _PIDE_VALORACION_RE.search(catalog_pick._norm(previo)):
-        return False
-    try:
+        if (estado.propuesta_servicio.estado != "aceptada"
+                or not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or ""))):
+            return False
         from backend import booking
-
-        return bool(booking._servicio_de_valoracion(cliente_id))
-    except Exception:  # noqa: BLE001 - sin catalogo, que siga el curso normal
-        return False
+        return bool(booking.revalidar_alternativa_de_propuesta(cliente_id, estado))
+    # Sin un hecho recuperable no hay autorización: el texto del bot no prueba
+    # ni el envío de la oferta ni su vigencia. La respuesta libre pasa por la tool.
+    return False
 
 
 def _lo_que_el_negocio_dice_al_no_saber(cliente_id: str, mensaje: str,
@@ -1794,9 +1769,8 @@ def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None, estado=None)
     Se mira lo que acaba de decir, no el estado: pedir el diagnostico es una
     peticion COMPLETA en si misma, no un detalle que complete lo anterior.
 
-    Tambien cuenta el "si" a secas cuando el asistente ACABA de ofrecersela:
-    contestar que si a la pregunta que te acaban de hacer es pedirlo igual que
-    escribir la palabra (`_acepta_la_valoracion`).
+    Un "si" solo continúa la valoración si existe una aceptación vigente
+    registrada por la transición compartida (`_acepta_la_valoracion`).
     """
     if not dicho:
         return False
@@ -3685,7 +3659,7 @@ async def responder(
                  "tratamiento concreto." % no_sabe) if no_sabe else "")
             guia = [t for t in (reserva.resumen(estado, conocido), aviso,
                                 qa_negocio, guia_no_sabe, cuanto_dura, sin_precio,
-                                reserva.instruccion_de_cierre(estado, conocido)) if t]
+                                reserva.instruccion_de_cierre(estado, conocido, cliente_id=cliente_id)) if t]
             turno = list(mensajes)
             if guia:
                 turno.append({"role": "system", "content": "\n\n".join(guia)})
@@ -3719,6 +3693,9 @@ async def responder(
             else:
                 eleccion = "auto"
 
+            # Los hechos ya validados sobreviven también si el proveedor falla
+            # o el proceso cae mientras espera la respuesta del modelo.
+            reserva.guardar(cliente_id, clave_estado, estado, pedido=reserva.que_falta(estado, conocido))
             respuesta = cliente.chat.completions.create(
                 model=_modelo_del_negocio(cfg),
                 messages=turno,
@@ -4374,11 +4351,42 @@ async def responder(
                     if progreso:
                         estado.veces_falta = 0
                     estado.candidatos_pendientes = cantidad
-                    # Dos veces preguntando lo mismo es el limite. Si ella ya ha
-                    # dicho que no sabe y el negocio tiene escrito que eso se ve
-                    # en persona, se le coge la valoracion y se sigue: no hay una
-                    # tercera pregunta.
-                    valoracion = _hay_que_cogerle_la_valoracion(
+                    # Una política explícita sustituye los rescates de este
+                    # recorrido. Ofrecer no selecciona ni crea una cita.
+                    orientacion = {}
+                    if falta and not progreso and estado.veces_falta >= 2:
+                        original = str(estado.servicio_texto or argumentos.get("descripcion") or "")
+                        orientacion = booking.regla_de_orientacion_para(cliente_id, original)
+                        if orientacion.get("accion") == "ofrecer_cita":
+                            actual = booking.alternativa_de_orientacion_vigente(cliente_id, original, location_id)
+                            anterior = estado.propuesta_servicio
+                            if actual and not (anterior and anterior.origen == actual["origen"]
+                                               and anterior.estado in ("rechazada", "aceptada")):
+                                estado.intencion = "reservar"
+                                propuesta = (reserva._propuesta_servicio_vigente(estado, anterior.id)
+                                             if anterior else None)
+                                if not (propuesta and propuesta.estado in ("preparada", "ofrecida")
+                                        and propuesta.origen == actual["origen"]
+                                        and propuesta.revision_config == actual["revision"]
+                                        and propuesta.servicio_id == actual["servicio_id"]
+                                        and propuesta.servicio_origen == original
+                                        and propuesta.location_id == location_id):
+                                    propuesta = reserva.preparar_propuesta_servicio(
+                                        estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
+                                        origen=actual["origen"], revision_config=actual["revision"],
+                                        servicio_origen=original, location_id=location_id)
+                                final = "%s\n¿Quieres una cita de %s?" % (
+                                    actual.get("texto") or "Podemos ofrecerte una valoración.",
+                                    textnorm.nombre_de_servicio_publico(actual["nombre"]))
+                                if not remate_manual:
+                                    reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "turno:" + propuesta.id)
+                                reserva.guardar(cliente_id, clave_estado, estado)
+                                traza.guardar(mensaje=mensaje, respuesta=final)
+                                return final, False
+                        if orientacion:
+                            resultado = dict(resultado, politica_orientacion=orientacion,
+                                nota="Aplica esta política declarada. No selecciones otra técnica ni confirmes una cita.")
+                    valoracion = "" if orientacion else _hay_que_cogerle_la_valoracion(
                         cliente_id, mensajes, estado.veces_falta, config)
                     if valoracion:
                         traza.freno("le_cojo_la_valoracion")
@@ -4394,7 +4402,7 @@ async def responder(
                             % valoracion)
                         falta = ""
                         estado.veces_falta = 0
-                    elif falta and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
+                    elif falta and not orientacion and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
                         # Ya se lo preguntaste y no lo ha elegido. Repetirle la
                         # misma lista es EL fallo mas repetido de la medicion: se
                         # cansa y se va. La salida depende de lo que el negocio

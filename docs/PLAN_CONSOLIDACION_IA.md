@@ -3,6 +3,56 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Persistencia del estado (candidato de Astra)
+
+Rama astra/persistencia-conversacion, basada en 44dddf8. SQLite conserva Estado
+por tenant/canal/identidad con formato, caducidad y versión de escritura. Se
+publican juntas aceptación y selección; otra versión pierde la carrera y recarga.
+WhatsApp guarda antes del envío y después del acuse, y recupera el modo del agente
+al perder su caché visual. Una gestión terminada no se reabre. Se retira la
+aceptación deducida de una pregunta antigua del bot, además del diccionario como
+fuente autoritativa. Snapshots/lápidas caducados tienen limpieza acotada y borrar
+un tenant limpia sus filas sin tocar al vecino.
+
+Evidencia: tres recuperaciones entre procesos y tres respuestas ambiguas rojas
+antes del cambio. La carrera aceptación/rechazo falla al retirar la comparación
+de revisión. 181 dirigidos de integración, 52 de cierre y 17 de primitivas aisladas verdes
+(grupos con solapamiento). El descendiente integrado 530ae40 terminó con 2256
+correctos y 1 omitido; revisión exacta pedida automáticamente.
+Referencia 12d2614: 2226 correctos y 1 omitido. 44dddf8 terminó con 2231 correctos, 1 omitido y revisión exacta pedida.
+
+Siguiente puerta: operación de agenda con identidad persistida y resultado
+recuperable. Hoy una caída entre crear la cita y guardar Estado no está resuelta
+por esta fase. Tampoco se afirma haber migrado todo WAFlowState, voz o widget,
+ni eliminado los demás correctores. No sustituye el banco real multinegocio.
+
+## Revalidación y recuperación (en curso)
+
+Base de agenda/recordatorios 6e040e1: suite 2221 correctos y 1 omitido, revisión
+exacta en cola. Orientación 12d2614 en suite completa. Rama hija de recuperación:
+se revalida también una aceptación anterior antes de reutilizarla; tres pruebas
+fallaron sin la corrección (caducidad, cambio de política y cambio de catálogo).
+La validación vive en booking y se comparte con la transición de aceptación y el envío de la oferta por WhatsApp. Cuarto caso rojo: se enviaban botones de una propuesta ya caducada. 64 dirigidos verdes y, tras adaptar el envío, otros 19 verdes de los recorridos afectados. Suite completa y revisión exacta pendientes.
+
+La persistencia no está resuelta: diseño y puertas concretas en
+`DISENO_RECUPERACION_ESTADO.md`. No confundir la revalidación de un objeto presente
+con recuperar una conversación tras reiniciar ni con resolver carreras de workers.
+
+## Candidato de orientación declarada (12-sep, Astra)
+
+Base integrada: 6e040e1, que incorpora servicios retirados, calendario de medidas,
+apellidos por tenant, eje de agenda de quince minutos y estado de recordatorios.
+La orientación usa una intención configurable en Q&A y las transiciones de
+propuesta existentes. Sustituye el rescate inferido y la nota de repetición solo
+cuando existe esta política explícita. No se habilita ni se inventa para Alicia.
+
+60 pruebas dirigidas verdes: oferta sin selección, aceptación tras envío,
+repetición con el mismo id, caducidad, cambio de regla y política de foto.
+Regresiones demostradas: repetir creaba otro id antes del arreglo; desactivar la
+vía nueva vuelve a seleccionar diagnóstico. Esto no mide al modelo real.
+Pendiente suite completa y revisión del candidato exacto. Estado aún en memoria:
+esta fase no acredita continuidad ni exclusión mutua entre workers.
+
 ## Actualización tras asumir los encargos de Claude
 
 Astra ha implementado las piezas pendientes de servicio retirado en creación y
@@ -166,6 +216,21 @@ comportamiento pertinente; indicar configuración inválida/conflictiva; dos ten
 con reglas opuestas no se contaminan. Horarios y catálogo siguen en sus secciones.
 
 ## Fase 4 — consolidación de canales y retirada de duplicados
+
+Siguiente candidato: astra/confirmacion-reserva, hija de 530ae40. El resumen de
+WhatsApp se guarda antes de enviarlo, solo se ofrece tras el acuse, se recupera
+al perder el worker y sus botones llevan identidad. La aceptación se publica con
+versión antes de ejecutar; las opciones antiguas no autorizan datos nuevos.
+Queda conectar esa identidad al resultado de la creación, además de migrar los
+formularios nativos y las confirmaciones de gestión de citas existentes.
+
+Avance local 12-sep: `53f40c7` persiste Estado con versión y aceptación explícita;
+su suite terminó con 2248 correctos, 1 omitido y 2 fallos de mapa/código muerto,
+corregidos en 96e10b8 con 10 dirigidos verdes. El descendiente integrado requiere
+su propia suite y revisión. La siguiente rama
+`astra/operaciones-recuperables` prepara una identidad duradera de creación en
+el núcleo. Sigue pendiente conectarla a confirmaciones persistidas y a la
+recuperación de WhatsApp; una primitiva opcional no cierra esta fase.
 
 Inventariar cada interceptor con el caso que protege y su dueño final. Mover la
 decisión al estado, política o núcleo según contrato y eliminar el camino antiguo

@@ -162,7 +162,7 @@ def test_lo_que_ya_sabe_se_le_recuerda(estado, api_module):  # noqa: F811
     assert "2026-09-01" in texto and "10:00" in texto and "Marta" in texto
 
 
-def test_la_conversacion_de_otro_dia_no_cuenta(api_module):  # noqa: F811
+def test_la_conversacion_de_otro_dia_no_cuenta(api_module, monkeypatch):  # noqa: F811
     """Mismo criterio que el historial: un silencio largo cierra la conversacion."""
     import time
 
@@ -170,9 +170,9 @@ def test_la_conversacion_de_otro_dia_no_cuenta(api_module):  # noqa: F811
 
     estado = reserva.Estado(servicio="Mechas")
     reserva.guardar("demo", "34600111222", estado)
-    # Guardar refresca la marca a proposito (guardar = hay actividad), asi que se
-    # envejece DESPUES para simular el silencio.
-    estado.tocado = time.time() - (reserva.CADUCA_EN + 60)
+    # El reloj avanza también para la copia persistida, no solo para este objeto.
+    despues = time.time() + reserva.CADUCA_EN + 60
+    monkeypatch.setattr(reserva.time, "time", lambda: despues)
     assert not estado.vigente()
 
     recuperado = reserva.cargar("demo", "34600111222")

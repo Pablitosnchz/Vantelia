@@ -4,8 +4,8 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 11-sep-2026 tarde, Claude Code (Coexistence desbloqueado;
-el +31 contesta con el asistente de Alicia).
+Última actualización: 12-sep-2026, Astra (candidato de confirmación persistida;
+no implica cambios en producción).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
 fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** corregir revisión de c22cc42/bb4083b en su rama: negativa por identidad de regla, transición tras cancelación ejecutada y respaldo de texto si falla el interactivo. La tarjeta de reglas ya estaba corregida por 0c9dc22/6d10eba; verificar sin repetir cambios.
-- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado. Integrar aquí 6d00071 de astra/confirmacion-reserva sin perder persistencia ni confirmaciones.
-- **Siguiente:** 67 dirigidos de integración y 11 de cierre verdes (grupos solapados), pyflakes limpio. La prueba de negativa recorre el botón No y el resumen real con Pack/mayúsculas; retirar la protección da rojo. Centro, cancelación y respaldo corregidos; tarjeta Q&A verificada ejecutando JavaScript. Integrar la arquitectura reciente y validar el candidato único antes de pedir revisión. 6d00071 terminó con 2261 correctos, 1 omitido y 5 fallos en test_demo_conversion; se ha encargado diagnóstico acotado a Claude, sin repetir suite completa.
-- **Espera a:** diagnóstico de Claude de las demos y revisión exacta futura del candidato corregido. Sin push ni despliegue. El núcleo recuperable sigue sin enlace con ejecución WhatsApp; banco real y recordatorios siguen pendientes.
+- **Tarea:** correcciones b338a2d de la revisión c22cc42 integradas con 6d00071: negativa por regla, centros coherentes, respaldo de texto y siguiente paso, conservando persistencia, confirmación por identidad y núcleo recuperable.
+- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado. Esta rama vuelve a ser el candidato integrado más reciente; no retomar ramas anteriores por inercia.
+- **Siguiente:** Integración con 6d00071: 68 dirigidos verdes. Cerrar los fallos de demos antes de una única suite completa y revisión exacta. Correcciones: 67 dirigidos y 11 de cierre verdes (grupos solapados), pyflakes limpio. La prueba de negativa recorre botón No y resumen real con Pack/mayúsculas; la protección tiene mutación roja. La tarjeta Q&A ya corregida se verifica ejecutando JavaScript.
+- **Espera a:** diagnóstico encargado a Claude de 5 fallos en test_demo_conversion de la suite 6d00071 (2261 correctos, 1 omitido). 530ae40 tenía suite verde (2256 correctos, 1 omitido). No duplicar ese diagnóstico ni las suites anteriores. Sin push ni despliegue; todavía pendientes enlace de ejecución recuperable WhatsApp, banco comparable Alicia+otro negocio y recordatorios reales.
 
 
 

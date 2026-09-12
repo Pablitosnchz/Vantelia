@@ -618,6 +618,7 @@
     },
     "demo_claimable": false,
     "booking": {
+      "exigir_dos_apellidos": true,
       "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 15,

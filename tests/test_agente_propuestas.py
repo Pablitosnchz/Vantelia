@@ -83,6 +83,7 @@ def test_dos_sesiones_web_no_comparten_la_propuesta(api_module, monkeypatch):
     propuesta = reserva.preparar_propuesta_servicio(
         estado, servicio_id="diag", nombre="Diagnóstico", origen="regla:precio", revision_config="v1")
     reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "mensaje")
+    reserva.guardar("demo", "", estado)
     monkeypatch.setattr(agent, "_historial", lambda *a: [])
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-prueba-sin-red")
     observados = []

@@ -807,7 +807,10 @@
     .cd-line { position:absolute; left:0; right:0; border-top:1px solid var(--line); pointer-events:none; }
     .cd-line.hour { border-top-color:var(--line-strong); }
     .cd-glabel { position:absolute; right:8px; transform:translateY(-50%); font-size:0.68rem; font-weight:600; color:var(--soft-2); white-space:nowrap; }
-    .cd-glabel.hour { color:var(--soft); }
+    .cd-glabel.hour { color:var(--soft); right:20px; font-size:0.88rem; }
+    .cd-glabel.hour sup { font-size:0.6em; margin-left:1px; }
+    .cd-tick { position:absolute; right:0; width:12px; border-top:1px solid var(--soft-2); pointer-events:none; }
+    .cd-tick.hour { width:18px; border-top-color:var(--soft); }
     /* Los extremos se alinean hacia dentro: centradas se salian del cuerpo y la
        primera se montaba sobre la cabecera "Hora". */
     .cd-glabel.edge-first { transform:translateY(1px); }
@@ -2314,6 +2317,8 @@
         <span><b>Que el asistente interprete lo que le piden</b> · sin esto solo reconoce las frases más habituales.</span>
       </label>
       <p id="brStatus" class="panel-sub" role="status"></p>
+      <label class="panel-sub"><input type="checkbox" id="brDosApellidos" /> Pedir nombre y dos apellidos a clientes nuevos</label>
+      <p class="panel-sub">Esta regla de identificación se aplica solo a tu negocio, aunque la interpretación de mensajes esté apagada.</p>
       <div id="brList" style="margin-top:14px;"></div>
     </div>
 
@@ -2546,6 +2551,7 @@
         <span class="pro-pill" id="waStatusPill" style="background:var(--accent-soft); color:var(--accent);">Cargando</span>
       </div>
 
+      <p id="waReminderStatus" class="panel-sub" role="status"></p>
       <div id="waPlanNotice" class="panel-sub" style="display:none; margin-top:14px; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">
         Tu plan actual no incluye WhatsApp. Puedes solicitar la activación, pero necesitarás un plan con WhatsApp para que el asistente empiece a responder.
         <button class="btn btn-ghost" id="waGoBillingBtn" type="button" style="margin-left:10px; padding:6px 10px;">Ver planes</button>
@@ -4541,6 +4547,9 @@ async function loadOverview() {
   try {
     const data = await api('/auth/app/overview');
     state.cliente_id = data.cliente_id;
+    state.exigirDosApellidos = data.exigir_dos_apellidos === true;
+    document.getElementById("nbNombre").placeholder = state.exigirDosApellidos
+      ? "Nombre y dos apellidos" : "Nombre del cliente";
     state.nombre = data.nombre;
     state.color = data.color || '#00b1d9';
     state.icono = (data.icono || 'AI').slice(0, 12);
@@ -5655,6 +5664,7 @@ document.getElementById('pbSaveBtn')?.addEventListener('click', async () => {
 });
 
 const BR_INTENCION_LABEL = {
+  orientacion: "Ayuda para elegir un servicio",
   reservar: 'pedir cita', cancelar: 'cancelar su cita', reprogramar: 'cambiar su cita',
   disponibilidad: 'saber si hay hueco', precio: 'saber un precio',
   presupuesto: 'un presupuesto de su caso', info: 'informacion del negocio',
@@ -5679,6 +5689,8 @@ async function loadBusinessRules() {
   const items = data.items || [];
   card.style.display = '';
   document.getElementById('brEnabled').checked = !!data.enabled;
+  document.getElementById('brDosApellidos').checked = !!data.exigir_dos_apellidos;
+  state.exigirDosApellidos = !!data.exigir_dos_apellidos;
   document.getElementById('brStatus').textContent = data.enabled
     ? 'Las reglas activadas se aplican a las conversaciones.'
     : 'Las reglas guardadas no se aplican mientras este interruptor esté apagado. Actívalo para utilizarlas.';
@@ -5751,6 +5763,18 @@ function brOpenForm(regla) {
   document.querySelectorAll('#brIntenciones input').forEach(cb => { cb.checked = marcadas.includes(cb.value); });
   document.getElementById('brFormCard').classList.add('open');
 }
+
+document.getElementById('brDosApellidos')?.addEventListener('change', async (ev) => {
+  try {
+    await api('/auth/app/business-rules/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exigir_dos_apellidos: ev.target.checked }),
+    });
+    toast('Regla de identificación guardada', 'success');
+    loadBusinessRules();
+    loadOverview();
+  } catch (err) { toast(err.message, 'error'); ev.target.checked = !ev.target.checked; }
+});
 
 document.getElementById('brEnabled')?.addEventListener('change', async (ev) => {
   try {
@@ -6087,6 +6111,16 @@ function renderWhatsApp(data) {
   pill.style.color = statusColor[1];
 
   document.getElementById('waPlanNotice').style.display = data.plan_allows_whatsapp ? 'none' : '';
+  const estadosPlantilla = {
+    APPROVED: 'Plantilla aprobada. Para enviar recordatorios también deben estar activos WhatsApp y los avisos de citas.',
+    PENDING: 'Plantilla de recordatorios pendiente de aprobación por WhatsApp.',
+    REJECTED: 'Plantilla de recordatorios rechazada. Contacta con soporte para revisarla.',
+    PAUSED: 'Plantilla de recordatorios pausada por WhatsApp.',
+    DISABLED: 'Plantilla de recordatorios desactivada por WhatsApp.',
+    NOT_CREATED: 'Todavía no consta una plantilla de recordatorios para tu negocio.',
+  };
+  document.getElementById('waReminderStatus').textContent = estadosPlantilla[data.plantilla_recordatorio_estado]
+    || 'El estado de la plantilla de recordatorios no está disponible.';
   renderWhatsAppChecklist(data);
 }
 
@@ -7828,7 +7862,7 @@ function tieneDosApellidos(nombre) {
 function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
-  const completo = tieneDosApellidos(nombre);
+  const completo = !!nombre && (!state.exigirDosApellidos || tieneDosApellidos(nombre));
   document.getElementById('nbConfirmBtn').disabled = !(completo && hora);
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
@@ -8442,7 +8476,7 @@ document.getElementById('calToday').addEventListener('click', async () => { cons
 // verse el nombre y 2 apellidos y el servicio obligatoriamente"- aceptando
 // el scroll que trae: la columna ya vive dentro de `.cd-scroll`.
 // 15 min * 2.2 = 33 px, que es lo que ocupan las dos lineas apretadas.
-const CD_PX_PER_MIN = 2.2, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 32, CD_GENERAL_KEY = '__general__';
+const CD_PX_PER_MIN = 2.2, CD_AXIS_STEP = 15, CD_MIN_BLOCK_H = 32, CD_GENERAL_KEY = '__general__';
 const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled', no_show:'no_show' };
 
 function cdEstado(b){ return CD_ESTADO_NORM[b.estado || b.status] || 'pending'; }
@@ -8748,12 +8782,19 @@ function renderCitasDay(){
   const gh = document.createElement('div'); gh.className = 'cd-head'; gh.textContent = 'Hora';
   const gb = document.createElement('div'); gb.className = 'cd-body'; gb.style.height = bodyH + 'px';
   for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){
+    const tick = document.createElement('div');
+    tick.className = 'cd-tick' + (t%60===0 ? ' hour' : '');
+    tick.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px';
+    tick.setAttribute('aria-hidden', 'true');
+    gb.appendChild(tick);
+    if (t%60 !== 0) continue;
     const lab = document.createElement('div');
-    lab.className = 'cd-glabel' + (t%60===0 ? ' hour' : '')
+    lab.className = 'cd-glabel hour'
       + (t === startMin ? ' edge-first' : '')
-      + (t + CD_AXIS_STEP > endMin ? ' edge-last' : '');
+      + (t === endMin ? ' edge-last' : '');
     lab.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px';
-    lab.textContent = cdFmtMin(t);
+    lab.setAttribute('aria-label', cdFmtMin(t));
+    lab.innerHTML = `${Math.floor(t/60)}<sup>00</sup>`;
     gb.appendChild(lab);
   }
   gutter.appendChild(gh); gutter.appendChild(gb); grid.appendChild(gutter);
@@ -12002,7 +12043,7 @@ function openNewClientePanel() {
     if (!payload.name && !payload.email && !payload.phone) { toast('Indica al menos nombre, email o teléfono.', 'error'); return; }
     // Mismo liston que al crear la cita: en la agenda hay que distinguir a dos
     // clientas que se llaman igual. El backend lo rechaza igualmente (400).
-    if (payload.name && !tieneDosApellidos(payload.name)) {
+    if (payload.name && state.exigirDosApellidos && !tieneDosApellidos(payload.name)) {
       toast('Escribe el nombre y los dos apellidos del cliente.', 'error');
       return;
     }

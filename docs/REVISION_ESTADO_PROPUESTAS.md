@@ -1,7 +1,7 @@
 # Revisión de c22cc42 / bb4083b
 
 Revisión de Claude recibida el 12-sep. Se corrige en astra/estado-propuestas y se
-integra después en el candidato descendiente; no se considera final esta base.
+integra aquí la arquitectura 6d00071; no se considera todavía versión final.
 
 1. **Rechazo que se repite:** ambos caminos consultan `rechazo_de_regla_de_precio`.
    El rechazo se asocia al id de la regla ofrecida, nunca a la capitalización o
@@ -26,7 +26,9 @@ Evidencia en tests/test_revision_rechazo_diagnostico.py,
 tests/test_reglas_tarjetas_qa.py y las suites existentes de propuestas/precio.
 La mutación que ignora el rechazo hace fallar las variantes Pack/mayúsculas.
 La ausencia de centro, el cambio de intención y el respaldo de texto dieron rojo.
-Validación y SHA final se registran en ESTADO_ACTUAL al cerrar.
+Validación: 67 dirigidos de base, 11 de cierre y 68 de integración con 6d00071
+verdes (grupos solapados). Pyflakes limpio. La revisión exacta sigue pendiente
+de resolver los fallos de demos y pasar una única suite completa del conjunto.
 
 Independiente: 6d00071 terminó con 2261 correctos, 1 omitido y cinco fallos en
 test_demo_conversion. Claude tiene un encargo acotado para aislar su causa;

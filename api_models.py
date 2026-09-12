@@ -689,6 +689,7 @@ class AppOverviewChannels(BaseModel):
 
 
 class AppOverviewResponse(BaseModel):
+    exigir_dos_apellidos: bool = False
     cliente_id: str
     nombre: str
     color: str = "#00b1d9"
@@ -1103,6 +1104,7 @@ class AppBusinessRulePayload(BaseModel):
 
 
 class AppBusinessRulesResponse(BaseModel):
+    exigir_dos_apellidos: bool = False
     enabled: bool = False
     items: List[AppBusinessRuleItem] = Field(default_factory=list)
     intenciones: List[str] = Field(default_factory=list)
@@ -1112,7 +1114,8 @@ class AppBusinessRulesResponse(BaseModel):
 
 
 class AppBusinessRulesConfigPayload(BaseModel):
-    enabled: bool
+    enabled: Optional[bool] = None
+    exigir_dos_apellidos: Optional[bool] = None
 
 
 class AppChatMenuPayload(BaseModel):
@@ -1195,6 +1198,7 @@ class AppWhatsAppPayload(BaseModel):
 
 
 class AppWhatsAppResponse(BaseModel):
+    plantilla_recordatorio_estado: str = "NOT_CREATED"
     ok: bool = True
     cliente_id: str
     enabled: bool = False

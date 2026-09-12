@@ -515,6 +515,7 @@ def _business_rules_response(cliente_id: str) -> AppBusinessRulesResponse:
     items = [AppBusinessRuleItem(**r) for r in rules.listar(cliente_id)]
     return AppBusinessRulesResponse(
         enabled=intents.config_enabled(cliente_id),
+        exigir_dos_apellidos=clients.exige_dos_apellidos(cliente_id),
         items=items,
         intenciones=list(intents.INTENCIONES),
         acciones=list(rules.ACCIONES),
@@ -544,8 +545,11 @@ async def app_business_rules_config(
         next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         seccion = dict(cfg.get("ai_intents", {}) or {})
-        seccion["enabled"] = bool(data.enabled)
+        if data.enabled is not None:
+            seccion["enabled"] = bool(data.enabled)
         cfg["ai_intents"] = seccion
+        if data.exigir_dos_apellidos is not None:
+            cfg.setdefault("booking", {})["exigir_dos_apellidos"] = data.exigir_dos_apellidos
         next_configs[cliente_id] = cfg
         clients._update_runtime_configs(next_configs)
     clients._persist_configs_to_disk(next_configs)
