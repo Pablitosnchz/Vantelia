@@ -1507,6 +1507,18 @@ async def _wa_hora_que_no_existe(cliente_id: str, fecha: str, hora: str) -> str:
                 % hora) + rag._call_us_line(cliente_id)
 
 
+async def _wa_ese_servicio_ya_no_esta(cliente_id: str) -> str:
+    """El negocio retiro el servicio entre el resumen y el boton Confirmar.
+
+    Esto se contaba como "ese hueco se acaba de ocupar" y se le ofrecian tres
+    horas del mismo dia: ella elegia otra, volvia a fallar por lo mismo y se iba
+    sin cita creyendo que habia tenido mala suerte. Lo que ya no esta es el
+    SERVICIO, y con otra hora no se arregla; se le dice y se le deja elegir otro.
+    """
+    return ("Lo siento, cariño: ese servicio ya no está disponible. Dime otro que "
+            "te interese y te miro los huecos." + rag._call_us_line(cliente_id))
+
+
 async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) -> str:
     """El hueco se ha ocupado entre el resumen y el boton: se ofrecen otros REALES.
 
@@ -1581,9 +1593,17 @@ async def _wa_create_booking(
             )
         except HTTPException as exc:
             if exc.status_code == 409:
+                # Los dos son 409, pero no se arreglan igual: el hueco ocupado se
+                # resuelve con otra hora y el servicio retirado NO. Ofrecerle horas
+                # en ese caso la mete en un bucle hasta que se va.
+                if booking.es_servicio_retirado(exc.detail):
+                    _wa_clear_flow(cliente_id, to_number)
+                    texto = await _wa_ese_servicio_ya_no_esta(cliente_id)
+                else:
+                    texto = await _wa_ese_hueco_ya_no_esta(cliente_id, flow)
                 await messaging._send_whatsapp_text(
                     cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                    text=await _wa_ese_hueco_ya_no_esta(cliente_id, flow),
+                    text=texto,
                 )
             else:
                 await messaging._send_whatsapp_text(
@@ -1597,8 +1617,14 @@ async def _wa_create_booking(
         # El 409 de aqui es "no queda nadie libre a esa hora", y llega justo cuando
         # la clienta acaba de pulsar Confirmar. Mandarla al menu con un "elige otro
         # tramo" es perder la cita en el ultimo paso: se le dan horas de verdad.
-        texto = ("⚠️ %s" % exc.detail) if exc.status_code != 409 else (
-            await _wa_ese_hueco_ya_no_esta(cliente_id, flow))
+        if exc.status_code != 409:
+            texto = "⚠️ %s" % exc.detail
+        elif booking.es_servicio_retirado(exc.detail):
+            # No es el hueco: es el servicio. Con otra hora no se arregla.
+            _wa_clear_flow(cliente_id, to_number)
+            texto = await _wa_ese_servicio_ya_no_esta(cliente_id)
+        else:
+            texto = await _wa_ese_hueco_ya_no_esta(cliente_id, flow)
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
             text=texto,
