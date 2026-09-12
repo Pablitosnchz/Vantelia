@@ -191,7 +191,7 @@ def test_el_fallo_vuelve_si_se_quita_el_sello(client, portal_cookies, monkeypatc
 
     _limpiar("demo")
     monkeypatch.setattr(intents, "sellos_del_tenant",
-                        lambda _cid: {"qa": "congelado", "catalogo": "congelado"})
+                        lambda _cid, **_kwargs: {"qa": "congelado", "catalogo": "congelado"})
     monkeypatch.setattr(intents, "olvidar_tenant", lambda _cid: None)
     try:
         qa_id = _crear_qa(client, portal_cookies, "Tenéis parking?", "Sí, gratuito.")
@@ -339,8 +339,15 @@ def test_no_se_cierra_una_cita_sobre_unas_vacaciones_recien_puestas(
     )
     assert bloqueo.status_code == 200, bloqueo.text
 
-    respuesta = _reservar(client, fecha, "12:00", "Masajes descontracturantes", nombre="Despues")
-    assert respuesta.status_code == 409, respuesta.text
+    try:
+        respuesta = _reservar(client, fecha, "12:00", "Masajes descontracturantes", nombre="Despues")
+        assert respuesta.status_code == 409, respuesta.text
+    finally:
+        for item in bloqueo.json()["items"]:
+            eliminado = client.delete(
+                "/auth/schedule/blocks/" + item["block_id"],
+                params={"cliente_id": "demo"}, cookies=admin_cookies)
+            assert eliminado.status_code == 200, eliminado.text
 
 
 # ─── Nadie toca la configuración del vecino ────────────────────────────────

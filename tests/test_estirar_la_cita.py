@@ -64,7 +64,10 @@ def _proximo_dia_con_hueco(cliente_id: str) -> str:
     for salto in range(1, 15):
         dia = (hoy + datetime.timedelta(days=salto)).isoformat()
         libres = agenda._build_slots_for_day(cliente_id, dia, duration_minutes=30) or []
-        if {"10:00", "11:00", "12:00"} <= set(libres):
+        if {"10:00", "11:00", "12:00"} <= set(libres) and all(
+                asyncio.run(agenda._booking_slot_available(
+                    cliente_id, dia, hora, duration_minutes=60))
+                for hora in ("10:00", "11:00", "12:00")):
             return dia
     raise AssertionError(
         "el negocio de pruebas no abre ningun dia de los proximos 14 con 10:00, "

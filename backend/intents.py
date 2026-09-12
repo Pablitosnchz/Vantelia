@@ -124,7 +124,7 @@ _SELLOS_SQL = {
 }
 
 
-def sellos_del_tenant(cliente_id: str) -> Dict[str, str]:
+def sellos_del_tenant(cliente_id: str, *, ambitos: Optional[List[str]] = None) -> Dict[str, str]:
     """Como esta AHORA lo que el negocio configura, en una cadena por ambito.
 
     POR QUE NO BASTA VACIAR UN DICCIONARIO: el POST del panel lo atiende UN
@@ -139,17 +139,21 @@ def sellos_del_tenant(cliente_id: str) -> Dict[str, str]:
     Cadena vacia = no se pudo sellar (BD caida): entonces no se cachea nada, que
     es lo unico seguro. Entender nunca puede dejar a un cliente sin respuesta.
     """
-    salida = {ambito: "" for ambito in _SELLOS_SQL}
+    elegidos = tuple(_SELLOS_SQL if ambitos is None else ambitos)
+    if any(ambito not in _SELLOS_SQL for ambito in elegidos):
+        raise ValueError("Ámbito de sello desconocido")
+    salida = {ambito: "" for ambito in elegidos}
     try:
         with db._get_db_connection() as conexion:
-            for ambito, sql in _SELLOS_SQL.items():
+            for ambito in elegidos:
+                sql = _SELLOS_SQL[ambito]
                 filas = conexion.execute(sql, (cliente_id,)).fetchall()
                 contenido = json.dumps([list(fila) for fila in filas],
                                        ensure_ascii=False, separators=(",", ":"))
                 salida[ambito] = hashlib.sha256(contenido.encode("utf-8")).hexdigest()
     except Exception as exc:  # noqa: BLE001 - sin sello se recalcula, no se rompe
         settings.logger.warning("[intents] no se pudo sellar (%s): %s", cliente_id, exc)
-        return {ambito: "" for ambito in _SELLOS_SQL}
+        return {ambito: "" for ambito in elegidos}
     return salida
 
 
@@ -198,7 +202,7 @@ def familias_del_tenant(cliente_id: str, *, sellos: Optional[Dict[str, str]] = N
     Peinados...) mas las primeras palabras de los servicios: asi el modelo puede
     decir "alisado" o "mechas" sin que nadie haya escrito esa lista a mano.
     """
-    sellos = sellos or sellos_del_tenant(cliente_id)
+    sellos = sellos if sellos is not None else sellos_del_tenant(cliente_id, ambitos=["catalogo"])
     return _cacheado(
         "familias|%s" % cliente_id,
         sellos.get("catalogo", ""),

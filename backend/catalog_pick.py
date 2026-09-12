@@ -646,7 +646,7 @@ def _mismo_sonido(texto: str) -> str:
     return (texto or "").replace("qu", "k").replace("sh", "s").replace("ph", "f")
 
 
-def _raices_pedidas(cliente_id: str, texto: str) -> List[str]:
+def _raices_pedidas(cliente_id: str, texto: str, *, familias: Optional[List[str]] = None) -> List[str]:
     """Las raices de familia del catalogo que la clienta ha nombrado de verdad.
 
     Se queda con la raiz que CASO, no con todas las del nombre de la familia:
@@ -657,7 +657,8 @@ def _raices_pedidas(cliente_id: str, texto: str) -> List[str]:
     from backend import intents
 
     try:
-        familias = intents.familias_del_tenant(cliente_id)
+        if familias is None:
+            familias = intents.familias_del_tenant(cliente_id)
     except Exception:  # noqa: BLE001  (sin catalogo no se frena nada)
         return []
     dichas = _raices(texto)
@@ -681,7 +682,7 @@ def familias_pedidas(cliente_id: str, texto: str) -> List[str]:
         familias = intents.familias_del_tenant(cliente_id)
     except Exception:  # noqa: BLE001
         return []
-    pedidas = _raices_pedidas(cliente_id, texto)
+    pedidas = _raices_pedidas(cliente_id, texto, familias=familias)
     salida: List[str] = []
     for raiz in pedidas:
         for familia in familias:
