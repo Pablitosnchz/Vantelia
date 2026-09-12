@@ -2313,6 +2313,7 @@
         <input type="checkbox" id="brEnabled" />
         <span><b>Que el asistente interprete lo que le piden</b> · sin esto solo reconoce las frases más habituales.</span>
       </label>
+      <p id="brStatus" class="panel-sub" role="status"></p>
       <div id="brList" style="margin-top:14px;"></div>
     </div>
 
@@ -5678,6 +5679,9 @@ async function loadBusinessRules() {
   const items = data.items || [];
   card.style.display = '';
   document.getElementById('brEnabled').checked = !!data.enabled;
+  document.getElementById('brStatus').textContent = data.enabled
+    ? 'Las reglas activadas se aplican a las conversaciones.'
+    : 'Las reglas guardadas no se aplican mientras este interruptor esté apagado. Actívalo para utilizarlas.';
   brFamiliasDisponibles = data.familias || [];
   const hint = document.getElementById('brFamiliasHint');
   if (hint) hint.textContent = brFamiliasDisponibles.length

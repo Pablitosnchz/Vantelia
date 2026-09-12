@@ -14,11 +14,8 @@ mensajero.
 
 ## Cómo se trabaja ahora
 
-- **Astra diseña e implementa la consolidación** (decisión actualizada de Pablo,
-  12-sep). El plan es `PLAN_CONSOLIDACION_IA.md`.
-- **Claude es auxiliar**: mide con el modelo real, revisa candidatos, aporta datos
-  saneados y despliega cuando Pablo lo ordena. Implementa solo piezas encargadas
-  expresamente por Astra para evitar trabajo solapado.
+- **Astra coordina e implementa la consolidación** (encargo vigente de Pablo).
+- **Claude auxilia con revisiones, mediciones y piezas encargadas** en ramas propias. Despliegue solo por orden de Pablo.
 - **Pablo decide.** Reglas completas en `AGENTS.md`.
 - **¿Estáis sincronizados?** → https://app.vantelia.es/sincronia (semáforo, solo
   admin). Pablo no tiene que decir nada: los hooks de los dos agentes los ponen al
@@ -39,13 +36,18 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra implementa propuestas; Claude auxiliar corrige guiones/NO MEDIDO y servicio retirado al reprogramar.
-- **Tarea:** revisión CAMBIOS de bb4083b sobre candidato actual c22cc42. Fusionadas correcciones comunes de 6eb8ae5 y fechas exactas e8d6896. Corregir rechazo del horizonte como NO MEDIDO.
-- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado.
-- **Siguiente:** integrar entrega acotada de Claude, suite completa estable y nueva revisión. Suite previa de c22cc42: 2185 passed/1 skipped. Dos pruebas de horizonte rojo antes del arreglo.
-- **Espera a:** revalidación de cambio de servicio al reprogramar y guiones/métricas de Claude. Calendario y propuestas siguen pendientes de revisión, no OK. No desplegar sin Pablo.
-- **Medición real de 570a201:** control 4/6 tiradas, 1/6 al primer intento, 4/11 conversaciones; tratamiento 6/6 tiradas, 0/6 al primero, 6/12 conversaciones. El rescate salta pero sube el freno de falsa confirmación (1→7); no acredita una versión final. Recordatorios pendientes y cambios antiguos de alicia-final preservados.
+- **Testigo:** Astra.
+- **Tarea:** segunda revisión CAMBIOS de 6eb8ae5. Corregido hallazgo2: aviso persistente de reglas inactivas (6d10eba). Corregido hallazgo5: renuncia compartida por agente y booking con ventana de 30 mensajes, sin recorte de familia obligatoria a 1500 caracteres. 19 dirigidos verdes; regresiones rojas antes.
+- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado. Correcciones integradas desde 038e9f2.
+- **Siguiente:** 36 dirigidos verdes en la base; validar integración de 3 (menos candidatos cuenta como progreso aunque haya duda), 4 (sello de catálogo compartido solo durante responder; Q&A consulta solo su ámbito) y 6 (limpieza solo de IDs creados por el instrumento); integrar encargo de Claude sobre servicio retirado antes de resolver profesional; suite completa estable y revisión. No se ha solicitado nueva revisión todavía.
+- **Espera a:** Claude hallazgo1 con recorridos reales WA sin profesional, voz/chat y widget; no basta mock del núcleo. Otros encargos previos: calendario y reprogramación. Arquitectura conservada en astra/estado-propuestas. Medición crítico 6+6: tratamiento 0/6 al primer intento, no final. No desplegar sin Pablo.
 
+
+Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
+y prueba de envío real; confirmar situación actual con Claude. Última referencia
+documental anterior de producción: `aab4d02`, no verificada de nuevo en esta revisión.
+Los relatos de medición antiguos de más abajo son históricos; la referencia con
+calendario reproducible se distingue arriba y no oculta los reintentos.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

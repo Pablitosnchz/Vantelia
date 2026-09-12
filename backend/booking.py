@@ -6863,6 +6863,14 @@ def puede_saltarse_la_valoracion(cliente_id: str, dicho: str) -> bool:
     return not la_valoracion_es_obligatoria(cliente_id, dicho)
 
 
+def renuncio_al_diagnostico_en_mensajes(cliente_id: str, contenidos) -> bool:
+    """Una decisión compartida: mensajes separados y familia obligatoria completa."""
+    textos = [str(texto or "") for texto in contenidos][-30:]
+    if la_valoracion_es_obligatoria(cliente_id, " ".join(textos)):
+        return False
+    return any(renuncio_al_diagnostico(texto) for texto in textos)
+
+
 def renuncio_al_diagnostico_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
     """Ha dicho en ESTA conversacion que lo quiere sin pasar por la valoracion.
 
@@ -6880,12 +6888,8 @@ def renuncio_al_diagnostico_en_la_conversacion(cliente_id: str, session_id: str)
                 " AND role = 'user' ORDER BY id DESC LIMIT 30",
                 (cliente_id, session_id),
             ).fetchall()
-        # Lo que ella ha escrito EN TODA la conversacion: si en algun momento pidio
-        # algo cuya valoracion es obligatoria, no hay atajo aunque lo rechace.
-        todo = " ".join(str(f["content"] or "") for f in filas)
-        if la_valoracion_es_obligatoria(cliente_id, todo):
-            return False
-        return any(renuncio_al_diagnostico(str(f["content"] or "")) for f in filas)
+        return renuncio_al_diagnostico_en_mensajes(
+            cliente_id, [f["content"] for f in reversed(filas)])
     except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
         return False
 

@@ -3,6 +3,34 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Estado comprobado al retomar (12-sep)
+
+El objetivo sigue pendiente: no hay candidato final aprobado ni evidencia de
+fiabilidad suficiente al primer intento. Astra coordina e implementa; Claude
+revisa, mide y resuelve encargos aislados. No desplegar sin Pablo.
+
+- Base 6eb8ae5: suite 2152/1 omitido; revisión CAMBIOS. Corregidos aviso de reglas
+  inactivas y renuncia compartida (24ff8de). Se cierran progreso por candidatos,
+  lecturas por turno y limpieza de Q&A. Falta servicio retirado ANTES de resolver
+  profesional, encargado a Claude con pruebas de recorridos reales.
+- Propuestas c22cc42: suite 2185/1 omitido. Base corregida integrada hasta 37a0a49;
+  nueva validación tras incorporar lo anterior y cambio a servicio retirado al
+  reprogramar. El prototipo separa propuesta/aceptación/ejecución para presupuesto;
+  aún no sustituye todos los correctores ni garantiza recuperación entre procesos.
+- Calendario: e8d6896 corrige ida/vuelta de fechas y ocupación de fixtures;
+  37a0a49 convierte rechazo de horizonte en NO MEDIDO. Guiones y denominadores
+  encargados a Claude, sin entrega registrada al retomar.
+- Sincronía cf2066d: suite 2138/1 omitido, revisión pendiente. CLI de cuenta actual
+  comprobado sin registrar PII; no afirmar cambio real entre ambas cuentas.
+- Medición 570a201: control 4/6 tiradas, 1/6 al primero, 4/11 conversaciones;
+  tratamiento 6/6, 0/6 al primero, 6/12 conversaciones. No acredita cierre fiable.
+- Pendiente: políticas restantes de Alicia, retirada de autoridades duplicadas,
+  reinicios/reentregas/fallos de proveedor, recordatorios (plantilla y envío real),
+  banco comparable de Alicia y otro negocio y revisión del SHA integrado final.
+
+Las cifras de fases históricas de abajo describen sus candidatos originales;
+este bloque evita interpretarlas como aprobación del candidato actual.
+
 ## Dirección y criterios de operación (12-sep, encargo actualizado de Pablo)
 
 Astra diseña e implementa las fases. Claude queda de auxiliar para mediciones

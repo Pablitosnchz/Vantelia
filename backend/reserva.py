@@ -98,6 +98,7 @@ class Estado:
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez
+    candidatos_pendientes: int = 0  # cantidad de candidatos en la búsqueda anterior
     veces_falta: int = 0        # repeticiones sin concretar el servicio (técnica/talla/destinatario)
     veces_sin_pedirla: int = 0  # veces que el freno de "cita sin pedir" ha saltado
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
@@ -321,6 +322,7 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
         estado.hora = ""
         estado.hora_del_codigo = False
         estado.huecos = []
+        estado.candidatos_pendientes = 0
         estado.ultimo_falta = ""
         estado.veces_falta = 0
 
@@ -798,6 +800,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.ya_creada = False
     estado.esperando_confirmacion = False
     estado.ultimo_falta = ""
+    estado.candidatos_pendientes = 0
     estado.veces_falta = 0
     estado.ultimo_pedido = ""
 

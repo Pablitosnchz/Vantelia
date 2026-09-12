@@ -19,12 +19,14 @@ from test_booking_exhaustive import api_module  # noqa: F401
     ("no lo se, no quiero diagnostico", "tecnica", True, True, ""),
     ("keratina", "talla", True, True, ""),
     ("keratina", "talla", False, True, ""),
+    ("la keratina, pero no se si tengo el pelo medio o largo", "talla", True, True, ""),
 ])
 def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla, valoracion, esperado):
     from backend import agent, booking, reserva, settings
 
     estado = reserva.Estado(intencion="reservar", servicio_texto="quiero un alisado",
                             ultimo_falta="tecnica", veces_falta=1)
+    estado.candidatos_pendientes = 4
     monkeypatch.setattr(reserva, "cargar", lambda *a: estado)
     monkeypatch.setattr(reserva, "guardar", lambda *a, **k: None)
     monkeypatch.setattr(agent, "_historial", lambda *a: [
@@ -39,7 +41,7 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     def buscar(cid, args, **kwargs):
         if args["descripcion"] == "Diagnostico":
             return {"ok": True, "servicio": "Diagnostico", "servicio_en_agenda": "Diagnostico"}
-        return {"ok": True, "servicio": "" if falta else "Keratina medio", "falta": falta}
+        return {"ok": True, "servicio": "" if falta else "Keratina medio", "falta": falta, "total_candidatos": 2 if duda.startswith("la keratina") else 4}
     monkeypatch.setattr(agent, "_tool_buscar_servicio", buscar)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-prueba-sin-red")
     observados = []
@@ -78,3 +80,13 @@ def test_renuncia_por_mensaje_y_respeta_obligatoriedad(api_module, monkeypatch, 
     monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda *a: obligatoria)
     assert agent._hay_que_cogerle_la_valoracion(
         "demo", [{"role": "user", "content": m} for m in mensajes], 2) == esperado
+
+
+def test_familia_obligatoria_no_desaparece_al_superar_1500_caracteres(api_module, monkeypatch):
+    from backend import agent, booking
+    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar", lambda *a: "Se decide en persona.")
+    monkeypatch.setattr(booking, "_servicio_de_valoracion", lambda *a: {"nombre": "Diagnostico"})
+    monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda cid, texto: "extensiones" in texto)
+    mensajes = [{"role": "user", "content": m} for m in
+                ["quiero extensiones", "comentario " * 180, "no lo tengo claro, no quiero diagnostico"]]
+    assert agent._hay_que_cogerle_la_valoracion("demo", mensajes, 2) == "Diagnostico"
