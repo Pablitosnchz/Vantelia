@@ -3232,6 +3232,17 @@ async def _create_booking_core(
         cliente_id, service_row, employee_row["location_id"] or ""
     )
 
+    # Entre lo que se ofrecio y el "si, quiero" el negocio ha podido retirar el
+    # servicio desde el panel. La propuesta se revalida AQUI, que es donde se
+    # ejecuta: cerrar una cita de algo que ya no esta a la venta es prometer un
+    # dato obsoleto. El MOSTRADOR si puede apuntarlo a mano (lo retiran del
+    # catalogo publico y lo siguen haciendo a quien ya lo tenia hablado).
+    if source != "portal_manual" and service_row is not None and not int(service_row["is_active"] or 0):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese servicio ya no esta disponible. Elige otro del catalogo.",
+        )
+
     if not await agenda._booking_slot_available(
         cliente_id, booking_date, booking_time,
         employee_id=employee_row["id"], duration_minutes=service_duration,

@@ -29,10 +29,33 @@ import types
 
 import pytest
 
-from test_booking_exhaustive import api_module, client  # noqa: F401
+from datetime import date, timedelta
+
+from test_booking_exhaustive import admin_cookies, api_module, client  # noqa: F401
 from test_crm_light import portal_cookies  # noqa: F401
 
 CONTROL = "otro_negocio"  # el tenant de control: nada de lo de "demo" le afecta
+
+
+def _dia_habil(desplazamiento: int) -> str:
+    """Un día que el tenant de pruebas tiene abierto (cierra los domingos)."""
+    dia = date.today() + timedelta(days=desplazamiento)
+    while dia.weekday() == 6:
+        dia += timedelta(days=1)
+    return dia.isoformat()
+
+
+def _borrar_cita(respuesta):
+    """Deja el hueco libre otra vez: la cita era solo para probar que se podía."""
+    from backend import db
+
+    datos = respuesta.json()
+    booking_id = datos.get("booking_id") or datos.get("id")
+    if not booking_id:
+        return
+    with db._get_db_connection() as conexion:
+        conexion.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+        conexion.commit()
 
 
 def _limpiar(*clientes):
@@ -143,6 +166,32 @@ def test_dos_guardados_en_el_mismo_segundo(client, portal_cookies, monkeypatch):
         _limpiar("demo")
 
 
+def test_el_fallo_vuelve_si_se_quita_el_sello(client, portal_cookies, monkeypatch):  # noqa: F811
+    """Prueba del instrumento: que estos tests fallen sin el arreglo.
+
+    Se congela el sello y se desactiva el olvido local, que es exactamente como
+    estaba esto antes (memoria por TTL, sin revisar nada). Si algún día se deja
+    de sellar, este test se pone verde donde los otros se ponen rojos y dice por
+    dónde se ha ido la frescura.
+    """
+    from backend import intents
+
+    _limpiar("demo")
+    monkeypatch.setattr(intents, "sellos_del_tenant",
+                        lambda _cid: {"qa": "congelado", "catalogo": "congelado"})
+    monkeypatch.setattr(intents, "olvidar_tenant", lambda _cid: None)
+    try:
+        qa_id = _crear_qa(client, portal_cookies, "Tenéis parking?", "Sí, gratuito.")
+        assert "Tenéis parking?" in _respuestas("demo")
+
+        assert client.delete("/auth/app/qa/%s" % qa_id, cookies=portal_cookies).status_code == 200
+        assert "Tenéis parking?" in _respuestas("demo"), (
+            "sin sello el fallo tendría que reaparecer; si no, estos tests no prueban nada"
+        )
+    finally:
+        _limpiar("demo")
+
+
 # ─── Catálogo: activar, desactivar y renombrar ─────────────────────────────
 
 @pytest.fixture()
@@ -204,6 +253,81 @@ def test_borrar_un_servicio_lo_saca_de_las_familias(client, portal_cookies, serv
     borrado = client.delete("/auth/services/%s" % servicio_temporal, cookies=portal_cookies)
     assert borrado.status_code == 200, borrado.text
     assert "masajes" not in intents.familias_del_tenant("demo")
+
+
+# ─── Lo que se ofreció se revalida al ejecutarlo ───────────────────────────
+
+def _reservar(client, fecha, hora, servicio, nombre="Prueba Panel"):  # noqa: F811
+    return client.post("/agendar", headers={"Origin": "http://testserver"}, json={
+        "cliente_id": "demo", "nombre": nombre, "email": "panel@ejemplo.com",
+        "telefono": "600111222", "fecha": fecha, "hora": hora,
+        "servicio": servicio, "notas": "",
+    })
+
+
+def test_no_se_cierra_una_cita_de_un_servicio_retirado(client, portal_cookies, servicio_temporal):  # noqa: F811
+    """Se ofrece, el negocio lo desactiva y entonces llega el "sí, quiero".
+
+    Dos capas: el widget ni siquiera encuentra profesional para un servicio
+    retirado, y el núcleo —por donde pasan TODOS los canales, cada uno con su
+    propia forma de resolver el profesional— lo rechaza también. El mostrador sí
+    puede apuntarlo a mano (`portal_manual`): lo retiran del catálogo público y
+    lo siguen haciendo a quien ya lo tenía hablado.
+    """
+    from fastapi import HTTPException
+
+    from test_booking_exhaustive import _run_async
+
+    from backend import agenda, booking, db
+
+    fecha = _dia_habil(3)
+    apagado = client.patch(
+        "/auth/services/%s" % servicio_temporal, cookies=portal_cookies,
+        json={"is_active": False},
+    )
+    assert apagado.status_code == 200, apagado.text
+
+    assert _reservar(client, fecha, "11:00", "Masajes descontracturantes").status_code == 409
+
+    def _crear(source):
+        return _run_async(booking._create_booking_core(
+            "demo",
+            employee_row=agenda._resolve_employee_for_booking("demo", "", require_active=False),
+            nombre="Prueba Panel", email="panel@ejemplo.com", telefono="600111222",
+            servicio="Masajes descontracturantes", booking_date=fecha, booking_time="11:00",
+            source=source, send_confirmation=False,
+        ))
+
+    with pytest.raises(HTTPException) as caso:
+        _crear("voice")
+    assert caso.value.status_code == 409
+    # El texto importa: "ese HORARIO ya no esta disponible" es otro 409 distinto.
+    assert "Ese servicio ya no esta disponible" in str(caso.value.detail)
+
+    fila = _crear("portal_manual")  # el mostrador sigue pudiendo
+    with db._get_db_connection() as conexion:
+        conexion.execute("DELETE FROM bookings WHERE id = ?", (fila["id"],))
+        conexion.commit()
+
+
+def test_no_se_cierra_una_cita_sobre_unas_vacaciones_recien_puestas(
+    client, admin_cookies, servicio_temporal,  # noqa: F811
+):
+    """Mismo caso con la agenda: el hueco se ofreció antes del bloqueo."""
+    fecha = _dia_habil(4)
+    libre = _reservar(client, fecha, "12:00", "Masajes descontracturantes", nombre="Antes")
+    assert libre.status_code == 200, libre.text
+    _borrar_cita(libre)
+
+    bloqueo = client.post(
+        "/auth/schedule/blocks", params={"cliente_id": "demo"}, cookies=admin_cookies,
+        json={"fecha": fecha, "fecha_fin": fecha, "hora_inicio": "00:00",
+              "hora_fin": "23:59", "motivo": "Vacaciones"},
+    )
+    assert bloqueo.status_code == 200, bloqueo.text
+
+    respuesta = _reservar(client, fecha, "12:00", "Masajes descontracturantes", nombre="Despues")
+    assert respuesta.status_code == 409, respuesta.text
 
 
 # ─── Nadie toca la configuración del vecino ────────────────────────────────
