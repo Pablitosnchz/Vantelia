@@ -2314,6 +2314,8 @@
         <span><b>Que el asistente interprete lo que le piden</b> · sin esto solo reconoce las frases más habituales.</span>
       </label>
       <p id="brStatus" class="panel-sub" role="status"></p>
+      <label class="panel-sub"><input type="checkbox" id="brDosApellidos" /> Pedir nombre y dos apellidos a clientes nuevos</label>
+      <p class="panel-sub">Esta regla de identificación se aplica solo a tu negocio, aunque la interpretación de mensajes esté apagada.</p>
       <div id="brList" style="margin-top:14px;"></div>
     </div>
 
@@ -4541,6 +4543,9 @@ async function loadOverview() {
   try {
     const data = await api('/auth/app/overview');
     state.cliente_id = data.cliente_id;
+    state.exigirDosApellidos = data.exigir_dos_apellidos === true;
+    document.getElementById("nbNombre").placeholder = state.exigirDosApellidos
+      ? "Nombre y dos apellidos" : "Nombre del cliente";
     state.nombre = data.nombre;
     state.color = data.color || '#00b1d9';
     state.icono = (data.icono || 'AI').slice(0, 12);
@@ -5679,6 +5684,8 @@ async function loadBusinessRules() {
   const items = data.items || [];
   card.style.display = '';
   document.getElementById('brEnabled').checked = !!data.enabled;
+  document.getElementById('brDosApellidos').checked = !!data.exigir_dos_apellidos;
+  state.exigirDosApellidos = !!data.exigir_dos_apellidos;
   document.getElementById('brStatus').textContent = data.enabled
     ? 'Las reglas activadas se aplican a las conversaciones.'
     : 'Las reglas guardadas no se aplican mientras este interruptor esté apagado. Actívalo para utilizarlas.';
@@ -5751,6 +5758,18 @@ function brOpenForm(regla) {
   document.querySelectorAll('#brIntenciones input').forEach(cb => { cb.checked = marcadas.includes(cb.value); });
   document.getElementById('brFormCard').classList.add('open');
 }
+
+document.getElementById('brDosApellidos')?.addEventListener('change', async (ev) => {
+  try {
+    await api('/auth/app/business-rules/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exigir_dos_apellidos: ev.target.checked }),
+    });
+    toast('Regla de identificación guardada', 'success');
+    loadBusinessRules();
+    loadOverview();
+  } catch (err) { toast(err.message, 'error'); ev.target.checked = !ev.target.checked; }
+});
 
 document.getElementById('brEnabled')?.addEventListener('change', async (ev) => {
   try {
@@ -7828,7 +7847,7 @@ function tieneDosApellidos(nombre) {
 function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
-  const completo = tieneDosApellidos(nombre);
+  const completo = !!nombre && (!state.exigirDosApellidos || tieneDosApellidos(nombre));
   document.getElementById('nbConfirmBtn').disabled = !(completo && hora);
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
@@ -12002,7 +12021,7 @@ function openNewClientePanel() {
     if (!payload.name && !payload.email && !payload.phone) { toast('Indica al menos nombre, email o teléfono.', 'error'); return; }
     // Mismo liston que al crear la cita: en la agenda hay que distinguir a dos
     // clientas que se llaman igual. El backend lo rechaza igualmente (400).
-    if (payload.name && !tieneDosApellidos(payload.name)) {
+    if (payload.name && state.exigirDosApellidos && !tieneDosApellidos(payload.name)) {
       toast('Escribe el nombre y los dos apellidos del cliente.', 'error');
       return;
     }

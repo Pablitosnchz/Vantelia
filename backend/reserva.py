@@ -1076,7 +1076,7 @@ def tool_que_remata(estado: Estado, nombre_conocido: str = "") -> str:
     return ""
 
 
-def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "") -> str:
+def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "", cliente_id: str = "") -> str:
     """Lo que hay que decirle SOLO cuando toca cerrar. Vacio el resto del tiempo.
 
     Medido en tres tiradas de cuarenta conversaciones:
@@ -1129,9 +1129,13 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "") -> str:
     # modelo miraba otro dia y le volvia a ensenar la lista de horas.
     if (falta == "nombre" and estado.dia_le_da_igual and estado.hora_del_codigo
             and estado.fecha and estado.hora):
+        from backend import clients
+
+        identificacion = ("nombre y sus dos apellidos" if cliente_id and clients.exige_dos_apellidos(cliente_id)
+                          else "nombre y apellidos")
         return ("Le da igual el dia y ya tienes el primer hueco que hay: el %s a las "
-                "%s. Proponselo tal cual y pidele su nombre y sus dos apellidos para "
+                "%s. Proponselo tal cual y pidele su %s para "
                 "apuntarla. NO mires "
                 "otros dias ni le ofrezcas una lista de horas."
-                % (_fecha_hablada(estado.fecha), estado.hora))
+                % (_fecha_hablada(estado.fecha), estado.hora, identificacion))
     return ""

@@ -218,6 +218,7 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         "demo_claimable": bool(payload.get("demo_claimable", False)),
         "booking": {
             "enabled": bool(booking_row.get("enabled", False)),
+            "exigir_dos_apellidos": booking_row.get("exigir_dos_apellidos") is True,
             "timezone": textnorm._sanitize_text(booking_row.get("timezone", settings.DEFAULT_TIMEZONE)) or settings.DEFAULT_TIMEZONE,
             "slot_minutes": int(booking_row.get("slot_minutes", 30)),
             "day_start": booking_day_start,
@@ -305,6 +306,7 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "demo_claimable": bool(config.get("demo_claimable", False)),
         "booking": {
             "enabled": bool(config.get("booking", {}).get("enabled", False)),
+            "exigir_dos_apellidos": config.get("booking", {}).get("exigir_dos_apellidos") is True,
             "timezone": config.get("booking", {}).get("timezone", settings.DEFAULT_TIMEZONE),
             "slot_minutes": int(config.get("booking", {}).get("slot_minutes", 30)),
             "day_start": config.get("booking", {}).get("day_start", "09:00"),
@@ -630,6 +632,11 @@ def _plan_feature(cliente_id: str, feature: str) -> Any:
     return _plan_limits(_client_plan(cliente_id)).get(feature)
 
 
+
+
+def exige_dos_apellidos(cliente_id: str) -> bool:
+    """Regla optativa del negocio, compartida por panel y conversación."""
+    return _get_client_config(cliente_id).get("booking", {}).get("exigir_dos_apellidos") is True
 
 
 def _client_booking_plan_enabled(cliente_id: str) -> bool:

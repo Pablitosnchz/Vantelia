@@ -516,6 +516,7 @@ async def _ejecutar(
         conocida = str((quien or {}).get("nombre", "")).strip()
         quien_nombre = str(argumentos.get("nombre") or conocida).strip()
         if (quien_nombre and telefono and not conocida
+                and clients.exige_dos_apellidos(cliente_id)
                 and not textnorm.tiene_dos_apellidos(quien_nombre)):
             return {
                 "ok": False,
@@ -3685,7 +3686,7 @@ async def responder(
                  "tratamiento concreto." % no_sabe) if no_sabe else "")
             guia = [t for t in (reserva.resumen(estado, conocido), aviso,
                                 qa_negocio, guia_no_sabe, cuanto_dura, sin_precio,
-                                reserva.instruccion_de_cierre(estado, conocido)) if t]
+                                reserva.instruccion_de_cierre(estado, conocido, cliente_id=cliente_id)) if t]
             turno = list(mensajes)
             if guia:
                 turno.append({"role": "system", "content": "\n\n".join(guia)})

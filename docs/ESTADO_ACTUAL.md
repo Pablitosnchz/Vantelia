@@ -37,10 +37,11 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** asumidos encargos pendientes durante cuota agotada de Claude. Servicio retirado validado antes de resolver profesional y en núcleo compartido; voz conserva motivo. Reprogramar rechaza cambio a retirado y permite mover el histórico sin cambiar profesional. Banco distingue medidos/no medidos/no aplican; humo incompleto no se etiqueta roto; guiones relativos corregidos.
-- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado.
-- **Siguiente:** suite completa sobre candidato estable y revisión exacta. Recorridos reales sin mocks del núcleo: 4 rojos antes, 19 verdes después; reprogramación 2 rojos antes, 26 dirigidos verdes; widget endpoint 2 verdes; métricas 2 rojos antes, 17 verdes. Correcciones previas integradas y verificadas con58 dirigidos.
-- **Espera a:** revisión de Claude cuando vuelva; NO debe duplicar encargos asumidos. No desplegar. Pendientes del plan: encapsulación restante en Q&A, retirar otros correctores, reinicios/reentregas/proveedores, recordatorios (plantilla/envío real) y medición Alicia+otro negocio. El crítico sigue sin aceptación al primer intento.
+- **Tarea:** regla de identificación del salón encapsulada por tenant y editable desde Q&A; independiente del interruptor de interpretación. Recuperados selectivamente cambios antiguos de alicia-final, que permanece intacto. Conservada configuración local explícita del salón.
+- **Rama:** astra/politicas-portal, E:/Vantelia-astra-politicas, desde 0b6043f.
+- **Siguiente:** suite completa cuando acabe la del candidato base, y revisión exacta. 27 dirigidos verdes; desactivar guardado del ajuste hace fallar la prueba. UI y API conservan activación separada; vecinos no cambian.
+- **Espera a:** suite/revisión; Claude sin créditos hasta22:40 según último aviso. 0b6043f sigue validándose en su copia intacta. Pendientes: demás políticas, resiliencia, recordatorios/medición real Alicia+otro negocio. No final ni despliegue.
+
 
 
 

@@ -581,6 +581,7 @@ async def app_overview(
         booking=bool(cfg.get("booking", {}).get("enabled", False)),
     )
     return AppOverviewResponse(
+        exigir_dos_apellidos=clients.exige_dos_apellidos(cliente_id),
         cliente_id=cliente_id,
         nombre=cfg.get("nombre", cliente_id),
         color=cfg.get("color", "#00b1d9"),
@@ -897,7 +898,8 @@ async def app_contact_create(
     security._require_portal_permission(user, "clients.edit")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     # Mismo liston que al crear la cita: nombre y dos apellidos.
-    if data.name and not textnorm.tiene_dos_apellidos(data.name):
+    if (data.name and clients.exige_dos_apellidos(cliente_id)
+            and not textnorm.tiene_dos_apellidos(data.name)):
         raise HTTPException(
             status_code=400,
             detail="Escribe el nombre y los dos apellidos del cliente.",
@@ -3184,7 +3186,8 @@ async def auth_create_booking(
     # Nombre y DOS apellidos: lo pidio el salon el 10-sep-2026 porque en la agenda
     # tienen que distinguir a dos clientas que se llaman igual. Aqui escribe el
     # equipo, que se los sabe; por WhatsApp el liston es mas bajo a proposito.
-    if not textnorm.tiene_dos_apellidos(nombre):
+    if (clients.exige_dos_apellidos(target_client_id)
+            and not textnorm.tiene_dos_apellidos(nombre)):
         raise HTTPException(
             status_code=400,
             detail="Escribe el nombre y los dos apellidos del cliente.",

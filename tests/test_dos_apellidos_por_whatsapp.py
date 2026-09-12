@@ -21,6 +21,11 @@ import pytest
 from test_booking_exhaustive import api_module, client  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def regla_del_salon(api_module, monkeypatch):
+    monkeypatch.setitem(api_module.CONFIG_CLIENTES["demo"]["booking"], "exigir_dos_apellidos", True)
+
+
 @pytest.mark.parametrize("antes,dice,queda", [
     ("Ana Ruiz", "Pérez", "Ana Ruiz Pérez"),
     ("Ana", "Ruiz Pérez", "Ana Ruiz Pérez"),

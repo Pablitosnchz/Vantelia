@@ -3525,7 +3525,16 @@ async def _handle_whatsapp_message(
         # con lo que falta, y se junta con lo que ya dijo.
         if flow.apellidos_pedidos:
             nombre = textnorm.juntar_nombre(flow.nombre, nombre)
-        if not textnorm.tiene_dos_apellidos(nombre):
+        estricta = clients.exige_dos_apellidos(cliente_id)
+        if not estricta and not textnorm.tiene_algun_apellido(nombre) and not flow.apellidos_pedidos:
+            flow.apellidos_pedidos = "1"
+            flow.nombre = nombre[:80]
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Gracias, %s. ¿Me dices también tus apellidos? 😊" % nombre[:40],
+            )
+            return
+        if estricta and not textnorm.tiene_dos_apellidos(nombre):
             veces = int(flow.apellidos_pedidos or 0) + 1
             flow.apellidos_pedidos = str(veces)
             flow.nombre = nombre[:80]
