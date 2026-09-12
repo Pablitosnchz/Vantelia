@@ -121,3 +121,17 @@ def test_fecha_del_guion_vuelve_al_dia_validado(monkeypatch, hoy, objetivo):
     mensajes, datos = calendario.resolver_mensajes("salon", caso, hoy=hoy,
         consultar=lambda dia: ({"10:00"}, {"10:00"} if dia == objetivo else set()))
     assert textnorm._extract_date_from_text(mensajes[0], "Europe/Madrid") == datos["dia_abierto"]
+
+
+@pytest.mark.parametrize("marcador", ["dia_abierto", "dia_cerrado"])
+def test_horizonte_rechazado_es_no_medido(marcador):
+    from fastapi import HTTPException
+
+    def consultar(dia):
+        if dia > "2026-09-27":
+            raise HTTPException(400, "Fuera del plazo máximo de reserva")
+        return {"10:00"}, set()
+
+    with pytest.raises(calendario.CalendarioNoDisponible):
+        calendario.resolver_mensajes("salon", {"mensajes": ["{" + marcador + "}"]},
+            hoy=date(2026, 9, 12), consultar=consultar)

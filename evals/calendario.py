@@ -52,16 +52,27 @@ def resolver_mensajes(cliente_id, caso, codigo=None, *, hoy=None, consultar=None
             consultar = lambda dia: asyncio.run(agenda._public_slot_sets_for_day(
                 cliente_id, dia, servicio=servicio))
             consultar_cerrado = lambda dia: asyncio.run(agenda._public_slot_sets_for_day(cliente_id, dia))
+    def consultar_validado(consulta, dia):
+        from fastapi import HTTPException
+
+        try:
+            return consulta(dia)
+        except HTTPException as exc:
+            if exc.status_code != 400:
+                raise
+            raise CalendarioNoDisponible(
+                "El calendario rechaza la fecha %s: %s" % (dia, exc.detail)) from exc
+
     valores = {"codigo": codigo} if codigo is not None else {}
     desde = hoy + timedelta(days=1)
     if any("{dia_abierto" in m for m in mensajes):
-        iso = buscar_dia_con_huecos(lambda dia: consultar(dia)[1], desde,
+        iso = buscar_dia_con_huecos(lambda dia: consultar_validado(consultar, dia)[1], desde,
                                     horas=caso.get("horas_calendario", ()))
         valores.update(dia_abierto=iso, dia_abierto_nombre=nombre_del_dia(iso))
     if any("{dia_cerrado" in m for m in mensajes):
         for salto in range(30):
             iso = (desde + timedelta(days=salto)).isoformat()
-            if not consultar_cerrado(iso)[0]:
+            if not consultar_validado(consultar_cerrado, iso)[0]:
                 valores.update(dia_cerrado=iso, dia_cerrado_nombre=nombre_del_dia(iso))
                 break
         else:
