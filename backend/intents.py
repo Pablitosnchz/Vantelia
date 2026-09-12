@@ -195,6 +195,24 @@ def _cacheado(clave: str, sello: str, calcular):
     return valor
 
 
+from contextvars import ContextVar
+from functools import wraps
+
+_CATALOGO_TURNO = ContextVar("catalogo_turno", default=None)
+
+
+def con_catalogo_del_turno(funcion):
+    """Reutilización aislada durante una llamada; el siguiente turno vuelve a leer."""
+    @wraps(funcion)
+    async def ejecutar_con_catalogo(*args, **kwargs):
+        token = _CATALOGO_TURNO.set({})
+        try:
+            return await funcion(*args, **kwargs)
+        finally:
+            _CATALOGO_TURNO.reset(token)
+    return ejecutar_con_catalogo
+
+
 def familias_del_tenant(cliente_id: str, *, sellos: Optional[Dict[str, str]] = None) -> List[str]:
     """Familias de servicio de ESTE negocio, sacadas de su catalogo.
 
@@ -202,6 +220,11 @@ def familias_del_tenant(cliente_id: str, *, sellos: Optional[Dict[str, str]] = N
     Peinados...) mas las primeras palabras de los servicios: asi el modelo puede
     decir "alisado" o "mechas" sin que nadie haya escrito esa lista a mano.
     """
+    turno = _CATALOGO_TURNO.get()
+    if sellos is None and turno is not None:
+        if cliente_id not in turno:
+            turno[cliente_id] = sellos_del_tenant(cliente_id, ambitos=["catalogo"])
+        sellos = turno[cliente_id]
     sellos = sellos if sellos is not None else sellos_del_tenant(cliente_id, ambitos=["catalogo"])
     return _cacheado(
         "familias|%s" % cliente_id,
@@ -258,7 +281,7 @@ def preguntas_del_tenant(
     de preguntar lo mismo. El limite existe porque estas preguntas viajan en el
     prompt: con mas de 40 conviene acotar antes por otro medio.
     """
-    sellos = sellos or sellos_del_tenant(cliente_id)
+    sellos = sellos if sellos is not None else sellos_del_tenant(cliente_id, ambitos=["qa"])
     return _cacheado(
         "preguntas|%s|%d" % (cliente_id, limite),
         sellos.get("qa", ""),
