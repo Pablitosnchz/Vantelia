@@ -143,12 +143,7 @@ def test_el_otro_worker_tambien_se_entera(client, portal_cookies):  # noqa: F811
 
 
 def test_dos_guardados_en_el_mismo_segundo(client, portal_cookies, monkeypatch):  # noqa: F811
-    """El sello lleva fecha, y la fecha va al segundo: aquí no distingue nada.
-
-    Se congela el reloj y se edita conservando el largo del texto, así que la
-    huella de la tabla sale idéntica. Lo que salva el caso es el vaciado local
-    del CRUD (`intents.olvidar_tenant`), que es para lo que está.
-    """
+    """Dos ediciones locales de igual longitud no dependen de la fecha del sello."""
     from backend import timeutils
 
     _limpiar("demo")
@@ -162,6 +157,24 @@ def test_dos_guardados_en_el_mismo_segundo(client, portal_cookies, monkeypatch):
         )
         assert editada.status_code == 200, editada.text
         assert _respuestas("demo")["Tenéis parking?"] == "BBBB"
+    finally:
+        _limpiar("demo")
+
+
+def test_otro_worker_ve_texto_de_igual_longitud_en_el_mismo_segundo(client, portal_cookies, monkeypatch):
+    from backend import db, timeutils
+
+    _limpiar("demo")
+    monkeypatch.setattr(timeutils, "_utc_now_iso", lambda: "2026-09-12T10:00:00Z")
+    try:
+        qa_id = _crear_qa(client, portal_cookies, "¿Hay parking?", "Sí, gratis")
+        assert _respuestas("demo")["¿Hay parking?"] == "Sí, gratis"
+        # Otro worker guarda sin poder vaciar nuestra memoria. La fecha y la
+        # longitud no cambian, pero el significado de la respuesta sí cambia.
+        with db._get_db_connection() as conexion:
+            conexion.execute("UPDATE kb_qa SET answer=? WHERE id=?", ("Es de pago", qa_id))
+            conexion.commit()
+        assert _respuestas("demo")["¿Hay parking?"] == "Es de pago"
     finally:
         _limpiar("demo")
 

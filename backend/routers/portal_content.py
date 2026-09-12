@@ -278,8 +278,8 @@ async def app_qa_update(
         row = connection.execute("SELECT * FROM kb_qa WHERE id = ?", (qa_id,)).fetchone()
     rag._maybe_regenerate_info_with_qa(cliente_id)
     # Lo que el negocio acaba de guardar manda en el mensaje siguiente: se tira lo
-    # cacheado de ESTE tenant sin esperar al sello (que va al segundo). A los demas
-    # workers los avisa la BD, ver intents.sellos_del_tenant.
+    # cacheado de ESTE tenant. Los demás workers comprueban el contenido de la BD,
+    # ver intents.sellos_del_tenant.
     intents.olvidar_tenant(cliente_id)
     return rag._qa_row_to_public(row)
 

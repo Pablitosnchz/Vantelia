@@ -42,8 +42,8 @@ página de sincronía lo enseña tal cual.
 - **Testigo:** Astra coordina; Claude colabora mediante sincronía.
 - **Tarea:** consolidar agente y portal según `docs/PLAN_CONSOLIDACION_IA.md`; reglas compartidas en `docs/NORMAS_AGENTE_IA.md`.
 - **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-valoracion`. El trabajo anterior de encapsulación sigue preservado en `astra/alicia-final`.
-- **Siguiente:** fase 1 (frescura Q&A/catálogo, encargo a Claude) y fase 2 (propuesta/aceptación de valoración, Astra). No duplicar motores ni CRUD existentes.
-- **Espera a:** medición 6+6 de Claude para `570a201` y auditoría del recorrido de valoración. Suite: 2114 correctos/1 omitido; los 11 errores de fixture dominical se corrigieron en `7314155` y sus 11 casos pasan. Repetir suite completa sobre el candidato estabilizado, no durante ediciones.
+- **Siguiente:** fase 1 integrada desde `claude/encargo-a9efef`; corregida colisión del sello entre workers (mismo segundo y longitud), con regresión roja y 51 pruebas dirigidas verdes. Ejecutar suite completa y pedir revisión solo si termina en verde. Fase 2 pendiente: propuestas/aceptación como estado.
+- **Espera a:** suite del candidato integrado, medición 6+6 de Claude para `570a201` y auditoría del recorrido de valoración. Fixture de agenda unificada con `02bd1a7` de Claude. No supervisar repetidamente la suite ni modificar su candidato mientras corre.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

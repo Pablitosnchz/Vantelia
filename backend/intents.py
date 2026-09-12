@@ -36,6 +36,7 @@ REGLAS DE LA CASA
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -107,20 +108,18 @@ def enabled_for(cliente_id: str, config: Optional[Dict[str, Any]] = None) -> boo
     return bool(isinstance(seccion, dict) and seccion.get("enabled"))
 
 
-# Huella de lo que el negocio tiene configurado AHORA. Una consulta agregada por
-# ambito, con indice por cliente: lo que se paga en cada mensaje para no servir
-# datos viejos.
+# Huella del contenido que consumen estas cachés, ordenado por identidad.
+# COUNT/MAX/longitud no distinguen dos textos del mismo tamaño guardados en el
+# mismo segundo desde otro worker. Leer estos datos evita esa colisión sin esquema
+# nuevo; la extracción y clasificación del modelo siguen aprovechando la caché.
 _SELLOS_SQL = {
     "qa": (
-        "SELECT COUNT(*), COALESCE(MAX(updated_at), ''), COALESCE(MAX(created_at), ''),"
-        " COALESCE(SUM(LENGTH(question) + LENGTH(answer)), 0)"
-        " FROM kb_qa WHERE cliente_id = ?"
+        "SELECT id, question, answer, tags_json, created_at, updated_at"
+        " FROM kb_qa WHERE cliente_id = ? ORDER BY id"
     ),
     "catalogo": (
-        "SELECT COUNT(*), COALESCE(MAX(updated_at), ''), COALESCE(MAX(created_at), ''),"
-        " COALESCE(SUM(is_active), 0),"
-        " COALESCE(SUM(LENGTH(name) + LENGTH(COALESCE(category, ''))), 0)"
-        " FROM services WHERE cliente_id = ?"
+        "SELECT slug, name, category, is_active, sort_order, created_at, updated_at"
+        " FROM services WHERE cliente_id = ? ORDER BY slug"
     ),
 }
 
@@ -133,9 +132,9 @@ def sellos_del_tenant(cliente_id: str) -> Dict[str, str]:
     memoria del que recibio el POST deja al resto contestando con la Q&A que el
     negocio acaba de borrar. La huella sale de la BD, que si comparten todos.
 
-    Sin esquema nuevo: se deriva de lo que las tablas ya guardan (cuantas filas
-    hay, cuando se toco la ultima y cuanto ocupa el texto). Cambia al crear,
-    editar, renombrar, activar/desactivar y borrar.
+    Sin esquema nuevo: se calcula sobre el contenido, no sobre su longitud o la
+    precisión de las fechas. Cambia al editar desde cualquier worker, incluso
+    cuando dos guardados conservan la longitud y caen en el mismo segundo.
 
     Cadena vacia = no se pudo sellar (BD caida): entonces no se cachea nada, que
     es lo unico seguro. Entender nunca puede dejar a un cliente sin respuesta.
@@ -144,8 +143,10 @@ def sellos_del_tenant(cliente_id: str) -> Dict[str, str]:
     try:
         with db._get_db_connection() as conexion:
             for ambito, sql in _SELLOS_SQL.items():
-                fila = conexion.execute(sql, (cliente_id,)).fetchone()
-                salida[ambito] = "/".join(str(valor) for valor in fila) if fila else ""
+                filas = conexion.execute(sql, (cliente_id,)).fetchall()
+                contenido = json.dumps([list(fila) for fila in filas],
+                                       ensure_ascii=False, separators=(",", ":"))
+                salida[ambito] = hashlib.sha256(contenido.encode("utf-8")).hexdigest()
     except Exception as exc:  # noqa: BLE001 - sin sello se recalcula, no se rompe
         settings.logger.warning("[intents] no se pudo sellar (%s): %s", cliente_id, exc)
         return {ambito: "" for ambito in _SELLOS_SQL}
@@ -156,9 +157,8 @@ def olvidar_tenant(cliente_id: str) -> None:
     """Tira lo cacheado de ESTE negocio; lo de los demas no se toca.
 
     Lo llama el CRUD del panel (Q&A y servicios) para que el worker que recibe el
-    POST no espere ni al sello: los sellos de fecha van al segundo, y dos guardados
-    dentro del mismo segundo podrian parecer el mismo estado. A los demas workers
-    los avisa la BD (`sellos_del_tenant`), no esto.
+    POST libere las entradas antiguas. Los demás workers detectan el cambio por
+    el contenido de la BD (`sellos_del_tenant`), no por este vaciado local.
     """
     if not cliente_id:
         return

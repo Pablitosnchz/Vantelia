@@ -34,6 +34,14 @@ Claude tiene pendiente comparación 6+6 con modelo real; no confundir con tests.
 
 ## Fase 1 — cambios del portal visibles al agente
 
+Integración en curso: entrega `e6e7ee3`, `e77b074`, `2063655` de Claude integrada.
+La revisión de Astra reprodujo una colisión del sello agregado para texto de
+igual longitud en el mismo segundo desde otro worker. Se sustituye por SHA-256
+del contenido ordenado que consumen las cachés, incluido orden del catálogo.
+Coste: leer esas columnas por tenant para comprobar frescura; se conserva la
+caché de extracción/clasificación del modelo. No se añade esquema ni TTL de gracia.
+51 pruebas dirigidas verdes; suite completa y revisión pendientes.
+
 Responsable propuesto: Claude, rama aislada acordada por sincronía.
 Reutilizar CRUD y cachés anteriores. Reproducir primero editar/borrar Q&A y
 activar/desactivar/renombrar un servicio después de una consulta cacheada.
