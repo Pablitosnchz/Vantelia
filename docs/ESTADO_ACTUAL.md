@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** identidad persistida de la creación en el núcleo; recuperar la cita ya guardada tras una caída y bloquear la repetición cuando el proveedor deja un resultado desconocido. Pieza todavía opcional, sin conectar a los canales.
-- **Rama:** astra/operaciones-recuperables, E:/Vantelia-astra-operaciones (hija de 53f40c7).
-- **Siguiente:** cerrar pruebas de concurrencia, aislamiento y recuperación; después conectar la identidad a una confirmación persistida. La suite del padre 53f40c7 sigue en ejecución en E:/Vantelia-astra-persistencia y ya muestra fallos: analizar el resumen al terminar, antes de avanzar la integración. 15 dirigidos de operaciones, concurrencia existente y compatibilidad pasan. Al retirar la recuperación anterior a consultar disponibilidad, la regresión de caída tras commit falla; código restaurado.
-- **Espera a:** revisión de Claude al recuperar créditos (último aviso 22:40). 12d2614: 2226 correctos, 1 omitido; 44dddf8: 2231 correctos, 1 omitido, revisión pedida. No push ni despliegue. No afirmar ejecución exactamente una vez: faltan enlace con los canales, reconciliar resultados inciertos y entrega de notificaciones. Pendientes banco real Alicia+segundo negocio y envío real de recordatorios. No hay nuevas reglas de Alicia.
+- **Tarea:** identidad persistida de creación en el núcleo, recuperación tras commit y bloqueo de resultados desconocidos del proveedor. Integrada la corrección 96e10b8 de persistencia. Pieza de ejecución todavía opcional, sin conectar a los canales.
+- **Rama:** astra/operaciones-recuperables, E:/Vantelia-astra-operaciones (062725f + corrección 96e10b8).
+- **Siguiente:** validar el candidato integrado con suite completa y pedir revisión exacta solo en verde. Después enlazar identidad y datos a una confirmación persistida de WhatsApp (contrato en DISENO_RECUPERACION_ESTADO). 15 dirigidos de operaciones verdes; mutación de recuperación roja. Suite padre 53f40c7: 2248 correctos, 1 omitido y 2 fallos (mapa y helper sin uso), corregidos en 96e10b8 con 10 dirigidos verdes; no sumar grupos ni presentar esa suite como verde.
+- **Espera a:** revisión de Claude (último aviso sin créditos hasta 22:40). No push ni despliegue. No afirmar ejecución exactamente una vez: faltan enlace con canales, reconciliar resultados inciertos y entrega de notificaciones. Pendientes banco real Alicia+segundo negocio y envío real de recordatorios. No hay nuevas reglas de Alicia.
 
 
 

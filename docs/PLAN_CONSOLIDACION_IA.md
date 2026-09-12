@@ -217,7 +217,9 @@ con reglas opuestas no se contaminan. Horarios y catálogo siguen en sus seccion
 ## Fase 4 — consolidación de canales y retirada de duplicados
 
 Avance local 12-sep: `53f40c7` persiste Estado con versión y aceptación explícita;
-su suite completa aún tiene fallos por analizar al finalizar. La siguiente rama
+su suite terminó con 2248 correctos, 1 omitido y 2 fallos de mapa/código muerto,
+corregidos en 96e10b8 con 10 dirigidos verdes. El descendiente integrado requiere
+su propia suite y revisión. La siguiente rama
 `astra/operaciones-recuperables` prepara una identidad duradera de creación en
 el núcleo. Sigue pendiente conectarla a confirmaciones persistidas y a la
 recuperación de WhatsApp; una primitiva opcional no cierra esta fase.

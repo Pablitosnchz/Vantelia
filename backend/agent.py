@@ -1014,17 +1014,6 @@ _AFIRMA_A_SECAS = re.compile(
     r"([ ,.!]+(si|porfa|por favor|gracias|claro|vale|please|mejor))*[ ,.!]*$")
 
 
-def _ultimo_del_asistente(mensajes) -> str:
-    """Lo ultimo que dijo el asistente, para saber a que esta contestando ella."""
-    for mensaje in reversed(list(mensajes or [])):
-        try:
-            if mensaje.get("role") == "assistant" and mensaje.get("content"):
-                return str(mensaje.get("content"))
-        except AttributeError:  # noqa: PERF203 - objetos del SDK, no dicts
-            continue
-    return ""
-
-
 def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str, estado=None) -> bool:
     """Continúa una alternativa ya aceptada y aún vigente.
 
