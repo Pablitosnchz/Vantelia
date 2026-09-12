@@ -2308,7 +2308,7 @@
           <button class="btn btn-primary" id="brAddBtn" type="button" data-perm="catalog.manage">+ Añadir regla</button>
         </div>
       </div>
-      <p class="panel-sub">Aquí decides <b>qué hace el asistente según lo que te pidan</b>, aunque cada cliente lo escriba a su manera. El asistente entiende la intención (pedir cita, preguntar un precio, cancelar…) y aplica tu regla. Ejemplo real: <i>si preguntan el precio de un alisado, pide una foto del pelo por detrás y avisa de que le daréis presupuesto vosotros</i>.</p>
+      <p class="panel-sub">Aquí decides <b>qué hace el asistente según lo que te pidan</b>, aunque cada cliente lo escriba a su manera. Puedes aplicar una regla a todos tus servicios o solo a una familia. Las respuestas informativas se editan arriba, en Q&A; los horarios y las vacaciones, en Horario; los servicios, precios y duraciones, en Servicios.</p>
       <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-top:10px;">
         <input type="checkbox" id="brEnabled" />
         <span><b>Que el asistente interprete lo que le piden</b> · sin esto solo reconoce las frases más habituales.</span>
@@ -5484,7 +5484,6 @@ async function loadKeywordRules() {
   try { data = await api('/auth/app/keyword-rules'); }
   catch { card.style.display = 'none'; return; }
   const items = data.items || [];
-  if (!data.enabled && !items.length) { card.style.display = 'none'; return; }
   card.style.display = '';
   document.getElementById('kwrEnabled').checked = !!data.enabled;
   if (!items.length) {
