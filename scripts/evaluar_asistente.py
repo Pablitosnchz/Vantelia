@@ -398,6 +398,11 @@ def main() -> int:
     parser.add_argument("--detalle", action="store_true", help="imprime lo que contesta")
     parser.add_argument("--guardar", default="", help="guarda informe JSON con todos los intentos")
     args = parser.parse_args()
+    if args.guardar:
+        destino_informe = os.path.normcase(str(pathlib.Path(args.guardar).resolve()))
+        for ruta_bd in (args.db_origen, args.db_copia):
+            if ruta_bd and destino_informe == os.path.normcase(str(pathlib.Path(ruta_bd).resolve())):
+                parser.error("el informe debe guardarse en una ruta distinta de las bases de datos")
     inicio = datetime.now(timezone.utc).isoformat()
     identidad = ({"sha": _sha_del_banco(), "arbol_sucio": _arbol_sucio_del_banco()}
                  if args.guardar else {})

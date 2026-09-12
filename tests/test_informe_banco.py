@@ -260,3 +260,39 @@ def test_interrupcion_dentro_del_reintento_conserva_primer_fallo(runner, monkeyp
     assert datos["contadores"]["medidos"] == datos["contadores"]["no_medidos"] == 0
     assert datos["contadores"]["no_aplican"] == 0
     assert datos["contadores"]["fallos"]["critico"] == 0
+
+
+@pytest.mark.parametrize("campo", ["origen", "copia"])
+@pytest.mark.parametrize("variante", ["exacta", "normalizada"])
+def test_informe_no_sobrescribe_base_de_datos(runner, monkeypatch, tmp_path, campo, variante):
+    import os
+    import sqlite3
+
+    origen = tmp_path / "origen.db"
+    copia = tmp_path / "copia.db"
+    protegida = origen if campo == "origen" else copia
+    with sqlite3.connect(str(protegida)) as conexion:
+        conexion.execute("CREATE TABLE evidencia (valor TEXT)")
+        conexion.execute("INSERT INTO evidencia VALUES ('dato sintetico intacto')")
+        conexion.commit()
+    conexion.close()
+    antes = protegida.read_bytes()
+    informe = str(protegida)
+    if variante == "normalizada":
+        informe = str(tmp_path / "subdirectorio" / ".." / protegida.name)
+        (tmp_path / "subdirectorio").mkdir()
+        if os.name == "nt":
+            informe = informe.upper()
+    preparaciones = []
+    monkeypatch.setattr(banco, "_preparar_copia", lambda *a: preparaciones.append(a))
+    monkeypatch.setattr(sys, "argv", ["banco", "--db-origen", str(origen),
+        "--db-copia", str(copia), "--guardar", informe])
+    salida = None
+    try:
+        banco.main()
+    except SystemExit as exc:
+        salida = exc.code
+    assert protegida.read_bytes() == antes, "el informe ha sobrescrito la base de datos"
+    assert salida == 2
+    assert preparaciones == []
+    assert runner == []
