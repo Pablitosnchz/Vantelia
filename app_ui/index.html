@@ -807,7 +807,10 @@
     .cd-line { position:absolute; left:0; right:0; border-top:1px solid var(--line); pointer-events:none; }
     .cd-line.hour { border-top-color:var(--line-strong); }
     .cd-glabel { position:absolute; right:8px; transform:translateY(-50%); font-size:0.68rem; font-weight:600; color:var(--soft-2); white-space:nowrap; }
-    .cd-glabel.hour { color:var(--soft); }
+    .cd-glabel.hour { color:var(--soft); right:20px; font-size:0.88rem; }
+    .cd-glabel.hour sup { font-size:0.6em; margin-left:1px; }
+    .cd-tick { position:absolute; right:0; width:12px; border-top:1px solid var(--soft-2); pointer-events:none; }
+    .cd-tick.hour { width:18px; border-top-color:var(--soft); }
     /* Los extremos se alinean hacia dentro: centradas se salian del cuerpo y la
        primera se montaba sobre la cabecera "Hora". */
     .cd-glabel.edge-first { transform:translateY(1px); }
@@ -8461,7 +8464,7 @@ document.getElementById('calToday').addEventListener('click', async () => { cons
 // verse el nombre y 2 apellidos y el servicio obligatoriamente"- aceptando
 // el scroll que trae: la columna ya vive dentro de `.cd-scroll`.
 // 15 min * 2.2 = 33 px, que es lo que ocupan las dos lineas apretadas.
-const CD_PX_PER_MIN = 2.2, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 32, CD_GENERAL_KEY = '__general__';
+const CD_PX_PER_MIN = 2.2, CD_AXIS_STEP = 15, CD_MIN_BLOCK_H = 32, CD_GENERAL_KEY = '__general__';
 const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled', no_show:'no_show' };
 
 function cdEstado(b){ return CD_ESTADO_NORM[b.estado || b.status] || 'pending'; }
@@ -8767,12 +8770,19 @@ function renderCitasDay(){
   const gh = document.createElement('div'); gh.className = 'cd-head'; gh.textContent = 'Hora';
   const gb = document.createElement('div'); gb.className = 'cd-body'; gb.style.height = bodyH + 'px';
   for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){
+    const tick = document.createElement('div');
+    tick.className = 'cd-tick' + (t%60===0 ? ' hour' : '');
+    tick.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px';
+    tick.setAttribute('aria-hidden', 'true');
+    gb.appendChild(tick);
+    if (t%60 !== 0) continue;
     const lab = document.createElement('div');
-    lab.className = 'cd-glabel' + (t%60===0 ? ' hour' : '')
+    lab.className = 'cd-glabel hour'
       + (t === startMin ? ' edge-first' : '')
-      + (t + CD_AXIS_STEP > endMin ? ' edge-last' : '');
+      + (t === endMin ? ' edge-last' : '');
     lab.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px';
-    lab.textContent = cdFmtMin(t);
+    lab.setAttribute('aria-label', cdFmtMin(t));
+    lab.innerHTML = `${Math.floor(t/60)}<sup>00</sup>`;
     gb.appendChild(lab);
   }
   gutter.appendChild(gh); gutter.appendChild(gb); grid.appendChild(gutter);
