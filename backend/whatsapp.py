@@ -511,9 +511,15 @@ def _wa_get_flow(cliente_id: str, from_number: str) -> appstate.WAFlowState:
             flow.booking_code = recuperado.codigo
             if recuperado.propuesta_servicio is not None:
                 flow.location_id = recuperado.propuesta_servicio.location_id
-        propuesta = reserva.leer_confirmacion_reserva(recuperado)
+        if recuperado.intencion == "cancelar" and not recuperado.hecho:
+            flow.flow = "manage_cancel_verify" if recuperado.codigo else "manage_cancel_code"
+        propuesta = reserva.leer_confirmacion_reserva(recuperado, incluir_hecha=True)
         if propuesta and propuesta["estado"] in ("ofrecida", "aceptada"):
-            _wa_restaurar_datos_del_resumen(flow, propuesta["datos"])
+            if propuesta["datos"].get("accion") == "cancelar":
+                flow.flow = "manage_cancel_confirm"
+                flow.booking_code = propuesta["datos"].get("booking_code", "")
+            elif not recuperado.hecho:
+                _wa_restaurar_datos_del_resumen(flow, propuesta["datos"])
         appstate.whatsapp_flows[key] = flow
     flow.last_seen = ahora
     return flow
@@ -609,6 +615,11 @@ def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
     try:
         from backend import reserva
 
+        pendiente = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, from_number))
+        if pendiente and pendiente["estado"] == "aceptada":
+            # Salir del paso visual no demuestra que una operación aceptada
+            # terminara. Conservarla permite consultar el resultado sin repetirla.
+            return
         reserva.olvidar(cliente_id, from_number)
     except Exception:  # noqa: BLE001 - limpiar nunca puede romper el canal
         pass
@@ -2526,6 +2537,144 @@ async def _wa_start_booking_flow(
     )
 
 
+async def _wa_texto_cancelacion(*, cliente_id, phone_number_id, from_number, texto, request):
+    enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id,
+        phone_number_id=phone_number_id, to_number=from_number, text=texto)
+    if enviado:
+        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+            respuesta=texto, intent="gestion_cancelacion")
+    return enviado
+
+
+async def _wa_ofrecer_cancelacion(*, cliente_id, phone_number_id, from_number, codigo,
+                                request, telefono="", email=""):
+    """Consulta y verifica en el núcleo; el canal solo ofrece la cita que recibió."""
+    from backend import reserva, conversation_state
+    estado = reserva.cargar(cliente_id, from_number)
+    anterior = reserva.leer_confirmacion_reserva(estado)
+    if anterior and anterior["estado"] == "aceptada":
+        await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="Hay una operación aceptada cuyo resultado está pendiente. Comprueba primero esa gestión antes de iniciar otra cancelación.")
+        return
+    reserva.empezar_otra_gestion(estado)
+    estado.intencion, estado.codigo = "cancelar", codigo
+    reserva.guardar(cliente_id, from_number, estado)
+    flow = _wa_get_flow(cliente_id, from_number)
+    flow.booking_code = codigo
+    flow.flow = "manage_cancel_verify" if codigo else "manage_cancel_code"
+    if not codigo:
+        await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="Para cancelar tu cita necesito el número de reserva (formato *R-XXXX*).")
+        return
+    fila, error = await booking._prepare_booking_cancellation(cliente_id, codigo,
+        trusted_phone=from_number, telefono=telefono, email=email)
+    if error:
+        await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto=str(error.get("error") or error.get("mensaje") or "No se pudo consultar la cita."))
+        return
+    datos = booking._booking_cancellation_snapshot(fila)
+    datos.update(accion="cancelar", from_number=from_number, telefono=telefono, email=email)
+    estado.codigo = datos["booking_code"]
+    identidad = reserva.preparar_confirmacion_reserva(estado, datos)
+    try:
+        reserva.guardar(cliente_id, from_number, estado)
+    except conversation_state.ConversationStateConflict:
+        return
+    cuerpo = ("¿Quieres cancelar esta cita?\n\n"
+              "🔖 *{booking_code}*\n{servicio}\n📅 {booking_date} a las {booking_time}").format(**datos)
+    if datos["employee_name"]:
+        cuerpo += "\nCon " + datos["employee_name"]
+    enviado = await messaging._send_whatsapp_buttons(cliente_id=cliente_id,
+        phone_number_id=phone_number_id, to_number=from_number, header="Cancelar cita", body=cuerpo,
+        buttons=[("cancel_yes:" + identidad, "Sí, cancelar cita"),
+                 ("cancel_no:" + identidad, "Mantener cita")])
+    flow.flow = "manage_cancel_confirm"
+    if not enviado:
+        return
+    if reserva.avanzar_confirmacion_reserva(estado, identidad, "ofrecida"):
+        try:
+            reserva.guardar(cliente_id, from_number, estado)
+        except conversation_state.ConversationStateConflict:
+            return
+    _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+        respuesta=cuerpo + "\n[Sí, cancelar cita] [Mantener cita]", intent="oferta_cancelacion")
+
+
+async def _wa_responder_cancelacion(*, cliente_id, phone_number_id, from_number, iid, request):
+    """La aceptación referencia un snapshot persistido; nunca toma el código del flow."""
+    from backend import reserva, conversation_state
+    estado = reserva.cargar(cliente_id, from_number)
+    propuesta = reserva.leer_confirmacion_reserva(estado, incluir_hecha=True)
+    accion, _, identidad = iid.partition(":")
+    datos = propuesta["datos"] if propuesta else {}
+    texto = "Esa solicitud ya no está vigente. Vuelve a solicitar la cancelación para revisar la cita."
+    valida = (accion in ("cancel_yes", "cancel_no") and propuesta and propuesta["id"] == identidad
+              and propuesta["estado"] in ("ofrecida", "aceptada")
+              and estado.intencion == "cancelar" and estado.codigo == datos.get("booking_code")
+              and datos.get("accion") == "cancelar" and datos.get("from_number") == from_number
+              and set(datos) == set(booking._booking_cancellation_snapshot(datos)) | {
+                  "accion", "from_number", "telefono", "email"})
+    if valida and accion == "cancel_no" and propuesta["estado"] == "ofrecida":
+        estado.confirmacion_reserva_json = ""
+        estado.intencion = ""
+        try:
+            reserva.guardar(cliente_id, from_number, estado)
+        except conversation_state.ConversationStateConflict:
+            return
+        appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+        texto = "No he cancelado la cita."
+    elif valida and accion == "cancel_yes":
+        snapshot = booking._booking_cancellation_snapshot(datos)
+        fila, error = await booking._prepare_booking_cancellation(cliente_id, datos["booking_code"],
+            trusted_phone=from_number, telefono=datos["telefono"], email=datos["email"],
+            expected_snapshot=snapshot)
+        resultado = None
+        if error:
+            if error.get("ya_cancelada"):
+                resultado = error
+            else:
+                texto = str(error.get("error") or "No se pudo verificar la cita.")
+        elif propuesta["estado"] == "aceptada":
+            # Un reinicio pudo ocurrir tras ejecutar y antes de enviar. Consultar
+            # el resultado real evita repetir la llamada al proveedor.
+            texto = "La cancelación fue aceptada, pero todavía no puedo confirmar su resultado. Contacta con el negocio para comprobarla."
+        elif reserva.avanzar_confirmacion_reserva(estado, identidad, "aceptada"):
+            try:
+                reserva.guardar(cliente_id, from_number, estado)
+            except conversation_state.ConversationStateConflict:
+                return
+            try:
+                resultado = await booking._cancel_booking_by_code(cliente_id, datos["booking_code"],
+                    trusted_phone=from_number, telefono=datos["telefono"], email=datos["email"],
+                    source="whatsapp", request=request, expected_snapshot=snapshot)
+            except Exception:  # El resultado desconocido no habilita un segundo intento.
+                settings.logger.exception("[whatsapp] resultado de cancelación desconocido")
+                texto = "No he podido confirmar el resultado de la cancelación. Contacta con el negocio para comprobarla."
+        if resultado is not None:
+            actual = reserva.cargar(cliente_id, from_number)
+            vigente = reserva.leer_confirmacion_reserva(actual, incluir_hecha=True)
+            if vigente and vigente["id"] == identidad:
+                if resultado.get("ok"):
+                    actual.hecho, actual.cancelada = True, True
+                elif not resultado.get("resultado_desconocido"):
+                    actual.confirmacion_reserva_json = ""
+                try:
+                    reserva.guardar(cliente_id, from_number, actual)
+                except conversation_state.ConversationStateConflict:
+                    pass
+            if resultado.get("ok"):
+                texto = "✅ La cita %s está cancelada." % datos["booking_code"]
+            elif resultado.get("resultado_desconocido"):
+                texto = "No he podido confirmar el resultado de la cancelación. Contacta con el negocio para comprobarla."
+            else:
+                texto = str(resultado.get("error") or "No se pudo cancelar la cita.")
+    await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        from_number=from_number, request=request, texto=texto)
+
+
 async def _wa_handle_reminder_reply(
     *,
     cliente_id: str,
@@ -2567,23 +2716,9 @@ async def _wa_handle_reminder_reply(
             text="✅ ¡Gracias! Tu asistencia queda confirmada. Te esperamos.",
         )
         return
-    result = await booking._cancel_booking_by_code(
-        cliente_id,
-        booking_row["booking_code"] or "",
-        trusted_phone=from_number,
-        source="whatsapp_reminder_button",
-        request=request,
-    )
-    if result.get("ok"):
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text="✅ Tu cita queda cancelada. Escribe *menu* si quieres reservar de nuevo.",
-        )
-    else:
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=str(result.get("message") or "No se ha podido cancelar la cita. Escribe *menu* para gestionar tus citas."),
-        )
+    await _wa_ofrecer_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        from_number=from_number, codigo=booking_row["booking_code"] or "", request=request)
+
 
 
 def _wa_registrar(
@@ -2651,6 +2786,48 @@ async def _handle_whatsapp_message(
     iid = (interactive_id or "").strip()
     text_norm = textnorm._strip_accents((incoming_text or "").lower().strip())
 
+    if iid.startswith(("cancel_yes", "cancel_no")):
+        await _wa_responder_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, iid=iid, request=request)
+        return
+
+    # Comando "menu" siempre rompe flujo y muestra menu
+    if iid in ("menu_main", "back_menu") or text_norm in ("menu", "menu principal", "inicio", "opciones", "principal"):
+        _wa_clear_flow(cliente_id, from_number)
+        await _wa_send_main_menu(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            nombre_empresa=nombre_empresa, booking_enabled=booking_enabled,
+        )
+        return
+
+    # Pedir atención humana conserva su salida aunque haya una operación pendiente.
+    if (not iid and inbox.pide_una_persona(incoming_text)
+            and inbox.paso_a_persona_activo(cliente_id, config)):
+        inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+        texto_persona = inbox.texto_al_pedir_persona(cliente_id, config)
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=from_number, request=request,
+            entrante=incoming_text, respuesta=texto_persona,
+            intent="pide_una_persona",
+        )
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text=texto_persona,
+        )
+        return
+
+
+    from backend import reserva
+    pendiente = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, from_number))
+    if (pendiente and pendiente["estado"] == "aceptada"
+            and pendiente["datos"].get("accion") == "cancelar"):
+        # Frontera común antes de cualquier desvío por modo o agente. Menú
+        # y atención humana pueden salir sin borrar la operación pendiente.
+        await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="Hay una cancelación aceptada cuyo resultado está pendiente. Usa el botón de esa solicitud para comprobarla o contacta con el negocio antes de iniciar otra gestión.")
+        return
+
     if iid.startswith(("confirm_yes", "confirm_no", "dup_crear")):
         from backend import reserva
         propuesta = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, from_number))
@@ -2711,15 +2888,6 @@ async def _handle_whatsapp_message(
             from_number=from_number,
             interactive_id=iid,
             request=request,
-        )
-        return
-
-    # Comando "menu" siempre rompe flujo y muestra menu
-    if iid in ("menu_main", "back_menu") or text_norm in ("menu", "menu principal", "inicio", "opciones", "principal"):
-        _wa_clear_flow(cliente_id, from_number)
-        await _wa_send_main_menu(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            nombre_empresa=nombre_empresa, booking_enabled=booking_enabled,
         )
         return
 
@@ -2798,33 +2966,6 @@ async def _handle_whatsapp_message(
     # escritas a mano y sus reglas ("cuando pidan X, haz Y"). Misma funcion y misma
     # posicion que en el chat de la web, para que no diverjan. Solo sin flujo
     # activo: a media reserva, sus respuestas son pasos del flujo, no consultas.
-    # Pedir una persona gana SIEMPRE, tambien a media reserva. Estaba metido en
-    # el bloque de abajo, que solo corre sin flujo activo, asi que funcionaba de
-    # entrada y se ignoraba en cuanto habia una reserva empezada:
-    #
-    #     ELLA  quiero cita para un alisado
-    #     ELLA  oye prefiero hablar con una persona
-    #     IA    Entiendo... PERO para poder ayudarte a reservar necesito saber...
-    #
-    # Que es justo lo contrario de lo que dice el comentario de abajo: quien pide
-    # una persona no quiere seguir hablando con la maquina. Y es la misma forma
-    # que el fallo de las digresiones: el guard se apagaba al entrar en un flujo.
-    if (not iid and inbox.pide_una_persona(incoming_text)
-            and inbox.paso_a_persona_activo(cliente_id, config)):
-        inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
-        texto_persona = inbox.texto_al_pedir_persona(cliente_id, config)
-        _wa_registrar(
-            cliente_id=cliente_id, from_number=from_number, request=request,
-            entrante=incoming_text, respuesta=texto_persona,
-            intent="pide_una_persona",
-        )
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id,
-            to_number=from_number, text=texto_persona,
-        )
-        return
-
-
     intencion_entendida = ""
     if not flow.flow and not iid:
         decision = chat.decision_del_negocio(cliente_id, incoming_text, config=config)
@@ -2966,41 +3107,9 @@ async def _handle_whatsapp_message(
         # Si no ha podido, sigue el recorrido de siempre: nadie se queda colgado.
 
     if trigger_cancel and booking_enabled:
-        _wa_reset_booking_fields(flow)
-        flow.flow = "manage_cancel_code"
-        code = booking._extract_booking_code_from_text(incoming_text)
-        if code:
-            flow.booking_code = code
-            flow.flow = "manage_cancel_verify"
-            result = await booking._cancel_booking_by_code(
-                cliente_id,
-                code,
-                trusted_phone=from_number,
-                source="whatsapp",
-                request=request,
-            )
-            if result.get("ok"):
-                _wa_clear_flow(cliente_id, from_number)
-                await messaging._send_whatsapp_text(
-                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                    text=f"✅ Listo, la cita {code} queda cancelada. Escribe *menu* para volver.",
-                )
-                return
-            if not result.get("needs_verification"):
-                _wa_clear_flow(cliente_id, from_number)
-                await messaging._send_whatsapp_text(
-                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                    text=f"⚠️ {result.get('error') or 'No se pudo cancelar la cita.'}",
-                )
-                return
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=(
-                "Para cancelar tu cita necesito el número de reserva (formato *R-XXXX*)."
-                if not flow.booking_code else
-                "Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita."
-            ),
-        )
+        await _wa_ofrecer_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, codigo=booking._extract_booking_code_from_text(incoming_text),
+            request=request)
         return
 
     if trigger_reschedule and booking_enabled:
@@ -3095,66 +3204,21 @@ async def _handle_whatsapp_message(
                 ),
             )
             return
-        flow.booking_code = code
-        result = await booking._cancel_booking_by_code(
-            cliente_id,
-            code,
-            trusted_phone=from_number,
-            source="whatsapp",
-            request=request,
-        )
-        if result.get("ok"):
-            _wa_clear_flow(cliente_id, from_number)
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, la cita {code} queda cancelada. Escribe *menu* para volver.",
-            )
-            return
-        if result.get("needs_verification"):
-            flow.flow = "manage_cancel_verify"
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita.",
-            )
-            return
-        _wa_clear_flow(cliente_id, from_number)
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"⚠️ {result.get('error') or 'No se pudo cancelar la cita.'}",
-        )
+        await _wa_ofrecer_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, codigo=code, request=request)
         return
 
     if flow.flow == "manage_cancel_verify":
         email = textnorm._extract_email_from_text(incoming_text)
         phone = textnorm._extract_phone_from_text(incoming_text)
-        if not (email or phone):
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Envíame el teléfono o el email usado en la reserva para poder verificarla.",
-            )
-            return
-        result = await booking._cancel_booking_by_code(
-            cliente_id,
-            flow.booking_code,
-            trusted_phone=from_number,
-            telefono=phone,
-            email=email,
-            source="whatsapp",
-            request=request,
-        )
-        if result.get("ok"):
-            _wa_clear_flow(cliente_id, from_number)
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, la cita {flow.booking_code} queda cancelada. Escribe *menu* para volver.",
-            )
-            return
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"⚠️ {result.get('error') or 'No se pudo cancelar la cita.'}",
-        )
-        if not result.get("needs_verification"):
-            _wa_clear_flow(cliente_id, from_number)
+        await _wa_ofrecer_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, codigo=flow.booking_code, telefono=phone, email=email, request=request)
+        return
+
+    if flow.flow == "manage_cancel_confirm":
+        await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="Usa los botones del último resumen para cancelar o mantener esa cita. Puedes escribir menú para salir.")
         return
 
     if flow.flow == "manage_reschedule_code":

@@ -115,9 +115,9 @@ class Estado:
         return (time.time() - self.tocado) < CADUCA_EN
 
 
-def leer_confirmacion_reserva(estado: Estado):
+def leer_confirmacion_reserva(estado: Estado, *, incluir_hecha: bool = False):
     """Un snapshot malformado o vencido no acredita que se ofreciera una cita."""
-    if estado.hecho:
+    if estado.hecho and not incluir_hecha:
         return None
     try:
         p = json.loads(estado.confirmacion_reserva_json)

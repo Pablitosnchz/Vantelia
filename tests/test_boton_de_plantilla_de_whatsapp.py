@@ -151,7 +151,10 @@ def test_confirmo_desde_una_plantilla_confirma_la_cita(enviados, cita):
 
 
 def test_cancelar_desde_una_plantilla_cancela_la_cita(enviados, cita, monkeypatch):
-    """El otro boton del recordatorio: cancela de verdad, no solo contesta."""
+    """bkcancel identifica una cita, pero pudo cambiar desde el recordatorio.
+
+    Se muestra la versión actual y solo su aceptación permite cancelarla.
+    """
     from backend import booking, db
 
     async def _sin_proveedor(*args, **kwargs):
@@ -160,6 +163,14 @@ def test_cancelar_desde_una_plantilla_cancela_la_cita(enviados, cita, monkeypatc
     monkeypatch.setattr(booking, "_cancel_provider_booking", _sin_proveedor)
 
     _recibir(_boton_de_plantilla(cita["telefono"], "bkcancel_%s" % cita["id"], "❌ Cancelar cita"))
+
+    with db._get_db_connection() as connection:
+        assert connection.execute("SELECT status FROM bookings WHERE id = ?",
+            (cita["id"],)).fetchone()["status"] == "confirmed"
+    oferta = next(m for m in enviados if isinstance(m, dict) and m.get("header") == "Cancelar cita")
+    boton = oferta["buttons"][0][0]
+    assert boton.startswith("cancel_yes:")
+    _recibir(_boton_de_plantilla(cita["telefono"], boton, "Sí, cancelar cita"))
 
     with db._get_db_connection() as connection:
         estado = connection.execute(
@@ -185,3 +196,25 @@ def test_el_boton_de_otro_telefono_no_toca_la_cita(enviados, cita):
         ).fetchone()["status"]
     assert estado == "confirmed", "una cita ajena se ha cancelado desde otro telefono"
     assert any("no he podido localizar" in str(m).lower() for m in enviados), enviados
+
+
+def test_cancelacion_del_recordatorio_revalida_cita_reprogramada(enviados, cita):
+    """La identidad del recordatorio sobrevive a una reprogramación del portal.
+
+    Ni el recordatorio antiguo ni aceptar un resumen anterior cancelan la nueva hora.
+    """
+    from backend import db
+    with db._get_db_connection() as connection:
+        connection.execute("UPDATE bookings SET booking_time='11:30' WHERE id=?", (cita["id"],))
+        connection.commit()
+    _recibir(_boton_de_plantilla(cita["telefono"], "bkcancel_%s" % cita["id"], "Cancelar cita"))
+    oferta = next(m for m in enviados if isinstance(m, dict) and m.get("header") == "Cancelar cita")
+    assert "11:30" in oferta["body"]
+    with db._get_db_connection() as connection:
+        connection.execute("UPDATE bookings SET booking_time='12:30' WHERE id=?", (cita["id"],))
+        connection.commit()
+    _recibir(_boton_de_plantilla(cita["telefono"], oferta["buttons"][0][0], "Sí, cancelar cita"))
+    with db._get_db_connection() as connection:
+        assert connection.execute("SELECT status FROM bookings WHERE id=?",
+            (cita["id"],)).fetchone()["status"] == "confirmed"
+    assert any("ha cambiado" in str(m) for m in enviados)

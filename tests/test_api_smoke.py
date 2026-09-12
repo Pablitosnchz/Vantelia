@@ -4016,6 +4016,7 @@ def test_chat_menu_quick_actions_match_configured_starters(client: TestClient, a
 def test_whatsapp_cancel_booking_by_code_uses_sender_phone(api_module, monkeypatch: pytest.MonkeyPatch):
     record = _build_booking_record(api_module, telefono="34611222333")
     sent_messages = []
+    ofertas = []
 
     async def _noop_cancel_provider(_row):
         return None
@@ -4027,9 +4028,14 @@ def test_whatsapp_cancel_booking_by_code_uses_sender_phone(api_module, monkeypat
         sent_messages.append(text)
         return True
 
+    async def _capture_cancel_offer(**kwargs):
+        ofertas.append(kwargs)
+        return True
+
     monkeypatch.setattr(api_module, "_cancel_provider_booking", _noop_cancel_provider)
     monkeypatch.setattr(api_module, "_send_booking_email_by_kind", _noop_email)
     monkeypatch.setattr(api_module, "_send_whatsapp_text", _capture_whatsapp_text)
+    monkeypatch.setattr(api_module, "_send_whatsapp_buttons", _capture_cancel_offer)
     try:
         api_module._store_booking(record)
         code = record["booking_code"]
@@ -4045,6 +4051,16 @@ def test_whatsapp_cancel_booking_by_code_uses_sender_phone(api_module, monkeypat
             )
         )
 
+        # El teléfono verifica la cita; la aceptación se refiere al resumen
+        # actual, porque el código por sí solo no acredita sus datos vigentes.
+        assert ofertas and code in ofertas[-1]["body"]
+        assert ofertas[-1]["to_number"] == "34611222333"
+        with api_module._get_db_connection() as conn:
+            assert conn.execute("SELECT status FROM bookings WHERE id = ?",
+                (record["id"],)).fetchone()[0] == "confirmed"
+        asyncio.run(api_module._handle_whatsapp_message(cliente_id="demo",
+            phone_number_id="1234567890", from_number="34611222333", incoming_text="Sí, cancelar cita",
+            interactive_id=ofertas[-1]["buttons"][0][0], request=None))
         assert any("cancelada" in message.lower() for message in sent_messages)
         with api_module._get_db_connection() as conn:
             status_value = conn.execute(

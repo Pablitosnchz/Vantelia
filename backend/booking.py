@@ -1279,6 +1279,35 @@ async def _lookup_and_verify_booking_by_code(
     return row, None
 
 
+def _booking_cancellation_snapshot(row) -> Dict[str, str]:
+    """La identidad y los datos de la cita que una cancelación propone retirar."""
+    datos = dict(row)
+    return {campo: str(datos.get(campo) or "") for campo in (
+        "id", "booking_code", "booking_date", "booking_time", "servicio",
+        "employee_id", "employee_name", "location_id")}
+
+
+async def _prepare_booking_cancellation(
+    cliente_id: str, codigo_reserva: str, *, trusted_phone: str = "",
+    telefono: str = "", email: str = "", expected_snapshot=None,
+):
+    """Consulta compartida; una oferta aceptada puede exigir los datos que mostró."""
+    row, error = await _lookup_and_verify_booking_by_code(
+        cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email)
+    if error:
+        return row, error
+    if expected_snapshot is not None and _booking_cancellation_snapshot(row) != expected_snapshot:
+        return row, {"ok": False, "cita_cambiada": True,
+            "error": "La cita ha cambiado desde el resumen. Solicita de nuevo la cancelación para revisar sus datos."}
+    if row["status"] == "cancelled":
+        return row, {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
+    if row["status"] == "completed":
+        return row, {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    if row["status"] == "no_show":
+        return row, {"ok": False, "error": "Esa cita esta marcada como no asistida y no se puede cancelar."}
+    return row, None
+
+
 async def _cancel_booking_by_code(
     cliente_id: str,
     codigo_reserva: str,
@@ -1289,18 +1318,14 @@ async def _cancel_booking_by_code(
     motivo: str = "",
     source: str,
     request: Optional[Request] = None,
+    expected_snapshot=None,
 ) -> Dict[str, Any]:
-    row, error = await _lookup_and_verify_booking_by_code(
-        cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email
+    row, error = await _prepare_booking_cancellation(
+        cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email,
+        expected_snapshot=expected_snapshot,
     )
     if error:
         return error
-    if row["status"] == "cancelled":
-        return {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
-    if row["status"] == "completed":
-        return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
-    if row["status"] == "no_show":
-        return {"ok": False, "error": "Esa cita esta marcada como no asistida y no se puede cancelar."}
     try:
         refreshed = await _cancel_booking_core(
             row,
@@ -1310,10 +1335,12 @@ async def _cancel_booking_by_code(
             audit_extra={"channel": source, "trusted_phone": trusted_phone},
         )
     except HTTPException as exc:
-        return {"ok": False, "error": str(exc.detail)}
+        # La verificación y los rechazos de estado ya ocurrieron antes del
+        # núcleo. Dentro de él pudo aceptar el proveedor y fallar el guardado.
+        return {"ok": False, "resultado_desconocido": True, "error": str(exc.detail)}
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[%s] cancelacion por codigo fallo (%s): %s", source, cliente_id, exc)
-        return {"ok": False, "error": "No se pudo cancelar la cita."}
+        return {"ok": False, "resultado_desconocido": True, "error": "No se pudo confirmar el resultado de la cancelación."}
     return {
         "ok": True,
         "codigo_reserva": refreshed["booking_code"] or "",
