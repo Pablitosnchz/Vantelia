@@ -713,6 +713,7 @@ def _purge_client_data(
         connection.execute("DELETE FROM admin_impersonations WHERE target_cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM booking_audit WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM bookings WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM booking_operations WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM agenda_blocks WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM employees WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM chat_messages WHERE cliente_id = ?", (cliente_id,))

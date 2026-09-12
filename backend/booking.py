@@ -3248,6 +3248,7 @@ async def _create_booking_core(
     fuera_de_horario: bool = False,
     request: Optional[Request] = None,
     audit_extra: Optional[Dict[str, Any]] = None,
+    operation_key: str = "",
 ) -> sqlite3.Row:
     """Crea una cita: fuente UNICA para todos los canales (widget, WhatsApp, voz,
     portal manual). Resuelve servicio/duracion/precio, valida hueco, llama al
@@ -3260,6 +3261,18 @@ async def _create_booking_core(
 
     Devuelve la fila guardada (el estado final puede ser pending_payment si el
     servicio exige pago por adelantado)."""
+    from backend import booking_operations
+    request_hash = ""
+    if operation_key:
+        request_hash = booking_operations.creation_request_fingerprint({
+            "employee_id": employee_row["id"], "nombre": nombre, "email": email,
+            "telefono": telefono, "servicio": servicio, "fecha": booking_date,
+            "hora": booking_time, "notas": notas, "source": source,
+            "fuera_de_horario": fuera_de_horario,
+        })
+        recuperada = booking_operations.recover_creation_operation(cliente_id, operation_key, request_hash)
+        if recuperada is not None:
+            return recuperada
     config = clients._get_client_config(cliente_id)
     service_row = agenda._find_service_by_name(cliente_id, servicio)
     service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
@@ -3305,6 +3318,11 @@ async def _create_booking_core(
         )
 
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
+    if operation_key:
+        recuperada = booking_operations.claim_creation_operation(
+            cliente_id, operation_key, request_hash, booking_id)
+        if recuperada is not None:
+            return recuperada
     manage_token = _generate_manage_token()
     created_at = timeutils._utc_now_iso()
     provider = _get_booking_provider(config)

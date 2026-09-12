@@ -93,3 +93,28 @@ La suite nueva se reparte en test_estado_entre_procesos, test_snapshot_conversac
 test_historial_sin_autorizacion y test_whatsapp_estado_persistido. Las fixtures
 antiguas que envejecían objetos por referencia ahora avanzan el reloj; no se ha
 eliminado la prueba de que una conversación caducada deja de valer.
+
+
+## Siguiente pieza: identidad de creación (en validación)
+
+El núcleo admite `operation_key` opcional. La clave se vincula al tenant y a la
+huella de los datos confirmados; un cambio de petición con la misma clave se
+rechaza. Una inserción exclusiva registra el id de reserva antes de llamar al
+proveedor. Si la reserva ya está guardada, recupera esa fila antes de consultar
+ocupación; conserva su estado actual, incluida una cancelación posterior.
+Si no existe resultado local verificable, responde `OPERATION_PENDING` y no
+repite al proveedor. No hay todavía reconciliación automática de ese estado.
+
+La tabla se elimina al dar de baja el tenant. No conserva una copia de nombre,
+teléfono o notas: solo huella, identidad, fecha e id de reserva. La recuperación
+no repite auditoría ni notificaciones; recuperar entregas pendientes requiere
+una fase de bandeja de salida, no volver a ejecutar la reserva.
+
+**Todavía no conectado a los canales.** No basta pasar una clave aleatoria a
+cada llamada. La confirmación debe conservar clave y datos antes de ejecutar,
+incluida la profesional resuelta. WhatsApp debe recuperar el resultado antes de
+su resolución de profesional y comprobación de hueco, distinguir resultado
+incierto de hueco ocupado y no describir una fila cancelada como confirmada.
+La identidad no acredita autorización: la transición aceptada vigente sigue
+siendo un requisito independiente. Reiniciar o reenviar el mismo mensaje no
+puede inventar una autorización nueva ni una nueva identidad de ejecución.

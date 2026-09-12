@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** persistencia de Estado en SQLite con versión por tenant/canal/conversación; aceptación y selección se publican juntas, los escritores antiguos se rechazan. Se retira la aceptación inferida del texto anterior del bot. WhatsApp recupera gestiones pendientes y no reabre terminadas; snapshots vencidos tienen limpieza acotada y baja por tenant.
-- **Rama:** astra/persistencia-conversacion, E:/Vantelia-astra-persistencia (hija de 44dddf8).
-- **Siguiente:** suite completa y revisión exacta del candidato estable. 181 dirigidos de integración, 52 de cierre y 17 de primitivas en ejecución aislada verdes (grupos con solapamiento, no sumar). La carrera entre procesos falla al retirar la comparación de revisión. Tres recuperaciones y tres respuestas ambiguas dieron rojo antes del arreglo. 12d2614 terminó: 2226 correctos, 1 omitido; 44dddf8 terminó: 2231 correctos, 1 omitido y revisión exacta pedida.
-- **Espera a:** revisión de Claude al recuperar créditos (último aviso 22:40). No desplegar ni hacer push. No se ha resuelto la ventana entre crear una cita y registrar su resultado tras una caída, ni toda la concurrencia del flujo anterior; no afirmar ejecución exactamente una vez. Pendientes banco real Alicia+segundo negocio, demás autoridades y envío real de recordatorios. No hay nuevas reglas de Alicia.
+- **Tarea:** identidad persistida de la creación en el núcleo; recuperar la cita ya guardada tras una caída y bloquear la repetición cuando el proveedor deja un resultado desconocido. Pieza todavía opcional, sin conectar a los canales.
+- **Rama:** astra/operaciones-recuperables, E:/Vantelia-astra-operaciones (hija de 53f40c7).
+- **Siguiente:** cerrar pruebas de concurrencia, aislamiento y recuperación; después conectar la identidad a una confirmación persistida. La suite del padre 53f40c7 sigue en ejecución en E:/Vantelia-astra-persistencia y ya muestra fallos: analizar el resumen al terminar, antes de avanzar la integración. 15 dirigidos de operaciones, concurrencia existente y compatibilidad pasan. Al retirar la recuperación anterior a consultar disponibilidad, la regresión de caída tras commit falla; código restaurado.
+- **Espera a:** revisión de Claude al recuperar créditos (último aviso 22:40). 12d2614: 2226 correctos, 1 omitido; 44dddf8: 2231 correctos, 1 omitido, revisión pedida. No push ni despliegue. No afirmar ejecución exactamente una vez: faltan enlace con los canales, reconciliar resultados inciertos y entrega de notificaciones. Pendientes banco real Alicia+segundo negocio y envío real de recordatorios. No hay nuevas reglas de Alicia.
 
 
 

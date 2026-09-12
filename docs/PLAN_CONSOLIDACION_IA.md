@@ -216,6 +216,12 @@ con reglas opuestas no se contaminan. Horarios y catálogo siguen en sus seccion
 
 ## Fase 4 — consolidación de canales y retirada de duplicados
 
+Avance local 12-sep: `53f40c7` persiste Estado con versión y aceptación explícita;
+su suite completa aún tiene fallos por analizar al finalizar. La siguiente rama
+`astra/operaciones-recuperables` prepara una identidad duradera de creación en
+el núcleo. Sigue pendiente conectarla a confirmaciones persistidas y a la
+recuperación de WhatsApp; una primitiva opcional no cierra esta fase.
+
 Inventariar cada interceptor con el caso que protege y su dueño final. Mover la
 decisión al estado, política o núcleo según contrato y eliminar el camino antiguo
 en entregas pequeñas. Reusar `_create_booking_core` y `_update_booking_details`.
