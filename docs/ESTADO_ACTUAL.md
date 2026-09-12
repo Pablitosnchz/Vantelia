@@ -39,11 +39,17 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra coordina; Claude colabora mediante sincronía.
-- **Tarea:** consolidar agente y portal según `docs/PLAN_CONSOLIDACION_IA.md`; reglas compartidas en `docs/NORMAS_AGENTE_IA.md`.
-- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-valoracion`. El trabajo anterior de encapsulación sigue preservado en `astra/alicia-final`.
-- **Siguiente:** fase 1 integrada desde `claude/encargo-a9efef`; corregida colisión del sello entre workers (mismo segundo y longitud), con regresión roja y 51 pruebas dirigidas verdes. Ejecutar suite completa y pedir revisión solo si termina en verde. Fase 2 pendiente: propuestas/aceptación como estado.
-- **Espera a:** suite del candidato integrado, medición 6+6 de Claude para `570a201` y auditoría del recorrido de valoración. Fixture de agenda unificada con `02bd1a7` de Claude. No supervisar repetidamente la suite ni modificar su candidato mientras corre.
+- **Testigo:** Astra implementa y coordina; Claude auxiliar de medición/revisión y del arreglo acotado de servicio retirado.
+- **Tarea:** corregir revisión CAMBIOS de `afecf80`. Hallazgos 1/4: progreso técnica→largo no cuenta como indecisión, renuncia por mensaje respetando valoración obligatoria. 3: tarjeta business-rules visible en Q&A. 5: familias reutilizadas y sello solo del catálogo, sin TTL que oculte cambios. 6: fixture comprueba ocupación y limpia vacaciones. Banco reutiliza captura compartida para no llamar a Meta.
+- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-revision`. `c22cc42` (fase 2) permanece aislado en `astra/estado-propuestas`; no integrar antes de incorporar estas correcciones. Encapsulación antigua preservada en `astra/alicia-final`.
+- **Siguiente:** terminar dirigidos, integrar entrega acotada de Claude (error servicio retirado distinto de hueco ocupado), suite completa sobre candidato estable y volver a pedir revisión. Se reprodujeron rojos para progreso, renuncia, visibilidad Q&A, lecturas redundantes, fixture ocupada y captura de Meta.
+- **Espera a:** corrección 2 de Claude y comparación 6+6 al primer intento. Referencia nueva: 43/43 y un caso no aplica, con calendario `1a9d56c` sobre `bd7a6da` (medida `9eadd6e`); el crítico necesitó segundo intento, no acredita fiabilidad inicial. No subir `claude/hora-sin-mirar` ni `570a201` sin validación/revisión; no desplegar sin Pablo.
+
+Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
+y prueba de envío real; confirmar situación actual con Claude. Última referencia
+documental anterior de producción: `aab4d02`, no verificada de nuevo en esta revisión.
+Los relatos de medición antiguos de más abajo son históricos; la referencia con
+calendario reproducible se distingue arriba y no oculta los reintentos.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
