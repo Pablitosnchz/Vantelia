@@ -44,6 +44,15 @@ página de sincronía lo enseña tal cual.
 
 
 
+
+
+Sincronía: retiradas seis peticiones propias de revisión de antecesores verificados
+(0b6043f, 550aafe, 6e040e1, 12d2614, 44dddf8, 530ae40) para evitar trabajo
+duplicado. Son peticiones sustituidas, no aprobaciones. Se conserva la revisión
+activa de cf2066d; el diagnóstico de demos está encargado y aún sin resultado.
+No hay suite completa nueva en ejecución ni revisión solicitada del conjunto
+619e1d3: primero deben cerrarse esos fallos. El seguimiento autónomo sigue activo.
+
 Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
 y prueba de envío real; confirmar situación actual con Claude. Última referencia
 documental anterior de producción: `aab4d02`, no verificada de nuevo en esta revisión.
