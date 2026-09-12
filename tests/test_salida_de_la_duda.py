@@ -10,11 +10,11 @@ from test_booking_exhaustive import api_module  # noqa: F401
 
 
 @pytest.mark.parametrize("duda,falta,regla,valoracion,esperado", [
-    ("no lo tengo claro", "tecnica", True, True, "Diagnostico"),
+    ("no lo tengo claro", "tecnica", True, True, ""),
     ("no lo tengo claro", "tecnica", "declarada", True, ""),
     ("no lo tengo claro", "tecnica", "foto", True, ""),
-    ("no lo tengo claro", "talla", True, True, "Diagnostico"),
-    ("no lo se", "talla", True, True, "Diagnostico"),
+    ("no lo tengo claro", "talla", True, True, ""),
+    ("no lo se", "talla", True, True, ""),
     ("no lo tengo claro", "tecnica", False, True, ""),
     ("no lo tengo claro", "tecnica", True, False, ""),
     ("no lo se", "", True, True, "Keratina medio"),
@@ -92,6 +92,12 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     assert len(observados) == 1
     assert observados[0].get("servicio", "") == esperado
     assert estado.servicio == esperado
+    if falta and regla != "declarada":
+        assert estado.propuesta_servicio is None
+        assert not estado.hecho
+        assert "cogele la" not in observados[0].get("nota", "")
+        if estado.veces_falta and not regla in ("declarada", "foto"):
+            assert "No elijas un servicio" in observados[0]["nota"]
     if regla == "foto":
         assert estado.propuesta_servicio is None
         assert observados[0]["politica_orientacion"]["accion"] == "pedir_foto"
@@ -107,19 +113,15 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     (["no lo tengo claro", "no quiero diagnostico"], True, "Diagnostico"),
 ])
 def test_renuncia_por_mensaje_y_respeta_obligatoriedad(api_module, monkeypatch, mensajes, obligatoria, esperado):
-    from backend import agent, booking
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar", lambda *a: "Se decide en persona.")
-    monkeypatch.setattr(booking, "_servicio_de_valoracion", lambda *a: {"nombre": "Diagnostico"})
+    from backend import booking
     monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda *a: obligatoria)
-    assert agent._hay_que_cogerle_la_valoracion(
-        "demo", [{"role": "user", "content": m} for m in mensajes], 2) == esperado
+    assert booking.renuncio_al_diagnostico_en_mensajes("demo", mensajes) is (esperado == "")
 
 
 def test_familia_obligatoria_no_desaparece_al_superar_1500_caracteres(api_module, monkeypatch):
-    from backend import agent, booking
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar", lambda *a: "Se decide en persona.")
-    monkeypatch.setattr(booking, "_servicio_de_valoracion", lambda *a: {"nombre": "Diagnostico"})
+    from backend import booking
     monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda cid, texto: "extensiones" in texto)
     mensajes = [{"role": "user", "content": m} for m in
                 ["quiero extensiones", "comentario " * 180, "no lo tengo claro, no quiero diagnostico"]]
-    assert agent._hay_que_cogerle_la_valoracion("demo", mensajes, 2) == "Diagnostico"
+    assert not booking.renuncio_al_diagnostico_en_mensajes(
+        "demo", [m["content"] for m in mensajes])

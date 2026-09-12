@@ -129,107 +129,24 @@ def test_el_si_se_busca_por_el_nombre_de_la_valoracion(api_module, monkeypatch, 
 
 
 # --------------------------------------------------------------------------- 3
-def test_con_la_regla_escrita_no_se_moja_ofrece_la_valoracion(api_module, monkeypatch):  # noqa: F811
+# El rescate que imponía valoración a la tercera pregunta se retiró el 13-sep.
+# Su reemplazo se prueba recorriendo responder en test_salida_de_la_duda.py.
+# Una Q&A informativa no autoriza seleccionar ni ofrecer otro servicio.
+@pytest.mark.parametrize("qa,catalogo", [
+    ("Sin ver tu cabello no puedo recomendarte uno.", {"nombre": "Diagnostico"}),
+    ("", {"nombre": "Diagnostico"}),
+    ("Eso se decide en persona.", None),
+])
+def test_nota_no_convierte_qa_en_seleccion(api_module, monkeypatch, qa, catalogo):
     from backend import agent, booking
-
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar",
-                        lambda cid, config=None: "Sin ver tu cabello no te puedo decir cual.")
-    monkeypatch.setattr(booking, "_servicio_de_valoracion",
-                        lambda cid, location_id="": {"nombre": "Diagnostico y presupuesto"})
-    nota = agent._nota_al_repetir_la_pregunta(CID)
-    assert "NO elijas tu por ella" in nota
-    assert "Diagnostico y presupuesto" in nota
+    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar", lambda *a: qa)
+    monkeypatch.setattr(booking, "_servicio_de_valoracion", lambda *a, **k: catalogo)
+    nota = agent._nota_al_repetir_la_pregunta()
+    assert "No elijas un servicio" in nota
+    assert "Diagnostico" not in nota
     assert "mojate" not in nota
-    assert "se puede cambiar" not in nota
-
-
-def test_sin_regla_escrita_se_sigue_pudiendo_mojar(api_module, monkeypatch):  # noqa: F811
-    """Recomendar es legitimo para quien no haya dicho lo contrario."""
-    from backend import agent
-
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar",
-                        lambda cid, config=None: "")
-    assert "mojate" in agent._nota_al_repetir_la_pregunta(CID)
-
-
-def test_con_regla_pero_sin_valoracion_tampoco_recomienda(api_module, monkeypatch):  # noqa: F811
-    from backend import agent, booking
-
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar",
-                        lambda cid, config=None: "Eso se ve en persona.")
-    monkeypatch.setattr(booking, "_servicio_de_valoracion",
-                        lambda cid, location_id="": None)
-    nota = agent._nota_al_repetir_la_pregunta(CID)
-    assert "NO elijas tu por ella" in nota
-    assert "mojate" not in nota
-
-
-def test_la_nota_esta_enchufada_en_el_bucle(api_module):  # noqa: F811
-    """Que exista no basta: la tenia que usar el freno de la repeticion."""
-    import inspect
-
-    from backend import agent
-
-    fuente = inspect.getsource(agent.responder)
-    assert "_nota_al_repetir_la_pregunta" in fuente
-
-
-# ------------------------------------------------- la tercera pregunta no existe
-def _charla_con_dudas():
-    return [{"role": "user", "content": "quiero un alisado"},
-            {"role": "assistant", "content": "¿Keratina premium o Acido lactico?"},
-            {"role": "user", "content": "no estoy segura de cual"},
-            {"role": "assistant", "content": "Se decide en la cita. ¿Que dia?"},
-            {"role": "user", "content": "manana a las 10"}]
-
-
-@pytest.fixture
-def negocio_que_no_elige(monkeypatch):
-    from backend import agent, booking
-
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar",
-                        lambda cid, config=None: "Eso se ve en persona.")
-    monkeypatch.setattr(booking, "_servicio_de_valoracion",
-                        lambda cid, location_id="": {"nombre": "Diagnostico y presupuesto"})
-
-
-def test_a_la_tercera_se_le_coge_la_valoracion(api_module, negocio_que_no_elige):  # noqa: F811
-    from backend import agent
-
-    assert agent._hay_que_cogerle_la_valoracion(
-        CID, _charla_con_dudas(), 2) == "Diagnostico y presupuesto"
-
-
-def test_preguntar_dos_veces_todavia_se_aguanta(api_module, negocio_que_no_elige):  # noqa: F811
-    from backend import agent
-
-    assert not agent._hay_que_cogerle_la_valoracion(CID, _charla_con_dudas(), 1)
-
-
-def test_sin_duda_de_ella_no_se_le_impone_nada(api_module, negocio_que_no_elige):  # noqa: F811
-    """Si nunca ha dicho que no sabe, se le sigue preguntando: quiza si lo sabe."""
-    from backend import agent
-
-    charla = [{"role": "user", "content": "quiero un alisado manana a las 10"}]
-    assert not agent._hay_que_cogerle_la_valoracion(CID, charla, 3)
-
-
-def test_sin_regla_del_negocio_no_se_toca_nada(api_module, monkeypatch):  # noqa: F811
-    from backend import agent
-
-    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar",
-                        lambda cid, config=None: "")
-    assert not agent._hay_que_cogerle_la_valoracion(CID, _charla_con_dudas(), 3)
-
-
-def test_el_corte_esta_enchufado(api_module):  # noqa: F811
-    import inspect
-
-    from backend import agent
-
-    fuente = inspect.getsource(agent.responder)
-    assert "_hay_que_cogerle_la_valoracion" in fuente
-    assert "estado.veces_falta" in fuente
+    assert "cogesela" not in nota
+    assert "contacto con el negocio" in nota
 
 
 # --------------------------- el nombre exacto lo resuelve el catalogo, no el modelo

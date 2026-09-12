@@ -471,50 +471,21 @@ def test_tampoco_cita_el_nombre_corto_que_le_ofrece(salon_con_packs, api_module)
     assert "Mechas o balayage" in texto
 
 
-def test_no_le_repite_la_misma_lista_de_opciones(api_module):  # noqa: F811
-    """Preguntar esta bien; preguntar DOS VECES lo mismo es el muro.
+def test_nota_de_aclaracion_es_general_y_no_impone_una_eleccion(api_module):  # noqa: F811
+    """Aclarar no autoriza seleccionar ni promete cambios posteriores en la cita.
 
-    Visto: "unas mechas" -> le ofrece las tres tecnicas -> "quiero unas mechas" ->
-    le ofrece las tres otra vez. Si ya se lo preguntaste y no se decide, hay que
-    darle una salida.
-
-    CUAL sea la salida depende del negocio, y eso lo corrigio la duenya el
-    8-sep-2026: aqui poniamos "mojate y recomiendale UNA... dile que en la cita
-    se puede cambiar", y a un salon que tiene escrito que la tecnica no se elige
-    por mensaje le hacia justo lo prohibido. Con esa regla escrita la salida es
-    la cita de valoracion; sin ella, mojarse sigue valiendo. Lo que este test
-    vigila es que SIEMPRE haya salida y que nunca sea repetir la lista.
+    Contrato 13-sep: la salida configurada se ofrece por la política compartida;
+    Q&A y catálogo no activan un rescate oculto. El cableado del turno se prueba
+    por comportamiento en test_salida_de_la_duda, no leyendo el código fuente.
     """
-    import inspect
-
-    from backend import agent, booking, reserva
-
-    assert hasattr(reserva.Estado(), "ultimo_falta"), "no hay donde recordar la pregunta"
-    fuente = inspect.getsource(agent.responder)
-    assert 'falta == estado.ultimo_falta' in fuente, (
-        "nada detecta que se le esta preguntando lo mismo otra vez"
-    )
-    assert "_nota_al_repetir_la_pregunta" in fuente, (
-        "no se le da salida cuando ella no se decide"
-    )
-
-    sin_regla = agent._nota_al_repetir_la_pregunta("demo")
-    assert "recomiendale UNA" in sin_regla, (
-        "sin regla del negocio, mojarse sigue siendo una salida legitima"
-    )
-
-    original_qa = agent._lo_que_el_negocio_dice_al_recomendar
-    original_val = booking._servicio_de_valoracion
-    agent._lo_que_el_negocio_dice_al_recomendar = lambda cid, config=None: "Eso se ve en persona."
-    booking._servicio_de_valoracion = lambda cid, location_id="": {"nombre": "Diagnostico"}
-    try:
-        con_regla = agent._nota_al_repetir_la_pregunta("demo")
-    finally:
-        agent._lo_que_el_negocio_dice_al_recomendar = original_qa
-        booking._servicio_de_valoracion = original_val
-    assert "recomiendale UNA" not in con_regla, "elige por ella pese a la regla del negocio"
-    assert "Diagnostico" in con_regla, "no le ofrece la salida que el negocio si permite"
-    assert "NO le repitas la misma lista" in con_regla
+    from backend import agent
+    nota = agent._nota_al_repetir_la_pregunta()
+    assert "No repitas la misma lista" in nota
+    assert "Explica las diferencias verificadas" in nota
+    assert "No elijas un servicio" in nota
+    assert "contacto con el negocio" in nota
+    assert "pelo" not in nota and "salon" not in nota
+    assert "recomiendale UNA" not in nota
 
 
 def test_quien_pregunta_el_precio_se_lleva_la_valoracion_no_el_tratamiento(api_module, client):  # noqa: F811

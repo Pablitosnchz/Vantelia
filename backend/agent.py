@@ -1819,89 +1819,15 @@ def _veces_sin_concretar(falta: str, ultimo: str, veces: int, *, duda: bool = Fa
     return veces + 1 if ultimo in pendientes and (falta == ultimo or duda) else 0
 
 
-def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
-                                   config=None) -> str:
-    """Ella ha dicho que no sabe y ya se le ha preguntado dos veces: se corta.
-
-    La nota de `_nota_al_repetir_la_pregunta` le pide al modelo que ofrezca la
-    cita de valoracion, y el modelo a veces vuelve a preguntar igualmente. Medido
-    el 8-sep-2026 con el catalogo real: a la tercera seguia preguntando "Keratina
-    premium o Acido lactico bio premium?" a alguien que ya habia dicho dos veces
-    que no lo sabia, y que ya le habia dado dia y hora.
-
-    Preguntar dos veces se aguanta; a la tercera se va. Aqui se decide en codigo:
-    se busca la valoracion y se sigue con ella. Solo pasa si se cumplen las
-    CUATRO condiciones -el negocio tiene escrito que eso no se elige por mensaje,
-    tiene cita de valoracion, ella ha expresado la duda, y ya se le ha preguntado
-    dos veces-; con cualquiera que falte, no se toca nada.
-    """
-    if veces < 2:
-        return ""
-    dicho = _lo_que_ha_escrito(mensajes)
-    if not _DUDA_AL_ELEGIR.search(catalog_pick._norm(dicho)):
-        return ""
-    if not _lo_que_el_negocio_dice_al_recomendar(cliente_id, config):
-        return ""
-    try:
-        from backend import booking
-
-        if booking.renuncio_al_diagnostico_en_mensajes(
-                cliente_id, [m.get("content") for m in mensajes
-                             if isinstance(m, dict) and m.get("role") == "user"]):
-            return ""
-        return str((booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
-    except Exception:  # noqa: BLE001 - ante la duda, se sigue preguntando
-        return ""
-
-
-def _nota_al_repetir_la_pregunta(cliente_id: str, config=None) -> str:
-    """Que hacer cuando vuelve a faltar el MISMO dato y ella no se decide.
-
-    Este freno existe porque repetirle la misma lista es el fallo mas repetido de
-    la medicion: se cansa y se va. Pero tal y como estaba escrito le pedia al
-    modelo *"mojate y recomiendale UNA... y dile que en la cita se puede
-    cambiar"*, que es justo lo que el salon piloto tiene PROHIBIDO: "la IA no
-    sabe cual es el mas recomendable, no debe aconsejar uno u otro".
-
-    El 8-sep-2026 la duenya lo vio en su propia demo: pidio un alisado, dijo dos
-    veces que no sabia cual, y el asistente le reservo el acido lactico anadiendo
-    "si en la cita prefieres la keratina, se puede cambiar". No fue el modelo
-    yendose por su cuenta -se lo pediamos nosotros aqui-, y ganaba por ir DESPUES
-    de la regla del negocio, igual que paso con el largo del pelo y el precio.
-
-    Con la regla escrita, la salida deja de ser recomendar y pasa a ser la cita
-    de valoracion, que es exactamente para lo que existe. Sin regla escrita no
-    cambia nada: mojarse es legitimo para quien no haya dicho lo contrario.
-    """
-    generico = (
-        "OJO: esto ya se lo preguntaste en el mensaje anterior y no se ha "
-        "decidido. NO le repitas la misma lista. Haz una de estas dos: "
-        "preguntale otro dato que falte (por ejemplo como tiene el pelo de "
-        "largo), o mojate y recomiendale UNA explicandole en una linea por que, "
-        "y dile que en la cita se puede cambiar."
-    )
-    if not _lo_que_el_negocio_dice_al_recomendar(cliente_id, config):
-        return generico
-    try:
-        from backend import booking
-
-        valoracion = str(
-            (booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
-    except Exception:  # noqa: BLE001 - sin catalogo, la version generica
-        valoracion = ""
-    if not valoracion:
-        return (
-            "OJO: esto ya se lo preguntaste y no se ha decidido. NO le repitas la "
-            "misma lista y NO elijas tu por ella: este negocio tiene escrito que "
-            "eso no se decide por mensaje. Preguntale otro dato distinto que haga "
-            "falta, o dile en una frase que se decide en el salon al verle el pelo."
-        )
+def _nota_al_repetir_la_pregunta() -> str:
+    """Ayuda a aclarar sin convertir una duda o una Q&A en selección de servicio."""
     return (
-        "OJO: esto ya se lo preguntaste y no se ha decidido. NO le repitas la "
-        "misma lista y NO elijas tu por ella: este negocio tiene escrito que eso "
-        "no se decide por mensaje. Ofrecele la cita de '%s' para verlo en persona "
-        "y decidirlo alli; si ya se la habias ofrecido y ha dicho que si, "
-        "cogesela sin volver a preguntar." % valoracion
+        "No repitas la misma lista. Explica las diferencias verificadas entre las "
+        "opciones o pregunta otro dato útil que falte. No elijas un servicio por "
+        "la persona ni prometas que podrá cambiarlo en la cita. Si no puede "
+        "precisarlo, explica que la elección sigue pendiente y facilita el "
+        "contacto con el negocio. Solo una política explícita puede ofrecer "
+        "una alternativa; ofrecerla no significa que la haya aceptado."
     )
 
 
@@ -4386,31 +4312,11 @@ async def responder(
                         if orientacion:
                             resultado = dict(resultado, politica_orientacion=orientacion,
                                 nota="Aplica esta política declarada. No selecciones otra técnica ni confirmes una cita.")
-                    valoracion = "" if orientacion else _hay_que_cogerle_la_valoracion(
-                        cliente_id, mensajes, estado.veces_falta, config)
-                    if valoracion:
-                        traza.freno("le_cojo_la_valoracion")
-                        resultado = _tool_buscar_servicio(
-                            cliente_id, {"descripcion": valoracion},
-                            location_id=location_id)
+                    if falta and not orientacion and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
+                        # Aclarar no cambia el servicio ni deduce una política
+                        # ejecutable de la respuesta informativa de una Q&A.
                         resultado = dict(resultado)
-                        resultado["nota"] = (
-                            "Ya le has preguntado dos veces cual quiere y ha dicho "
-                            "que no lo sabe. NO se lo preguntes otra vez: cogele la "
-                            "cita de '%s' y diselo en una frase, que ahi se decide "
-                            "cual le va mejor. Si ya te ha dado dia y hora, usalos."
-                            % valoracion)
-                        falta = ""
-                        estado.veces_falta = 0
-                    elif falta and not orientacion and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
-                        # Ya se lo preguntaste y no lo ha elegido. Repetirle la
-                        # misma lista es EL fallo mas repetido de la medicion: se
-                        # cansa y se va. La salida depende de lo que el negocio
-                        # tenga escrito: si dice que eso no se elige por mensaje,
-                        # la valoracion; si no ha dicho nada, mojarse.
-                        resultado = dict(resultado)
-                        resultado["nota"] = _nota_al_repetir_la_pregunta(
-                            cliente_id, config)
+                        resultado["nota"] = _nota_al_repetir_la_pregunta()
                     estado.ultimo_falta = falta
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True

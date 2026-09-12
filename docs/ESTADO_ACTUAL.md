@@ -37,9 +37,9 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** enlace implementado del resumen aceptado de WhatsApp con la operación recuperable del núcleo; conserva la referencia tras caída o envío fallido y consulta la fila actual sin recrear.
-- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; descendiente de 4ed33c7 (candidato integrado).
-- **Siguiente:** 66 dirigidos de integración y 23 de cierre verdes (grupos solapados); pyflakes y diff limpios. Cuatro regresiones rojas antes del cambio y mutación roja al quitar la guardia de identidad durante una consulta. Una única suite completa al resolver también los cinco fallos de demos; después revisión del SHA exacto. Siguen pendientes reconciliación/outbox, migración de gestión/nativos y medidas reales.
+- **Tarea:** retirado el rescate Q&A que seleccionaba diagnóstico sin política ni aceptación. Se eliminan el helper y la búsqueda impuesta; la nota ya no recomienda una técnica ni promete cambiarla en la cita.
+- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; descendiente integrado de 1ef4e73, conserva 9b1bfea.
+- **Siguiente:** 102 dirigidos verdes; tres regresiones de responder rojas antes del cambio. Verificar rechazo explícito del diagnóstico frente al detector de petición directa. Suite completa pendiente del diagnóstico de demos; revisión exacta y banco real después.
 - **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Claude revisó OK cf2066d (cambio de cuenta), con tres mejoras menores; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
 
 
@@ -63,18 +63,16 @@ NO se ha retirado el atajo Q&A cuando falta esa política. El hallazgo sigue vig
 en el candidato actual; no dar esa sustitución por terminada. Sigue sin inventarse
 la decisión particular de Alicia entre foto y diagnóstico.
 
-Prioridad independiente confirmada (13-sep): retirar el salto Q&A -> selección de
-valoración. En `backend/agent.py`, `_hay_que_cogerle_la_valoracion` sigue tomando
-Q&A y disponibilidad de un diagnóstico como autorización; el recorrido de
-`buscar_servicio` lo llama cuando `orientacion` está vacía. La nota al repetir
-también ofrece/coge valoración sin propuesta explícita. La política nueva solo
-sustituye esos caminos cuando está configurada. No depende de averiguar qué regla
-quiere Alicia: sin autorización declarada no se debe seleccionar un servicio por
-ella. Próximo paso de Astra: regresión de recorrido sin política (Q&A presente),
-retirar los caminos sustituidos y conservar oferta/aceptación bajo política
-explícita y petición directa de la clienta. Migrar pruebas antiguas que fijan el
-atajo por requisitos nuevos documentados, conservando las que impiden elegir una
-técnica sin autorización. Implementación aún pendiente, no hay prueba nueva ejecutada.
+Retirada Q&A implementada (13-sep): se elimina `_hay_que_cogerle_la_valoracion`
+y su búsqueda que imponía diagnóstico. La nota solo ayuda a aclarar, sin consultar
+Q&A/catálogo ni elegir un servicio. El recorrido declarado conserva propuesta y
+aceptación. Tres regresiones de técnica/talla fallan antes del cambio; 102 pruebas
+dirigidas verdes (oferta, aceptación, rechazo/obligatoriedad, catálogo, no elegir
+por ella, shim). Las pruebas antiguas que imponían diagnóstico pasan a cubrir el
+recorrido sin política; las de renuncia se mantienen en el núcleo compartido.
+`pyflakes backend/agent.py` y diff limpios. No es una medición con modelo real ni
+completa la migración del resto de autoridades. El comportamiento concreto para
+Alicia sin elección de servicio sigue requiriendo política acordada.
 
 cf2066d OK no implica integración: quedan mejoras menores de coste del sondeo de
 cuenta, aviso visible de identidad desconocida y actualización documental al integrar.

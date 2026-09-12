@@ -31,16 +31,25 @@ reejecuta automáticamente. Formularios nativos, cancelación y reprogramación 
 necesitan migrar sus confirmaciones; no se afirma idempotencia global entre canales.
 Recordatorios reales y decisión de foto/diagnóstico continúan pendientes.
 
-## Hallazgo vigente: falta retirar la alternativa implícita desde Q&A
+## Retirada del rescate Q&A (13-sep, validación dirigida)
 
-Verificado en el descendiente 5f54f72: `orientacion` solo anula el rescate antiguo
-si hay política configurada. Sin ella, `_hay_que_cogerle_la_valoracion` y la nota
-al repetir siguen convirtiendo una Q&A en ofrecimiento/selección de diagnóstico.
-La existencia de la política nueva no acredita autoridad única. Próxima corrección
-independiente de la decisión de producto: Q&A informativa sin política no debe
-seleccionar el diagnóstico. Conservar petición explícita y propuesta declarada,
-con pruebas de ausencia de política/otro tenant y aceptación diferenciada. No se
-ha implementado esta retirada ni medido su efecto en el banco real todavía.
+Se elimina `_hay_que_cogerle_la_valoracion` y su segunda búsqueda que sustituía el
+servicio cuando faltaba una política de orientación. La nota de aclaración deja
+de consultar Q&A/catálogo, de imponer una técnica y de prometer cambios posteriores
+en la cita. Su texto es general para cualquier negocio. La oferta configurada
+sigue pasando por la propuesta y la aceptación compartidas; una Q&A informativa
+no selecciona la valoración. No se activa ninguna regla particular para Alicia.
+
+Antes del cambio fallan tres recorridos deterministas reales de `responder` con
+Q&A sin política (duda de técnica/talla). Las pruebas antiguas que exigían imponer
+valoración a la tercera pregunta se sustituyen por esos recorridos, conservando
+las de petición directa, aceptación y rechazo/obligatoriedad. Se retiran pruebas
+que solo comprobaban el nombre del helper dentro del código fuente. Validación
+pendiente de cierre en ESTADO_ACTUAL; no acredita mejora medida con modelo real.
+
+Sin política ni elección de la clienta, el servicio sigue pendiente. La salida
+concreta para Alicia (foto, diagnóstico u otra) requiere una regla acordada; el
+código no puede decidirla para que el banco cierre artificialmente la cita.
 
 ## Persistencia del estado (candidato de Astra)
 
