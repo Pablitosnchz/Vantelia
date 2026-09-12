@@ -22,11 +22,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
+import json
 import os
 import pathlib
 import re
 import sys
+import subprocess
+import tempfile
 import unicodedata
+from datetime import datetime, timezone
 
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -94,6 +98,7 @@ def _comprobar_aislamiento(destino: str) -> None:
 def _instalar_captura():
     """Usa la captura compartida, incluido el payload de formularios de Meta."""
     from evals import arnes
+    arnes.cortar_el_mundo_exterior()
     return arnes.capturar_envios()
 
 
@@ -247,7 +252,7 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     # Casos que necesitan una cita ya cogida (cancelar, cambiar de hora).
     previa = _preparar_cita(cliente_id, telefono, indice) if caso.get("con_cita") else None
     if caso.get("con_cita") and not previa:
-        return False, [], "no se ha podido dejar una cita para probar"
+        raise PrecondicionNoDisponible("no se ha podido preparar la cita previa del caso")
     antes = _citas_del_telefono(cliente_id, telefono)
 
     mensajes = [m.replace("{codigo}", (previa or {}).get("booking_code", ""))
@@ -261,7 +266,7 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
             ))
         except Exception as exc:  # noqa: BLE001
             whatsapp._wa_clear_flow(cliente_id, telefono)
-            return False, [], "ha reventado: %r" % exc
+            return False, dichos[marca:], "ha reventado: %r" % exc
     whatsapp._wa_clear_flow(cliente_id, telefono)
 
     respuestas = dichos[marca:]
@@ -324,6 +329,66 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     return True, respuestas, ""
 
 
+class PrecondicionNoDisponible(ValueError):
+    """El instrumento no ha podido preparar un requisito previo a conversar."""
+
+
+def _guardar_informe(destino, informe):
+    """Reemplazo atomico: un fallo conserva el ultimo caso ya guardado."""
+    destino = pathlib.Path(destino)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=str(destino.parent),
+                                     prefix=".banco-", suffix=".json", delete=False) as archivo:
+        temporal = pathlib.Path(archivo.name)
+        try:
+            json.dump(informe, archivo, ensure_ascii=False, indent=2)
+        except BaseException:
+            archivo.close()
+            temporal.unlink()
+            raise
+    try:
+        os.replace(str(temporal), str(destino))
+    finally:
+        if temporal.exists():
+            temporal.unlink()
+
+
+def _contadores_del_informe(previstos, registros):
+    return {
+        "previstos": previstos,
+        "medidos": sum(r["estado"] in ("ok", "fallo") for r in registros),
+        "no_medidos": sum(r["estado"] == "no_medido" for r in registros),
+        "no_aplican": sum(r["estado"] == "no_aplica" for r in registros),
+        "primer_intento_medido": sum(bool(r["intentos"]) for r in registros),
+        "primer_intento_fallido": sum(bool(r["intentos"]) and not r["intentos"][0]["ok"] for r in registros),
+        "ok_primer_intento": sum(r["estado"] == "ok" and len(r["intentos"]) == 1 for r in registros),
+        "ok_tras_reintento": sum(r["estado"] == "ok" and len(r["intentos"]) == 2 for r in registros),
+        "reintentos": sum(len(r["intentos"]) == 2 for r in registros),
+        "reintentos_no_medidos": sum(r["estado"] == "no_medido" and len(r["intentos"]) == 1 for r in registros),
+        "fallos": {g: sum(r["estado"] == "fallo" and r["gravedad"] == g for r in registros)
+                   for g in ("critico", "importante", "deseable")},
+    }
+
+
+def _sha_del_banco():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=str(pathlib.Path(__file__).resolve().parents[1]),
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def _arbol_sucio_del_banco():
+    try:
+        return bool(subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=str(pathlib.Path(__file__).resolve().parents[1]),
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip())
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cliente", default="alicia_rincon_estilistas")
@@ -331,7 +396,21 @@ def main() -> int:
     parser.add_argument("--db-copia", default="", help="copia la BD aqui y trabaja sobre ella")
     parser.add_argument("--db-origen", default="storage/vantelia.db")
     parser.add_argument("--detalle", action="store_true", help="imprime lo que contesta")
+    parser.add_argument("--guardar", default="", help="guarda informe JSON con todos los intentos")
     args = parser.parse_args()
+    inicio = datetime.now(timezone.utc).isoformat()
+    identidad = ({"sha": _sha_del_banco(), "arbol_sucio": _arbol_sucio_del_banco()}
+                 if args.guardar else {})
+    registros = []
+    informe = {"version": 1, "cliente": args.cliente, **identidad,
+               "inicio_utc": inicio, "fin_utc": None, "estado": "en_curso",
+               "contesta": None, "configuracion": None, "casos": registros,
+               "contadores": _contadores_del_informe(0, registros)}
+    if args.guardar:
+        try:
+            _guardar_informe(args.guardar, informe)
+        except OSError as exc:
+            parser.error("no se puede guardar el informe: %s" % exc)
 
     if args.db_copia:
         _preparar_copia(args.db_origen, args.db_copia)
@@ -348,8 +427,15 @@ def main() -> int:
 
     # Quien va a contestar, dicho en voz alta antes de empezar: una tirada
     # medida contra el cerebro que no es aprueba sin probar nada.
-    print("Contesta: %s" % _quien_contesta(args.cliente))
-    print("Config:   %s" % _ficha_del_negocio(args.cliente))
+    contesta = _quien_contesta(args.cliente)
+    configuracion = _ficha_del_negocio(args.cliente)
+    informe.update(contesta=contesta, configuracion=configuracion)
+    def persistir():
+        if args.guardar:
+            informe["contadores"] = _contadores_del_informe(len(casos), registros)
+            _guardar_informe(args.guardar, informe)
+    print("Contesta: %s" % contesta)
+    print("Config:   %s" % configuracion)
     print()
 
     dichos = _instalar_captura()
@@ -360,20 +446,30 @@ def main() -> int:
 
     saltados = 0
     sin_calendario = []
+    sin_preparacion = []
     for indice, caso in enumerate(casos):
+        registro = {"id": caso["id"], "gravedad": caso["gravedad"],
+                    "estado": "no_aplica", "motivo": "", "fechas": {},
+                    "mensajes": list(caso["mensajes"]), "intentos": []}
+        registros.append(registro)
         if not _aplica_a_este_negocio(args.cliente, caso):
+            registro["motivo"] = "no aplica a este negocio"
             print("  --   [%-11s] %-34s (no aplica a este negocio)"
                   % (caso["gravedad"], caso["id"]))
             saltados += 1
+            persistir()
             continue
         # Resolver una vez: ambos intentos usan la misma fecha y precondiciones.
         try:
             mensajes, fechas = calendario.resolver_mensajes(args.cliente, caso)
         except calendario.CalendarioNoDisponible as exc:
+            registro.update(estado="no_medido", motivo=str(exc))
             sin_calendario.append(caso["id"])
             print("NO MEDIDO %-34s calendario: %s" % (caso["id"], exc))
+            persistir()
             continue
         caso = dict(caso, mensajes=mensajes)
+        registro.update(mensajes=mensajes, fechas=fechas)
         if fechas:
             print("  calendario %s: %s" % (caso["id"], fechas))
         # Al otro lado hay un modelo: la misma pregunta puede salir distinta dos
@@ -382,12 +478,27 @@ def main() -> int:
         # `no-inventar-duraciones`, que al repetirlo contestaba "de 195 a 440
         # minutos"- y una medicion que acusa de mas se deja de mirar igual que una
         # que no acusa nunca.
-        paso, respuestas, motivo = _ejecutar_caso(args.cliente, caso, dichos, indice)
-        segundo_intento = False
-        if not paso:
-            segundo_intento = True
-            paso, respuestas, motivo = _ejecutar_caso(
-                args.cliente, caso, dichos, indice + 1000)
+        try:
+            paso, respuestas, motivo = _ejecutar_caso(args.cliente, caso, dichos, indice)
+            registro["intentos"].append({"numero": 1, "ok": paso,
+                                          "respuestas": list(respuestas), "motivo": motivo})
+            registro["estado"] = "en_curso"
+            persistir()
+            segundo_intento = False
+            if not paso:
+                segundo_intento = True
+                paso, respuestas, motivo = _ejecutar_caso(
+                    args.cliente, caso, dichos, indice + 1000)
+                registro["intentos"].append({"numero": 2, "ok": paso,
+                                              "respuestas": list(respuestas), "motivo": motivo})
+                persistir()
+        except PrecondicionNoDisponible as exc:
+            registro.update(estado="no_medido", motivo=str(exc))
+            sin_preparacion.append(caso["id"])
+            print("NO MEDIDO %-34s preparacion: %s" % (caso["id"], exc))
+            persistir()
+            continue
+        registro.update(estado="ok" if paso else "fallo", motivo=motivo)
         marca = "  OK  " if paso else "FALLA "
         print("%s [%-11s] %-34s%s" % (
             marca, caso["gravedad"], caso["id"],
@@ -405,18 +516,26 @@ def main() -> int:
         if args.detalle and respuestas:
             for r in respuestas:
                 print("           > %s" % r.replace("\n", " ")[:160])
+        persistir()
 
+    sin_medida = sin_calendario + sin_preparacion
     print("\n" + "=" * 68)
     print("  %d de %d medidos; %d no medidos; %d no aplican; %d previstos" % (
-        aciertos, len(casos) - saltados - len(sin_calendario),
-        len(sin_calendario), saltados, len(casos)))
+        aciertos, len(casos) - saltados - len(sin_medida),
+        len(sin_medida), saltados, len(casos)))
     for gravedad in ("critico", "importante", "deseable"):
         if fallos[gravedad]:
             print("  %s: %s" % (
                 gravedad.upper(), ", ".join(c["id"] for c, _m, _r in fallos[gravedad])
             ))
+    informe.update(estado="terminado", fin_utc=datetime.now(timezone.utc).isoformat())
+    persistir()
+    if sin_preparacion:
+        print("\n  MEDICION INCOMPLETA (preparacion): %s" % ", ".join(sin_preparacion))
     if sin_calendario:
         print("\n  MEDICION INCOMPLETA (calendario): %s" % ", ".join(sin_calendario))
+        return 1
+    if sin_preparacion:
         return 1
     if fallos["critico"]:
         print("\n  HAY CRITICOS ROTOS: esto no se pone delante de un cliente.")

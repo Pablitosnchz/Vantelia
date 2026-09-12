@@ -116,7 +116,7 @@ def cortar_el_mundo_exterior() -> None:
     async def webhook_mudo(cliente_id, payload):
         return True, "simulacion"
 
-    async def email_mudo(*args, **kwargs):
+    def email_mudo(*args, **kwargs):
         return True
 
     async def sms_mudo(*args, **kwargs):
