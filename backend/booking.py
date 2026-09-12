@@ -4192,7 +4192,10 @@ async def _send_booking_reminder_by_kind(
             if channels.get(channel_name):
                 await _attempt_channel(channel_name)
 
-    if sent_channels or skipped_channels:
+    # Un canal omitido no rescata el fallo de otro: sin ninguna entrega hay que
+    # dejar el aviso pendiente. Todos omitidos si es terminal (evita un bucle sin
+    # destinatario), y una entrega aceptada conserva la marca para no duplicarla.
+    if sent_channels or (skipped_channels and not failed_channels):
         status_value = kind if sent_channels == ["email"] else f"{kind}:{','.join(sent_channels or ['skipped'])}"
         if sent_column:
             _mark_booking_email_result(
