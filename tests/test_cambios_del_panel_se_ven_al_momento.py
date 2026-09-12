@@ -58,15 +58,20 @@ def _borrar_cita(respuesta):
         conexion.commit()
 
 
-def _limpiar(*clientes):
-    from backend import appstate, db
+_QA_CREADAS = set()
 
+
+def _limpiar(*clientes):
+    from backend import db, intents
+
+    propias = [(cid, qa_id) for cid, qa_id in _QA_CREADAS if cid in clientes]
     with db._get_db_connection() as conexion:
-        for cliente_id in clientes:
-            conexion.execute("DELETE FROM kb_qa WHERE cliente_id = ?", (cliente_id,))
+        for cliente_id, qa_id in propias:
+            conexion.execute("DELETE FROM kb_qa WHERE cliente_id = ? AND id = ?", (cliente_id, qa_id))
         conexion.commit()
-    with appstate.state_lock:
-        appstate.intent_cache.clear()
+    _QA_CREADAS.difference_update(propias)
+    for cliente_id in clientes:
+        intents.olvidar_tenant(cliente_id)
 
 
 def _crear_qa(client, portal_cookies, pregunta, respuesta):  # noqa: F811
@@ -75,7 +80,9 @@ def _crear_qa(client, portal_cookies, pregunta, respuesta):  # noqa: F811
         json={"question": pregunta, "answer": respuesta},
     )
     assert creada.status_code == 200, creada.text
-    return creada.json()["id"]
+    qa_id = creada.json()["id"]
+    _QA_CREADAS.add(("demo", qa_id))
+    return qa_id
 
 
 def _respuestas(cliente_id):
@@ -367,6 +374,7 @@ def test_el_otro_negocio_conserva_lo_suyo(client, portal_cookies):  # noqa: F811
             )
             conexion.commit()
 
+        _QA_CREADAS.add((CONTROL, "qa_control"))
         qa_id = _crear_qa(client, portal_cookies, "Tenéis parking?", "Sí, gratuito.")
         assert _respuestas(CONTROL) == {"Abrís los domingos?": "No, cerramos."}
         assert "Tenéis parking?" in _respuestas("demo")
@@ -439,3 +447,20 @@ def test_una_clasificacion_guardada_no_repite_una_respuesta_borrada(
         )
     finally:
         _limpiar("demo")
+
+
+def test_limpiar_solo_borra_las_qa_creadas_por_este_instrumento(client, portal_cookies):
+    from backend import db
+    respuesta = client.post("/auth/app/qa", cookies=portal_cookies,
+                           json={"question": "Dato ajeno de control", "answer": "Conservar"})
+    assert respuesta.status_code == 200
+    ajena = respuesta.json()["id"]
+    try:
+        propia = _crear_qa(client, portal_cookies, "Dato propio", "Borrar")
+        _limpiar("demo")
+        with db._get_db_connection() as conexion:
+            ids = {fila[0] for fila in conexion.execute("SELECT id FROM kb_qa WHERE cliente_id = ?", ("demo",))}
+        assert ajena in ids
+        assert propia not in ids
+    finally:
+        client.delete("/auth/app/qa/%s" % ajena, cookies=portal_cookies)

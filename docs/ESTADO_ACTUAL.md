@@ -14,11 +14,8 @@ mensajero.
 
 ## Cómo se trabaja ahora
 
-- **Claude Code implementa y despliega** (decisión de Pablo, 11-sep por la tarde:
-  a Astra se le acabaron los créditos en una hora).
-- **GPT-6 Astra (Codex) revisa y hace encargos acotados** que Claude le pasa; le
-  llegan solos a su sesión. Si está sin créditos, Claude sigue con sus propios
-  instrumentos (tests + humo) y le deja la revisión esperando en el buzón.
+- **Astra coordina e implementa la consolidación** (encargo vigente de Pablo).
+- **Claude auxilia con revisiones, mediciones y piezas encargadas** en ramas propias. Despliegue solo por orden de Pablo.
 - **Pablo decide.** Reglas completas en `AGENTS.md`.
 - **¿Estáis sincronizados?** → https://app.vantelia.es/sincronia (semáforo, solo
   admin). Pablo no tiene que decir nada: los hooks de los dos agentes los ponen al
@@ -42,7 +39,7 @@ página de sincronía lo enseña tal cual.
 - **Testigo:** Astra.
 - **Tarea:** segunda revisión CAMBIOS de 6eb8ae5. Corregido hallazgo2: aviso persistente de reglas inactivas (6d10eba). Corregido hallazgo5: renuncia compartida por agente y booking con ventana de 30 mensajes, sin recorte de familia obligatoria a 1500 caracteres. 19 dirigidos verdes; regresiones rojas antes.
 - **Rama:** astra/valoracion-sin-bucle, E:/Vantelia-astra-revision.
-- **Siguiente:** cerrar 3 (elección con duda), 4 (lecturas repetidas) y 6 (limpieza Q&A de tests); integrar encargo de Claude sobre servicio retirado antes de resolver profesional; suite completa estable y revisión. No se ha solicitado nueva revisión todavía.
+- **Siguiente:** validar 3 (menos candidatos cuenta como progreso aunque haya duda), 4 (sello de catálogo compartido solo durante responder; Q&A consulta solo su ámbito) y 6 (limpieza solo de IDs creados por el instrumento); integrar encargo de Claude sobre servicio retirado antes de resolver profesional; suite completa estable y revisión. No se ha solicitado nueva revisión todavía.
 - **Espera a:** Claude hallazgo1 con recorridos reales WA sin profesional, voz/chat y widget; no basta mock del núcleo. Otros encargos previos: calendario y reprogramación. Arquitectura conservada en astra/estado-propuestas. Medición crítico 6+6: tratamiento 0/6 al primer intento, no final. No desplegar sin Pablo.
 
 
