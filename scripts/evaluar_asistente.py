@@ -28,7 +28,8 @@ import re
 import sys
 import unicodedata
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if __name__ == "__main__":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -379,13 +380,26 @@ def main() -> int:
     fallos = {"critico": [], "importante": [], "deseable": []}
     aciertos = 0
 
+    from evals import calendario
+
     saltados = 0
+    sin_calendario = []
     for indice, caso in enumerate(casos):
         if not _aplica_a_este_negocio(args.cliente, caso):
             print("  --   [%-11s] %-34s (no aplica a este negocio)"
                   % (caso["gravedad"], caso["id"]))
             saltados += 1
             continue
+        # Resolver una vez: ambos intentos usan la misma fecha y precondiciones.
+        try:
+            mensajes, fechas = calendario.resolver_mensajes(args.cliente, caso)
+        except calendario.CalendarioNoDisponible as exc:
+            sin_calendario.append(caso["id"])
+            print("NO MEDIDO %-34s calendario: %s" % (caso["id"], exc))
+            continue
+        caso = dict(caso, mensajes=mensajes)
+        if fechas:
+            print("  calendario %s: %s" % (caso["id"], fechas))
         # Al otro lado hay un modelo: la misma pregunta puede salir distinta dos
         # veces. Un fallo DE VERDAD falla las dos; un tropiezo, no. Sin esto, una
         # tirada entera se daba por mala por un traspies -paso con
@@ -424,6 +438,9 @@ def main() -> int:
             print("  %s: %s" % (
                 gravedad.upper(), ", ".join(c["id"] for c, _m, _r in fallos[gravedad])
             ))
+    if sin_calendario:
+        print("\n  MEDICION INCOMPLETA (calendario): %s" % ", ".join(sin_calendario))
+        return 1
     if fallos["critico"]:
         print("\n  HAY CRITICOS ROTOS: esto no se pone delante de un cliente.")
         return 1

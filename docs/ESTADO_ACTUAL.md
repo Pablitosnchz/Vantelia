@@ -39,11 +39,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra coordina; Claude colabora mediante sincronía.
-- **Tarea:** consolidar agente y portal según `docs/PLAN_CONSOLIDACION_IA.md`; reglas compartidas en `docs/NORMAS_AGENTE_IA.md`.
-- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-valoracion`. El trabajo anterior de encapsulación sigue preservado en `astra/alicia-final`.
-- **Siguiente:** fase 1 integrada desde `claude/encargo-a9efef`; corregida colisión del sello entre workers (mismo segundo y longitud), con regresión roja y 51 pruebas dirigidas verdes. Ejecutar suite completa y pedir revisión solo si termina en verde. Fase 2 pendiente: propuestas/aceptación como estado.
-- **Espera a:** suite del candidato integrado, medición 6+6 de Claude para `570a201` y auditoría del recorrido de valoración. Fixture de agenda unificada con `02bd1a7` de Claude. No supervisar repetidamente la suite ni modificar su candidato mientras corre.
+- **Testigo:** Astra (instrumentos de medida); Claude revisa y mide el modelo.
+- **Tarea:** quitar supuestos de calendario del banco/humo y compartir la preparación de fechas de tests. Diseño de propuestas pendiente de revisión de Claude.
+- **Rama:** `astra/calendario-evals`, worktree `E:/Vantelia-astra-valoracion`, desde `afecf80`.
+- **Siguiente:** suite completa y revisión del encargo de calendario. 11 pruebas del calendario y runner verdes; fixture de estirar citas: 11 verdes. La guarda contra mañana literal fallaba antes. No toca agent.py, reserva.py ni intents.py.
+- **Espera a:** suite/revisión del candidato de calendario y medición posterior de Claude con los guiones nuevos. `afecf80` ya tiene revisión OK y suite 2138 passed/1 skipped. Medición vieja: activa la salida de valoración, pero el calendario y los reintentos no permiten concluir una mejora clara del cierre. No desplegar sin orden.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

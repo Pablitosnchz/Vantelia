@@ -42,33 +42,7 @@ def _payload(booking, **cambios):
     return BookingUpdatePayload(**datos)
 
 
-def _proximo_dia_con_hueco(cliente_id: str) -> str:
-    """El primer dia que abre con las 10:00, 11:00 y 12:00 libres.
-
-    Decia "manana" a secas, y el 12-sep-2026 eso tumbo un despliegue: era sabado,
-    "manana" caia en domingo y el negocio de pruebas CIERRA los domingos, asi que
-    `_create_booking_core` contestaba 409 y los ONCE tests de este fichero
-    petaban en el setup. No habia nada roto, pero el deploy pasa la suite entera
-    antes de subir y se nego -o sea, un test que solo pasa de lunes a viernes
-    bloquea los despliegues del fin de semana y encima hace dudar del codigo.
-
-    Las tres horas: la cita nace a las 10:00 y los tests de aqui la estiran hasta
-    las 13:00 y meten otra a las 11:00. Pedir solo las 10:00 dejaria el fichero
-    fallando a ratos, que es peor que fallar siempre.
-    """
-    import datetime
-
-    from backend import agenda, timeutils
-
-    hoy = timeutils._utc_now().date()
-    for salto in range(1, 15):
-        dia = (hoy + datetime.timedelta(days=salto)).isoformat()
-        libres = agenda._build_slots_for_day(cliente_id, dia, duration_minutes=30) or []
-        if {"10:00", "11:00", "12:00"} <= set(libres):
-            return dia
-    raise AssertionError(
-        "el negocio de pruebas no abre ningun dia de los proximos 14 con 10:00, "
-        "11:00 y 12:00 libres: revisa su horario antes de tocar estos tests")
+from calendario_de_pruebas import proximo_dia_con_hueco
 
 
 @pytest.fixture
@@ -76,7 +50,7 @@ def una_cita(api_module):  # noqa: F811
     """Una cita real en el proximo dia con hueco, por el nucleo que usa el portal."""
     from backend import agenda, booking, db
 
-    fecha = _proximo_dia_con_hueco(CID)
+    fecha = proximo_dia_con_hueco(CID)
     empleado = agenda._resolve_employee_for_booking(CID, "", require_active=False)
     creada = asyncio.run(booking._create_booking_core(
         CID, employee_row=empleado, nombre="Clienta Prueba", email="c@example.com",

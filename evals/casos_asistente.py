@@ -52,7 +52,9 @@ CASOS = [
         # Nombre y DOS apellidos desde el 11-sep-2026 (decision de Pablo): a una
         # clienta nueva se le piden los dos, asi que con uno solo esta conversacion
         # se quedaba en "¿y tu segundo apellido?" y no llegaba a medir lo suyo.
-        "mensajes": ["quiero un alisado", "no lo tengo claro", "manana",
+        "servicio_calendario": "valoracion",
+        "horas_calendario": ["15:00"],
+        "mensajes": ["quiero un alisado", "no lo tengo claro", "el {dia_abierto}",
                      "a las 15", "si", "me llamo Ana Ruiz Perez"],
         # En WhatsApp la cita NACE al pulsar el boton del resumen, no antes: el
         # final bueno de esta conversacion es el resumen para confirmar. Pedir
@@ -67,6 +69,7 @@ CASOS = [
         "por_que": ("Un dia, una hora o un 'vale' se tomaban por el nombre de un "
                     "servicio: 'veo que mencionas manana, pero no tengo un servicio "
                     "con ese nombre'. Misma forma que el 'gracias' del 4-sep."),
+        "fecha_relativa_intencional": True,  # Comprueba interpretar la palabra, no reservar ese día.
         "mensajes": ["mañana"],
         "no_debe": ["no tengo un servicio", "con ese nombre", "no existe un servicio"],
     },
@@ -88,8 +91,10 @@ CASOS = [
                     "dos mensajes le reservo el acido lactico 'y si en la cita "
                     "prefieres la keratina, se puede cambiar'. Se lo pedia nuestra "
                     "propia nota anti-repeticion."),
+        "servicio_calendario": "valoracion",
+        "horas_calendario": ["10:00"],
         "mensajes": ["quiero un alisado", "no estoy segura de cual", "lo tengo corto",
-                     "mañana a las 10"],
+                     "el {dia_abierto_nombre} a las 10"],
         "no_debe": ["se puede cambiar"],
         "no_debe_en": "ultima",
     },

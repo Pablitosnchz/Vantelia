@@ -45,7 +45,8 @@ import os
 import sys
 from typing import Any, Dict, List
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if __name__ == "__main__":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Un telefono por caso: asi cada conversacion tiene su agenda y no se pisan.
@@ -250,6 +251,16 @@ def main() -> int:
         # salir distinta dos veces. Un fallo DE VERDAD falla las dos; un tropiezo,
         # no. Sin esto, el humo bloquea despliegues por azar, se le pierde la fe y
         # acaba ignorandose, que es como si no existiera.
+        from evals import calendario
+
+        try:
+            mensajes, fechas = calendario.resolver_mensajes(args.cliente, caso)
+        except calendario.CalendarioNoDisponible as exc:
+            print("NO MEDIDO %s: %s" % (caso["id"], exc))
+            fallos.append((caso, "precondición de calendario no disponible"))
+            continue
+        if fechas:
+            print("  calendario %s: %s" % (caso["id"], fechas))
         motivo = ""
         for intento in (0, 1):
             telefono = _telefono(indice * 10 + intento)
@@ -258,7 +269,7 @@ def main() -> int:
                 motivo = "(no se le ha podido dejar una cita)"
                 break
             try:
-                _hablar(args.cliente, telefono, caso["mensajes"])
+                _hablar(args.cliente, telefono, mensajes)
                 motivo = _juzgar(args.cliente, telefono, caso, previa)
             except Exception as exc:  # noqa: BLE001 - un caso roto es un fallo, no un crash
                 motivo = "ha reventado: %s" % str(exc)[:160]
