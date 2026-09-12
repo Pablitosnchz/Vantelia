@@ -717,6 +717,7 @@ def _purge_client_data(
         connection.execute("DELETE FROM employees WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM chat_messages WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM chat_sessions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM conversation_states WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM live_chat_sessions WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM analytics_events WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM whatsapp_inbound_messages WHERE cliente_id = ?", (cliente_id,))

@@ -25,17 +25,21 @@ que el modelo diga que ha entendido: si el servicio no lo ha confirmado
 `buscar_servicio`, no esta elegido; si la hora no sale de `consultar_disponibilidad`,
 no existe.
 
-El estado vive por conversacion (`appstate`) y caduca con el mismo silencio que
-cierra el historial: la charla de otro dia no cuenta.
+El estado vive en SQLite por tenant, canal y conversación. Caduca con el mismo
+silencio que cierra el historial. Una escritura compara su versión para que otro
+proceso no pueda deshacer una decisión más reciente.
 """
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, replace
+import json
+import math
+import sqlite3
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from backend import appstate, settings
+from backend import settings
 
 # Una conversacion parada mas de esto ya es otra conversacion.
 CADUCA_EN = settings.SESSION_TTL_SECONDS
@@ -185,34 +189,97 @@ def responder_propuesta_servicio(estado: Estado, propuesta_id: str, respuesta: s
     return True
 
 
-def _clave(cliente_id: str, telefono: str) -> str:
-    return "%s|%s" % (cliente_id, telefono)
+def _identidad_persistida(cliente_id: str, telefono: str):
+    for canal in ("web", "whatsapp", "voice", "turno"):
+        if telefono.startswith(canal + ":"):
+            return cliente_id, canal, telefono[len(canal) + 1:]
+    # Los adaptadores existentes de WhatsApp llaman con el teléfono sin prefijo.
+    return cliente_id, "whatsapp", telefono
+
+
+def _estado_desde_snapshot(row) -> Estado:
+    if row is None or row["formato"] != 1 or row["expires_at"] <= time.time():
+        return Estado()
+    try:
+        data = json.loads(row["payload_json"])
+        if not isinstance(data, dict):
+            return Estado()
+        defaults = Estado()
+        valores = {}
+        for f in fields(Estado):
+            value = data.get(f.name, getattr(defaults, f.name))
+            default = getattr(defaults, f.name)
+            if f.name == "propuesta_servicio":
+                if value is not None:
+                    value = PropuestaServicio(**value)
+                    if (value.estado not in ("preparada", "ofrecida", "aceptada", "rechazada", "invalidada")
+                            or not isinstance(value.creada, (int, float)) or not math.isfinite(value.creada)
+                            or any(not isinstance(getattr(value, p.name), str)
+                                   for p in fields(PropuestaServicio) if p.name != "creada")):
+                        return Estado()
+            elif isinstance(default, float):
+                if type(value) not in (float, int) or not math.isfinite(value):
+                    return Estado()
+            elif type(value) is not type(default):
+                return Estado()
+            elif isinstance(value, list) and any(not isinstance(v, str) for v in value):
+                return Estado()
+            valores[f.name] = value
+        return Estado(**valores)
+    except (ValueError, TypeError, KeyError):
+        # Un registro incompleto o de otra versión nunca acredita autorización.
+        return Estado()
 
 
 def cargar(cliente_id: str, telefono: str) -> Estado:
-    """El estado de esta conversacion, o uno limpio si caduco."""
-    guardados = getattr(appstate, "ESTADOS_DE_RESERVA", None)
-    if guardados is None:
-        guardados = {}
-        appstate.ESTADOS_DE_RESERVA = guardados
-    estado = guardados.get(_clave(cliente_id, telefono))
-    if estado is None or not estado.vigente():
-        estado = Estado()
-        guardados[_clave(cliente_id, telefono)] = estado
+    """Lee hechos persistidos; la memoria del worker no decide su vigencia."""
+    from backend import conversation_state
+    identidad = _identidad_persistida(cliente_id, telefono)
+    row = conversation_state.read_conversation_state(*identidad)
+    estado = _estado_desde_snapshot(row)
+    estado._persistencia = (identidad, int(row["revision"]) if row else 0, time.time())
     return estado
 
 
 def guardar(cliente_id: str, telefono: str, estado: Estado, pedido: str = "") -> None:
-    estado.tocado = time.time()
+    from backend import conversation_state
+    now = time.time()
+    identidad = _identidad_persistida(cliente_id, telefono)
+    origen, revision, cargado = getattr(estado, "_persistencia", (identidad, 0, now))
+    if origen != identidad or now - cargado >= CADUCA_EN:
+        raise conversation_state.ConversationStateConflict("El contexto ya no está vigente")
+    estado.tocado = now
     estado.ultimo_pedido = pedido
-    guardados = getattr(appstate, "ESTADOS_DE_RESERVA", None)
-    if guardados is None:
-        guardados = {}
-        appstate.ESTADOS_DE_RESERVA = guardados
-    guardados[_clave(cliente_id, telefono)] = estado
-    if len(guardados) > 2000:  # no crecer sin limite en un proceso largo
-        for clave in [k for k, v in guardados.items() if not v.vigente()]:
-            guardados.pop(clave, None)
+    siguiente = conversation_state.write_conversation_state(
+        *identidad, revision=revision, payload=asdict(estado), expires_at=now + CADUCA_EN)
+    estado._persistencia = (identidad, siguiente, cargado)
+    # Los escritores cargados hace una sesión ya no pueden publicar. Con este
+    # margen se pueden retirar snapshots y lápidas vencidos sin resucitarlos.
+    try:
+        conversation_state.purge_conversation_states(before=now - CADUCA_EN)
+    except sqlite3.Error:
+        settings.logger.warning("No se pudo limpiar el estado de conversación vencido")
+
+
+def persistir_respuesta_de_propuesta(cliente_id: str, estado: Estado) -> bool:
+    """Publica selección y respuesta juntas antes de devolver aceptación al canal."""
+    from backend import conversation_state
+    contexto = getattr(estado, "_persistencia", None)
+    if contexto is None:
+        # Objetos transitorios de las primitivas; no pertenecen a una conversación.
+        return True
+    identidad, _, _ = contexto
+    if identidad[0] != cliente_id:
+        return False
+    clave = identidad[1] + ":" + identidad[2]
+    try:
+        guardar(cliente_id, clave, estado, pedido=estado.ultimo_pedido)
+    except conversation_state.ConversationStateConflict:
+        vigente = cargar(cliente_id, clave)
+        estado.__dict__.clear()
+        estado.__dict__.update(vigente.__dict__)
+        return False
+    return True
 
 
 def marcar_hecha(cliente_id: str, telefono: str, codigo: str = "") -> None:
@@ -232,8 +299,8 @@ def marcar_hecha(cliente_id: str, telefono: str, codigo: str = "") -> None:
 
 
 def olvidar(cliente_id: str, telefono: str) -> None:
-    guardados = getattr(appstate, "ESTADOS_DE_RESERVA", None) or {}
-    guardados.pop(_clave(cliente_id, telefono), None)
+    from backend import conversation_state
+    conversation_state.forget_conversation_state(*_identidad_persistida(cliente_id, telefono), now=time.time())
 
 
 # ─── Lo que dice la clienta ────────────────────────────────────────────────

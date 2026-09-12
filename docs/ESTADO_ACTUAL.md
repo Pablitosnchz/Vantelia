@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** candidata orientación declarada 12d2614 en suite completa. Se corrige en rama hija la reutilización de aceptaciones caducadas o con política/catálogo editados; tres casos rojos reproducidos antes del arreglo. WhatsApp comparte esa validación antes de enviar botones; un cuarto caso rojo demostraba el envío de una oferta caducada. Diseño de persistencia y concurrencia en docs/DISENO_RECUPERACION_ESTADO.md, aún sin implementar.
-- **Rama:** astra/recuperacion-propuestas, E:/Vantelia-astra-recuperacion (hija de 12d2614).
-- **Siguiente:** suite del candidato estable tras la actual y revisión exacta. 64 dirigidos verdes de aceptación/núcleo; 19 verdes después de integrar el acuse (incluido el caso nuevo de oferta caducada). Base 6e040e1 terminó: 2221 correctos, 1 omitido, revisión exacta pedida. Orientación 12d2614: 60 dirigidos verdes; su suite corre en E:/Vantelia-astra-nucleo.
-- **Espera a:** revisión de Claude al recuperar créditos (último aviso 22:40). No desplegar ni hacer push. Pendientes: persistencia y concurrencia, retirada de inferencias históricas restantes, revisión visual, banco real Alicia+segundo negocio y envío real autorizado de recordatorios. No se ha cambiado la política de orientación de Alicia.
+- **Tarea:** persistencia de Estado en SQLite con versión por tenant/canal/conversación; aceptación y selección se publican juntas, los escritores antiguos se rechazan. Se retira la aceptación inferida del texto anterior del bot. WhatsApp recupera gestiones pendientes y no reabre terminadas; snapshots vencidos tienen limpieza acotada y baja por tenant.
+- **Rama:** astra/persistencia-conversacion, E:/Vantelia-astra-persistencia (hija de 44dddf8).
+- **Siguiente:** suite completa y revisión exacta del candidato estable. 181 dirigidos de integración, 52 de cierre y 17 de primitivas en ejecución aislada verdes (grupos con solapamiento, no sumar). La carrera entre procesos falla al retirar la comparación de revisión. Tres recuperaciones y tres respuestas ambiguas dieron rojo antes del arreglo. 12d2614 terminó: 2226 correctos, 1 omitido; 44dddf8 terminó: 2231 correctos, 1 omitido y revisión exacta pedida.
+- **Espera a:** revisión de Claude al recuperar créditos (último aviso 22:40). No desplegar ni hacer push. No se ha resuelto la ventana entre crear una cita y registrar su resultado tras una caída, ni toda la concurrencia del flujo anterior; no afirmar ejecución exactamente una vez. Pendientes banco real Alicia+segundo negocio, demás autoridades y envío real de recordatorios. No hay nuevas reglas de Alicia.
 
 
 

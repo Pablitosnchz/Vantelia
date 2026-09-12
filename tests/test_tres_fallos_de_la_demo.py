@@ -76,14 +76,27 @@ def _conversacion(ofrecido: str):
             {"role": "assistant", "content": ofrecido}]
 
 
-def test_el_si_al_diagnostico_cuenta_como_pedirlo(api_module, monkeypatch):  # noqa: F811
+@pytest.fixture
+def diagnostico_aceptado(api_module, monkeypatch):
+    from backend import booking, reserva
+    actual = {"servicio_id": "diag", "nombre": "Diagnostico y presupuesto", "duracion": 20, "revision": "v1"}
+    monkeypatch.setattr(booking, "alternativa_de_precio_vigente", lambda *a, **k: actual)
+    estado = reserva.Estado(intencion="reservar")
+    p = reserva.preparar_propuesta_servicio(estado, servicio_id="diag", nombre=actual["nombre"],
+        origen="regla:precio", revision_config="v1")
+    reserva.marcar_propuesta_ofrecida(estado, p.id, "acuse")
+    assert booking.contestar_alternativa_de_precio(CID, estado, p.id, "acepta")
+    return estado
+
+
+def test_el_si_al_diagnostico_cuenta_como_pedirlo(api_module, monkeypatch, diagnostico_aceptado):  # noqa: F811
     from backend import agent, booking
 
     monkeypatch.setattr(booking, "_servicio_de_valoracion",
                         lambda cid, location_id="": {"nombre": "Diagnostico y presupuesto"})
     charla = _conversacion("¿Te gustaria que te agende una cita de diagnostico?")
     for dicho in ("si", "sí", "vale", "si por favor", "claro", "de acuerdo"):
-        assert agent._pide_la_valoracion(CID, dicho, mensajes=charla), dicho
+        assert agent._pide_la_valoracion(CID, dicho, mensajes=charla, estado=diagnostico_aceptado), dicho
 
 
 def test_el_si_a_otra_cosa_no_cuenta(api_module, monkeypatch):  # noqa: F811
@@ -102,7 +115,7 @@ def test_sin_conversacion_se_comporta_como_siempre(api_module):  # noqa: F811
     assert not agent._pide_la_valoracion(CID, "si")
 
 
-def test_el_si_se_busca_por_el_nombre_de_la_valoracion(api_module, monkeypatch):  # noqa: F811
+def test_el_si_se_busca_por_el_nombre_de_la_valoracion(api_module, monkeypatch, diagnostico_aceptado):  # noqa: F811
     """Un "si" no se puede mandar al catalogo tal cual: no dice nada."""
     from backend import agent, booking
 
@@ -110,7 +123,7 @@ def test_el_si_se_busca_por_el_nombre_de_la_valoracion(api_module, monkeypatch):
                         lambda cid, location_id="": {"nombre": "Diagnostico y presupuesto"})
     charla = _conversacion("¿Quieres que te coja el diagnostico?")
     descripcion, acumulado = agent._descripcion_para_buscar(
-        CID, "si", "un alisado", mensajes=charla)
+        CID, "si", "un alisado", mensajes=charla, estado=diagnostico_aceptado)
     assert descripcion == "Diagnostico y presupuesto"
     assert acumulado == ""
 

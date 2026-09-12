@@ -58,6 +58,21 @@ def _init_database() -> None:
     with _get_db_connection() as connection:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute(
+            """CREATE TABLE IF NOT EXISTS conversation_states (
+                cliente_id TEXT NOT NULL,
+                canal TEXT NOT NULL,
+                identidad TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                formato INTEGER NOT NULL,
+                expires_at REAL NOT NULL,
+                payload_json TEXT NOT NULL,
+                PRIMARY KEY (cliente_id, canal, identidad)
+            )"""
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversation_states_expiry ON conversation_states(expires_at)"
+        )
+        connection.execute(
             """
             CREATE TABLE IF NOT EXISTS bookings (
                 id TEXT PRIMARY KEY,

@@ -7021,7 +7021,7 @@ def contestar_alternativa_de_precio(cliente_id: str, estado, propuesta_id: str,
         estado.esperando_confirmacion = False
         estado.ultimo_falta = ""
         estado.veces_falta = 0
-    return True
+    return reserva.persistir_respuesta_de_propuesta(cliente_id, estado)
 
 
 def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool) -> Dict[str, Any]:

@@ -1,11 +1,34 @@
 # Recuperación del estado: siguiente fase de consolidación
 
-Diseño de Astra, 12-sep-2026. No está implementada la persistencia descrita aquí.
+Diseño de Astra, 12-sep-2026. Primera implementación en astra/persistencia-conversacion; quedan puertas de operación por cerrar.
 No sustituye la revisión del candidato ni las mediciones con el modelo real.
+
+## Implementado en el candidato de persistencia
+
+Estado se lee de SQLite, no del diccionario del worker. La clave separa tenant,
+canal e identidad. Teléfonos sin prefijo son del adaptador actual de WhatsApp;
+web:/whatsapp:/voice:/turno: separan explícitamente los espacios. El núcleo de voz
+y el widget tienen recorridos distintos y no se afirma su migración completa.
+
+Cada snapshot lleva formato, revisión y vencimiento. Guardar compara revisión;
+olvidar deja una lápida para impedir que un escritor antiguo lo resucite. Aceptar
+una alternativa publica su respuesta y selección juntas antes de devolver éxito.
+Hay pruebas con intérpretes distintos y una aceptación/rechazo sobre la misma
+versión: solo uno gana. Esto no ejecuta ni duplica una cita.
+
+El agente guarda los hechos validados antes de esperar al modelo. WhatsApp guarda
+la oferta preparada antes de enviar, y el acuse después. Los datos malformados,
+caducados o de otro formato no recuperan autorización. Se elimina el fallback
+que aceptaba una valoración a partir de la pregunta antigua del bot.
+
+Límite importante: los resultados de una operación de reserva aún no comparten
+una transacción/idempotencia con ese snapshot. La ventana de caída después de
+crear y antes de guardar el resultado necesita la siguiente fase; no se presenta
+como exactamente una vez ni como versión final para Alicia.
 
 ## Problema demostrado y límite actual
 
-`reserva.cargar` y `guardar` solo conservan Estado en un diccionario de appstate.
+Antes de este candidato, `reserva.cargar` y `guardar` conservaban Estado solo en un diccionario de appstate.
 Reiniciar o cambiar de worker pierde selección, propuesta, rechazo y acuse.
 `agent._acepta_la_valoracion` protege las propuestas presentes, pero sin ellas
 conserva una inferencia histórica a partir de la pregunta del bot. Esa inferencia
@@ -56,3 +79,17 @@ Orden: prueba roja entre procesos reales sobre DB temporal; repositorio de estad
 con concurrencia; adaptación de canales; retirada del fallback; suite estable;
 banco Alicia y segundo negocio; revisión exacta. No basta vaciar un diccionario
 para simular todos los fallos anteriores.
+
+## Mantenimiento y rutas de implementación
+
+`conversation_state.py` contiene lectura, escritura comparada y limpieza SQLite;
+`reserva.py` mantiene el contrato y serializa hechos tipados. El esquema se crea
+idempotentemente en `db._init_database`. La limpieza borra hasta 200 filas vencidas
+con margen de una sesión adicional; los escritores cuya carga caducó no publican.
+La baja del tenant limpia todas sus filas. Una versión de formato desconocida
+no recupera permisos ni puede ser sobrescrita por este escritor.
+
+La suite nueva se reparte en test_estado_entre_procesos, test_snapshot_conversacion,
+test_historial_sin_autorizacion y test_whatsapp_estado_persistido. Las fixtures
+antiguas que envejecían objetos por referencia ahora avanzan el reloj; no se ha
+eliminado la prueba de que una conversación caducada deja de valer.

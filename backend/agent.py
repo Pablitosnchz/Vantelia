@@ -1026,18 +1026,10 @@ def _ultimo_del_asistente(mensajes) -> str:
 
 
 def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str, estado=None) -> bool:
-    """Le ha ofrecido el diagnostico y ella ha dicho que si.
+    """Continúa una alternativa ya aceptada y aún vigente.
 
-    Visto en produccion el 8-sep-2026:
-
-        IA    ...  Te gustaria que te agende una cita de diagnostico?
-        ELLA  si
-        IA    Ahora, para manana, necesito saber como tienes el pelo de largo
-
-    El "si" no estaba atado a nada: pedir el diagnostico solo contaba si ella
-    escribia la palabra. Tuvo que decirlo entero -"quiero el diagnostico"- dos
-    turnos despues para que se lo cogieran. Un si a una pregunta que acabas de
-    hacer es la forma mas normal de pedir algo, y era la unica que no valia.
+    Interpretar una respuesta libre corresponde a responder_propuesta; este
+    atajo no crea aceptación leyendo una pregunta antigua del asistente.
     """
     # Los recorridos migrados tienen una aceptación explícita. Nunca volver a
     # inferirla del texto anterior del bot, incluso si la oferta fue rechazada.
@@ -1047,19 +1039,9 @@ def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str, estado=None) ->
             return False
         from backend import booking
         return bool(booking.revalidar_alternativa_de_propuesta(cliente_id, estado))
-    if not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or "")):
-        return False
-    previo = _ultimo_del_asistente(mensajes)
-    if "?" not in previo:
-        return False
-    if not _PIDE_VALORACION_RE.search(catalog_pick._norm(previo)):
-        return False
-    try:
-        from backend import booking
-
-        return bool(booking._servicio_de_valoracion(cliente_id))
-    except Exception:  # noqa: BLE001 - sin catalogo, que siga el curso normal
-        return False
+    # Sin un hecho recuperable no hay autorización: el texto del bot no prueba
+    # ni el envío de la oferta ni su vigencia. La respuesta libre pasa por la tool.
+    return False
 
 
 def _lo_que_el_negocio_dice_al_no_saber(cliente_id: str, mensaje: str,
@@ -1798,9 +1780,8 @@ def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None, estado=None)
     Se mira lo que acaba de decir, no el estado: pedir el diagnostico es una
     peticion COMPLETA en si misma, no un detalle que complete lo anterior.
 
-    Tambien cuenta el "si" a secas cuando el asistente ACABA de ofrecersela:
-    contestar que si a la pregunta que te acaban de hacer es pedirlo igual que
-    escribir la palabra (`_acepta_la_valoracion`).
+    Un "si" solo continúa la valoración si existe una aceptación vigente
+    registrada por la transición compartida (`_acepta_la_valoracion`).
     """
     if not dicho:
         return False
@@ -3723,6 +3704,9 @@ async def responder(
             else:
                 eleccion = "auto"
 
+            # Los hechos ya validados sobreviven también si el proveedor falla
+            # o el proceso cae mientras espera la respuesta del modelo.
+            reserva.guardar(cliente_id, clave_estado, estado, pedido=reserva.que_falta(estado, conocido))
             respuesta = cliente.chat.completions.create(
                 model=_modelo_del_negocio(cfg),
                 messages=turno,

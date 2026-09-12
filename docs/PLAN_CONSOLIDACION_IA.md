@@ -3,6 +3,28 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Persistencia del estado (candidato de Astra)
+
+Rama astra/persistencia-conversacion, basada en 44dddf8. SQLite conserva Estado
+por tenant/canal/identidad con formato, caducidad y versión de escritura. Se
+publican juntas aceptación y selección; otra versión pierde la carrera y recarga.
+WhatsApp guarda antes del envío y después del acuse, y recupera el modo del agente
+al perder su caché visual. Una gestión terminada no se reabre. Se retira la
+aceptación deducida de una pregunta antigua del bot, además del diccionario como
+fuente autoritativa. Snapshots/lápidas caducados tienen limpieza acotada y borrar
+un tenant limpia sus filas sin tocar al vecino.
+
+Evidencia: tres recuperaciones entre procesos y tres respuestas ambiguas rojas
+antes del cambio. La carrera aceptación/rechazo falla al retirar la comparación
+de revisión. 181 dirigidos de integración, 52 de cierre y 17 de primitivas aisladas verdes
+(grupos con solapamiento); suite completa y revisión del candidato exacto pendientes.
+Referencia 12d2614: 2226 correctos y 1 omitido. 44dddf8 terminó con 2231 correctos, 1 omitido y revisión exacta pedida.
+
+Siguiente puerta: operación de agenda con identidad persistida y resultado
+recuperable. Hoy una caída entre crear la cita y guardar Estado no está resuelta
+por esta fase. Tampoco se afirma haber migrado todo WAFlowState, voz o widget,
+ni eliminado los demás correctores. No sustituye el banco real multinegocio.
+
 ## Revalidación y recuperación (en curso)
 
 Base de agenda/recordatorios 6e040e1: suite 2221 correctos y 1 omitido, revisión

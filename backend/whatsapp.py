@@ -496,6 +496,21 @@ def _wa_get_flow(cliente_id: str, from_number: str) -> appstate.WAFlowState:
     if not flow:
         _wa_purge_stale_flows(ahora)
         flow = appstate.WAFlowState(cliente_id=cliente_id, from_number=from_number, last_seen=ahora)
+        from backend import reserva
+        recuperado = reserva.cargar(cliente_id, from_number)
+        if not recuperado.hecho and recuperado.intencion in ("reservar", "cancelar", "reprogramar"):
+            # El paso visual puede perderse al reiniciar; los hechos de negocio
+            # se recuperan del mismo Estado que usa el agente. No restaurar un
+            # botón genérico de confirmar como autorización de una operación.
+            flow.flow = "agente"
+            flow.servicio = recuperado.servicio_exacto or recuperado.servicio
+            flow.servicio_texto = recuperado.servicio_texto
+            flow.fecha = recuperado.fecha
+            flow.hora = recuperado.hora
+            flow.nombre = recuperado.nombre
+            flow.booking_code = recuperado.codigo
+            if recuperado.propuesta_servicio is not None:
+                flow.location_id = recuperado.propuesta_servicio.location_id
         appstate.whatsapp_flows[key] = flow
     flow.last_seen = ahora
     return flow
@@ -1267,6 +1282,9 @@ async def _wa_enviar_propuesta_de_precio(*, cliente_id: str, phone_number_id: st
     propuesta = estado.propuesta_servicio
     if propuesta is None or propuesta.estado != "preparada":
         return False, ""
+    # El identificador tiene que sobrevivir a una caída durante el envío. Si
+    # otro turno cambió la propuesta, no se envía usando una versión perdida.
+    reserva.guardar(cliente_id, from_number, estado)
     actual = booking.revalidar_alternativa_de_propuesta(cliente_id, estado)
     if not actual:
         cuerpo = "La opción ha cambiado. Dime qué servicio quieres y lo consultamos de nuevo."
