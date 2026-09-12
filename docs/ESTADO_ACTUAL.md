@@ -40,7 +40,7 @@ página de sincronía lo enseña tal cual.
 - **Tarea:** enlace implementado del resumen aceptado de WhatsApp con la operación recuperable del núcleo; conserva la referencia tras caída o envío fallido y consulta la fila actual sin recrear.
 - **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; descendiente de 4ed33c7 (candidato integrado).
 - **Siguiente:** 66 dirigidos de integración y 23 de cierre verdes (grupos solapados); pyflakes y diff limpios. Cuatro regresiones rojas antes del cambio y mutación roja al quitar la guardia de identidad durante una consulta. Una única suite completa al resolver también los cinco fallos de demos; después revisión del SHA exacto. Siguen pendientes reconciliación/outbox, migración de gestión/nativos y medidas reales.
-- **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Último estado observado de Sincronía: revisión de cf2066d; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
+- **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Claude revisó OK cf2066d (cambio de cuenta), con tres mejoras menores; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
 
 
 
@@ -48,12 +48,24 @@ página de sincronía lo enseña tal cual.
 
 Sincronía: retiradas seis peticiones propias de revisión de antecesores verificados
 (0b6043f, 550aafe, 6e040e1, 12d2614, 44dddf8, 530ae40) para evitar trabajo
-duplicado. Son peticiones sustituidas, no aprobaciones. Se conserva la revisión
-activa de cf2066d; el diagnóstico de demos está encargado y aún sin resultado.
+duplicado. Son peticiones sustituidas, no aprobaciones. La revisión
+de cf2066d llegó OK el 13-sep; el diagnóstico de demos sigue encargado y sin resultado.
 No hay suite completa nueva en ejecución ni revisión solicitada del descendiente
 de 4ed33c7: primero deben cerrarse esos fallos. El seguimiento autónomo sigue activo.
 El trabajo local de WhatsApp se conserva en su rama propia; no sustituye el diagnóstico
 de demos encargado a Claude ni afirma entregas de modelo/Meta reales.
+
+Última entrega de Astra: 9b1bfea, creación recuperable de WhatsApp, rama limpia al
+cerrar; 66 dirigidos de integración y 23 de cierre verdes (solapados), cuatro rojos
+prearreglo y mutación roja de identidad. No se ha pedido revisión formal sin suite
+completa. Sin push/despliegue. La respuesta antigua de Claude sobre Q&A/diagnóstico
+no describe las fases de orientación declarada y confirmación ya integradas; no
+aplicarla como si faltasen sin comprobar el candidato actual. Sigue sin inventarse
+la decisión particular de Alicia entre foto y diagnóstico.
+
+cf2066d OK no implica integración: quedan mejoras menores de coste del sondeo de
+cuenta, aviso visible de identidad desconocida y actualización documental al integrar.
+Conservar su revisión y tratarlas sin bloquear el diagnóstico de demos.
 
 Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
 y prueba de envío real; confirmar situación actual con Claude. Última referencia
