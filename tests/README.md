@@ -191,3 +191,11 @@ y los tests de confirmación/creación recuperable; no mide Meta ni modelo reale
 `test_estado_servicio_retirado.py` vigila que el estado no vuelva a pedir crear el
 servicio rechazado, conserva contacto/fecha, respeta alternativas y citas ya
 terminadas, y comprueba que el aviso de WhatsApp solo entra en historial tras envío.
+
+`test_demo_conversion.py` usa una fixture de API de ámbito módulo: una fixture de
+sesión puede quedar apuntando al backend anterior después de que otros módulos de
+agenda lo reimporten. Reproducción del fallo de aislamiento: ejecutar primero
+`test_demo_conversion.py::test_registry_keeps_two_different_email_demos_registered_concurrently`,
+después `test_tres_fallos_de_la_demo.py::test_la_tool_no_devuelve_la_palabra_como_servicio`
+y finalmente `test_demo_conversion.py`. Sin la fixture local fallaban tokens,
+engagement y constructor de pre-generación; con ella los 23 casos pasan.

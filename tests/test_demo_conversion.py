@@ -22,6 +22,17 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(scope="module")
+def api_module(vantelia_env_factory):
+    """Los módulos de agenda recargan backend; una API de sesión quedaría obsoleta.
+
+    Las importaciones locales desde outreach deben ver el mismo runtime que el
+    proxy y los monkeypatch. Crear el entorno de demos al entrar en este módulo
+    evita mezclar su registro SQLite con el de una fixture anterior.
+    """
+    return vantelia_env_factory()
+
+
 def _install_auto_demo(
     api_module,
     *,

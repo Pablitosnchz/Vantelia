@@ -3,6 +3,21 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Integración y desbloqueo de suite (13-sep)
+
+Entrega ee939c8 integrada en 52acab5 sin duplicar validadores: continuidad WhatsApp
+con servicio retirado y alternativas de voz, 57 dirigidos verdes. 2e3db40 impide
+que el estado vuelva a ordenar crear ese servicio después del rechazo, 61 dirigidos
+verdes (grupos solapados) y regresión roja previa. Widget y reprogramación ya estaban
+cubiertos en da0ca70 y se volvieron a validar.
+
+Los cinco fallos de demos fueron reproducidos por orden de fixtures: API de sesión
+antigua frente a backend recargado por un módulo anterior. Fichero aislado: 21 verdes;
+orden reducido: cinco rojos exactos y dos controles verdes. Fixture local al módulo:
+23 verdes repitiendo el orden con todo el fichero. No se modifica producción ni se
+elimina ninguna aserción. Se lanza una suite completa estable; revisión exacta solo
+tras éxito. Consultar el resultado real en ESTADO_ACTUAL y su registro de ejecución.
+
 ## Estado integrado al 13-sep: WhatsApp recupera la creación
 
 Candidato descendiente de 4ed33c7 en `astra/whatsapp-recuperable`. Incorpora las

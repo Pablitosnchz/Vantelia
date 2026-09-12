@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** entrega ee939c8 integrada en 52acab5 conservando validación única; corregido el estado que reintentaba crear un servicio retirado. Astra asume ahora el diagnóstico de demos que seguía en cola.
-- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; candidato integrado actual.
-- **Siguiente:** 57 dirigidos de integración y 61 del cierre de estado verdes (solapados); cuatro rojos antes de integrar y uno de estado antes del arreglo. Diagnosticar demos, estabilizar y una suite completa; revisión exacta después. Banco real, recordatorios y fases restantes pendientes.
-- **Espera a:** Claude tiene el encargo de calendario activo; avisado de la cobertura ya existente en 0b6043f. Dos encargos duplicados de servicios retirados se han retirado (ya cubiertos en da0ca70). Demos reasignado explícitamente a Astra para no duplicar. Sin push ni despliegue.
+- **Tarea:** candidato integrado: ee939c8 en 52acab5, estado de servicio retirado corregido en 2e3db40 y cinco fallos de demos diagnosticados/corregidos en su fixture de módulo.
+- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; conservar este candidato estable durante la suite.
+- **Siguiente:** una suite completa mediante C:/Users/pabli/.codex/vantelia-coordination/validar-integrado-wa.py. Log integrado-wa-suite.log y resultado integrado-wa-suite.result.json en la misma carpeta. El proceso pide revisión automáticamente solo si pytest termina verde y el mismo SHA sigue limpio; si falla, registra resultado y no pide revisión. No repetir ni consultar progreso periódicamente.
+- **Espera a:** resultado de esa suite y revisión exacta posterior. Claude conserva calendario activo y está avisado de los encargos sustituidos; demos ya no espera a Claude. Banco real Alicia/otro, recordatorios, reconciliación y migración de gestión siguen pendientes. Sin push ni despliegue.
 
 
 
@@ -339,3 +339,16 @@ La nota de Claude sobre widget ya estaba cubierta por da0ca70 y se volvió a pro
 Cola depurada: retirados encargos propios 6bbb04 y 8a476e ya implementados en
 antecesor da0ca70. No son aprobaciones. Diagnóstico 04d9a4 reasignado a Astra antes
 de lanzarlo aquí; Claude conserva el calendario activo, sin interrumpir su proceso.
+
+
+Demos, diagnóstico cerrado el 13-sep: el fichero aislado dio 21 verdes. Orden
+reducido (demo inicial -> módulo de agenda que recarga backend -> cinco casos)
+reprodujo EXACTAMENTE los cinco fallos, con dos controles verdes. No es horario ni
+regresión demostrada del agente: la API de fixture de sesión apuntaba a módulos
+antiguos, mientras importaciones locales desde outreach usaban el backend nuevo;
+se mezclaban registros de demos y los monkeypatch no alcanzaban el constructor.
+Fixture api_module local al módulo de demos crea un runtime coherente. El mismo
+orden, con TODO el fichero de demos después, da 23 verdes. Solo se modifica el
+instrumento; no se toca outreach ni se rebajan las comprobaciones. Suite completa
+es la siguiente puerta, seguida de revisión exacta; las métricas reales no se dan
+por medidas.
