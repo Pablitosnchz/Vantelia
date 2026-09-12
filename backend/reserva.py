@@ -109,6 +109,17 @@ class Estado:
         return (time.time() - self.tocado) < CADUCA_EN
 
 
+def contexto_para_ofrecer_reserva(estado: Estado) -> bool:
+    """Solo abre reserva nueva desde una cancelación ejecutada y una creación pendiente."""
+    if estado.intencion not in ("", "reservar") and not (
+            estado.cancelada and estado.esperando_confirmacion):
+        return False
+    estado.intencion = "reservar"
+    if estado.cancelada and estado.esperando_confirmacion:
+        estado.hecho = False  # la cancelación terminó; la reserva nueva aún no
+    return True
+
+
 def preparar_propuesta_servicio(estado: Estado, *, servicio_id: str, nombre: str,
                                origen: str, revision_config: str,
                                servicio_origen: str = "", location_id: str = "") -> PropuestaServicio:

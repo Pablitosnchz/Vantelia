@@ -4188,9 +4188,8 @@ async def responder(
                 # pegado a la conversacion, y en cada intento de cerrar le volvia a
                 # salir el diagnostico aunque lo hubiera rechazado cuatro veces.
                 renuncio = _bk_renuncio(cliente_id, dicho_de_ella)
-                if (estado.propuesta_servicio is not None
-                        and estado.propuesta_servicio.estado == "rechazada"
-                        and estado.propuesta_servicio.servicio_origen == argumentos.get("servicio")):
+                if booking.rechazo_de_regla_de_precio(
+                        cliente_id, estado, str(argumentos.get("servicio") or "")):
                     renuncio = True
                 if (llamada.function.name == "crear_cita" and estado.veces_sin_precio
                         and not renuncio
@@ -4223,7 +4222,12 @@ async def responder(
                         original = str(argumentos.get("servicio") or estado.servicio_exacto or estado.servicio)
                         actual = cambio["alternativa"]
                         if actual:
-                            estado.intencion = estado.intencion or "reservar"
+                            if not reserva.contexto_para_ofrecer_reserva(estado):
+                                mensajes.append({"role": "tool", "tool_call_id": llamada.id,
+                                    "content": json.dumps({"ok": False,
+                                        "error": "Termina la gestión de la cita actual antes de ofrecer otra reserva."},
+                                        ensure_ascii=False)})
+                                continue
                             propuesta = reserva.preparar_propuesta_servicio(
                                 estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
                                 origen=actual["origen"], revision_config=actual["revision"],

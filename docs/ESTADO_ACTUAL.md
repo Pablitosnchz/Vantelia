@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** asumidos encargos pendientes durante cuota agotada de Claude. Servicio retirado validado antes de resolver profesional y en núcleo compartido; voz conserva motivo. Reprogramar rechaza cambio a retirado y permite mover el histórico sin cambiar profesional. Banco distingue medidos/no medidos/no aplican; humo incompleto no se etiqueta roto; guiones relativos corregidos.
-- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado.
-- **Siguiente:** suite completa sobre candidato estable y revisión exacta. Recorridos reales sin mocks del núcleo: 4 rojos antes, 19 verdes después; reprogramación 2 rojos antes, 26 dirigidos verdes; widget endpoint 2 verdes; métricas 2 rojos antes, 17 verdes. Correcciones previas integradas y verificadas con58 dirigidos.
-- **Espera a:** revisión de Claude cuando vuelva; NO debe duplicar encargos asumidos. No desplegar. Pendientes del plan: encapsulación restante en Q&A, retirar otros correctores, reinicios/reentregas/proveedores, recordatorios (plantilla/envío real) y medición Alicia+otro negocio. El crítico sigue sin aceptación al primer intento.
+- **Tarea:** corregir revisión de c22cc42/bb4083b en su rama: negativa por identidad de regla, transición tras cancelación ejecutada y respaldo de texto si falla el interactivo. La tarjeta de reglas ya estaba corregida por 0c9dc22/6d10eba; verificar sin repetir cambios.
+- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado. Integrar aquí 6d00071 de astra/confirmacion-reserva sin perder persistencia ni confirmaciones.
+- **Siguiente:** 67 dirigidos de integración y 11 de cierre verdes (grupos solapados), pyflakes limpio. La prueba de negativa recorre el botón No y el resumen real con Pack/mayúsculas; retirar la protección da rojo. Centro, cancelación y respaldo corregidos; tarjeta Q&A verificada ejecutando JavaScript. Integrar la arquitectura reciente y validar el candidato único antes de pedir revisión. 6d00071 terminó con 2261 correctos, 1 omitido y 5 fallos en test_demo_conversion; se ha encargado diagnóstico acotado a Claude, sin repetir suite completa.
+- **Espera a:** diagnóstico de Claude de las demos y revisión exacta futura del candidato corregido. Sin push ni despliegue. El núcleo recuperable sigue sin enlace con ejecución WhatsApp; banco real y recordatorios siguen pendientes.
 
 
 

@@ -1279,6 +1279,11 @@ async def _wa_enviar_propuesta_de_precio(*, cliente_id: str, phone_number_id: st
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
             body=cuerpo, buttons=[("prop_acepta_" + propuesta.id, "Sí, esa cita"),
                                   ("prop_rechaza_" + propuesta.id, "No, gracias")])
+        if not enviado:
+            cuerpo += "\nPuedes responder si quieres esa cita o prefieres seguir con el servicio que habías elegido."
+            enviado = await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=to_number, text=cuerpo)
         if enviado:
             reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "oferta:" + propuesta.id)
     reserva.guardar(cliente_id, from_number, estado)
@@ -1301,7 +1306,9 @@ async def _wa_explicar_la_regla_del_precio(
     if freno.get("texto_del_negocio"):
         lineas.append(freno["texto_del_negocio"])
     else:
-        lineas.append("Ese presupuesto requiere una valoración previa del negocio.")
+        lineas.append("Para orientarte sobre el precio, necesitamos revisar lo que necesitas.")
+    if freno.get("alternativa_no_disponible"):
+        lineas.append("Ahora no puedo ofrecer esa cita en este centro. Consúltalo directamente con el centro para que te ayuden.")
 
     # La regla ofrece una alternativa: solo la aceptación selecciona el servicio.
     if freno.get("reserva_esto_en_su_lugar"):
@@ -1310,8 +1317,11 @@ async def _wa_explicar_la_regla_del_precio(
         if not actual:
             return await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                text="La opción ha cambiado. Voy a consultar de nuevo lo que podemos ofrecerte.")
-        estado.intencion = estado.intencion or "reservar"
+                text=chr(10).join(lineas) + "\nEsa cita ya no está disponible en este centro. Consúltalo directamente con el centro.")
+        if not reserva.contexto_para_ofrecer_reserva(estado):
+            return await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                text=chr(10).join(lineas) + "\nPrimero terminamos de gestionar tu cita actual.")
         reserva.preparar_propuesta_servicio(
             estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
             origen=actual["origen"], revision_config=actual["revision"],
@@ -1346,9 +1356,7 @@ async def _wa_freno_del_precio(
         return False
     numero = flow.from_number or to_number
     estado = reserva.cargar(cliente_id, numero)
-    propuesta = estado.propuesta_servicio
-    if (propuesta is not None and propuesta.estado == "rechazada"
-            and propuesta.servicio_origen == servicio):
+    if booking.rechazo_de_regla_de_precio(cliente_id, estado, servicio):
         return False
     # Si ya ha dicho que quiere el tratamiento SIN pasar por la valoracion, se le
     # coge: es su decision. Sugerirselo la primera vez es la politica del salon;
@@ -1361,7 +1369,8 @@ async def _wa_freno_del_precio(
     pidio_precio = (bool(getattr(estado, "veces_sin_precio", 0))
                     or booking.pidio_precio_en_la_conversacion(
                         cliente_id, _whatsapp_session_id(cliente_id, numero)))
-    parada = booking.bloquea_por_regla_de_precio(cliente_id, servicio, pidio_precio)
+    parada = booking.bloquea_por_regla_de_precio(
+        cliente_id, servicio, pidio_precio, location_id=flow.location_id or "")
     if not parada:
         return False
     await _wa_explicar_la_regla_del_precio(
@@ -1924,7 +1933,7 @@ async def _wa_preguntar_servicio(
 
 async def _wa_ofrecer_huecos_hablando(
     *, cliente_id: str, phone_number_id: str, to_number: str, fecha_iso: str,
-    fecha_humana: str, employee_id: str = "", servicio: str = "", location_id: str = "",
+    fecha_humana: str, employee_id: str = "", servicio: str = "", location_id: str = "", request=None,
 ) -> bool:
     """Los huecos, dichos en una frase en vez de en una lista de botones.
 
@@ -1975,10 +1984,13 @@ async def _wa_ofrecer_huecos_hablando(
         )
     if len(libres) > len(elegidos):
         cuerpo += " Si no te encaja, dime a qué hora te iría bien y miro."
-    await messaging._send_whatsapp_text(
+    enviado = await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=cuerpo,
     )
-    return True
+    if enviado and request is not None:
+        _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                      respuesta=cuerpo, intent="huecos_tras_propuesta")
+    return bool(enviado)
 
 
 def _wa_tiene_cita(cliente_id: str, telefono: str) -> bool:
@@ -2511,13 +2523,16 @@ async def _handle_whatsapp_message(
         if not ok:
             texto = "Esta opción ya no está vigente. Dime qué servicio quieres y lo consultamos de nuevo."
         elif respuesta == "acepta":
-            texto = "De acuerdo, buscamos una cita de %s. %s" % (
-                estado.servicio, "¿A qué hora te viene bien?" if estado.fecha else "¿Qué día te viene bien?")
+            texto = ("De acuerdo, buscamos una cita de %s para el %s." % (
+                estado.servicio, _wa_fecha_humana(estado.fecha)) if estado.fecha else
+                "De acuerdo, buscamos una cita de %s. ¿Qué día te viene bien?" % estado.servicio)
             flow.flow = "agente"
             flow.servicio = estado.servicio_exacto
+            flow.fecha = estado.fecha
             flow.hora = ""
         else:
-            texto = "De acuerdo, no selecciono esa alternativa. ¿Cómo quieres continuar?"
+            texto = ("De acuerdo, seguimos con %s." % textnorm.nombre_de_servicio_publico(estado.servicio)
+                     if estado.servicio else "De acuerdo. ¿Qué servicio te gustaría reservar?")
             flow.flow = "agente"
         enviado = await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id,
@@ -2525,6 +2540,16 @@ async def _handle_whatsapp_message(
         _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
                       entrante=incoming_text, respuesta=texto if enviado else "",
                       intent="respuesta_propuesta")
+        if enviado and ok and respuesta == "acepta" and estado.fecha:
+            await _wa_ofrecer_huecos_hablando(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                fecha_iso=estado.fecha, fecha_humana=_wa_fecha_humana(estado.fecha),
+                servicio=estado.servicio_exacto, location_id=estado.propuesta_servicio.location_id,
+                request=request)
+        elif (enviado and ok and respuesta == "rechaza"
+              and estado.servicio and estado.fecha and estado.hora and estado.nombre):
+            await _wa_resumen_para_confirmar(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, flow=flow, texto_previo="", request=request)
         return
 
     # Respuesta a los botones del recordatorio (confirmo / cancelar cita).

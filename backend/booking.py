@@ -6930,6 +6930,16 @@ def pidio_la_duracion_en_la_conversacion(cliente_id: str, session_id: str) -> bo
         return False
 
 
+def rechazo_de_regla_de_precio(cliente_id: str, estado, servicio: str) -> bool:
+    """La negativa pertenece a la regla ofrecida, no al alias que use un canal."""
+    propuesta = estado.propuesta_servicio
+    if propuesta is None or propuesta.estado != "rechazada":
+        return False
+    regla = regla_de_precio_para(cliente_id, servicio)
+    return bool(regla.get("id") and regla.get("accion") == "ofrecer_cita"
+                and propuesta.origen == "regla:" + str(regla["id"]))
+
+
 def alternativa_de_precio_vigente(cliente_id: str, servicio: str,
                                  location_id: str = "") -> Dict[str, Any]:
     """Resuelve la alternativa permitida por una regla declarada de presupuesto.
@@ -6986,7 +6996,8 @@ def contestar_alternativa_de_precio(cliente_id: str, estado, propuesta_id: str,
     return True
 
 
-def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool) -> Dict[str, Any]:
+def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool,
+                               location_id: str = "") -> Dict[str, Any]:
     """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.
 
     Devuelve {} si no hay nada que hacer. Si no, dice la accion del negocio y, en
@@ -7009,7 +7020,7 @@ def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bo
         return {}
     valoracion = {}
     if regla.get("accion") == "ofrecer_cita":
-        fila = _servicio_de_valoracion(cliente_id)
+        fila = _servicio_de_valoracion(cliente_id, location_id=location_id)
         nombre = str((fila or {}).get("nombre") or "").strip()
         if nombre:
             valoracion = {"servicio": nombre}
@@ -7017,6 +7028,7 @@ def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bo
         "accion": regla.get("accion", ""),
         "texto_del_negocio": regla.get("texto") or "",
         "reserva_esto_en_su_lugar": valoracion.get("servicio", ""),
+        "alternativa_no_disponible": regla.get("accion") == "ofrecer_cita" and not valoracion,
         "en_lugar_de": textnorm.nombre_de_servicio_publico(servicio),
     }
 
