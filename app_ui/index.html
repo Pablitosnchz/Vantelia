@@ -3432,6 +3432,7 @@
       </div>
       <div id="fuGlobalChannels" class="fu-gchips"><div class="panel-sub">Cargando…</div></div>
       <div class="fu-gchips-note panel-sub" id="fuGlobalNote"></div>
+      <div class="fu-gchips-note panel-sub" id="fuPlantillaWa"></div>
 
       <div class="flow-sec-head">
         <span class="flow-sec-num">2</span>
@@ -12914,8 +12915,27 @@ function fuRenderGlobalChannels() {
     if (btn.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
     const ch = btn.dataset.gchannel, c = fuChannels();
     fuGlobalChannels = Object.assign({ email:false, whatsapp:false, sms:false }, c, { [ch]: !c[ch] });
-    fuRenderGlobalChannels(); fuUpdateGlobalNote(); renderFuTimeline();
+    fuRenderGlobalChannels(); fuUpdateGlobalNote();
+    fuRenderPlantillaWa(followUpState && followUpState.plantilla_whatsapp);
+    renderFuTimeline();
   }));
+}
+
+// Estado de la plantilla de WhatsApp. Meta solo deja escribir texto libre 24 h
+// desde el ultimo mensaje de la clienta, asi que el recordatorio del dia antes
+// necesita una plantilla APROBADA. Mientras no lo este, el aviso se va por el
+// siguiente canal y el negocio no se entera: por eso se ve aqui, donde decide
+// sus avisos, con el motivo si Meta la rechaza.
+function fuRenderPlantillaWa(p) {
+  const el = document.getElementById('fuPlantillaWa'); if (!el) return;
+  if (!p || !fuChannels().whatsapp) { el.innerHTML = ''; return; }
+  const color = p.puede_enviar ? '#16a34a' : (p.estado === 'REJECTED' ? '#dc2626' : '#f59e0b');
+  const icono = p.puede_enviar ? '✓' : (p.estado === 'REJECTED' ? '✕' : '⏳');
+  const motivo = p.motivo ? ` <b>Motivo:</b> ${escapeHtml(p.motivo)}` : '';
+  const coste = (p.conectado && p.aviso_coste)
+    ? `<div class="panel-sub">${escapeHtml(p.aviso_coste)}</div>` : '';
+  el.innerHTML = `<div style="color:${color}">${icono} Recordatorios por WhatsApp: `
+    + `${escapeHtml(p.etiqueta || '')}${motivo}</div>${coste}`;
 }
 
 function fuUpdateGlobalNote() {
@@ -12940,6 +12960,7 @@ function renderFollowUp(data) {
   fuToggleCallBlock();
   fuRenderGlobalChannels();
   fuUpdateGlobalNote();
+  fuRenderPlantillaWa(data.plantilla_whatsapp);
   renderFuTimeline();
 }
 

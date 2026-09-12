@@ -148,6 +148,56 @@ def aprobada(cliente_id: str, *, name: str = NOMBRE_RECORDATORIO,
     return (estado(cliente_id, name=name, language=language).get("status") or "") == APROBADA
 
 
+# Como se le cuenta al negocio, que ni sabe ni tiene por que saber que es una
+# plantilla: lo unico que necesita saber es si sus clientas van a recibir el
+# recordatorio por WhatsApp o por otro sitio.
+_ETIQUETAS = {
+    "APPROVED": "Aprobada por Meta: tus recordatorios ya salen por WhatsApp.",
+    "PENDING": ("En revisión por Meta. Mientras tanto el aviso sale por el "
+                "siguiente canal que tengas puesto."),
+    "REJECTED": ("Meta la ha rechazado. Hasta que se corrija, el aviso sale por "
+                 "el siguiente canal que tengas puesto."),
+}
+
+
+def resumen_para_el_negocio(cliente_id: str) -> Dict[str, Any]:
+    """Lo que ve el negocio en Recordatorios: si puede avisar por WhatsApp o no.
+
+    El estado de la plantilla no es un detalle tecnico: decide si sus clientas
+    reciben el recordatorio o no, y si no esta aprobada el aviso se va por otro
+    canal SIN que el negocio se entere. Por eso se ensena, con el motivo cuando
+    Meta la rechaza -que es justo el dato con el que se arregla-.
+
+    El texto sale de aqui, no de la interfaz: lo leen el portal de hoy y lo que
+    venga despues, y tiene que decir lo mismo.
+    """
+    from backend import wa_onboarding
+
+    cuenta = wa_onboarding.get_account(cliente_id) or {}
+    conectado = bool(cuenta.get("waba_id") and cuenta.get("phone_number_id"))
+    datos = estado(cliente_id)
+    situacion = str(datos.get("status") or "").upper()
+    if not conectado:
+        etiqueta = "Conecta tu WhatsApp para poder avisar a tus clientas por ahí."
+    elif not situacion:
+        etiqueta = ("Todavía no está dada de alta. Se pide sola la primera vez "
+                    "que haga falta enviar un recordatorio.")
+    else:
+        etiqueta = _ETIQUETAS.get(situacion, situacion)
+    return {
+        "conectado": conectado,
+        "estado": situacion,
+        "etiqueta": etiqueta,
+        "motivo": str(datos.get("motivo_rechazo") or ""),
+        "ultimo_error": str(datos.get("last_error") or ""),
+        "actualizado": str(datos.get("updated_at") or ""),
+        "puede_enviar": bool(conectado and situacion == APROBADA),
+        "aviso_coste": ("Pasadas 24 h desde el último mensaje de la clienta, cada "
+                        "recordatorio por WhatsApp lo cobra Meta a tu cuenta: hace "
+                        "falta un método de pago en WhatsApp Manager."),
+    }
+
+
 # --- Graph API -------------------------------------------------------------
 
 

@@ -1316,12 +1316,32 @@ class FollowUpStep(BaseModel):
     needs_setup: bool = False  # requiere configuracion extra (p.ej. enlace de resena)
 
 
+class PlantillaWhatsAppEstado(BaseModel):
+    """Si el negocio puede avisar por WhatsApp fuera de la ventana de 24 h.
+
+    Meta solo entrega texto libre dentro de las 24 h siguientes al ultimo mensaje
+    del cliente; el recordatorio del dia antes cae fuera y necesita una plantilla
+    APROBADA. Mientras no lo este, el aviso se va por otro canal sin que el
+    negocio se entere: por eso se ensena en el portal, con el motivo del rechazo,
+    que es el dato con el que se arregla.
+    """
+    conectado: bool = False     # tiene su WhatsApp conectado (Coexistence)
+    estado: str = ""            # APPROVED | PENDING | REJECTED | "" (sin dar de alta)
+    etiqueta: str = ""          # como se le cuenta al negocio
+    motivo: str = ""            # por que la rechazo Meta
+    ultimo_error: str = ""
+    actualizado: str = ""
+    puede_enviar: bool = False
+    aviso_coste: str = ""
+
+
 class FollowUpResponse(BaseModel):
     plan: str = "free"
     plan_label: str = "Free"
     whatsapp_available: bool = False
     voice_available: bool = False
     channel_availability: FollowUpChannelAvailability = FollowUpChannelAvailability()
+    plantilla_whatsapp: PlantillaWhatsAppEstado = PlantillaWhatsAppEstado()
     # Canales GLOBALES (una sola tira para todos los avisos).
     channels: List[FollowUpStepChannel] = []
     call_enabled: bool = False

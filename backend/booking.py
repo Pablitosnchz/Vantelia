@@ -4568,10 +4568,16 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
             "available": voice_available, "locked": not voice_plan,
         })
 
+    # El estado de la plantilla NO es un detalle tecnico: si no esta aprobada, el
+    # recordatorio se va por el siguiente canal y el negocio no se entera de que
+    # por WhatsApp no sale nada. Se ensena donde decide sus avisos.
+    from backend import wa_plantillas   # tardio: solo hace falta para pintarlo
+
     return {
         "plan": plan, "plan_label": plan_label,
         "whatsapp_available": wa_available, "voice_available": voice_available,
         "channels": global_channels,
+        "plantilla_whatsapp": wa_plantillas.resumen_para_el_negocio(cliente_id),
         "channel_availability": {
             "email": True, "whatsapp": wa_available, "sms": sms_available, "voice": voice_available,
             "whatsapp_reason": avail["whatsapp"]["reason"], "sms_reason": avail["sms"]["reason"],
