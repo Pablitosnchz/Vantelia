@@ -44,6 +44,11 @@ config.json          Config multi-tenant de clientes.
 
 ## Reglas de oro
 
+- Antes de cambiar el agente, sus políticas o la conexión con el portal, leer y
+  seguir [docs/NORMAS_AGENTE_IA.md](docs/NORMAS_AGENTE_IA.md), contrato compartido
+  con Astra por decisión de Pablo del 12-sep-2026. El plan de consolidación vive
+  en [docs/PLAN_CONSOLIDACION_IA.md](docs/PLAN_CONSOLIDACION_IA.md).
+
 - Trabaja en espanol para textos visibles, contenido comercial, emails, legales y mensajes de usuario.
 - No introduzcas frameworks frontend. El proyecto usa HTML/CSS/JS vanilla.
 - El backend esta modularizado en `backend/` (refactor junio 2026). Entre modulos de backend el acceso es CUALIFICADO (`from backend import booking` + `booking.helper()`), nunca from-import de funciones: el proxy de `api.py` y los monkeypatch de tests dependen de ello. Clases y modelos Pydantic si pueden importarse por nombre. No toques el shim `api.py` ni el orden de import de routers en `backend/main.py` sin leer docs/ARQUITECTURA.md.

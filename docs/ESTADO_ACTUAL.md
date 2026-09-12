@@ -39,11 +39,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra.
-- **Tarea:** cerrar el caso crítico `dice-que-si-y-acaba-en-cita` con regresiones deterministas; Claude medirá el modelo real.
-- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-valoracion`, base `97af567`. No se integran los intentos sin validar de `claude/hora-sin-mirar`.
-- **Siguiente:** suite completa y revisión del arreglo acotado. Reproducción determinista en `responder`: 4 fallos antes (duda literal, alternancia y rechazo al diagnóstico), 54 pruebas dirigidas verdes después. Claude medirá el caso con modelo real y fecha/hora abiertas.
-- **Espera a:** conversación fallida con traza de Claude, solicitada por buzón. Encapsulación de apellidos sigue pendiente en `astra/alicia-final` (49 pruebas dirigidas verdes, sin suite completa); no está desplegada.
+- **Testigo:** Astra coordina; Claude colabora mediante sincronía.
+- **Tarea:** consolidar agente y portal según `docs/PLAN_CONSOLIDACION_IA.md`; reglas compartidas en `docs/NORMAS_AGENTE_IA.md`.
+- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-valoracion`. El trabajo anterior de encapsulación sigue preservado en `astra/alicia-final`.
+- **Siguiente:** fase 1 (frescura Q&A/catálogo, encargo a Claude) y fase 2 (propuesta/aceptación de valoración, Astra). No duplicar motores ni CRUD existentes.
+- **Espera a:** medición 6+6 de Claude para `570a201` y auditoría del recorrido de valoración. Suite: 2114 correctos/1 omitido; los 11 errores de fixture dominical se corrigieron en `7314155` y sus 11 casos pasan. Repetir suite completa sobre el candidato estabilizado, no durante ediciones.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

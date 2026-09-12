@@ -14,6 +14,10 @@ una clienta de verdad.
 
 ## Qué leer (lo justo: tus créditos se gastan rápido)
 
+Antes de cambiar el agente, sus reglas o su conexión con el portal, seguir
+[`docs/NORMAS_AGENTE_IA.md`](docs/NORMAS_AGENTE_IA.md): contrato compartido con
+Claude para evitar motores de decisión duplicados y políticas entre tenants.
+
 Siempre, lo primero: `docs/ESTADO_ACTUAL.md`. El resto, **solo lo que pida la
 tarea**, no todo de golpe en cada sesión (el 11-sep se te acabó la cuota en una
 hora, y buena parte se fue en releer documentación):
