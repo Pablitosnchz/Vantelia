@@ -3192,6 +3192,24 @@ def _minutos_del_tramo(hora: str, duracion: int):
     return inicio, inicio + max(int(duracion or 0), 1)
 
 
+# El negocio retiro el servicio entre que se ofrecio y ella pulso Confirmar. Es un
+# 409 como el del hueco, y ahi estaba el problema: los canales traducen CUALQUIER
+# 409 a "ese hueco se acaba de ocupar, te doy otras horas", asi que la clienta
+# elegia otra hora, volvia a fallar por lo mismo, y se iba sin cita sin enterarse
+# de que lo que ya no esta es el SERVICIO. Por eso el motivo se puede distinguir.
+SERVICIO_RETIRADO = "Ese servicio ya no esta disponible. Elige otro del catalogo."
+
+
+def es_servicio_retirado(detalle: Any) -> bool:
+    """¿Este 409 es "retiraron el servicio" y no "te quitaron el hueco"?
+
+    Se compara con el texto del nucleo y no con un codigo nuevo a proposito: el
+    `detail` ya viaja a todos los canales y al portal, asi que no hay que cambiar
+    ningun contrato para que cada uno diga la verdad.
+    """
+    return SERVICIO_RETIRADO.lower() in str(detalle or "").lower()
+
+
 async def _create_booking_core(
     cliente_id: str,
     *,
@@ -3240,7 +3258,7 @@ async def _create_booking_core(
     if source != "portal_manual" and service_row is not None and not int(service_row["is_active"] or 0):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ese servicio ya no esta disponible. Elige otro del catalogo.",
+            detail=SERVICIO_RETIRADO,
         )
 
     if not await agenda._booking_slot_available(

@@ -18,7 +18,7 @@ def test_busca_dia_abierto_en_sabado_y_martes(hoy, esperado):
     assert mensajes[0] == "el " + esperado
     assert mensajes[2] == "ABC"
     assert datos["dia_abierto"] == esperado
-    assert "septiembre de 2026" in mensajes[1]
+    assert mensajes[1] == date.fromisoformat(esperado).strftime("%d/%m/%Y")
 
 
 def test_un_dia_lleno_no_es_un_dia_cerrado():
@@ -103,3 +103,21 @@ def test_runner_congela_fecha_y_no_mide_sin_calendario(monkeypatch, capsys, disp
     else:
         assert ejecuciones == []
         assert "NO MEDIDO" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("hoy,objetivo", [(date(2026, 9, 12), "2026-09-23"),
+                                         (date(2026, 12, 28), "2027-01-09")])
+def test_fecha_del_guion_vuelve_al_dia_validado(monkeypatch, hoy, objetivo):
+    from datetime import datetime
+    from backend import textnorm
+
+    class Reloj(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(hoy.year, hoy.month, hoy.day, 12, tzinfo=tz)
+
+    monkeypatch.setattr(textnorm, "datetime", Reloj)
+    caso = {"mensajes": ["el {dia_abierto_nombre} a las 10"], "horas_calendario": ["10:00"]}
+    mensajes, datos = calendario.resolver_mensajes("salon", caso, hoy=hoy,
+        consultar=lambda dia: ({"10:00"}, {"10:00"} if dia == objetivo else set()))
+    assert textnorm._extract_date_from_text(mensajes[0], "Europe/Madrid") == datos["dia_abierto"]

@@ -39,11 +39,13 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra (diseño e implementación); Claude auxiliar de medición y revisión.
-- **Tarea:** fase 2, integración de alternativas de PRESUPUESTO con regla `ofrecer_cita`: agente y botones WA comparten aceptación y revalidación de política/servicio. Ofrecer no selecciona; pendiente no permite crear. Diseño en `DISENO_FASE2_PROPUESTAS.md`.
-- **Rama:** `astra/estado-propuestas`, worktree `E:/Vantelia-astra-estado`, desde `1a9d56c`. El candidato de calendario permanece intacto en su worktree mientras termina la suite.
-- **Siguiente:** suite completa y revisión del candidato integrado: 168 pruebas dirigidas verdes. Base `bb4083b`: suite 2166 passed/1 skipped. Dos regresiones WA fallaban antes (selección previa incluso si fallaba el envío); restaurar la clave web vacía hace fallar la prueba de aislamiento. Ambos arreglos restaurados. Edición de regla persistida probada; no crear con propuesta pendiente aunque el modelo ignore el esquema.
-- **Espera a:** referencia completa de Claude y validación del candidato. Dato recibido: la indecisión de Alicia solo vive en Q&A; no se activa una regla por inferencia. Presupuestar alisados pide foto y asesorar sobre técnica es otra condición por confirmar. Calendario `1a9d56c` tiene revisión OK. Arquitectura sigue a cargo de Astra; Claude auxiliar. No desplegar sin orden.
+- **Testigo:** Astra implementa propuestas; Claude auxiliar corrige guiones/NO MEDIDO y servicio retirado al reprogramar.
+- **Tarea:** revisión CAMBIOS de bb4083b sobre candidato actual c22cc42. Fusionadas correcciones comunes de 6eb8ae5 y fechas exactas e8d6896. Corregir rechazo del horizonte como NO MEDIDO.
+- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado.
+- **Siguiente:** integrar entrega acotada de Claude, suite completa estable y nueva revisión. Suite previa de c22cc42: 2185 passed/1 skipped. Dos pruebas de horizonte rojo antes del arreglo.
+- **Espera a:** revalidación de cambio de servicio al reprogramar y guiones/métricas de Claude. Calendario y propuestas siguen pendientes de revisión, no OK. No desplegar sin Pablo.
+- **Medición real de 570a201:** control 4/6 tiradas, 1/6 al primer intento, 4/11 conversaciones; tratamiento 6/6 tiradas, 0/6 al primero, 6/12 conversaciones. El rescate salta pero sube el freno de falsa confirmación (1→7); no acredita una versión final. Recordatorios pendientes y cambios antiguos de alicia-final preservados.
+
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

@@ -17,6 +17,8 @@ from test_booking_exhaustive import api_module  # noqa: F401
     ("no lo tengo claro", "tecnica", True, False, ""),
     ("no lo se", "", True, True, "Keratina medio"),
     ("no lo se, no quiero diagnostico", "tecnica", True, True, ""),
+    ("keratina", "talla", True, True, ""),
+    ("keratina", "talla", False, True, ""),
 ])
 def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla, valoracion, esperado):
     from backend import agent, booking, reserva, settings
@@ -54,8 +56,25 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     modulo.OpenAI = lambda **k: types.SimpleNamespace(chat=types.SimpleNamespace(
         completions=types.SimpleNamespace(create=modelo)))
     monkeypatch.setitem(sys.modules, "openai", modulo)
-    asyncio.run(agent.responder("demo", "mañana", session_id="prueba-duda",
+    asyncio.run(agent.responder("demo", duda, session_id="prueba-duda",
                                telefono="34600777999", intencion="reservar"))
     assert len(observados) == 1
     assert observados[0].get("servicio", "") == esperado
     assert estado.servicio == esperado
+    if duda == "keratina":
+        assert "nota" not in observados[0]
+        assert estado.veces_falta == 0
+
+
+@pytest.mark.parametrize("mensajes,obligatoria,esperado", [
+    (["no lo tengo claro", "¿me puedes coger cita?", "directamente para mañana"], False, "Diagnostico"),
+    (["no lo tengo claro", "no quiero diagnostico"], False, ""),
+    (["no lo tengo claro", "no quiero diagnostico"], True, "Diagnostico"),
+])
+def test_renuncia_por_mensaje_y_respeta_obligatoriedad(api_module, monkeypatch, mensajes, obligatoria, esperado):
+    from backend import agent, booking
+    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar", lambda *a: "Se decide en persona.")
+    monkeypatch.setattr(booking, "_servicio_de_valoracion", lambda *a: {"nombre": "Diagnostico"})
+    monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda *a: obligatoria)
+    assert agent._hay_que_cogerle_la_valoracion(
+        "demo", [{"role": "user", "content": m} for m in mensajes], 2) == esperado

@@ -1833,16 +1833,16 @@ def _texto_de_la_valoracion(cliente_id: str, dicho: str) -> str:
     return nombre
 
 
-def _veces_sin_concretar(falta: str, ultimo: str, veces: int) -> int:
-    """Técnica y talla pertenecen a la misma búsqueda todavía sin resolver.
+def _veces_sin_concretar(falta: str, ultimo: str, veces: int, *, duda: bool = False) -> int:
+    """Otra pregunta puede ser progreso: elegir técnica deja pendiente el largo.
 
-    Cambiar de pregunta no es avanzar a un servicio elegido. Un resultado sin
-    candidatos o con un servicio concreto sí termina esta cuenta.
+    Solo agrupamos datos distintos cuando la respuesta actual expresa duda;
+    una duda antigua no convierte una elección posterior en falta de respuesta.
     """
     pendientes = ("tecnica", "talla", "para_quien")
     if falta not in pendientes:
         return 0
-    return veces + 1 if ultimo in pendientes else 0
+    return veces + 1 if ultimo in pendientes and (falta == ultimo or duda) else 0
 
 
 def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
@@ -1871,7 +1871,9 @@ def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
     try:
         from backend import booking
 
-        if booking.renuncio_al_diagnostico(dicho):
+        if (not booking.la_valoracion_es_obligatoria(cliente_id, dicho)
+                and any(booking.renuncio_al_diagnostico(str(m.get("content") or ""))
+                        for m in mensajes if isinstance(m, dict) and m.get("role") == "user")):
             return ""
         return str((booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
     except Exception:  # noqa: BLE001 - ante la duda, se sigue preguntando
@@ -4359,7 +4361,8 @@ async def responder(
                     catalogo_mirado = True
                     falta = str(resultado.get("falta") or "")
                     estado.veces_falta = _veces_sin_concretar(
-                        falta, estado.ultimo_falta, estado.veces_falta)
+                        falta, estado.ultimo_falta, estado.veces_falta,
+                        duda=bool(_DUDA_AL_ELEGIR.search(catalog_pick._norm(mensaje))))
                     # Dos veces preguntando lo mismo es el limite. Si ella ya ha
                     # dicho que no sabe y el negocio tiene escrito que eso se ve
                     # en persona, se le coge la valoracion y se sigue: no hay una

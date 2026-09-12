@@ -2459,6 +2459,21 @@ async def _voice_perform_booking(
         )
     except HTTPException as exc:
         if exc.status_code == status.HTTP_409_CONFLICT:
+            # Dos 409 distintos. Si el negocio RETIRO el servicio entre la oferta y
+            # el "si", ofrecerle mas horas no arregla nada: elige otra, vuelve a
+            # fallar por lo mismo y se queda sin cita sin saber por que. Este
+            # camino lo usan voz, chat y WhatsApp por texto libre.
+            if booking.es_servicio_retirado(exc.detail):
+                respuesta = {
+                    "ok": False,
+                    "servicio_retirado": True,
+                    "error": "Ese servicio ya no esta disponible.",
+                    "que_hacer": ("Dile que ese servicio ya no esta disponible y "
+                                  "preguntale que otro quiere. NO le ofrezcas mas "
+                                  "horas ni otro dia: el problema no es la hora."),
+                }
+                respuesta.update(date_meta)
+                return respuesta
             # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca
             # tal cual (sin inventarse horas) en vez de un "ofrece otra hora" a ciegas.
             response = await _voice_booking_unavailable_response(

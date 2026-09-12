@@ -92,33 +92,9 @@ def _comprobar_aislamiento(destino: str) -> None:
 
 
 def _instalar_captura():
-    """Sustituye los envios de WhatsApp y devuelve la lista donde caen."""
-    from backend import messaging
-
-    dichos = []
-
-    async def texto(*, text="", **kwargs):
-        dichos.append(text)
-        return True
-
-    async def lista(*, body="", sections=None, **kwargs):
-        filas = [f["title"] for s in (sections or []) for f in s.get("rows", [])]
-        dichos.append("%s || %s" % (body, " / ".join(filas)))
-        return True
-
-    async def botones(*, body="", **kwargs):
-        dichos.append(body)
-        return True
-
-    async def cta(*, body="", **kwargs):
-        dichos.append(body)
-        return True
-
-    messaging._send_whatsapp_text = texto
-    messaging._send_whatsapp_list = lista
-    messaging._send_whatsapp_buttons = botones
-    messaging._send_whatsapp_cta_url = cta
-    return dichos
+    """Usa la captura compartida, incluido el payload de formularios de Meta."""
+    from evals import arnes
+    return arnes.capturar_envios()
 
 
 def _citas_del_telefono(cliente_id: str, telefono: str):
