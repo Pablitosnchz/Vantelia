@@ -215,8 +215,8 @@ def test_una_corazonada_floja_se_descarta(api_module, client, monkeypatch):  # n
     from backend import intents
 
     monkeypatch.setattr(intents, "enabled_for", lambda *a, **k: True)
-    monkeypatch.setattr(intents, "familias_del_tenant", lambda cid: [])
-    monkeypatch.setattr(intents, "preguntas_del_tenant", lambda cid, limite=40: [])
+    monkeypatch.setattr(intents, "familias_del_tenant", lambda cid, **k: [])
+    monkeypatch.setattr(intents, "preguntas_del_tenant", lambda cid, limite=40, **k: [])
     monkeypatch.setattr(intents.settings, "OPENAI_API_KEY", "sk-test")
 
     def _responde(confianza):

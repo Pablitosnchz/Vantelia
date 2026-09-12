@@ -26,6 +26,7 @@ from backend import (
     clients,
     db,
     demo_agenda,
+    intents,
     outreach,
     portal,
     rag,
@@ -546,6 +547,10 @@ async def auth_create_service(
             ),
         )
         connection.commit()
+    # El catalogo que el asistente tiene en memoria (familias del tenant) deja de
+    # valer en cuanto se toca el de verdad. A los demas workers los avisa el sello
+    # de la BD, ver intents.sellos_del_tenant.
+    intents.olvidar_tenant(target_client_id)
     return ServicePublic(**agenda._service_row_to_public(agenda._get_service_row(target_client_id, slug)))
 
 
@@ -615,6 +620,7 @@ async def auth_update_service(
                 (*updates.values(), target_client_id, slug),
             )
             connection.commit()
+        intents.olvidar_tenant(target_client_id)
         updated_row = agenda._get_service_row(target_client_id, slug)
         if updated_row is not None:
             demo_agenda._sync_demo_bookings_for_service(
@@ -644,6 +650,7 @@ async def auth_delete_service(
             "DELETE FROM service_payment_policies WHERE cliente_id = ? AND service_id = ?", (target_client_id, slug)
         )
         connection.commit()
+    intents.olvidar_tenant(target_client_id)
     return AuthSimpleResponse(ok=True, message="Servicio eliminado.")
 
 
