@@ -3,6 +3,52 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Dirección y criterios de operación (12-sep, encargo actualizado de Pablo)
+
+Astra diseña e implementa las fases. Claude queda de auxiliar para mediciones
+con el modelo real, revisión, datos saneados y despliegue cuando Pablo lo ordene.
+Solo implementa piezas que Astra le encargue explícitamente. Este reparto
+sustituye los responsables provisionales indicados más abajo.
+
+Contraste con referencias públicas de ingeniería, consultadas el 12-sep-2026:
+
+- [Anthropic: Building effective agents](https://www.anthropic.com/engineering/building-effective-agents):
+  recomienda empezar con patrones simples y aumentar complejidad si mejora los
+  resultados medidos. Aplicación a Vantelia: un flujo de gestión compartido;
+  ningún nuevo agente corrector por defecto. La flexibilidad está en interpretar
+  mensajes; la autorización y ejecución tienen contratos explícitos.
+- [Anthropic: Demystifying evals](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+  y [OpenAI: Agent evals](https://developers.openai.com/api/docs/guides/agent-evals):
+  evaluar recorridos y resultados reproducibles. Aplicación: conservar resultado
+  de herramientas y estado final, además del texto; distinguir éxito inicial,
+  éxito tras reintento y fallo. Una respuesta convincente no acredita una cita.
+
+Estas son decisiones de diseño para nuestro producto, no una certificación ni
+una afirmación sobre la arquitectura privada de otras empresas.
+
+Puertas adicionales para dar por operativo el candidato (pendientes de ejecutar):
+
+| Propiedad | Evidencia requerida |
+| --- | --- |
+| Autorización | Un sí ambiguo, una Q&A informativa o un mensaje no enviado no autorizan cambiar servicio ni crear cita. |
+| Reinicios | Al perder estado, recuperar hechos persistidos o pedir confirmación; nunca ejecutar una aceptación deducida de texto antiguo. |
+| Repetición y concurrencia | Reentrega del mismo evento y confirmaciones simultáneas no duplican citas ni recordatorios; dos clientes compitiendo por el mismo hueco respetan la capacidad. |
+| Cambios del portal | Cambiar horario, vacaciones, servicio o regla entre oferta y confirmación obliga a revalidar; el otro tenant permanece aislado. |
+| Fallos externos | Timeout y rechazo de Meta o de una tool no producen éxito falso; distinguir envío aceptado de entrega al destinatario. |
+| Recuperación | Tras ambigüedad persistente o fallo, conservar los datos válidos y ofrecer una salida útil; derivación a persona solo con mecanismo real de atención. |
+| Operación | Trazas saneadas de transición, regla aplicada, resultado de tool y envío permiten explicar un fallo sin registrar secretos ni datos personales nuevos. |
+
+Medición: referencia y candidato con los mismos casos, calendario resuelto,
+configuración y modelo; registrar SHAs, intentos y denominadores. Comparar
+creación/cancelación/reprogramación realmente persistida, violaciones de reglas,
+abandono/bucles, coste por conversación y latencia. Publicar por separado Alicia
+y un segundo negocio. No fijar un porcentaje de fiabilidad con seis ejemplos;
+las limitaciones de muestra deben acompañar al resultado.
+
+Cada fase retira el mecanismo que sustituye, añade regresiones de comportamiento
+y termina en revisión. No introducir frameworks, llamadas extra al modelo ni una
+migración de proveedor sin un problema concreto y una comparación que lo justifique.
+
 ## Fase 0 — descubrimiento y referencia (realizada, con huecos explícitos)
 
 Fuentes consultadas: `MAPA_DEL_CODIGO.md` (horarios y decisión del negocio),

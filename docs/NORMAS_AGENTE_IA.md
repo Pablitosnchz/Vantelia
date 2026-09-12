@@ -50,8 +50,9 @@ ya la cumpla. El plan y su evidencia viven en `PLAN_CONSOLIDACION_IA.md`.
 
 ## Coordinación y coste
 
-Astra coordina el plan autorizado; Claude aporta contexto, trabajo aislado,
-revisión y mediciones reales. Antes de editar en paralelo se asignan archivos y
+Astra diseña e implementa el plan autorizado; Claude aporta contexto,
+revisión, datos saneados y mediciones reales. Claude implementa solo piezas que
+Astra le encargue explícitamente. Antes de editar en paralelo se asignan archivos y
 ramas. `ESTADO_ACTUAL.md` registra el testigo y siguiente paso. Ambos leen este
 contrato antes de tocar decisiones conversacionales o políticas del negocio.
 

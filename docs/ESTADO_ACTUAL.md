@@ -14,11 +14,11 @@ mensajero.
 
 ## Cómo se trabaja ahora
 
-- **Claude Code implementa y despliega** (decisión de Pablo, 11-sep por la tarde:
-  a Astra se le acabaron los créditos en una hora).
-- **GPT-6 Astra (Codex) revisa y hace encargos acotados** que Claude le pasa; le
-  llegan solos a su sesión. Si está sin créditos, Claude sigue con sus propios
-  instrumentos (tests + humo) y le deja la revisión esperando en el buzón.
+- **Astra diseña e implementa la consolidación** (decisión actualizada de Pablo,
+  12-sep). El plan es `PLAN_CONSOLIDACION_IA.md`.
+- **Claude es auxiliar**: mide con el modelo real, revisa candidatos, aporta datos
+  saneados y despliega cuando Pablo lo ordena. Implementa solo piezas encargadas
+  expresamente por Astra para evitar trabajo solapado.
 - **Pablo decide.** Reglas completas en `AGENTS.md`.
 - **¿Estáis sincronizados?** → https://app.vantelia.es/sincronia (semáforo, solo
   admin). Pablo no tiene que decir nada: los hooks de los dos agentes los ponen al
@@ -39,11 +39,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra (instrumentos de medida); Claude revisa y mide el modelo.
-- **Tarea:** quitar supuestos de calendario del banco/humo y compartir la preparación de fechas de tests. Diseño de propuestas pendiente de revisión de Claude.
-- **Rama:** `astra/calendario-evals`, worktree `E:/Vantelia-astra-valoracion`, desde `afecf80`.
-- **Siguiente:** suite completa y revisión del encargo de calendario. 11 pruebas del calendario y runner verdes; fixture de estirar citas: 11 verdes. La guarda contra mañana literal fallaba antes. No toca agent.py, reserva.py ni intents.py.
-- **Espera a:** suite/revisión del candidato de calendario y medición posterior de Claude con los guiones nuevos. `afecf80` ya tiene revisión OK y suite 2138 passed/1 skipped. Medición vieja: activa la salida de valoración, pero el calendario y los reintentos no permiten concluir una mejora clara del cierre. No desplegar sin orden.
+- **Testigo:** Astra (diseño e implementación); Claude auxiliar de medición y revisión.
+- **Tarea:** fase 2, propuestas y aceptación. Plan reforzado con referencias técnicas y criterios operativos; todavía sin cambio de runtime en esta rama.
+- **Rama:** `astra/estado-propuestas`, worktree `E:/Vantelia-astra-estado`, desde `1a9d56c`. El candidato de calendario permanece intacto en su worktree mientras termina la suite.
+- **Siguiente:** pruebas de autorización explícita de la alternativa y estado de propuesta. Auditoría de Claude recibida: Q&A solo explica; el canal acredita envío; pérdida de estado no autoriza acciones. Comprobado que `_familias_que_exigen_valoracion` cubre precio/presupuesto y no permite inferir una regla de indecisión para alisados.
+- **Espera a:** datos saneados de Claude sobre política de indecisión; referencia completa con calendario nuevo y comparación crítica. Calendario: 11 tests propios y 11 de fixture verdes, suite/revisión pendientes. `afecf80`: revisión OK y 2138 passed/1 skipped. La medición vieja no demuestra mejora clara del cierre. No desplegar sin orden.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
