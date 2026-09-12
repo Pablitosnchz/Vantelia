@@ -18,10 +18,10 @@ def buscar_dia_con_huecos(consultar, desde, horas=(), dias=30):
 
 def nombre_del_dia(iso):
     dia = date.fromisoformat(iso)
-    semanas = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
-    meses = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
-             "agosto", "septiembre", "octubre", "noviembre", "diciembre")
-    return "%s %d de %s de %d" % (semanas[dia.weekday()], dia.day, meses[dia.month - 1], dia.year)
+    # Una fecha con día semanal se interpreta primero como relativa en el núcleo.
+    # La fecha numérica incluye el año y conserva el día elegido incluso a >7 días.
+    return dia.strftime("%d/%m/%Y")
+
 
 
 def resolver_mensajes(cliente_id, caso, codigo=None, *, hoy=None, consultar=None):
