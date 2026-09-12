@@ -1779,6 +1779,10 @@ def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None, estado=None)
     try:
         from backend import booking
 
+        # Nombrar una alternativa para rechazarla no es pedirla, incluso si
+        # el tratamiento requiere valoración: esa restricción no es aceptación.
+        if booking.renuncio_al_diagnostico(dicho, solo_explicita=True):
+            return False
         return bool(booking._servicio_de_valoracion(cliente_id))
     except Exception:  # noqa: BLE001 - sin catalogo, que siga el curso normal
         return False

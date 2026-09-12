@@ -37,9 +37,9 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** retirado el rescate Q&A que seleccionaba diagnóstico sin política ni aceptación. Se eliminan el helper y la búsqueda impuesta; la nota ya no recomienda una técnica ni promete cambiarla en la cita.
+- **Tarea:** retirada Q&A guardada en d42e964 (102 dirigidos verdes); corrección adicional del detector que interpretaba «no quiero diagnóstico» como pedirlo, incluso cuando era obligatorio.
 - **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; descendiente integrado de 1ef4e73, conserva 9b1bfea.
-- **Siguiente:** 102 dirigidos verdes; tres regresiones de responder rojas antes del cambio. Verificar rechazo explícito del diagnóstico frente al detector de petición directa. Suite completa pendiente del diagnóstico de demos; revisión exacta y banco real después.
+- **Siguiente:** Negativa explícita validada: 77 dirigidos verdes y cuatro casos rojos prearreglo; petición directa conservada. La retirada Q&A anterior tiene 102 dirigidos verdes (grupos solapados). Suite completa pendiente del diagnóstico de demos; revisión exacta y banco real después.
 - **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Claude revisó OK cf2066d (cambio de cuenta), con tres mejoras menores; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
 
 
@@ -55,7 +55,7 @@ de 4ed33c7: primero deben cerrarse esos fallos. El seguimiento autónomo sigue a
 El trabajo local de WhatsApp se conserva en su rama propia; no sustituye el diagnóstico
 de demos encargado a Claude ni afirma entregas de modelo/Meta reales.
 
-Última entrega de Astra: 9b1bfea, creación recuperable de WhatsApp, rama limpia al
+Entrega anterior de Astra: 9b1bfea, creación recuperable de WhatsApp, rama limpia al
 cerrar; 66 dirigidos de integración y 23 de cierre verdes (solapados), cuatro rojos
 prearreglo y mutación roja de identidad. No se ha pedido revisión formal sin suite
 completa. Sin push/despliegue. Contraste posterior de la respuesta de Claude: existe orientación declarada, pero
@@ -307,3 +307,22 @@ Leído de la BD de producción, no de los documentos de agosto. Sustituye a las
 - Los fallos de estas semanas NO los encontraron los tests ni el banco: los
   encontró Pablo usando el producto como una clienta. Probar a mano la
   conversación entera sigue siendo imprescindible.
+
+
+Corrección adicional del 13-sep (validada con pruebas dirigidas): mencionar diagnóstico para
+rechazarlo activaba `_pide_la_valoracion`, que además borraba el servicio acumulado.
+Se reutiliza el detector compartido de renuncia distinguiendo negativa explícita
+de preferencia por reservar directamente. «Quiero diagnóstico directamente» sigue
+siendo una petición. La obligatoriedad puede impedir contratar el tratamiento sin
+valoración, pero no transforma una negativa en aceptación de cita. Cuatro pruebas
+rojas antes del cambio; 77 dirigidos verdes, pyflakes de los módulos tocados y diff limpios. No se modifica
+configuración de negocio ni se añade una lista de frases en el canal.
+
+
+Relevo tras este bloque: retirada Q&A en d42e964 y negativa explícita en su
+siguiente commit. No hay suite propia ejecutándose ni revisión formal solicitada.
+Claude conserva su encargo; diagnóstico de demos sin entrega recibida al cerrar.
+La siguiente puerta de validación del conjunto es resolver esos fallos y pasar
+una suite completa, después revisión exacta y banco comparable. Quedan trabajo
+independiente de reconciliación/outbox y migración de confirmaciones de gestión;
+no confundir estos dos arreglos con haber terminado toda la arquitectura.

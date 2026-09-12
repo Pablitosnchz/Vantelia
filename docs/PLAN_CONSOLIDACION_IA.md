@@ -44,8 +44,8 @@ Antes del cambio fallan tres recorridos deterministas reales de `responder` con
 Q&A sin política (duda de técnica/talla). Las pruebas antiguas que exigían imponer
 valoración a la tercera pregunta se sustituyen por esos recorridos, conservando
 las de petición directa, aceptación y rechazo/obligatoriedad. Se retiran pruebas
-que solo comprobaban el nombre del helper dentro del código fuente. Validación
-pendiente de cierre en ESTADO_ACTUAL; no acredita mejora medida con modelo real.
+que solo comprobaban el nombre del helper dentro del código fuente. Validación:
+102 dirigidos verdes en d42e964; no acredita mejora medida con modelo real.
 
 Sin política ni elección de la clienta, el servicio sigue pendiente. La salida
 concreta para Alicia (foto, diagnóstico u otra) requiere una regla acordada; el

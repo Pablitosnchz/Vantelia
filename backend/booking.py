@@ -6796,15 +6796,15 @@ def precios_ocultos(cliente_id: str) -> bool:
 
 
 _RENUNCIA_AL_DIAGNOSTICO = re.compile(
-    r'(sin (el )?(diagnostico|diagnostic|valoracion)'
+    r'((?P<negativa>sin (el )?(diagnostico|diagnostic|valoracion)'
     r'|no (quiero|necesito|hace falta)[^.]{0,20}(diagnostico|valoracion)'
     r'|no quiero cita para (el )?diagnostico'
-    r'|sin pasar por (el )?(diagnostico|valoracion)'
+    r'|sin pasar por (el )?(diagnostico|valoracion))'
     r'|(cita|mechas|reservar|hacermelas|hacerme)[^.]{0,30}directamente'
     r'|directamente[^.]{0,30}(cita|mechas|sin))')
 
 
-def renuncio_al_diagnostico(dicho: str) -> bool:
+def renuncio_al_diagnostico(dicho: str, *, solo_explicita: bool = False) -> bool:
     """Ha dicho que quiere el tratamiento SIN pasar por la valoracion.
 
     La regla del salon, en sus palabras: "para coger unas mechas la cita hay que
@@ -6821,8 +6821,12 @@ def renuncio_al_diagnostico(dicho: str) -> bool:
     despues de que lo rechace es lo que hace perder la clienta: se le ofrece, y si
     dice que no, se le coge lo que pide.
     """
-    return bool(_RENUNCIA_AL_DIAGNOSTICO.search(textnorm._strip_accents(
-        str(dicho or '').lower())))
+    plano = textnorm._strip_accents(str(dicho or '').lower())
+    if solo_explicita:
+        # Pedir el tratamiento directamente puede renunciar a una oferta, pero
+        # pedir el diagnóstico directamente sigue siendo pedir ese diagnóstico.
+        return any(m.group("negativa") is not None for m in _RENUNCIA_AL_DIAGNOSTICO.finditer(plano))
+    return bool(_RENUNCIA_AL_DIAGNOSTICO.search(plano))
 
 
 def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
