@@ -19,12 +19,14 @@ from test_booking_exhaustive import api_module  # noqa: F401
     ("no lo se, no quiero diagnostico", "tecnica", True, True, ""),
     ("keratina", "talla", True, True, ""),
     ("keratina", "talla", False, True, ""),
+    ("la keratina, pero no se si tengo el pelo medio o largo", "talla", True, True, ""),
 ])
 def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla, valoracion, esperado):
     from backend import agent, booking, reserva, settings
 
     estado = reserva.Estado(intencion="reservar", servicio_texto="quiero un alisado",
                             ultimo_falta="tecnica", veces_falta=1)
+    estado.candidatos_pendientes = 4
     monkeypatch.setattr(reserva, "cargar", lambda *a: estado)
     monkeypatch.setattr(reserva, "guardar", lambda *a, **k: None)
     monkeypatch.setattr(agent, "_historial", lambda *a: [
@@ -39,7 +41,7 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     def buscar(cid, args, **kwargs):
         if args["descripcion"] == "Diagnostico":
             return {"ok": True, "servicio": "Diagnostico", "servicio_en_agenda": "Diagnostico"}
-        return {"ok": True, "servicio": "" if falta else "Keratina medio", "falta": falta}
+        return {"ok": True, "servicio": "" if falta else "Keratina medio", "falta": falta, "total_candidatos": 2 if duda.startswith("la keratina") else 4}
     monkeypatch.setattr(agent, "_tool_buscar_servicio", buscar)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-prueba-sin-red")
     observados = []

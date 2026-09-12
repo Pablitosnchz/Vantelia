@@ -36,7 +36,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend import catalog_pick, clients, db, settings, textnorm, timeutils
+from backend import catalog_pick, clients, db, intents, settings, textnorm, timeutils
 
 # Cuantas vueltas de tool se le permiten en un turno. Con 4 le sobra para buscar
 # un servicio, mirar huecos y crear la cita; el tope existe para que un modelo
@@ -3462,6 +3462,7 @@ def _con_el_telefono_si_hace_falta(
     return respuesta.rstrip() + linea
 
 
+@intents.con_catalogo_del_turno
 async def responder(
     cliente_id: str,
     mensaje: str,
@@ -4309,9 +4310,15 @@ async def responder(
                 if llamada.function.name == "buscar_servicio":
                     catalogo_mirado = True
                     falta = str(resultado.get("falta") or "")
+                    cantidad = int(resultado.get("total_candidatos") or 0)
+                    progreso = bool(cantidad and estado.candidatos_pendientes
+                                    and cantidad < estado.candidatos_pendientes)
                     estado.veces_falta = _veces_sin_concretar(
                         falta, estado.ultimo_falta, estado.veces_falta,
                         duda=bool(_DUDA_AL_ELEGIR.search(catalog_pick._norm(mensaje))))
+                    if progreso:
+                        estado.veces_falta = 0
+                    estado.candidatos_pendientes = cantidad
                     # Dos veces preguntando lo mismo es el limite. Si ella ya ha
                     # dicho que no sabe y el negocio tiene escrito que eso se ve
                     # en persona, se le coge la valoracion y se sigue: no hay una
@@ -4332,7 +4339,7 @@ async def responder(
                             % valoracion)
                         falta = ""
                         estado.veces_falta = 0
-                    elif falta and (falta == estado.ultimo_falta or estado.veces_falta):
+                    elif falta and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
                         # Ya se lo preguntaste y no lo ha elegido. Repetirle la
                         # misma lista es EL fallo mas repetido de la medicion: se
                         # cansa y se va. La salida depende de lo que el negocio
