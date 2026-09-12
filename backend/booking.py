@@ -2950,12 +2950,17 @@ async def _update_booking_details(
         data.employee_id or (booking_row["employee_id"] or ""),
         require_active=False,
     )
-    if not agenda._service_name_allowed_for_employee(booking_row["cliente_id"], target_employee, data.servicio):
+    service_row = agenda._find_service_by_name(booking_row["cliente_id"], data.servicio)
+    mismo_servicio = bool(service_row and str(service_row["slug"] or "") == str(booking_row["service_id"] or ""))
+    if source not in ("portal", "portal_manual") and not mismo_servicio:
+        validar_servicio_publico(booking_row["cliente_id"], data.servicio, fila=service_row)
+    conserva_historico = (mismo_servicio and not int(service_row["is_active"] or 0)
+                         and target_employee["id"] == booking_row["employee_id"])
+    if not conserva_historico and not agenda._service_name_allowed_for_employee(booking_row["cliente_id"], target_employee, data.servicio):
         raise HTTPException(
             status_code=400,
             detail="El servicio seleccionado no esta disponible para ese profesional.",
         )
-    service_row = agenda._find_service_by_name(booking_row["cliente_id"], data.servicio)
     service_duration = agenda._service_duration_minutes(booking_row["cliente_id"], data.servicio, target_employee)
     # Duracion a mano (arrastrar el borde de la cita en el calendario). Manda sobre
     # la del catalogo, porque la del catalogo es una media y el salon sabe lo que
@@ -3200,6 +3205,19 @@ def _minutos_del_tramo(hora: str, duracion: int):
 SERVICIO_RETIRADO = "Ese servicio ya no esta disponible. Elige otro del catalogo."
 
 
+def validar_servicio_publico(cliente_id: str, servicio: str, *, fila=None) -> None:
+    """Un servicio retirado no se convierte en falta de profesionales ni de horas."""
+    fila = fila if fila is not None else agenda._find_service_by_name(cliente_id, servicio)
+    if fila is not None and not int(fila["is_active"] or 0):
+        raise HTTPException(status_code=409, detail=SERVICIO_RETIRADO)
+
+
+def respuesta_servicio_retirado() -> Dict[str, Any]:
+    return {"ok": False, "servicio_retirado": True,
+            "error": "Ese servicio ya no está disponible.",
+            "que_hacer": "Pide elegir otro servicio. No ofrezcas otra hora para el servicio retirado."}
+
+
 def es_servicio_retirado(detalle: Any) -> bool:
     """¿Este 409 es "retiraron el servicio" y no "te quitaron el hueco"?
 
@@ -3255,11 +3273,8 @@ async def _create_booking_core(
     # ejecuta: cerrar una cita de algo que ya no esta a la venta es prometer un
     # dato obsoleto. El MOSTRADOR si puede apuntarlo a mano (lo retiran del
     # catalogo publico y lo siguen haciendo a quien ya lo tenia hablado).
-    if source != "portal_manual" and service_row is not None and not int(service_row["is_active"] or 0):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=SERVICIO_RETIRADO,
-        )
+    if source != "portal_manual":
+        validar_servicio_publico(cliente_id, servicio, fila=service_row)
 
     if not await agenda._booking_slot_available(
         cliente_id, booking_date, booking_time,

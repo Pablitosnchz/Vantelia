@@ -2430,6 +2430,8 @@ async def _voice_perform_booking(
             employee_id=_empleado_por_nombre(cliente_id, profesional, location_id),
         )
     except HTTPException as exc:
+        if booking.es_servicio_retirado(exc.detail):
+            return dict(booking.respuesta_servicio_retirado(), **date_meta)
         detail = str(exc.detail or "")
         if exc.status_code == status.HTTP_409_CONFLICT and re.search(
             r"horario|disponible|hueco", detail, re.IGNORECASE
@@ -2464,14 +2466,7 @@ async def _voice_perform_booking(
             # fallar por lo mismo y se queda sin cita sin saber por que. Este
             # camino lo usan voz, chat y WhatsApp por texto libre.
             if booking.es_servicio_retirado(exc.detail):
-                respuesta = {
-                    "ok": False,
-                    "servicio_retirado": True,
-                    "error": "Ese servicio ya no esta disponible.",
-                    "que_hacer": ("Dile que ese servicio ya no esta disponible y "
-                                  "preguntale que otro quiere. NO le ofrezcas mas "
-                                  "horas ni otro dia: el problema no es la hora."),
-                }
+                respuesta = booking.respuesta_servicio_retirado()
                 respuesta.update(date_meta)
                 return respuesta
             # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca

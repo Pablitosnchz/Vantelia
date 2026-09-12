@@ -3513,6 +3513,9 @@ async def _resolve_public_booking_employee(
     servicio: str = "",
     location_id: str = "",
 ) -> sqlite3.Row:
+    from backend import booking
+
+    booking.validar_servicio_publico(cliente_id, servicio)
     if employee_id:
         employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
         if bool(employee_row["is_default"]):
