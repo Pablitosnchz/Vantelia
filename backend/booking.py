@@ -3192,6 +3192,39 @@ def _minutos_del_tramo(hora: str, duracion: int):
     return inicio, inicio + max(int(duracion or 0), 1)
 
 
+class ServicioRetirado(HTTPException):
+    """409 de "ese servicio ya no esta a la venta", distinto del hueco ocupado.
+
+    Para el widget y el portal es el mismo 409 de siempre, con su texto. Los
+    canales que conversan lo distinguen por el TIPO: traducian todo 409 a "ese
+    hueco se ha ocupado, tengo estas otras horas", la clienta elegia otra hora y
+    volvia a chocar con el mismo servicio retirado, en bucle. Otra hora no lo
+    arregla; otro servicio si.
+    """
+
+    def __init__(self, servicio: str = "") -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese servicio ya no esta disponible. Elige otro del catalogo.",
+        )
+        self.servicio = servicio
+
+
+def _fila_retirada(service_row: Optional[sqlite3.Row], source: str) -> bool:
+    return (source != "portal_manual" and service_row is not None
+            and not int(service_row["is_active"] or 0))
+
+
+def servicio_retirado(cliente_id: str, servicio: str, *, source: str) -> bool:
+    """¿Lo que se va a reservar es un servicio que el negocio ha desactivado?
+
+    La misma regla que aplica `_create_booking_core`. Los canales la miran ANTES
+    de resolver profesional y hueco: esos pasos fallan con su propio 409 ("no hay
+    profesionales", "ese horario...") y el motivo real no llegaba a la clienta.
+    """
+    return _fila_retirada(agenda._find_service_by_name(cliente_id, servicio), source)
+
+
 async def _create_booking_core(
     cliente_id: str,
     *,
@@ -3220,7 +3253,9 @@ async def _create_booking_core(
 
     El canal resuelve ANTES el empleado (cada canal tiene su politica de
     resolucion) y traduce DESPUES los HTTPException a su medio (texto WhatsApp,
-    respuesta de tool de voz, JSON del portal...). 409 = hueco ocupado.
+    respuesta de tool de voz, JSON del portal...). 409 = hueco ocupado;
+    `ServicioRetirado` (tambien 409) = el servicio ya no se vende, y NO se
+    arregla ofreciendo otra hora.
 
     Devuelve la fila guardada (el estado final puede ser pending_payment si el
     servicio exige pago por adelantado)."""
@@ -3237,11 +3272,8 @@ async def _create_booking_core(
     # ejecuta: cerrar una cita de algo que ya no esta a la venta es prometer un
     # dato obsoleto. El MOSTRADOR si puede apuntarlo a mano (lo retiran del
     # catalogo publico y lo siguen haciendo a quien ya lo tenia hablado).
-    if source != "portal_manual" and service_row is not None and not int(service_row["is_active"] or 0):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese servicio ya no esta disponible. Elige otro del catalogo.",
-        )
+    if _fila_retirada(service_row, source):
+        raise ServicioRetirado(service_row["name"] or servicio)
 
     if not await agenda._booking_slot_available(
         cliente_id, booking_date, booking_time,

@@ -1529,11 +1529,87 @@ async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) 
                 + rag._call_us_line(cliente_id))
 
 
+async def _wa_servicio_retirado(
+    *, cliente_id: str, phone_number_id: str, to_number: str,
+    flow: appstate.WAFlowState, config: Dict[str, Any], request,
+) -> None:
+    """El negocio ha retirado el servicio entre el resumen y el boton Confirmar.
+
+    Se le dice ESO y se le deja elegir otro sin empezar de cero. Iba por
+    `_wa_ese_hueco_ya_no_esta` ("ese hueco se acaba de ocupar, tengo 09:00,
+    09:30"): elegia otra hora, chocaba otra vez con el mismo servicio retirado, y
+    asi hasta irse sin cita y sin saber por que.
+
+    Deja el flujo en `booking_service` y quien llama NO lo limpia. Profesional,
+    dia y hora se sueltan porque dependian del servicio (con otro cambian la
+    duracion y quien lo hace); nombre, email y nota se quedan.
+    """
+    retirado = flow.servicio or "Ese servicio"
+    for campo in ("servicio", "servicio_texto", "categoria", "employee_id", "employee_name",
+                  "fecha", "hora", "horas_franja", "duplicado_avisado"):
+        setattr(flow, campo, "")
+    flow.servicios_pagina = 0
+    flow.horas_pagina = 0
+    flow.intentos_fallidos = 0
+    try:
+        # El agente tenia apuntado el servicio retirado: si lo conserva, vuelve a
+        # intentar cerrar la cita con el.
+        from backend import reserva
+
+        reserva.olvidar(cliente_id, to_number)
+    except Exception:  # noqa: BLE001 - limpiar nunca puede romper el canal
+        pass
+    aviso = "⚠️ *%s* ya no está disponible para reservar." % retirado
+    if not booking._public_services_for_booking(cliente_id, location_id=flow.location_id):
+        flow.flow = ""
+        texto = (aviso + " Ahora mismo no queda otro servicio para reservar por aquí."
+                 + rag._call_us_line(cliente_id))
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=texto,
+        )
+    elif _wa_modo_conversacional(config):
+        flow.flow = "booking_service"
+        texto = aviso + " ¿Qué otro servicio te apetece?"
+        await _wa_preguntar_servicio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, pregunta=texto,
+        )
+    else:
+        flow.flow = "booking_service"
+        texto = aviso + " Elige otro servicio y te busco hueco."
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=texto,
+        )
+        await _wa_send_service_picker(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            location_id=flow.location_id,
+        )
+    try:
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=to_number, request=request,
+            respuesta=texto, intent="servicio_retirado",
+        )
+    except Exception as exc:  # noqa: BLE001 - el historial nunca tumba un envio
+        settings.logger.warning("[whatsapp] no se pudo registrar el servicio retirado: %s", exc)
+
+
 async def _wa_create_booking(
     *, cliente_id: str, phone_number_id: str, to_number: str, flow: appstate.WAFlowState, config: Dict[str, Any],
     request: Request,
 ) -> bool:
+    """Crea la cita del flujo guiado (y del formulario) y se lo dice a la clienta.
+
+    Si el servicio se ha retirado deja el flujo en `booking_service` con el
+    selector enviado: quien llama NO debe limpiarlo, o lo que elija se pierde.
+    """
     try:
+        # Antes que el dia, el profesional y el hueco: con el servicio retirado,
+        # esos pasos fallan con su propio 409 y la clienta recibia otras horas.
+        if booking.servicio_retirado(cliente_id, flow.servicio, source="whatsapp"):
+            await _wa_servicio_retirado(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                flow=flow, config=config, request=request,
+            )
+            return False
         booking_dt = textnorm._parse_date(flow.fecha)
         agenda._validate_booking_window(cliente_id, booking_dt)
 
@@ -1579,6 +1655,12 @@ async def _wa_create_booking(
                 # dos veces. Igual que hace la voz.
                 send_confirmation=False,
             )
+        except booking.ServicioRetirado:
+            await _wa_servicio_retirado(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                flow=flow, config=config, request=request,
+            )
+            return False
         except HTTPException as exc:
             if exc.status_code == 409:
                 await messaging._send_whatsapp_text(
@@ -1831,11 +1913,13 @@ async def _wa_handle_flow_reply(
         flow.nombre = str(conocido["name"]).strip() if conocido else "Cliente WhatsApp"
 
     config = clients._get_client_config(cliente_id)
+    flow.flow = ""
     creada = await _wa_create_booking(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
         flow=flow, config=config, request=request,
     )
-    _wa_clear_flow(cliente_id, from_number)
+    if flow.flow != "booking_service":  # servicio retirado: esta eligiendo otro
+        _wa_clear_flow(cliente_id, from_number)
     return creada
 
 
@@ -3549,7 +3633,10 @@ async def _handle_whatsapp_message(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 flow=flow, config=config, request=request,
             )
-            _wa_clear_flow(cliente_id, from_number)
+            if flow.flow != "booking_service":
+                # Con el servicio retirado se le ha vuelto a ofrecer el selector:
+                # el flujo sigue vivo para recoger lo que elija.
+                _wa_clear_flow(cliente_id, from_number)
             if ok:
                 # Se deja constancia de que la cita YA esta: si no, el modelo relee
                 # la conversacion, la da por pendiente y monta otra.

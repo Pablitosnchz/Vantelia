@@ -811,6 +811,34 @@ def _voice_service_required_response(cliente_id: str, location_id: str = "", *, 
     }
 
 
+def _voice_service_retired_response(cliente_id: str, location_id: str = "", *, servicio: str = "") -> Dict[str, Any]:
+    """El negocio ha retirado ese servicio: se dice ESO y se pide otro, sin horas.
+
+    Salia por la respuesta del hueco ocupado ("ese horario ya no esta disponible,
+    tengo las nueve, las nueve y media...") y la clienta elegia otra hora para
+    volver a chocar con el mismo servicio. Otra hora no lo arregla; otro servicio
+    si. Por eso no lleva `huecos` ni `no_disponible`, y si `needs_service`.
+    """
+    options = _voice_service_options(cliente_id, location_id)
+    visible = options[:5]
+    nombre = textnorm._sanitize_text(servicio or "") or "Ese servicio"
+    prompt = "%s ya no está disponible para reservar." % nombre
+    if visible:
+        prompt += " ¿Quieres otro? Puedo reservarte %s" % _voice_join_es(visible[:3])
+        prompt += ", entre otros." if len(visible) > 3 else "."
+    else:
+        prompt += " Ahora mismo no me queda otro servicio que pueda reservarte."
+    return {
+        "ok": False,
+        "servicio_retirado": True,
+        "needs_service": True,
+        "missing_field": "servicio",
+        "servicios_disponibles": visible,
+        "error": prompt,
+        "mensaje_voz": prompt,
+    }
+
+
 def _voice_location_required_response(cliente_id: str) -> Dict[str, Any]:
     options = _voice_location_options(cliente_id)
     visible = options[:5]
@@ -2411,6 +2439,11 @@ async def _voice_perform_booking(
         if service_row is None:
             return _voice_service_required_response(cliente_id, location_id, invalid=servicio)
         servicio = service_row["name"] or servicio
+    # Retirado desde el panel entre la oferta y el "si": se mira ANTES que
+    # profesional y hueco, que fallan con su propio 409 y acababan contados como
+    # hueco ocupado -> horas en bucle para algo que ya no se vende.
+    if servicio and booking.servicio_retirado(cliente_id, servicio, source="voice"):
+        return _voice_service_retired_response(cliente_id, location_id, servicio=servicio)
 
     fecha, date_meta = _voice_correct_date_from_text(cliente_id, fecha, fecha_texto, config=config)
     try:
@@ -2457,6 +2490,8 @@ async def _voice_perform_booking(
             source="voice",
             send_confirmation=False,  # la voz confirma con su propio envio en segundo plano
         )
+    except booking.ServicioRetirado:
+        return _voice_service_retired_response(cliente_id, location_id, servicio=servicio)
     except HTTPException as exc:
         if exc.status_code == status.HTTP_409_CONFLICT:
             # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca
