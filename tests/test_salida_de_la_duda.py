@@ -11,6 +11,8 @@ from test_booking_exhaustive import api_module  # noqa: F401
 
 @pytest.mark.parametrize("duda,falta,regla,valoracion,esperado", [
     ("no lo tengo claro", "tecnica", True, True, "Diagnostico"),
+    ("no lo tengo claro", "tecnica", "declarada", True, ""),
+    ("no lo tengo claro", "tecnica", "foto", True, ""),
     ("no lo tengo claro", "talla", True, True, "Diagnostico"),
     ("no lo se", "talla", True, True, "Diagnostico"),
     ("no lo tengo claro", "tecnica", False, True, ""),
@@ -36,8 +38,12 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     ])
     monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar",
                         lambda cid, config=None: "Se decide en persona." if regla else "")
+    declarada = {"id": "orientacion", "accion": "ofrecer_cita", "texto": "Te orientamos en persona", "activa": True}
+    if regla == "foto":
+        declarada.update(accion="pedir_foto", texto="Envíanos una foto")
+    monkeypatch.setattr(booking, "regla_de_orientacion_para", lambda *a: declarada if regla in ("declarada", "foto") else {})
     monkeypatch.setattr(booking, "_servicio_de_valoracion",
-                        lambda *a, **k: {"nombre": "Diagnostico"} if valoracion else None)
+                        lambda *a, **k: {"id": "diag", "nombre": "Diagnostico", "duration_minutes": 20} if valoracion else None)
     def buscar(cid, args, **kwargs):
         if args["descripcion"] == "Diagnostico":
             return {"ok": True, "servicio": "Diagnostico", "servicio_en_agenda": "Diagnostico"}
@@ -60,9 +66,36 @@ def test_tercera_busqueda_del_agente(api_module, monkeypatch, duda, falta, regla
     monkeypatch.setitem(sys.modules, "openai", modulo)
     asyncio.run(agent.responder("demo", duda, session_id="prueba-duda",
                                telefono="34600777999", intencion="reservar"))
+    if regla == "declarada":
+        assert observados == []  # la oferta se devuelve sin ordenar seleccionar ni crear
+        assert estado.servicio == ""
+        propuesta = estado.propuesta_servicio
+        assert propuesta.estado == "ofrecida"
+        assert propuesta.origen == "orientacion:orientacion"
+        asyncio.run(agent.responder("demo", duda, session_id="prueba-duda",
+                                   telefono="34600777999", intencion="reservar"))
+        assert estado.propuesta_servicio.id == propuesta.id
+
+        from dataclasses import replace
+        estado.propuesta_servicio = replace(estado.propuesta_servicio, creada=0)
+        asyncio.run(agent.responder("demo", duda, session_id="prueba-duda",
+                                   telefono="34600777999", intencion="reservar"))
+        assert estado.propuesta_servicio.id != propuesta.id
+        assert not booking.contestar_alternativa_de_precio("demo", estado, propuesta.id, "acepta")
+        propuesta = estado.propuesta_servicio
+
+        declarada["accion"] = "pedir_foto"
+        assert not booking.contestar_alternativa_de_precio("demo", estado, propuesta.id, "acepta")
+        assert estado.propuesta_servicio.estado == "invalidada"
+        assert estado.servicio == ""
+        return
     assert len(observados) == 1
     assert observados[0].get("servicio", "") == esperado
     assert estado.servicio == esperado
+    if regla == "foto":
+        assert estado.propuesta_servicio is None
+        assert observados[0]["politica_orientacion"]["accion"] == "pedir_foto"
+        assert "cogele la" not in observados[0]["nota"]
     if duda == "keratina":
         assert "nota" not in observados[0]
         assert estado.veces_falta == 0

@@ -4371,11 +4371,42 @@ async def responder(
                     if progreso:
                         estado.veces_falta = 0
                     estado.candidatos_pendientes = cantidad
-                    # Dos veces preguntando lo mismo es el limite. Si ella ya ha
-                    # dicho que no sabe y el negocio tiene escrito que eso se ve
-                    # en persona, se le coge la valoracion y se sigue: no hay una
-                    # tercera pregunta.
-                    valoracion = _hay_que_cogerle_la_valoracion(
+                    # Una política explícita sustituye los rescates de este
+                    # recorrido. Ofrecer no selecciona ni crea una cita.
+                    orientacion = {}
+                    if falta and not progreso and estado.veces_falta >= 2:
+                        original = str(estado.servicio_texto or argumentos.get("descripcion") or "")
+                        orientacion = booking.regla_de_orientacion_para(cliente_id, original)
+                        if orientacion.get("accion") == "ofrecer_cita":
+                            actual = booking.alternativa_de_orientacion_vigente(cliente_id, original, location_id)
+                            anterior = estado.propuesta_servicio
+                            if actual and not (anterior and anterior.origen == actual["origen"]
+                                               and anterior.estado in ("rechazada", "aceptada")):
+                                estado.intencion = "reservar"
+                                propuesta = (reserva._propuesta_servicio_vigente(estado, anterior.id)
+                                             if anterior else None)
+                                if not (propuesta and propuesta.estado in ("preparada", "ofrecida")
+                                        and propuesta.origen == actual["origen"]
+                                        and propuesta.revision_config == actual["revision"]
+                                        and propuesta.servicio_id == actual["servicio_id"]
+                                        and propuesta.servicio_origen == original
+                                        and propuesta.location_id == location_id):
+                                    propuesta = reserva.preparar_propuesta_servicio(
+                                        estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
+                                        origen=actual["origen"], revision_config=actual["revision"],
+                                        servicio_origen=original, location_id=location_id)
+                                final = "%s\n¿Quieres una cita de %s?" % (
+                                    actual.get("texto") or "Podemos ofrecerte una valoración.",
+                                    textnorm.nombre_de_servicio_publico(actual["nombre"]))
+                                if not remate_manual:
+                                    reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "turno:" + propuesta.id)
+                                reserva.guardar(cliente_id, clave_estado, estado)
+                                traza.guardar(mensaje=mensaje, respuesta=final)
+                                return final, False
+                        if orientacion:
+                            resultado = dict(resultado, politica_orientacion=orientacion,
+                                nota="Aplica esta política declarada. No selecciones otra técnica ni confirmes una cita.")
+                    valoracion = "" if orientacion else _hay_que_cogerle_la_valoracion(
                         cliente_id, mensajes, estado.veces_falta, config)
                     if valoracion:
                         traza.freno("le_cojo_la_valoracion")
@@ -4391,7 +4422,7 @@ async def responder(
                             % valoracion)
                         falta = ""
                         estado.veces_falta = 0
-                    elif falta and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
+                    elif falta and not orientacion and not progreso and (falta == estado.ultimo_falta or estado.veces_falta):
                         # Ya se lo preguntaste y no lo ha elegido. Repetirle la
                         # misma lista es EL fallo mas repetido de la medicion: se
                         # cansa y se va. La salida depende de lo que el negocio

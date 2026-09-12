@@ -2,8 +2,7 @@
 
 Diseño de Astra, 12-sep-2026. Datos y transiciones implementados en `reserva`.
 Integración en validación para alternativas de PRESUPUESTO con regla declarada
-`ofrecer_cita`: agente y WhatsApp usan la misma transición del núcleo. No se ha
-migrado la indecisión ni se ha aprobado una política nueva de Alicia.
+`ofrecer_cita`: agente y WhatsApp usan la misma transición del núcleo. Se está migrando la indecisión únicamente para reglas explícitas de orientación; no se ha aprobado ni activado una política nueva de Alicia.
 Complementa docs/PLAN_CONSOLIDACION_IA.md y docs/NORMAS_AGENTE_IA.md.
 
 ## Evidencia y alcance
@@ -137,3 +136,31 @@ Claude revisa las piezas y aporta los datos de política que falten. El estado
 base avanza en `astra/estado-propuestas` sin esperar las mediciones reales. No
 afirma persistencia entre procesos, ejecución exactamente una vez ni integración
 de canales: esos comportamientos requieren sus pruebas de extremo a extremo.
+
+
+## Orientación declarada: candidato de núcleo
+
+El portal puede declarar la intención «Ayuda para elegir un servicio». La acción
+ofrecer_cita prepara una propuesta del catálogo, sin seleccionar ni crear. Pedir
+foto o responder conserva su acción; no se sustituye por diagnóstico. Se respeta
+el interruptor del negocio. Sin regla declarada este cambio no activa políticas.
+
+| Decisión | Dueño en este recorrido |
+| --- | --- |
+| Detectar repetición sin progreso | Estado y resultado estructurado de buscar_servicio |
+| Autorizar alternativa | Regla activa del tenant y catálogo actual |
+| Registrar oferta | Propuesta en Estado; WhatsApp acusa envío antes de aceptar |
+| Interpretar respuesta libre | Modelo mediante responder_propuesta |
+| Aceptar/rechazar | Núcleo, revalidando id y revisión de política/servicio |
+| Crear cita | Núcleo existente; aceptar alternativa no ejecuta reserva |
+
+Para negocios con esta regla se omiten el rescate por Q&A y la nota genérica de
+repetición. Los mecanismos antiguos de otros recorridos aún no se han retirado.
+La política de Alicia (foto frente a diagnóstico para orientación) no se infiere
+ni se cambia con esta entrega. Persistencia entre procesos y aceptación real
+siguen pendientes; los tests en memoria no acreditan esas propiedades.
+
+Una repetición de la búsqueda conserva la propuesta vigente, su id y el acuse
+anterior. Cambiar política, servicio, sede o caducar exige una oferta nueva;
+un botón antiguo no la acepta. La primitiva de creación conserva su contrato de
+crear una identidad nueva cuando el llamador pide explícitamente reemplazarla.

@@ -1267,8 +1267,7 @@ async def _wa_enviar_propuesta_de_precio(*, cliente_id: str, phone_number_id: st
     propuesta = estado.propuesta_servicio
     if propuesta is None or propuesta.estado != "preparada":
         return False, ""
-    actual = booking.alternativa_de_precio_vigente(
-        cliente_id, propuesta.servicio_origen, propuesta.location_id)
+    actual = booking.alternativa_vigente_de_propuesta(cliente_id, propuesta)
     if not actual or actual["revision"] != propuesta.revision_config:
         reserva.invalidar_propuesta_servicio(estado)
         cuerpo = "La opción ha cambiado. Dime qué servicio quieres y lo consultamos de nuevo."

@@ -51,6 +51,7 @@ INTENCIONES = (
     "reprogramar",     # quiere moverla
     "disponibilidad",  # pregunta si hay hueco / cuando
     "precio",          # cuanto cuesta
+    "orientacion",     # necesita ayuda para elegir un servicio
     "presupuesto",     # quiere que le presupuesten su caso concreto
     "info",            # duda general del negocio (horario, donde estan, que hacen)
     "pago",            # quiere pagar / enlace de pago

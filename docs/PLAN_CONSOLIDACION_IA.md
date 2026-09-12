@@ -3,6 +3,21 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Candidato de orientación declarada (12-sep, Astra)
+
+Base integrada: 6e040e1, que incorpora servicios retirados, calendario de medidas,
+apellidos por tenant, eje de agenda de quince minutos y estado de recordatorios.
+La orientación usa una intención configurable en Q&A y las transiciones de
+propuesta existentes. Sustituye el rescate inferido y la nota de repetición solo
+cuando existe esta política explícita. No se habilita ni se inventa para Alicia.
+
+60 pruebas dirigidas verdes: oferta sin selección, aceptación tras envío,
+repetición con el mismo id, caducidad, cambio de regla y política de foto.
+Regresiones demostradas: repetir creaba otro id antes del arreglo; desactivar la
+vía nueva vuelve a seleccionar diagnóstico. Esto no mide al modelo real.
+Pendiente suite completa y revisión del candidato exacto. Estado aún en memoria:
+esta fase no acredita continuidad ni exclusión mutua entre workers.
+
 ## Actualización tras asumir los encargos de Claude
 
 Astra ha implementado las piezas pendientes de servicio retirado en creación y

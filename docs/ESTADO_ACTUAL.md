@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** aplicado eje de agenda con horas y marcas cada15 minutos según foto de Alicia (61be499). Portal muestra estado de plantilla de recordatorios del tenant, sin exponer errores internos ni confundir aprobación con envío verificado. Lista de cierre en docs/CIERRE_ALICIA.md.
-- **Rama:** astra/politicas-portal, E:/Vantelia-astra-politicas.
-- **Siguiente:** suite completa del candidato actualizado y revisión exacta. 39 dirigidos verdes de plantillas, recordatorios seguros, cancelación y duplicados; 4 casos de estado del portal rojos antes. Coordenadas del eje y sintaxis JS verificadas. Bases ya verdes: 0b6043f 2216/1 omitido;550aafe 2217/1 omitido.
-- **Espera a:** revisión de Claude al recuperar créditos. No desplegar. Pendientes: revisión visual final, demás políticas/autoridades, recuperación entre procesos y banco real Alicia+segundo negocio, envío real autorizado de recordatorios. Sin nuevas reglas de Alicia aparte del eje visual; lunes14/martes15 es objetivo, no aceptación automática.
+- **Tarea:** orientación declarada desde Q&A reutiliza propuesta, acuse y aceptación compartidos. En este recorrido sustituye rescate por Q&A y nota genérica; ofrecer no selecciona ni crea. Repeticiones conservan id y las ofertas caducadas se renuevan. Alicia sigue sin política nueva inferida.
+- **Rama:** astra/nucleo-decisiones, E:/Vantelia-astra-nucleo, basada en 6e040e1 (agenda 15 minutos y estado de recordatorios incluidos).
+- **Siguiente:** validar candidato estable completo y revisión exacta. 60 pruebas dirigidas verdes; fallo reproducido antes al repetir oferta y al desactivar la nueva vía. Regla guardada real, pedir foto, expiración y fallo de envío cubiertos. Después, recuperación segura y políticas todavía globales.
+- **Espera a:** revisión de Claude al recuperar créditos (último aviso: 22:40). No desplegar ni hacer push. Pendientes: revisión visual, demás autoridades, recuperación entre procesos, banco real Alicia+segundo negocio y envío real autorizado de recordatorios. La fecha objetivo lunes14/martes15 no sustituye aceptación.
 
 
 
