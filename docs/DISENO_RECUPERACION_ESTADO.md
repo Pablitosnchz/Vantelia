@@ -110,7 +110,7 @@ teléfono o notas: solo huella, identidad, fecha e id de reserva. La recuperaci�
 no repite auditoría ni notificaciones; recuperar entregas pendientes requiere
 una fase de bandeja de salida, no volver a ejecutar la reserva.
 
-**Todavía no conectado a los canales.** No basta pasar una clave aleatoria a
+**Situación de esta fase histórica, antes del enlace de WhatsApp descrito abajo.** No basta pasar una clave aleatoria a
 cada llamada. La confirmación debe conservar clave y datos antes de ejecutar,
 incluida la profesional resuelta. WhatsApp debe recuperar el resultado antes de
 su resolución de profesional y comprobación de hueco, distinguir resultado
@@ -142,3 +142,23 @@ Falta conservar la profesional asignada y recuperar el resultado de la operació
 antes de comprobar el hueco otra vez. Una aceptación en proceso tras una caída
 se bloquea; no se interpreta como cita creada ni se reejecuta automáticamente.
 El banco real y la revisión exacta siguen siendo puertas pendientes.
+
+
+## Enlace del resumen aceptado a la creación (13-sep)
+
+`vincular_operacion_confirmada` fija clave y huella una sola vez sobre la aceptación
+vigente. El canal y el núcleo comparten `booking_creation_fingerprint`; la huella
+incluye la profesional resuelta y todos los datos ejecutables. El CAS se guarda
+antes de llamar al núcleo. El adaptador recibe la identidad esperada para que una
+nueva oferta llegada durante la consulta no convierta la ejecución en otra sin clave.
+
+Una aceptación repetida consulta únicamente `booking_operations`, antes de resolver
+profesional o disponibilidad. Informa del estado ACTUAL de la fila; no repite proveedor,
+canje de bono, cobro ni mensajes accesorios. Cierra la confirmación solo si entrega
+su respuesta. El estado desconocido no ofrece otras horas ni se reejecuta. Un rechazo
+HTTP anterior a reclamar la operación permite abandonar esa confirmación sin dejar
+una ejecución ficticia pendiente. La finalización no borra una propuesta nueva.
+
+Pendiente: vínculo recuperable tras caducar/eliminar el estado, reconciliación de
+resultados desconocidos, outbox para entregas accesorias y migración de los demás
+recorridos. No presentar estas pruebas deterministas como banco real aprobado.

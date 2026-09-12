@@ -17,6 +17,17 @@ def creation_request_fingerprint(datos):
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def booking_creation_fingerprint(*, employee_row, nombre, email, telefono, servicio,
+                                 booking_date, booking_time, notas, source, fuera_de_horario=False):
+    """El núcleo y el canal identifican exactamente la misma solicitud ejecutable."""
+    return creation_request_fingerprint({
+        "employee_id": employee_row["id"], "nombre": nombre, "email": email,
+        "telefono": telefono, "servicio": servicio, "fecha": booking_date,
+        "hora": booking_time, "notas": notas, "source": source,
+        "fuera_de_horario": fuera_de_horario,
+    })
+
+
 def recover_creation_operation(cliente_id, operation_key, request_hash):
     if not isinstance(operation_key, str) or not operation_key.strip() or len(operation_key) > 128:
         raise HTTPException(status_code=422, detail="Identidad de operación no válida")

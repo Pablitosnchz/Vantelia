@@ -154,6 +154,18 @@ def avanzar_confirmacion_reserva(estado: Estado, identidad: str, siguiente: str)
     return True
 
 
+def vincular_operacion_confirmada(estado: Estado, identidad: str, huella: str) -> str:
+    """Conserva la identidad antes de ejecutar; una aceptación solo se vincula una vez."""
+    propuesta = leer_confirmacion_reserva(estado)
+    if (not propuesta or propuesta["id"] != identidad or propuesta["estado"] != "aceptada"
+            or propuesta.get("operacion") or not isinstance(huella, str) or len(huella) != 64):
+        raise ValueError("La confirmación no admite una nueva ejecución")
+    clave = "wa:" + identidad
+    propuesta["operacion"] = {"clave": clave, "huella": huella}
+    estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
+    return clave
+
+
 def contexto_para_ofrecer_reserva(estado: Estado) -> bool:
     """Solo abre reserva nueva desde una cancelación ejecutada y una creación pendiente."""
     if estado.intencion not in ("", "reservar") and not (

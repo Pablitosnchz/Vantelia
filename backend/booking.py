@@ -3264,12 +3264,10 @@ async def _create_booking_core(
     from backend import booking_operations
     request_hash = ""
     if operation_key:
-        request_hash = booking_operations.creation_request_fingerprint({
-            "employee_id": employee_row["id"], "nombre": nombre, "email": email,
-            "telefono": telefono, "servicio": servicio, "fecha": booking_date,
-            "hora": booking_time, "notas": notas, "source": source,
-            "fuera_de_horario": fuera_de_horario,
-        })
+        request_hash = booking_operations.booking_creation_fingerprint(
+            employee_row=employee_row, nombre=nombre, email=email, telefono=telefono,
+            servicio=servicio, booking_date=booking_date, booking_time=booking_time,
+            notas=notas, source=source, fuera_de_horario=fuera_de_horario)
         recuperada = booking_operations.recover_creation_operation(cliente_id, operation_key, request_hash)
         if recuperada is not None:
             return recuperada

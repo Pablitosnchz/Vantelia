@@ -3,6 +3,34 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Estado integrado al 13-sep: WhatsApp recupera la creación
+
+Candidato descendiente de 4ed33c7 en `astra/whatsapp-recuperable`. Incorpora las
+correcciones de la revisión c22cc42, persistencia, identidad del resumen y enlace
+con el registro de operaciones del núcleo. Los apartados posteriores documentan
+hitos históricos; sus suites y solicitudes de revisión no aprueban este candidato.
+
+WhatsApp conserva clave y huella de la petición (incluida la profesional resuelta)
+antes de ejecutar. Tras perder la respuesta, consulta el resultado real sin buscar
+otro hueco ni repetir creación, proveedor, bono o notificaciones accesorias. Un
+resultado desconocido queda pendiente de comprobación; no acredita cita creada.
+El resumen cambiado durante una consulta invalida la ejecución antigua. Un fallo
+de envío no marca terminada la confirmación. Se distingue cita confirmada,
+cancelada y pendiente de pago; esta última sigue sin recibir número de reserva.
+
+Validación dirigida inicial: cuatro regresiones rojas antes del enlace; 66 pruebas
+de integración verdes. Cierre y mutación registrados en ESTADO_ACTUAL. Falta la
+suite completa después de resolver los cinco fallos de demos encargados a Claude,
+revisión del SHA exacto y banco real comparable Alicia/otro negocio. Las seis
+revisiones de antecesores retiradas por sustitución no equivalen a aprobaciones.
+
+Límites de esta fase: recuperación vinculada a la vida del estado persistido;
+no hay reconciliación automática con el proveedor ni bandeja de salida duradera
+para pagos y entregas accesorias. Una caída antes de reclamar la operación no se
+reejecuta automáticamente. Formularios nativos, cancelación y reprogramación aún
+necesitan migrar sus confirmaciones; no se afirma idempotencia global entre canales.
+Recordatorios reales y decisión de foto/diagnóstico continúan pendientes.
+
 ## Persistencia del estado (candidato de Astra)
 
 Rama astra/persistencia-conversacion, basada en 44dddf8. SQLite conserva Estado

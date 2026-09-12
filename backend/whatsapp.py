@@ -1638,9 +1638,51 @@ async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) 
                 + rag._call_us_line(cliente_id))
 
 
+async def _wa_recuperar_creacion_confirmada(*, cliente_id, phone_number_id, to_number, propuesta, request):
+    """Solo consulta la operación aceptada. Nunca vuelve a ejecutar ni a cobrar."""
+    from backend import booking_operations, reserva, conversation_state
+    operacion = propuesta.get("operacion")
+    fila = None
+    if isinstance(operacion, dict):
+        try:
+            fila = booking_operations.recover_creation_operation(
+                cliente_id, operacion.get("clave"), operacion.get("huella"))
+        except HTTPException:
+            pass  # Ausente, en curso o corrupta: no acreditar éxito ni autorizar otra cita.
+    if fila is None:
+        texto = "Aún no puedo verificar el resultado de esa solicitud. No crearé otra cita; contacta con el negocio para comprobarla."
+    else:
+        estado_real = str(fila["status"] or "")
+        etiquetas = {"confirmed": "Cita confirmada", "pending_payment": "Reserva pendiente de pago",
+                     "pending_review": "Reserva pendiente de revisión", "completed": "Esta cita ya finalizó",
+                     "cancelled": "Esta cita está cancelada"}
+        numero = ("" if estado_real == "pending_payment" else
+                  " Número de reserva: %s." % (fila["booking_code"] or fila["id"]))
+        texto = "%s.%s Fecha: %s, %s." % (
+            etiquetas.get(estado_real, "Hay una cita registrada; consulta su estado con el negocio"),
+            numero, _wa_fecha_humana(fila["booking_date"]), fila["booking_time"])
+    enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, text=texto)
+    if enviado:
+        _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                      respuesta=texto, intent="booking_recovery")
+    if enviado and fila is not None:
+        estado = reserva.cargar(cliente_id, to_number)
+        actual = reserva.leer_confirmacion_reserva(estado)
+        if actual and actual["id"] == propuesta["id"]:
+            estado.hecho = True
+            estado.esperando_confirmacion = False
+            estado.codigo = str(fila["booking_code"] or "")
+            try:
+                reserva.guardar(cliente_id, to_number, estado)
+            except conversation_state.ConversationStateConflict:
+                return
+            appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, to_number), None)
+
+
 async def _wa_create_booking(
     *, cliente_id: str, phone_number_id: str, to_number: str, flow: appstate.WAFlowState, config: Dict[str, Any],
-    request: Request,
+    request: Request, confirmation_id: str = "",
 ) -> bool:
     try:
         booking_dt = textnorm._parse_date(flow.fecha)
@@ -1669,26 +1711,44 @@ async def _wa_create_booking(
             )
             return False
 
+        from backend import reserva, booking_operations
+        estado = reserva.cargar(cliente_id, to_number)
+        propuesta = reserva.leer_confirmacion_reserva(estado)
+        solicitud = dict(employee_row=employee_row, nombre=flow.nombre, email=flow.email,
+            telefono=flow.from_number, servicio=flow.servicio, booking_date=flow.fecha,
+            booking_time=flow.hora, notas=flow.notas or "", source="whatsapp")
+        operacion = {}
+        if confirmation_id:
+            if (not propuesta or propuesta["id"] != confirmation_id
+                    or propuesta["estado"] != "aceptada" or propuesta.get("operacion")
+                    or propuesta["datos"] != _wa_datos_del_resumen(flow)):
+                await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    to_number=to_number, text="La solicitud cambió antes de ejecutarse. Revisa el último resumen.")
+                return False
+            clave = reserva.vincular_operacion_confirmada(estado, propuesta["id"],
+                booking_operations.booking_creation_fingerprint(**solicitud))
+            reserva.guardar(cliente_id, to_number, estado)
+            operacion["operation_key"] = clave
         try:
             stored_booking = await booking._create_booking_core(
-                cliente_id,
-                employee_row=employee_row,
-                nombre=flow.nombre,
-                email=flow.email,
-                telefono=flow.from_number,
-                servicio=flow.servicio,
-                booking_date=flow.fecha,
-                booking_time=flow.hora,
-                notas=flow.notas or "",
-                source="whatsapp",
-                request=request,
-                audit_extra={"channel": "whatsapp"},
-                # Este flujo confirma en el propio chat (resumen + boton). Si ademas
-                # lo hiciera el nucleo, el cliente recibiria la misma confirmacion
-                # dos veces. Igual que hace la voz.
-                send_confirmation=False,
-            )
+                cliente_id, **solicitud, **operacion, request=request,
+                audit_extra={"channel": "whatsapp"}, send_confirmation=False)
         except HTTPException as exc:
+            if operacion:
+                vinculada = reserva.leer_confirmacion_reserva(estado)["operacion"]
+                try:
+                    resultado = booking_operations.recover_creation_operation(
+                        cliente_id, vinculada["clave"], vinculada["huella"])
+                except HTTPException:
+                    resultado = "pendiente"
+                if resultado is not None:
+                    await _wa_recuperar_creacion_confirmada(cliente_id=cliente_id,
+                        phone_number_id=phone_number_id, to_number=to_number,
+                        propuesta=reserva.leer_confirmacion_reserva(estado), request=request)
+                    return False
+                # El núcleo rechazó antes de reclamar la operación; no hay ejecución que recuperar.
+                estado.confirmacion_reserva_json = ""
+                reserva.guardar(cliente_id, to_number, estado)
             if exc.status_code == 409:
                 # Los dos son 409, pero no se arreglan igual: el hueco ocupado se
                 # resuelve con otra hora y el servicio retirado NO. Ofrecerle horas
@@ -1731,7 +1791,8 @@ async def _wa_create_booking(
         settings.logger.exception("Error creando booking WhatsApp para %s: %s", cliente_id, exc)
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-            text="No he podido registrar la cita. Intentalo en unos minutos.",
+            text=("No he podido verificar el resultado de la solicitud. Conservamos su referencia para comprobarla sin crear otra cita."
+                  if confirmation_id else "No he podido registrar la cita. Inténtalo en unos minutos."),
         )
         return False
 
@@ -1798,9 +1859,13 @@ async def _wa_create_booking(
     hay_que_pagar = bool(not bono_redeemed and payment_row and payment_row["checkout_url"])
     if not hay_que_pagar:
         confirmacion += "\nEscribe *menu* para volver al menu principal."
-    await messaging._send_whatsapp_text(
+    enviado = await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=confirmacion,
     )
+    if not enviado:
+        return False
+    _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                  respuesta=confirmacion, intent="booking_created")
     if not hay_que_pagar and stored_booking and (stored_booking["email"] or "").strip():
         # La confirmacion por WhatsApp ya la acaba de recibir; esto es solo la copia
         # por email para quien lo tenga en su ficha (antes la mandaba el nucleo).
@@ -3667,8 +3732,8 @@ async def _handle_whatsapp_message(
         from backend import reserva
         en_curso = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, from_number))
         if en_curso and en_curso["estado"] == "aceptada":
-            await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
-                to_number=from_number, text="Esa confirmación ya está en proceso; no voy a repetirla.")
+            await _wa_recuperar_creacion_confirmada(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=from_number, propuesta=en_curso, request=request)
             return
         # Ya tiene una cita viva y esta a punto de crear OTRA. Casi siempre venia a
         # moverla: el boton de confirmar llama siempre a `_wa_create_booking` y el
@@ -3780,15 +3845,24 @@ async def _handle_whatsapp_message(
                 return
             ok = await _wa_create_booking(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                flow=flow, config=config, request=request,
+                flow=flow, config=config, request=request, confirmation_id=propuesta["id"],
             )
-            _wa_clear_flow(cliente_id, from_number)
-            if ok:
-                # Se deja constancia de que la cita YA esta: si no, el modelo relee
-                # la conversacion, la da por pendiente y monta otra.
-                from backend import reserva
-
-                reserva.marcar_hecha(cliente_id, from_number)
+            actual = reserva.cargar(cliente_id, from_number)
+            if actual.hecho:
+                return  # La recuperación ya cerró la operación sin perder su resultado.
+            pendiente = reserva.leer_confirmacion_reserva(actual)
+            if pendiente and pendiente["id"] != propuesta["id"]:
+                return  # Otra gestión ganó mientras respondía el proveedor; no borrarla.
+            if ok and pendiente:
+                actual.hecho = True
+                actual.esperando_confirmacion = False
+                try:
+                    reserva.guardar(cliente_id, from_number, actual)
+                except conversation_state.ConversationStateConflict:
+                    return
+                appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+            elif not pendiente or not pendiente.get("operacion"):
+                _wa_clear_flow(cliente_id, from_number)
             if not ok:
                 # NO se le suelta el menu principal. `_wa_create_booking` ya le ha
                 # dicho lo que pasa y le ha ofrecido horas reales de ese mismo dia;

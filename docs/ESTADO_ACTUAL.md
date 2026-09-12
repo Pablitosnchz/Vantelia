@@ -4,7 +4,7 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 12-sep-2026, Astra (candidato de confirmación persistida;
+Última actualización: 13-sep-2026, Astra (candidato de creación recuperable WhatsApp;
 no implica cambios en producción).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** correcciones b338a2d de la revisión c22cc42 integradas con 6d00071: negativa por regla, centros coherentes, respaldo de texto y siguiente paso, conservando persistencia, confirmación por identidad y núcleo recuperable.
-- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado. Esta rama vuelve a ser el candidato integrado más reciente; no retomar ramas anteriores por inercia.
-- **Siguiente:** Integración con 6d00071: 68 dirigidos verdes. Cerrar los fallos de demos antes de una única suite completa y revisión exacta. Correcciones: 67 dirigidos y 11 de cierre verdes (grupos solapados), pyflakes limpio. La prueba de negativa recorre botón No y resumen real con Pack/mayúsculas; la protección tiene mutación roja. La tarjeta Q&A ya corregida se verifica ejecutando JavaScript.
-- **Espera a:** diagnóstico encargado a Claude de 5 fallos en test_demo_conversion de la suite 6d00071 (2261 correctos, 1 omitido). 530ae40 tenía suite verde (2256 correctos, 1 omitido). No duplicar ese diagnóstico ni las suites anteriores. Sin push ni despliegue; todavía pendientes enlace de ejecución recuperable WhatsApp, banco comparable Alicia+otro negocio y recordatorios reales.
+- **Tarea:** enlace implementado del resumen aceptado de WhatsApp con la operación recuperable del núcleo; conserva la referencia tras caída o envío fallido y consulta la fila actual sin recrear.
+- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; descendiente de 4ed33c7 (candidato integrado).
+- **Siguiente:** 66 dirigidos de integración y 23 de cierre verdes (grupos solapados); pyflakes y diff limpios. Cuatro regresiones rojas antes del cambio y mutación roja al quitar la guardia de identidad durante una consulta. Una única suite completa al resolver también los cinco fallos de demos; después revisión del SHA exacto. Siguen pendientes reconciliación/outbox, migración de gestión/nativos y medidas reales.
+- **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Último estado observado de Sincronía: revisión de cf2066d; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
 
 
 
@@ -50,8 +50,10 @@ Sincronía: retiradas seis peticiones propias de revisión de antecesores verifi
 (0b6043f, 550aafe, 6e040e1, 12d2614, 44dddf8, 530ae40) para evitar trabajo
 duplicado. Son peticiones sustituidas, no aprobaciones. Se conserva la revisión
 activa de cf2066d; el diagnóstico de demos está encargado y aún sin resultado.
-No hay suite completa nueva en ejecución ni revisión solicitada del conjunto
-619e1d3: primero deben cerrarse esos fallos. El seguimiento autónomo sigue activo.
+No hay suite completa nueva en ejecución ni revisión solicitada del descendiente
+de 4ed33c7: primero deben cerrarse esos fallos. El seguimiento autónomo sigue activo.
+El trabajo local de WhatsApp se conserva en su rama propia; no sustituye el diagnóstico
+de demos encargado a Claude ni afirma entregas de modelo/Meta reales.
 
 Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
 y prueba de envío real; confirmar situación actual con Claude. Última referencia
