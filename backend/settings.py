@@ -64,6 +64,43 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+
+class _SinSecretosEnElLog(logging.Filter):
+    """Tapa las credenciales que viajan en una URL antes de que se escriban.
+
+    `httpx` registra la URL ENTERA de cada peticion en nivel INFO, y la Graph API
+    de Meta obliga a llevar algunas credenciales en la query string (`input_token`
+    al inspeccionar un token, `client_secret` al canjear el code del alta). El
+    12-sep-2026, consultando el estado de una plantilla, el token permanente de un
+    negocio aparecio entero en los logs del VPS. Un token en un log es un token
+    filtrado: lo tiene quien entre al servidor, quien abra un backup y quien lea
+    un volcado.
+
+    Esto NO sustituye a mandarlos en cabecera -eso se hace donde Meta lo permite-:
+    es la red de debajo, para lo que no se puede mover y para el codigo que venga
+    despues sin acordarse de esto.
+    """
+
+    _CLAVES = ("access_token", "input_token", "client_secret", "code", "token",
+               "api_key", "apikey", "password", "secret")
+    _PATRON = re.compile(r"(?i)\b(%s)=([^&\s\"']+)" % "|".join(_CLAVES))
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003 - API de logging
+        try:
+            mensaje = record.getMessage()
+        except Exception:  # noqa: BLE001 - un filtro jamas puede tumbar el log
+            return True
+        if "=" in mensaje and self._PATRON.search(mensaje):
+            record.msg = self._PATRON.sub(r"\1=[oculto]", mensaje)
+            record.args = ()
+        return True
+
+
+# Se engancha al HANDLER, no al logger: asi tapa tambien lo que escriben librerias
+# de terceros (httpx, httpcore), que no pasan por el logger de Vantelia.
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(_SinSecretosEnElLog())
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 # Token SOLO para que el PC de Pablo mande la foto de sincronia entre agentes

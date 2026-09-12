@@ -279,8 +279,25 @@ def disconnect(cliente_id: str) -> bool:
 
 
 async def _graph_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """GET a la Graph API con el token en la CABECERA, nunca en la URL.
+
+    `httpx` escribe la URL entera de cada peticion en el log, asi que un
+    `access_token` en la query string acaba en claro en los logs del servidor: se
+    vio el 12-sep-2026 al consultar el estado de una plantilla, con el token
+    permanente del negocio completo en una linea. Meta acepta `Authorization:
+    Bearer`, asi que no hay motivo para llevarlo a la vista.
+
+    Si llega dentro de `params` se MUEVE a la cabecera en vez de ignorarlo: asi
+    ninguna llamada existente se queda sin credencial. Lo que Meta exige en la
+    URL de todas formas (`input_token`, `client_secret`) lo tapa el filtro de
+    `settings._SinSecretosEnElLog`.
+    """
+    limpios = dict(params or {})
+    portador = str(limpios.pop("access_token", "") or "")
+    cabeceras = {"Authorization": "Bearer %s" % portador} if portador else {}
     async with httpx.AsyncClient(timeout=25) as client:
-        response = await client.get(f"{GRAPH}/{settings.WHATSAPP_API_VERSION}/{path}", params=params)
+        response = await client.get(f"{GRAPH}/{settings.WHATSAPP_API_VERSION}/{path}",
+                                    params=limpios, headers=cabeceras)
         data = response.json() if response.content else {}
     if response.status_code >= 300 or "error" in data:
         raise RuntimeError(str((data.get("error") or {}).get("message") or response.text)[:300])
@@ -288,8 +305,18 @@ async def _graph_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _graph_post(path: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """POST a la Graph API. El token va en la cabecera, como en el GET.
+
+    Aqui el riesgo es menor -el cuerpo de un POST no se registra-, pero se hace
+    igual para que no haya dos formas de mandar lo mismo y para que nadie copie
+    la de la query string la proxima vez.
+    """
+    cuerpo = dict(data or {})
+    portador = str(cuerpo.pop("access_token", "") or "")
+    cabeceras = {"Authorization": "Bearer %s" % portador} if portador else {}
     async with httpx.AsyncClient(timeout=25) as client:
-        response = await client.post(f"{GRAPH}/{settings.WHATSAPP_API_VERSION}/{path}", data=data)
+        response = await client.post(f"{GRAPH}/{settings.WHATSAPP_API_VERSION}/{path}",
+                                     data=cuerpo, headers=cabeceras)
         payload = response.json() if response.content else {}
     if response.status_code >= 300 or "error" in payload:
         raise RuntimeError(str((payload.get("error") or {}).get("message") or response.text)[:300])
