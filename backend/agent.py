@@ -1852,9 +1852,9 @@ def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
     try:
         from backend import booking
 
-        if (not booking.la_valoracion_es_obligatoria(cliente_id, dicho)
-                and any(booking.renuncio_al_diagnostico(str(m.get("content") or ""))
-                        for m in mensajes if isinstance(m, dict) and m.get("role") == "user")):
+        if booking.renuncio_al_diagnostico_en_mensajes(
+                cliente_id, [m.get("content") for m in mensajes
+                             if isinstance(m, dict) and m.get("role") == "user"]):
             return ""
         return str((booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
     except Exception:  # noqa: BLE001 - ante la duda, se sigue preguntando

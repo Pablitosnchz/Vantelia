@@ -39,11 +39,12 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra implementa y coordina; Claude auxiliar de medición/revisión y del arreglo acotado de servicio retirado.
-- **Tarea:** corregir revisión CAMBIOS de `afecf80`. Hallazgos 1/4: progreso técnica→largo no cuenta como indecisión, renuncia por mensaje respetando valoración obligatoria. 3: tarjeta business-rules visible en Q&A. 5: familias reutilizadas y sello solo del catálogo, sin TTL que oculte cambios. 6: fixture comprueba ocupación y limpia vacaciones. Banco reutiliza captura compartida para no llamar a Meta.
-- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-revision`. `c22cc42` (fase 2) permanece aislado en `astra/estado-propuestas`; no integrar antes de incorporar estas correcciones. Encapsulación antigua preservada en `astra/alicia-final`.
-- **Siguiente:** 46 pruebas dirigidas verdes; integrado ad47b10 de Claude (servicio retirado distinto de hueco ocupado, 63 dirigidos reportados por Claude). Ejecutar suite completa estable y volver a pedir revisión. Se reprodujeron rojos para progreso, renuncia, visibilidad Q&A, lecturas redundantes, fixture ocupada y captura de Meta.
-- **Espera a:** suite completa y nueva revisión; comparación 6+6 al primer intento. Referencia nueva: 43/43 y un caso no aplica, con calendario `1a9d56c` sobre `bd7a6da` (medida `9eadd6e`); el crítico necesitó segundo intento, no acredita fiabilidad inicial. No subir `claude/hora-sin-mirar` ni `570a201` sin validación/revisión; no desplegar sin Pablo.
+- **Testigo:** Astra.
+- **Tarea:** segunda revisión CAMBIOS de 6eb8ae5. Corregido hallazgo2: aviso persistente de reglas inactivas (6d10eba). Corregido hallazgo5: renuncia compartida por agente y booking con ventana de 30 mensajes, sin recorte de familia obligatoria a 1500 caracteres. 19 dirigidos verdes; regresiones rojas antes.
+- **Rama:** astra/valoracion-sin-bucle, E:/Vantelia-astra-revision.
+- **Siguiente:** cerrar 3 (elección con duda), 4 (lecturas repetidas) y 6 (limpieza Q&A de tests); integrar encargo de Claude sobre servicio retirado antes de resolver profesional; suite completa estable y revisión. No se ha solicitado nueva revisión todavía.
+- **Espera a:** Claude hallazgo1 con recorridos reales WA sin profesional, voz/chat y widget; no basta mock del núcleo. Otros encargos previos: calendario y reprogramación. Arquitectura conservada en astra/estado-propuestas. Medición crítico 6+6: tratamiento 0/6 al primer intento, no final. No desplegar sin Pablo.
+
 
 Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
 y prueba de envío real; confirmar situación actual con Claude. Última referencia

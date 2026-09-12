@@ -78,3 +78,13 @@ def test_renuncia_por_mensaje_y_respeta_obligatoriedad(api_module, monkeypatch, 
     monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda *a: obligatoria)
     assert agent._hay_que_cogerle_la_valoracion(
         "demo", [{"role": "user", "content": m} for m in mensajes], 2) == esperado
+
+
+def test_familia_obligatoria_no_desaparece_al_superar_1500_caracteres(api_module, monkeypatch):
+    from backend import agent, booking
+    monkeypatch.setattr(agent, "_lo_que_el_negocio_dice_al_recomendar", lambda *a: "Se decide en persona.")
+    monkeypatch.setattr(booking, "_servicio_de_valoracion", lambda *a: {"nombre": "Diagnostico"})
+    monkeypatch.setattr(booking, "la_valoracion_es_obligatoria", lambda cid, texto: "extensiones" in texto)
+    mensajes = [{"role": "user", "content": m} for m in
+                ["quiero extensiones", "comentario " * 180, "no lo tengo claro, no quiero diagnostico"]]
+    assert agent._hay_que_cogerle_la_valoracion("demo", mensajes, 2) == "Diagnostico"
