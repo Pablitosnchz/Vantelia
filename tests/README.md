@@ -187,3 +187,7 @@ hueco ocupado, excepción del mostrador, alternativas de voz y continuidad de
 WhatsApp hasta elegir otro servicio. Los botones usan la identidad del resumen
 enviado. Complementa `test_retirado_recorrido_real.py` (widget y reprogramación)
 y los tests de confirmación/creación recuperable; no mide Meta ni modelo reales.
+
+`test_estado_servicio_retirado.py` vigila que el estado no vuelva a pedir crear el
+servicio rechazado, conserva contacto/fecha, respeta alternativas y citas ya
+terminadas, y comprueba que el aviso de WhatsApp solo entra en historial tras envío.

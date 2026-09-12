@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** integración de ee939c8 (Claude, encargo-811da6) sobre 8324844. Se conserva validación única ya vigente; se adapta continuidad de elección de servicio retirado y mensajes de voz a confirmación/recuperación actuales.
-- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; integración de claude/encargo-811da6, base antigua afecf80.
-- **Siguiente:** 57 dirigidos de integración verdes, pyflakes limpio. Cuatro casos rojos en la base previa, dos ya verdes. Cerrar memoria del agente ante servicio retirado; conservar la validación única y la recuperación ya probadas. Suite completa y revisión exacta pendientes del diagnóstico de demos.
-- **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Claude revisó OK cf2066d (cambio de cuenta), con tres mejoras menores; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
+- **Tarea:** entrega ee939c8 integrada en 52acab5 conservando validación única; corregido el estado que reintentaba crear un servicio retirado. Astra asume ahora el diagnóstico de demos que seguía en cola.
+- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; candidato integrado actual.
+- **Siguiente:** 57 dirigidos de integración y 61 del cierre de estado verdes (solapados); cuatro rojos antes de integrar y uno de estado antes del arreglo. Diagnosticar demos, estabilizar y una suite completa; revisión exacta después. Banco real, recordatorios y fases restantes pendientes.
+- **Espera a:** Claude tiene el encargo de calendario activo; avisado de la cobertura ya existente en 0b6043f. Dos encargos duplicados de servicios retirados se han retirado (ya cubiertos en da0ca70). Demos reasignado explícitamente a Astra para no duplicar. Sin push ni despliegue.
 
 
 
@@ -326,3 +326,16 @@ La siguiente puerta de validación del conjunto es resolver esos fallos y pasar
 una suite completa, después revisión exacta y banco comparable. Quedan trabajo
 independiente de reconciliación/outbox y migración de confirmaciones de gestión;
 no confundir estos dos arreglos con haber terminado toda la arquitectura.
+
+
+Integración 13-sep: 52acab5 une ee939c8 con el candidato moderno; no añade el segundo
+validador de retirada ni vuelve a botones genéricos. Nuevo cierre del estado:
+`anotar_resultado` invalida selección, duración, profesional, hora y resumen tras
+rechazo de crear el servicio vigente. Conserva nombre/fecha y no borra una cita
+terminada ni la selección al consultar otra alternativa. Prueba roja antes del
+arreglo; 61 dirigidos verdes. Aviso WhatsApp con envío rechazado no se registra.
+La nota de Claude sobre widget ya estaba cubierta por da0ca70 y se volvió a probar.
+
+Cola depurada: retirados encargos propios 6bbb04 y 8a476e ya implementados en
+antecesor da0ca70. No son aprobaciones. Diagnóstico 04d9a4 reasignado a Astra antes
+de lanzarlo aquí; Claude conserva el calendario activo, sin interrumpir su proceso.

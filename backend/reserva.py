@@ -716,6 +716,23 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         # Consultar una alternativa no es elegirla. Los datos provisionales se
         # devuelven al modelo, pero no pisan la reserva ni habilitan su resumen.
         return
+    if (tool == "crear_cita" and resultado.get("servicio_retirado")
+            and not resultado.get("ok") and not estado.hecho
+            and not _es_otro_servicio(estado.servicio_exacto or estado.servicio,
+                                     str(argumentos.get("servicio") or ""))):
+        # La tool rechazó el servicio elegido. Mantenerlo hacía que el cierre
+        # obligatorio volviese a ejecutar la misma creación en cada turno.
+        invalidar_propuesta_servicio(estado)
+        estado.servicio = estado.servicio_exacto = estado.servicio_texto = ""
+        estado.duracion = 0
+        estado.hora = estado.profesional = estado.fecha_de_los_huecos = ""
+        estado.huecos = []
+        estado.hora_del_codigo = estado.recargo_dicho = False
+        estado.esperando_confirmacion = False
+        estado.confirmacion_reserva_json = ""
+        estado.candidatos_pendientes = estado.veces_falta = 0
+        estado.ultimo_falta = ""
+        return
     if resultado.get("pendiente_de_confirmacion"):
         # La creacion se ha frenado a proposito (la confirma la clienta con un
         # boton), pero los datos que traia la llamada son buenos y son los unicos
