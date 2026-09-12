@@ -52,3 +52,42 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Evidencia y límites completos en ACEPTACION_CANDIDATO_IA.md; logs y resultados
   `portal-7ab7775*` en la carpeta externa de coordinación. Pendiente corregir
   explícitamente la fecha del instrumento y validar el recorrido restante.
+
+## 2026-09-13 01:26 +0200 - revision independiente del banco
+
+- Primera entrega: 3 regresiones rojas y 1 control verde contra originales; 20 dirigidos verdes con el cambio. No es una medicion real.
+- Revision detecta que no poder preparar una cita fixture se contaba como fallo del asistente sin conversar. Se corrige como NO MEDIDO, separado de conversaciones que fallan.
+- Se pide validar destino del informe antes de gastar modelo y guardar evidencia parcial atomicamente por caso. El manifiesto sigue siendo resumido; no acredita por si solo comparabilidad total ni anonimiza respuestas.
+- QA del portal: arreglo del dia revisado por otro agente, nueva ejecucion aislada en marcha sobre rama gestion con cambios sin commit, registrada en portal-gestion.*. No se presenta como validacion de un SHA limpio.
+
+## 2026-09-13 01:27 +02:00 — QA corregida, recorrido completo verde
+
+- Revisado el cambio mínimo: avanzar al día abierto sembrado antes de Nueva
+  cita y comprobar su fecha; no desactiva cierres ni elimina comprobaciones.
+- Nueva ejecución autorizada en gestión: 01:25:59–01:27:14, exit 0. Base f317e06
+  con árbol sucio y concurrente, no candidato exacto. Evidencia `portal-gestion*`.
+- Pasa todo el guion; cita arrastrada de 20 a 45 min con altura y persistencia
+  comprobadas. Se conserva el fallo anterior; no se repite este verde.
+- Inventariados dos casos de recordatorios aún NO REPRODUCIDOS: omitido+fallido
+  que marca enviado y duplicación entre ejecutores/reinicio. Detalle en aceptación.
+
+## 2026-09-13 01:38 +0200 - commits y trabajo independiente
+
+- e49f29d guarda correccion del domingo en QA; 44ac6de guarda banco revisado con checkpoints por intento y precondiciones NO MEDIDO. Ultimo cierre del informe: 10 pruebas verdes, tras 25 de informe/calendario (selecciones solapadas).
+- Cancelacion: 5 regresiones iniciales, 4 de resultado desconocido, mutacion de precondicion y 2 de perdida por menu fallan antes del arreglo. 86, 13 y 69 dirigidos verdes en grupos solapados; ultima revision detecta bypass tras intervencion humana, en correccion. Todavia sin suite completa nueva.
+- Auxiliar inicia reproduccion/arreglo de recordatorio marcado enviado cuando email se omite y WhatsApp falla, en worktree separado astra/recordatorios-fiables base44ac6de. Concurrencia queda pendiente, no resuelta por este arreglo.
+- Claude avisado por Sincronia; referencia real y copia saneada/configuracion de dos negocios solicitadas formalmente, esperan su disponibilidad.
+
+## 2026-09-13 01:44 +0200 - recordatorios reproducidos
+
+- 3 regresiones rojas demuestran marca de enviado sin aceptacion cuando email se omite y WA falla. Corregido en worktree independiente; 31 pruebas verdes y 1 xfail estricto, revision/integracion pendientes.
+- Xfail reproduce dos ejecutores enviando antes de escribir timestamp. No esta arreglado; exige registro duradero por aviso/canal y tratamiento de resultado desconocido.
+- No ha habido ninguna entrega Meta ni conversacion de modelo real; el objetivo de mejora comparada sigue pendiente.
+
+## 2026-09-13 01:52 +0200 - candidato integrado para suite
+
+- Cancelación 9ede4f9: último hallazgo de saludo tras atención humana cerrado, 1 rojo previo + control verde, 57 dirigidos verdes y revisión independiente OK.
+- ff59b06 de recordatorios revisado e integrado mediante merge limpio a83021c. La carrera entre ejecutores permanece como xfail explícito.
+- Banco revisado en 44ac6de y guarda de rutas f4ad515; QA guardada en e49f29d. Sin push ni despliegue.
+- Se prepara una sola suite completa mediante validar-gestion.py; el SHA exacto, horas y resultado quedarán en gestion-suite.result.json, junto al .log, en C:/Users/pabli/.codex/vantelia-coordination/. Solo se pide revisión automática tras verde y árbol intacto. Este registro previo no afirma que la suite haya terminado.
+- Siguiente trabajo independiente: reclamar recordatorios por generación/aviso/canal antes de enviar, preservar aceptaciones y tratar incertidumbre. El candidato de gestión se conservará estable para validar.

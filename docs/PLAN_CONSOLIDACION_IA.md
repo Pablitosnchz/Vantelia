@@ -3,6 +3,31 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Candidato nocturno integrado (13-sep)
+
+Código integrado en a83021c, pendiente suite del commit estable con su relevo:
+
+- 9ede4f9 migra cancelación guiada y de botones WhatsApp a propuesta persistida,
+  aceptación con identidad y snapshot validado por el núcleo. Resultado desconocido
+  se conserva al volver al menú; una protección común precede los desvíos al agente.
+  Último cierre dirigido: 57 verdes; revisión local independiente OK.
+- 44ac6de/f4ad515 guardan evidencia del banco por intento, incluso si se interrumpe
+  un reintento; precondiciones no medidas y denominadores separados. Destino
+  comprobado antes de medir; no puede reemplazar la BD origen/copia. No proporciona
+  por sí solo configuración completa, modelo ni copia saneada comparable.
+- e49f29d corrige dependencia del domingo en QA del portal. Recorrido completo
+  verde, incluida duración visual y persistida; árbol concurrente, no SHA exacto.
+- ff59b06 evita marcar enviado si email se omite y WhatsApp falla sin aceptación.
+  31 dirigidos verdes, un xfail estricto de duplicación entre ejecutores pendiente.
+
+No se cierra fase 4: faltan registro duradero de envíos, generación por cambio de
+cita, reconciliación, formularios nativos y gestión conversacional/otros canales.
+La recuperación de cancelación sigue limitada al TTL y no hace atómico el proveedor
+con la BD. Fase 5 exige revisión de Claude del candidato exacto y banco real
+comparable de Alicia y otro negocio. La decisión foto/diagnóstico permanece aislada.
+Siguiente entrega independiente: exclusión duradera de recordatorios antes del envío,
+revalidación de la cita y tratamiento explícito de resultados inciertos por canal.
+
 ## Corte verificable: 13-sep, 01:15 Europe/Madrid
 
 7ab7775: suite completa terminada, **2297 passed, 1 skipped**, duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid;

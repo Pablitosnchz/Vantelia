@@ -199,3 +199,29 @@ agenda lo reimporten. Reproducción del fallo de aislamiento: ejecutar primero
 después `test_tres_fallos_de_la_demo.py::test_la_tool_no_devuelve_la_palabra_como_servicio`
 y finalmente `test_demo_conversion.py`. Sin la fixture local fallaban tokens,
 engagement y constructor de pre-generación; con ella los 23 casos pasan.
+
+### Evidencia del banco sin ocultar intentos
+
+`test_informe_banco.py` comprueba JSON opcional con ambos intentos completos,
+primer intento medido/fallido y reintentos no medidos. No preparar la cita previa
+es una precondición no medida; una conversación que falla sigue contada aunque
+después no pueda prepararse el reintento. El destino se comprueba antes de tocar
+la BD y los checkpoints atómicos conservan intentos ante interrupción o fallo de
+reemplazo. La preparación real pasa por el núcleo con webhook y wrappers de
+email/SMS interceptados. Estas pruebas no llaman al modelo ni acreditan que una
+copia/configuración concreta coincida con producción.
+
+### Cancelación y recordatorios pendientes
+
+`test_cancelacion_whatsapp_confirmada.py` prueba ofrecer/aceptar/ejecutar con
+identidad persistida, botón antiguo y cita cambiada, separación de crear/cancelar,
+reinicio, CAS, resultado desconocido y fallo de envío. Menú, saludo y atención
+humana no deben perder una operación aceptada pendiente ni entregarla a otro
+recorrido. Precondición del núcleo probada con mutación; no acredita atomicidad
+durante la red ni recuperación fuera del TTL.
+
+`test_recordatorio_omitido_y_fallido.py` prueba que omisión de email y fallo de
+WhatsApp sin entrega aceptada no marcan enviado. Mantiene los casos totalmente
+omitidos y las aceptaciones parciales sin reenvío. Contiene un **xfail estricto**
+que reproduce dos ejecutores enviando antes de registrar resultado: es un fallo
+pendiente conocido, no una garantía de exclusión ni una entrega real de Meta.

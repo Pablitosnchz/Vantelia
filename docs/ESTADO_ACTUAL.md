@@ -37,15 +37,30 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** continuación nocturna autorizada por Pablo: migrar confirmación de cancelación WhatsApp, inventariar evidencia real y mantener registro horario.
+- **Tarea:** validar candidato integrado: cancelación 9ede4f9, banco 44ac6de/f4ad515, QA e49f29d y recordatorios ff59b06 integrados en a83021c. Revisión local de cada pieza OK, pendiente suite integrada y revisión de Claude.
 - **Rama:** astra/gestion-confirmada, E:/Vantelia-astra-gestion, descendiente de 7ab7775. Se conserva intacto el candidato anterior en astra/whatsapp-recuperable para revisión.
-- **Siguiente:** regresiones de cancelación antes del arreglo, identidad y aceptación persistidas reutilizando reserva.Estado; verificación independiente y una suite completa cuando el nuevo candidato sea estable. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Siguiente:** una suite completa estable con C:/Users/pabli/.codex/vantelia-coordination/validar-gestion.py. Resultado gestion-suite.result.json, revisión exacta automática solo tras verde. Conservar este candidato limpio durante la ejecución y consultar resultado al terminar, no periódicamente. Registro: docs/REGISTRO_CONSOLIDACION.md.
 - **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
 
 Resultado confirmado: C:/Users/pabli/.codex/vantelia-coordination/integrado-wa-suite.result.json
 y su .log. Suite terminada, exit 0; no sigue ejecutándose ni debe repetirse.
 El seguimiento cada 30 minutos está actualizado para retomar el último relevo y
 anotar avances con hora. No implica actividad continua entre ejecuciones.
+
+La rama astra/recordatorios-fiables en E:/Vantelia-astra-recordatorios contiene
+ff59b06 ya integrado, no tiene trabajo pendiente sin guardar. Se ha reproducido
+concurrencia de recordatorios (xfail estricto), todavía sin arreglar. Siguiente
+bloque independiente: reclamación duradera por aviso/canal en una rama hija del
+candidato integrado, conservando este para la suite. No repetir envíos de resultado
+incierto ni introducir otra autoridad conversacional.
+
+Validación dirigida nueva (selecciones solapadas): cancelación, último cierre 57
+verdes, con regresiones rojas de cambio de cita, resultado perdido, menú y salto
+al agente tras atención humana. Banco, último cierre 14 verdes, con guard de ruta,
+persistencia por intento y casos no medidos. Recordatorios: 31 verdes y un xfail
+de duplicación pendiente. QA navegador completa exit 0 sobre árbol de trabajo;
+no es evidencia del modelo/Meta ni atribución a un SHA estable. Detalles y límites
+en docs/ACEPTACION_CANDIDATO_IA.md.
 
 ## Notas históricas (el bloque En curso prevalece)
 
