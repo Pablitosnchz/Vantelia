@@ -31,6 +31,17 @@ reejecuta automáticamente. Formularios nativos, cancelación y reprogramación 
 necesitan migrar sus confirmaciones; no se afirma idempotencia global entre canales.
 Recordatorios reales y decisión de foto/diagnóstico continúan pendientes.
 
+## Hallazgo vigente: falta retirar la alternativa implícita desde Q&A
+
+Verificado en el descendiente 5f54f72: `orientacion` solo anula el rescate antiguo
+si hay política configurada. Sin ella, `_hay_que_cogerle_la_valoracion` y la nota
+al repetir siguen convirtiendo una Q&A en ofrecimiento/selección de diagnóstico.
+La existencia de la política nueva no acredita autoridad única. Próxima corrección
+independiente de la decisión de producto: Q&A informativa sin política no debe
+seleccionar el diagnóstico. Conservar petición explícita y propuesta declarada,
+con pruebas de ausencia de política/otro tenant y aceptación diferenciada. No se
+ha implementado esta retirada ni medido su efecto en el banco real todavía.
+
 ## Persistencia del estado (candidato de Astra)
 
 Rama astra/persistencia-conversacion, basada en 44dddf8. SQLite conserva Estado

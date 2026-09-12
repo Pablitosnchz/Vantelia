@@ -58,10 +58,23 @@ de demos encargado a Claude ni afirma entregas de modelo/Meta reales.
 Última entrega de Astra: 9b1bfea, creación recuperable de WhatsApp, rama limpia al
 cerrar; 66 dirigidos de integración y 23 de cierre verdes (solapados), cuatro rojos
 prearreglo y mutación roja de identidad. No se ha pedido revisión formal sin suite
-completa. Sin push/despliegue. La respuesta antigua de Claude sobre Q&A/diagnóstico
-no describe las fases de orientación declarada y confirmación ya integradas; no
-aplicarla como si faltasen sin comprobar el candidato actual. Sigue sin inventarse
+completa. Sin push/despliegue. Contraste posterior de la respuesta de Claude: existe orientación declarada, pero
+NO se ha retirado el atajo Q&A cuando falta esa política. El hallazgo sigue vigente
+en el candidato actual; no dar esa sustitución por terminada. Sigue sin inventarse
 la decisión particular de Alicia entre foto y diagnóstico.
+
+Prioridad independiente confirmada (13-sep): retirar el salto Q&A -> selección de
+valoración. En `backend/agent.py`, `_hay_que_cogerle_la_valoracion` sigue tomando
+Q&A y disponibilidad de un diagnóstico como autorización; el recorrido de
+`buscar_servicio` lo llama cuando `orientacion` está vacía. La nota al repetir
+también ofrece/coge valoración sin propuesta explícita. La política nueva solo
+sustituye esos caminos cuando está configurada. No depende de averiguar qué regla
+quiere Alicia: sin autorización declarada no se debe seleccionar un servicio por
+ella. Próximo paso de Astra: regresión de recorrido sin política (Q&A presente),
+retirar los caminos sustituidos y conservar oferta/aceptación bajo política
+explícita y petición directa de la clienta. Migrar pruebas antiguas que fijan el
+atajo por requisitos nuevos documentados, conservando las que impiden elegir una
+técnica sin autorización. Implementación aún pendiente, no hay prueba nueva ejecutada.
 
 cf2066d OK no implica integración: quedan mejoras menores de coste del sondeo de
 cuenta, aviso visible de identidad desconocida y actualización documental al integrar.
