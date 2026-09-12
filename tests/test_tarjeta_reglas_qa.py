@@ -17,7 +17,7 @@ def test_reglas_de_negocio_visibles_y_palabras_clave_sin_activar_ocultas():
         funciones.append(html[inicio:html.index("\n}", inicio) + 2])
     prueba = """
 const assert = require('assert');
-const nodos = Object.fromEntries(['brCard','brList','brEnabled','brFamiliasHint',
+const nodos = Object.fromEntries(['brCard','brList','brEnabled','brStatus','brFamiliasHint',
     'brIntenciones','kwrCard','kwrList','kwrEnabled'].map(id => [id, {
         style: {display:'none'}, dataset: {}, innerHTML:'', checked:false }]));
 const document = {getElementById: id => nodos[id]};
@@ -30,6 +30,7 @@ const escapeHtml = x => x;
   await loadBusinessRules(); await loadKeywordRules();
   assert.strictEqual(nodos.brCard.style.display, '');
   assert.strictEqual(nodos.brEnabled.checked, false);
+  assert.ok(nodos.brStatus.textContent.includes('no se aplican')); 
   assert.strictEqual(nodos.kwrCard.style.display, 'none');
 })().catch(e => { console.error(e); process.exit(1); });
 """
