@@ -177,3 +177,13 @@ el contenedor de producción es 3.11.
   `scripts/qa_voice_realtime_*.py` gastan cuota y van aparte.
 - El panel como tal: para eso está `python scripts/qa_e2e.py`, que recorre el
   portal entero en un entorno aislado y sale con 1 si hay bugs.
+
+
+### Servicio retirado al confirmar
+
+`test_servicio_retirado_al_confirmar.py` (entrega de Claude ee939c8, adaptada al
+candidato integrado) comprueba retiro desde el portal, motivo distinguible del
+hueco ocupado, excepción del mostrador, alternativas de voz y continuidad de
+WhatsApp hasta elegir otro servicio. Los botones usan la identidad del resumen
+enviado. Complementa `test_retirado_recorrido_real.py` (widget y reprogramación)
+y los tests de confirmación/creación recuperable; no mide Meta ni modelo reales.

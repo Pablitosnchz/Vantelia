@@ -3213,8 +3213,8 @@ def validar_servicio_publico(cliente_id: str, servicio: str, *, fila=None) -> No
 
 
 def respuesta_servicio_retirado() -> Dict[str, Any]:
-    return {"ok": False, "servicio_retirado": True,
-            "error": "Ese servicio ya no está disponible.",
+    return {"ok": False, "servicio_retirado": True, "needs_service": True,
+            "missing_field": "servicio", "error": "Ese servicio ya no está disponible.",
             "que_hacer": "Pide elegir otro servicio. No ofrezcas otra hora para el servicio retirado."}
 
 

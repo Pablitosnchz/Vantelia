@@ -811,6 +811,34 @@ def _voice_service_required_response(cliente_id: str, location_id: str = "", *, 
     }
 
 
+def _voice_service_retired_response(cliente_id: str, location_id: str = "", *, servicio: str = "") -> Dict[str, Any]:
+    """El negocio ha retirado ese servicio: se dice ESO y se pide otro, sin horas.
+
+    Salia por la respuesta del hueco ocupado ("ese horario ya no esta disponible,
+    tengo las nueve, las nueve y media...") y la clienta elegia otra hora para
+    volver a chocar con el mismo servicio. Otra hora no lo arregla; otro servicio
+    si. Por eso no lleva `huecos` ni `no_disponible`, y si `needs_service`.
+    """
+    options = _voice_service_options(cliente_id, location_id)
+    visible = options[:5]
+    nombre = textnorm._sanitize_text(servicio or "") or "Ese servicio"
+    prompt = "%s ya no está disponible para reservar." % nombre
+    if visible:
+        prompt += " ¿Quieres otro? Puedo reservarte %s" % _voice_join_es(visible[:3])
+        prompt += ", entre otros." if len(visible) > 3 else "."
+    else:
+        prompt += " Ahora mismo no me queda otro servicio que pueda reservarte."
+    return dict(booking.respuesta_servicio_retirado(), **{
+        "ok": False,
+        "servicio_retirado": True,
+        "needs_service": True,
+        "missing_field": "servicio",
+        "servicios_disponibles": visible,
+        "error": prompt,
+        "mensaje_voz": prompt,
+    })
+
+
 def _voice_location_required_response(cliente_id: str) -> Dict[str, Any]:
     options = _voice_location_options(cliente_id)
     visible = options[:5]
@@ -2431,7 +2459,7 @@ async def _voice_perform_booking(
         )
     except HTTPException as exc:
         if booking.es_servicio_retirado(exc.detail):
-            return dict(booking.respuesta_servicio_retirado(), **date_meta)
+            return dict(_voice_service_retired_response(cliente_id, location_id, servicio=servicio), **date_meta)
         detail = str(exc.detail or "")
         if exc.status_code == status.HTTP_409_CONFLICT and re.search(
             r"horario|disponible|hueco", detail, re.IGNORECASE
@@ -2466,7 +2494,7 @@ async def _voice_perform_booking(
             # fallar por lo mismo y se queda sin cita sin saber por que. Este
             # camino lo usan voz, chat y WhatsApp por texto libre.
             if booking.es_servicio_retirado(exc.detail):
-                respuesta = booking.respuesta_servicio_retirado()
+                respuesta = _voice_service_retired_response(cliente_id, location_id, servicio=servicio)
                 respuesta.update(date_meta)
                 return respuesta
             # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca

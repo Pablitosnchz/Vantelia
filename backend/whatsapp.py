@@ -1604,18 +1604,6 @@ async def _wa_hora_que_no_existe(cliente_id: str, fecha: str, hora: str) -> str:
                 % hora) + rag._call_us_line(cliente_id)
 
 
-async def _wa_ese_servicio_ya_no_esta(cliente_id: str) -> str:
-    """El negocio retiro el servicio entre el resumen y el boton Confirmar.
-
-    Esto se contaba como "ese hueco se acaba de ocupar" y se le ofrecian tres
-    horas del mismo dia: ella elegia otra, volvia a fallar por lo mismo y se iba
-    sin cita creyendo que habia tenido mala suerte. Lo que ya no esta es el
-    SERVICIO, y con otra hora no se arregla; se le dice y se le deja elegir otro.
-    """
-    return ("Lo siento, cariño: ese servicio ya no está disponible. Dime otro que "
-            "te interese y te miro los huecos." + rag._call_us_line(cliente_id))
-
-
 async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) -> str:
     """El hueco se ha ocupado entre el resumen y el boton: se ofrecen otros REALES.
 
@@ -1680,11 +1668,40 @@ async def _wa_recuperar_creacion_confirmada(*, cliente_id, phone_number_id, to_n
             appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, to_number), None)
 
 
+async def _wa_servicio_retirado(*, cliente_id, phone_number_id, to_number, flow, config, request):
+    """Conserva a la clienta y deja elegir otro servicio; solo registra envíos aceptados."""
+    from backend import reserva
+    retirado = flow.servicio or "Servicio retirado"
+    for campo in ("servicio", "servicio_texto", "categoria", "employee_id", "employee_name",
+                  "fecha", "hora", "horas_franja", "duplicado_avisado"):
+        setattr(flow, campo, "")
+    flow.servicios_pagina = flow.horas_pagina = flow.intentos_fallidos = 0
+    reserva.olvidar(cliente_id, to_number)
+    aviso = "El servicio ya no está disponible (*%s*)." % retirado
+    hay_servicios = bool(booking._public_services_for_booking(cliente_id, location_id=flow.location_id))
+    flow.flow = "booking_service" if hay_servicios else ""
+    if not hay_servicios:
+        texto = aviso + " Ahora mismo no queda otro servicio para reservar por aquí." + rag._call_us_line(cliente_id)
+    elif _wa_modo_conversacional(config):
+        texto = aviso + " ¿Qué otro servicio te interesa?"
+    else:
+        texto = aviso + " Elige otro servicio y te busco hueco."
+    enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, text=texto)
+    if enviado:
+        _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                      respuesta=texto, intent="servicio_retirado")
+    if hay_servicios and not _wa_modo_conversacional(config):
+        await _wa_send_service_picker(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, location_id=flow.location_id)
+
+
 async def _wa_create_booking(
     *, cliente_id: str, phone_number_id: str, to_number: str, flow: appstate.WAFlowState, config: Dict[str, Any],
     request: Request, confirmation_id: str = "",
 ) -> bool:
     try:
+        booking.validar_servicio_publico(cliente_id, flow.servicio)
         booking_dt = textnorm._parse_date(flow.fecha)
         agenda._validate_booking_window(cliente_id, booking_dt)
 
@@ -1754,8 +1771,9 @@ async def _wa_create_booking(
                 # resuelve con otra hora y el servicio retirado NO. Ofrecerle horas
                 # en ese caso la mete en un bucle hasta que se va.
                 if booking.es_servicio_retirado(exc.detail):
-                    _wa_clear_flow(cliente_id, to_number)
-                    texto = await _wa_ese_servicio_ya_no_esta(cliente_id)
+                    await _wa_servicio_retirado(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                        to_number=to_number, flow=flow, config=config, request=request)
+                    return False
                 else:
                     texto = await _wa_ese_hueco_ya_no_esta(cliente_id, flow)
                 await messaging._send_whatsapp_text(
@@ -1778,8 +1796,9 @@ async def _wa_create_booking(
             texto = "⚠️ %s" % exc.detail
         elif booking.es_servicio_retirado(exc.detail):
             # No es el hueco: es el servicio. Con otra hora no se arregla.
-            _wa_clear_flow(cliente_id, to_number)
-            texto = await _wa_ese_servicio_ya_no_esta(cliente_id)
+            await _wa_servicio_retirado(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=to_number, flow=flow, config=config, request=request)
+            return False
         else:
             texto = await _wa_ese_hueco_ya_no_esta(cliente_id, flow)
         await messaging._send_whatsapp_text(
@@ -2019,11 +2038,13 @@ async def _wa_handle_flow_reply(
         flow.nombre = str(conocido["name"]).strip() if conocido else "Cliente WhatsApp"
 
     config = clients._get_client_config(cliente_id)
+    flow.flow = ""
     creada = await _wa_create_booking(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
         flow=flow, config=config, request=request,
     )
-    _wa_clear_flow(cliente_id, from_number)
+    if flow.flow != "booking_service":
+        _wa_clear_flow(cliente_id, from_number)
     return creada
 
 
@@ -3861,7 +3882,7 @@ async def _handle_whatsapp_message(
                 except conversation_state.ConversationStateConflict:
                     return
                 appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
-            elif not pendiente or not pendiente.get("operacion"):
+            elif (not pendiente or not pendiente.get("operacion")) and flow.flow != "booking_service":
                 _wa_clear_flow(cliente_id, from_number)
             if not ok:
                 # NO se le suelta el menu principal. `_wa_create_booking` ya le ha

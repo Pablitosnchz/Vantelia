@@ -37,9 +37,9 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** retirada Q&A guardada en d42e964 (102 dirigidos verdes); corrección adicional del detector que interpretaba «no quiero diagnóstico» como pedirlo, incluso cuando era obligatorio.
-- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; descendiente integrado de 1ef4e73, conserva 9b1bfea.
-- **Siguiente:** Negativa explícita validada: 77 dirigidos verdes y cuatro casos rojos prearreglo; petición directa conservada. La retirada Q&A anterior tiene 102 dirigidos verdes (grupos solapados). Suite completa pendiente del diagnóstico de demos; revisión exacta y banco real después.
+- **Tarea:** integración de ee939c8 (Claude, encargo-811da6) sobre 8324844. Se conserva validación única ya vigente; se adapta continuidad de elección de servicio retirado y mensajes de voz a confirmación/recuperación actuales.
+- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; integración de claude/encargo-811da6, base antigua afecf80.
+- **Siguiente:** 57 dirigidos de integración verdes, pyflakes limpio. Cuatro casos rojos en la base previa, dos ya verdes. Cerrar memoria del agente ante servicio retirado; conservar la validación única y la recuperación ya probadas. Suite completa y revisión exacta pendientes del diagnóstico de demos.
 - **Espera a:** Claude diagnostica los cinco fallos de test_demo_conversion (encargo ya enviado). Claude revisó OK cf2066d (cambio de cuenta), con tres mejoras menores; diagnóstico de demos aún sin entrega. No duplicar estas tareas. Sin push ni despliegue; banco comparable y recordatorios reales pendientes.
 
 
