@@ -37,10 +37,24 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** candidato integrado: ee939c8 en 52acab5, estado de servicio retirado corregido en 2e3db40 y cinco fallos de demos diagnosticados/corregidos en su fixture de módulo.
-- **Rama:** astra/whatsapp-recuperable, E:/Vantelia-astra-wa-recuperable; conservar este candidato estable durante la suite.
-- **Siguiente:** una suite completa mediante C:/Users/pabli/.codex/vantelia-coordination/validar-integrado-wa.py. Log integrado-wa-suite.log y resultado integrado-wa-suite.result.json en la misma carpeta. El proceso pide revisión automáticamente solo si pytest termina verde y el mismo SHA sigue limpio; si falla, registra resultado y no pide revisión. No repetir ni consultar progreso periódicamente.
-- **Espera a:** resultado de esa suite y revisión exacta posterior. Claude conserva calendario activo y está avisado de los encargos sustituidos; demos ya no espera a Claude. Banco real Alicia/otro, recordatorios, reconciliación y migración de gestión siguen pendientes. Sin push ni despliegue.
+- **Tarea:** continuación nocturna autorizada por Pablo: migrar confirmación de cancelación WhatsApp, inventariar evidencia real y mantener registro horario.
+- **Rama:** astra/gestion-confirmada, E:/Vantelia-astra-gestion, descendiente de 7ab7775. Se conserva intacto el candidato anterior en astra/whatsapp-recuperable para revisión.
+- **Siguiente:** regresiones de cancelación antes del arreglo, identidad y aceptación persistidas reutilizando reserva.Estado; verificación independiente y una suite completa cuando el nuevo candidato sea estable. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
+
+Resultado confirmado: C:/Users/pabli/.codex/vantelia-coordination/integrado-wa-suite.result.json
+y su .log. Suite terminada, exit 0; no sigue ejecutándose ni debe repetirse.
+El seguimiento cada 30 minutos está actualizado para retomar el último relevo y
+anotar avances con hora. No implica actividad continua entre ejecuciones.
+
+## Notas históricas (el bloque En curso prevalece)
+
+QA visual independiente de 7ab7775 (13-sep 01:22): parcial, exit 1 por un supuesto
+de fecha del instrumento. Tras corregir solo el arranque NLTK en el lanzador,
+se recorren acceso, servicios/centros, Ventas, Informes y responsive; Nueva cita
+espera huecos del domingo cerrado antes de avanzar al lunes. Arrastre y
+persistencia de duración: NO MEDIDOS. No es un verde ni una regresión de producto
+acreditada. Evidencia en ACEPTACION_CANDIDATO_IA.md y REGISTRO_CONSOLIDACION.md.
 
 
 

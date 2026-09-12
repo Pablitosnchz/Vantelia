@@ -3,6 +3,35 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Corte verificable: 13-sep, 01:15 Europe/Madrid
+
+7ab7775: suite completa terminada, **2297 passed, 1 skipped**, duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid;
+revisión exacta solicitada automáticamente, pendiente por cuota de Claude.
+Se conserva en su worktree. Avance nuevo en astra/gestion-confirmada.
+Los resultados parciales y esperas de secciones anteriores son históricos.
+
+| Fase | Situación del candidato 7ab7775 | Puerta que falta |
+| --- | --- | --- |
+| 0 Referencia | Instrumentos de calendario integrados; evidencia real por inventariar | Referencia completa comparable y trazable |
+| 1 Portal | Invalidación por tenant y revalidación operativa probadas localmente | Aceptación real y recorrido visual autenticado |
+| 2 Estado | Propuestas, aceptación, persistencia y CAS implementados | Extender gestión y canales sin autoridades paralelas |
+| 3 Políticas | Editor Q&A y orientación explícita; rescate Q&A retirado | Decisión particular foto/diagnóstico aislada; contraste de dos negocios |
+| 4 Canales | Creación por resumen WhatsApp recuperable y servicio retirado | Cancelación/reprogramación, formularios, entregas y reconciliación |
+| 5 Aceptación | Suite completa verde sobre SHA exacto | Revisión, banco real, recordatorios y prueba de mejora |
+
+Siguiente rebanada: confirmación de cancelación WhatsApp con identidad de la
+propuesta, aceptación persistida, revalidación y respuestas solo tras resultado
+comprobado. No modifica políticas de Alicia. Después se decidirá el siguiente
+bloque según regresiones y revisión, sin esperar a Claude para tareas independientes.
+Registro de cambios y pruebas con hora: `REGISTRO_CONSOLIDACION.md`.
+
+QA visual 13-sep 01:22 sobre 7ab7775: recorrido parcial, exit 1. El instrumento
+espera franjas en domingo cerrado antes de avanzar al lunes; la agenda restante
+(selección de hora, arrastre y duración persistida) queda NO MEDIDA. Acceso,
+servicios, centros, Ventas, Informes y responsive sí se recorrieron. Corregir la
+fecha explícita del instrumento antes de una nueva ejecución; no usar este
+resultado para cerrar fase 1 o aceptación. Detalle en ACEPTACION_CANDIDATO_IA.md.
+
 ## Integración y desbloqueo de suite (13-sep)
 
 Entrega ee939c8 integrada en 52acab5 sin duplicar validadores: continuidad WhatsApp
