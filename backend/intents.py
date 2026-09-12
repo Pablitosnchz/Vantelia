@@ -28,6 +28,11 @@ REGLAS DE LA CASA
   fija: en un salón serán alisados y mechas; en una clínica, tratamientos.
 * Opt-in por tenant (`config['ai_intents']['enabled']`), para poder encenderlo en
   un cliente sin tocar a los demás.
+* Lo que el negocio guarda en el panel manda en la consulta SIGUIENTE. Lo que se
+  cachea aquí (familias, preguntas y clasificaciones) lleva el sello del tenant
+  (`sellos_del_tenant`, derivado de la BD que comparten todos los workers), así
+  que una Q&A borrada o un servicio desactivado dejan de usarse al momento y no
+  cuando venza un TTL.
 """
 from __future__ import annotations
 
@@ -35,7 +40,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional
 
-from backend import agenda, appstate, clients, rag, settings
+from backend import agenda, appstate, clients, db, rag, settings
 
 # Lo que un cliente puede querer. Cerrada a proposito: una lista abierta hace que
 # el modelo invente etiquetas y que las reglas del negocio no casen nunca.
@@ -58,7 +63,8 @@ INTENCIONES = (
 _CACHE_TTL = 600
 _CACHE_MAX = 500
 # El catalogo y las Q&A los edita una persona desde el panel: no hace falta
-# releerlos en cada mensaje, pero tampoco pueden tardar en verse.
+# releerlos en cada mensaje. Lo que manda para reusarlos es el SELLO del tenant
+# (`sellos_del_tenant`); esto es solo un tope por si el sello se quedara ciego.
 _CATALOGO_TTL = 300
 
 # Por debajo de esto se descarta la clasificacion y el chat sigue como siempre.
@@ -101,31 +107,103 @@ def enabled_for(cliente_id: str, config: Optional[Dict[str, Any]] = None) -> boo
     return bool(isinstance(seccion, dict) and seccion.get("enabled"))
 
 
-def _cacheado(clave: str, calcular):
+# Huella de lo que el negocio tiene configurado AHORA. Una consulta agregada por
+# ambito, con indice por cliente: lo que se paga en cada mensaje para no servir
+# datos viejos.
+_SELLOS_SQL = {
+    "qa": (
+        "SELECT COUNT(*), COALESCE(MAX(updated_at), ''), COALESCE(MAX(created_at), ''),"
+        " COALESCE(SUM(LENGTH(question) + LENGTH(answer)), 0)"
+        " FROM kb_qa WHERE cliente_id = ?"
+    ),
+    "catalogo": (
+        "SELECT COUNT(*), COALESCE(MAX(updated_at), ''), COALESCE(MAX(created_at), ''),"
+        " COALESCE(SUM(is_active), 0),"
+        " COALESCE(SUM(LENGTH(name) + LENGTH(COALESCE(category, ''))), 0)"
+        " FROM services WHERE cliente_id = ?"
+    ),
+}
+
+
+def sellos_del_tenant(cliente_id: str) -> Dict[str, str]:
+    """Como esta AHORA lo que el negocio configura, en una cadena por ambito.
+
+    POR QUE NO BASTA VACIAR UN DICCIONARIO: el POST del panel lo atiende UN
+    worker, y el mensaje siguiente de la clienta puede caerle a otro. Vaciar la
+    memoria del que recibio el POST deja al resto contestando con la Q&A que el
+    negocio acaba de borrar. La huella sale de la BD, que si comparten todos.
+
+    Sin esquema nuevo: se deriva de lo que las tablas ya guardan (cuantas filas
+    hay, cuando se toco la ultima y cuanto ocupa el texto). Cambia al crear,
+    editar, renombrar, activar/desactivar y borrar.
+
+    Cadena vacia = no se pudo sellar (BD caida): entonces no se cachea nada, que
+    es lo unico seguro. Entender nunca puede dejar a un cliente sin respuesta.
+    """
+    salida = {ambito: "" for ambito in _SELLOS_SQL}
+    try:
+        with db._get_db_connection() as conexion:
+            for ambito, sql in _SELLOS_SQL.items():
+                fila = conexion.execute(sql, (cliente_id,)).fetchone()
+                salida[ambito] = "/".join(str(valor) for valor in fila) if fila else ""
+    except Exception as exc:  # noqa: BLE001 - sin sello se recalcula, no se rompe
+        settings.logger.warning("[intents] no se pudo sellar (%s): %s", cliente_id, exc)
+        return {ambito: "" for ambito in _SELLOS_SQL}
+    return salida
+
+
+def olvidar_tenant(cliente_id: str) -> None:
+    """Tira lo cacheado de ESTE negocio; lo de los demas no se toca.
+
+    Lo llama el CRUD del panel (Q&A y servicios) para que el worker que recibe el
+    POST no espere ni al sello: los sellos de fecha van al segundo, y dos guardados
+    dentro del mismo segundo podrian parecer el mismo estado. A los demas workers
+    los avisa la BD (`sellos_del_tenant`), no esto.
+    """
+    if not cliente_id:
+        return
+    with appstate.state_lock:
+        for clave in [k for k in appstate.intent_cache if k.split("|", 2)[1:2] == [cliente_id]]:
+            appstate.intent_cache.pop(clave, None)
+
+
+def _cacheado(clave: str, sello: str, calcular):
     """Memoria corta para datos que edita una persona, no el trafico.
 
     El catalogo de un salon puede tener cientos de servicios: releerlo entero en
-    cada mensaje es trabajo tirado. Unos minutos de desfase tras editar el panel
-    es un precio razonable.
+    cada mensaje es trabajo tirado. Lo guardado vale mientras el `sello` del
+    tenant no cambie; el TTL queda de tope por si algun dia el sello se quedara
+    ciego.
     """
+    if not sello:
+        return calcular()
     with appstate.state_lock:
         entrada = appstate.intent_cache.get(clave)
-        if entrada and time.time() - entrada["ts"] <= _CATALOGO_TTL:
+        if (
+            entrada
+            and entrada.get("sello") == sello
+            and time.time() - entrada["ts"] <= _CATALOGO_TTL
+        ):
             return entrada["valor"]
     valor = calcular()
     with appstate.state_lock:
-        appstate.intent_cache[clave] = {"ts": time.time(), "valor": valor}
+        appstate.intent_cache[clave] = {"ts": time.time(), "sello": sello, "valor": valor}
     return valor
 
 
-def familias_del_tenant(cliente_id: str) -> List[str]:
+def familias_del_tenant(cliente_id: str, *, sellos: Optional[Dict[str, str]] = None) -> List[str]:
     """Familias de servicio de ESTE negocio, sacadas de su catalogo.
 
     Se usan las categorias que el negocio ya tiene (Alisados, Trabajos de color,
     Peinados...) mas las primeras palabras de los servicios: asi el modelo puede
     decir "alisado" o "mechas" sin que nadie haya escrito esa lista a mano.
     """
-    return _cacheado("familias|%s" % cliente_id, lambda: _familias_del_tenant(cliente_id))
+    sellos = sellos or sellos_del_tenant(cliente_id)
+    return _cacheado(
+        "familias|%s" % cliente_id,
+        sellos.get("catalogo", ""),
+        lambda: _familias_del_tenant(cliente_id),
+    )
 
 
 def _familias_del_tenant(cliente_id: str) -> List[str]:
@@ -167,15 +245,19 @@ def _habla_de_otra_cosa(cliente_id: str, mensaje: str, qa: Dict[str, str]) -> bo
         return False
 
 
-def preguntas_del_tenant(cliente_id: str, limite: int = 40) -> List[Dict[str, str]]:
+def preguntas_del_tenant(
+    cliente_id: str, limite: int = 40, *, sellos: Optional[Dict[str, str]] = None
+) -> List[Dict[str, str]]:
     """Preguntas que el negocio ya tiene respondidas, para que el modelo las reconozca.
 
     Antes casaban por etiquetas literales y habia que escribir a mano cada forma
     de preguntar lo mismo. El limite existe porque estas preguntas viajan en el
     prompt: con mas de 40 conviene acotar antes por otro medio.
     """
+    sellos = sellos or sellos_del_tenant(cliente_id)
     return _cacheado(
         "preguntas|%s|%d" % (cliente_id, limite),
+        sellos.get("qa", ""),
         lambda: _preguntas_del_tenant(cliente_id, limite),
     )
 
@@ -427,18 +509,28 @@ esta preguntando ninguna de estas, pon 0.
 No expliques nada. Solo el JSON."""
 
 
-def _cache_get(clave: str) -> Optional[Dict[str, Any]]:
+def _cache_get(clave: str, sello: str) -> Optional[Dict[str, Any]]:
+    """Lo clasificado antes, SOLO si el negocio sigue igual que entonces.
+
+    La clasificacion se lleva dentro la respuesta de la Q&A que reconocio: sin
+    comprobar el sello, borrar esa Q&A en el panel no impedia que se siguiera
+    contestando con ella durante diez minutos.
+    """
+    if not sello:
+        return None
     with appstate.state_lock:
         entrada = appstate.intent_cache.get(clave)
         if not entrada:
             return None
-        if time.time() - entrada["ts"] > _CACHE_TTL:
+        if entrada.get("sello") != sello or time.time() - entrada["ts"] > _CACHE_TTL:
             appstate.intent_cache.pop(clave, None)
             return None
         return dict(entrada["valor"])
 
 
-def _cache_put(clave: str, valor: Dict[str, Any]) -> None:
+def _cache_put(clave: str, sello: str, valor: Dict[str, Any]) -> None:
+    if not sello:
+        return
     with appstate.state_lock:
         ahora = time.time()
         if len(appstate.intent_cache) >= _CACHE_MAX:
@@ -447,7 +539,7 @@ def _cache_put(clave: str, valor: Dict[str, Any]) -> None:
                 appstate.intent_cache.pop(vieja, None)
             if len(appstate.intent_cache) >= _CACHE_MAX:
                 appstate.intent_cache.clear()
-        appstate.intent_cache[clave] = {"ts": ahora, "valor": dict(valor)}
+        appstate.intent_cache[clave] = {"ts": ahora, "sello": sello, "valor": dict(valor)}
 
 
 def classify(
@@ -473,13 +565,22 @@ def classify(
     if not enabled_for(cliente_id, config):
         return None
 
-    clave = "%s|%s" % (cliente_id, texto[:200])
-    guardada = _cache_get(clave)
+    # El sello se lee UNA vez por mensaje y vale para las tres memorias (esta,
+    # familias y preguntas): asi no se consulta la BD tres veces por turno.
+    sellos = sellos_del_tenant(cliente_id)
+    # Una clasificacion depende de las dos cosas (la Q&A que reconoce y las
+    # familias del prompt): si falta sellar cualquiera, no se guarda.
+    sello = (
+        "%s+%s" % (sellos["qa"], sellos["catalogo"])
+        if sellos.get("qa") and sellos.get("catalogo") else ""
+    )
+    clave = "clasificacion|%s|%s" % (cliente_id, texto[:200])
+    guardada = _cache_get(clave, sello)
     if guardada is not None:
         return guardada
 
-    familias = familias_del_tenant(cliente_id)
-    preguntas = preguntas_del_tenant(cliente_id)
+    familias = familias_del_tenant(cliente_id, sellos=sellos)
+    preguntas = preguntas_del_tenant(cliente_id, sellos=sellos)
     listado = "\n".join(
         "%d. %s" % (i + 1, q["question"][:140]) for i, q in enumerate(preguntas)
     ) or "(ninguna)"
@@ -547,5 +648,5 @@ def classify(
         else:
             resultado["qa_id"] = elegida.get("id", "")
             resultado["qa_answer"] = elegida.get("answer", "")
-    _cache_put(clave, resultado)
+    _cache_put(clave, sello, resultado)
     return resultado

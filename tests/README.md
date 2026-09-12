@@ -18,8 +18,8 @@ python -m pytest -k senal             # por nombre
 | Avisos al cliente (email, WhatsApp, SMS) | `test_avisos_cambio_cita.py`, `test_recordatorio_whatsapp_corto.py`, `test_wa_confirmacion_corta.py`, `test_nota_servicio.py` |
 | Señal / pago de la cita | `test_senal_visible.py`, `test_senal_canales.py`, `test_aviso_pago_pendiente.py`, `test_confirmacion_tras_pago.py`, `test_bizum.py`, `test_ai_payment_link.py` |
 | Horarios y disponibilidad | `test_booking_exhaustive.py`, `test_weekly_hours.py` |
-| Catálogo de servicios | `test_catalogo_grande.py`, `test_importar_catalogo.py`, `test_guardar_ficha_no_borra_catalogo.py` |
-| Cerebro del asistente (chat) | `test_api_smoke.py`, `test_qa_del_negocio.py`, `test_keyword_rules.py`, `test_intenciones_y_reglas.py`, `test_comprension_en_el_chat.py`, `test_reglas_en_el_portal.py`, `test_chat_menu_y_formato_whatsapp.py`, `test_chat_sin_agenda.py`, `test_menu_y_titulos.py` |
+| Catálogo de servicios | `test_catalogo_grande.py`, `test_importar_catalogo.py`, `test_guardar_ficha_no_borra_catalogo.py`, `test_cambios_del_panel_se_ven_al_momento.py` |
+| Cerebro del asistente (chat) | `test_api_smoke.py`, `test_qa_del_negocio.py`, `test_keyword_rules.py`, `test_intenciones_y_reglas.py`, `test_comprension_en_el_chat.py`, `test_reglas_en_el_portal.py`, `test_chat_menu_y_formato_whatsapp.py`, `test_chat_sin_agenda.py`, `test_menu_y_titulos.py`, `test_cambios_del_panel_se_ven_al_momento.py` |
 | Usuario que no sigue el guion | `test_wa_usuario_erratico.py` — nadie puede quedarse encerrado en un paso |
 | Menú de opciones (chat + WhatsApp) | `test_menu_y_titulos.py`, `test_wa_menu_starters.py` — el menú es lo que el negocio configura, igual en los dos canales |
 | WhatsApp | todos los `test_wa_*.py` + `test_inbox_takeover.py` |
@@ -49,6 +49,14 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   confirmaciones de cita salían por `smtp.hostinger.com` a `@test.es` y
   `@example.com`; los rebotes duros suspendían el envío de `info@vantelia.es`.
   El cortafuegos está en `conftest.py` (se aplica al importarlo).
+- `test_cambios_del_panel_se_ven_al_momento.py` — lo que el negocio guarda en el
+  panel manda en la consulta SIGUIENTE. `intents` cachea por tenant las familias
+  del catálogo, las preguntas del negocio y la clasificación de cada mensaje (que
+  se lleva dentro la RESPUESTA de la Q&A reconocida): todo eso lleva el sello del
+  tenant (`intents.sellos_del_tenant`, derivado de la BD, así que también se
+  entera el worker que no recibió el POST). Si este falla, se está contestando
+  con una Q&A borrada o se ofrece un servicio retirado. Incluye la prueba del
+  instrumento: con el sello congelado el fallo reaparece.
 - `test_patrones_sin_tilde.py` — el texto al cliente lleva tildes; los patrones
   que casan lo que el cliente ESCRIBE, no (se comparan ya normalizados). También
   vigila que no reaparezca texto con doble codificación UTF-8.
