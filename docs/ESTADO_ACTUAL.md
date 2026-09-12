@@ -39,11 +39,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** nadie
-- **Tarea:** ninguna abierta. Producción en `aab4d02` (lo de Astra integrado + el freno de la hora inventada).
-- **Rama:** main. Sin integrar: `claude/hora-sin-mirar`, con DOS intentos **sin validar** sobre el caso crítico (ver «El crítico que no cierra»). No subirlos sin medir a una hora decente.
-- **Siguiente:** (1) medir en condiciones el caso `dice-que-si-y-acaba-en-cita` —de día y con «mañana» abierto—, (2) de los recordatorios por WhatsApp quedan el estado de la plantilla en el portal y el envío real.
-- **Espera a:** nada. Astra volvió a tener créditos a las 02:5x del 12-sep; tiene el resumen en el buzón.
+- **Testigo:** Astra.
+- **Tarea:** cerrar el caso crítico `dice-que-si-y-acaba-en-cita` con regresiones deterministas; Claude medirá el modelo real.
+- **Rama:** `astra/valoracion-sin-bucle`, worktree `E:/Vantelia-astra-valoracion`, base `97af567`. No se integran los intentos sin validar de `claude/hora-sin-mirar`.
+- **Siguiente:** suite completa y revisión del arreglo acotado. Reproducción determinista en `responder`: 4 fallos antes (duda literal, alternancia y rechazo al diagnóstico), 54 pruebas dirigidas verdes después. Claude medirá el caso con modelo real y fecha/hora abiertas.
+- **Espera a:** conversación fallida con traza de Claude, solicitada por buzón. Encapsulación de apellidos sigue pendiente en `astra/alicia-final` (49 pruebas dirigidas verdes, sin suite completa); no está desplegada.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

@@ -933,7 +933,7 @@ def _lo_que_el_negocio_tiene_escrito(cliente_id: str, mensaje: str, config=None)
 
 
 _DUDA_AL_ELEGIR = re.compile(
-    r"\b(no (lo )?se\b|ni idea|no estoy segur[oa]|no sabria|no tengo claro|"
+    r"\b(no (lo )?se\b|ni idea|no estoy segur[oa]|no sabria|no (lo )?tengo claro|"
     r"no me aclaro|no se cual|cual me recomiendas|cual me recomendais|"
     r"que me aconsejas|lo que (tu |vosotras )?veais?|lo que (tu )?veas|"
     r"decide tu|elige tu|elegid vosotras)\b")
@@ -1814,6 +1814,18 @@ def _texto_de_la_valoracion(cliente_id: str, dicho: str) -> str:
     return nombre
 
 
+def _veces_sin_concretar(falta: str, ultimo: str, veces: int) -> int:
+    """Técnica y talla pertenecen a la misma búsqueda todavía sin resolver.
+
+    Cambiar de pregunta no es avanzar a un servicio elegido. Un resultado sin
+    candidatos o con un servicio concreto sí termina esta cuenta.
+    """
+    pendientes = ("tecnica", "talla", "para_quien")
+    if falta not in pendientes:
+        return 0
+    return veces + 1 if ultimo in pendientes else 0
+
+
 def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
                                    config=None) -> str:
     """Ella ha dicho que no sabe y ya se le ha preguntado dos veces: se corta.
@@ -1832,13 +1844,16 @@ def _hay_que_cogerle_la_valoracion(cliente_id: str, mensajes, veces: int,
     """
     if veces < 2:
         return ""
-    if not _DUDA_AL_ELEGIR.search(catalog_pick._norm(_lo_que_ha_escrito(mensajes))):
+    dicho = _lo_que_ha_escrito(mensajes)
+    if not _DUDA_AL_ELEGIR.search(catalog_pick._norm(dicho)):
         return ""
     if not _lo_que_el_negocio_dice_al_recomendar(cliente_id, config):
         return ""
     try:
         from backend import booking
 
+        if booking.renuncio_al_diagnostico(dicho):
+            return ""
         return str((booking._servicio_de_valoracion(cliente_id) or {}).get("nombre") or "")
     except Exception:  # noqa: BLE001 - ante la duda, se sigue preguntando
         return ""
@@ -4292,9 +4307,8 @@ async def responder(
                 if llamada.function.name == "buscar_servicio":
                     catalogo_mirado = True
                     falta = str(resultado.get("falta") or "")
-                    estado.veces_falta = (estado.veces_falta + 1
-                                          if falta and falta == estado.ultimo_falta
-                                          else 0)
+                    estado.veces_falta = _veces_sin_concretar(
+                        falta, estado.ultimo_falta, estado.veces_falta)
                     # Dos veces preguntando lo mismo es el limite. Si ella ya ha
                     # dicho que no sabe y el negocio tiene escrito que eso se ve
                     # en persona, se le coge la valoracion y se sigue: no hay una
@@ -4314,7 +4328,8 @@ async def responder(
                             "cual le va mejor. Si ya te ha dado dia y hora, usalos."
                             % valoracion)
                         falta = ""
-                    elif falta and falta == estado.ultimo_falta:
+                        estado.veces_falta = 0
+                    elif falta and (falta == estado.ultimo_falta or estado.veces_falta):
                         # Ya se lo preguntaste y no lo ha elegido. Repetirle la
                         # misma lista es EL fallo mas repetido de la medicion: se
                         # cansa y se va. La salida depende de lo que el negocio

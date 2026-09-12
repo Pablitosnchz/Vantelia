@@ -77,7 +77,7 @@ class Estado:
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez
-    veces_falta: int = 0        # cuantas veces seguidas se le ha pedido ESE dato
+    veces_falta: int = 0        # repeticiones sin concretar el servicio (técnica/talla/destinatario)
     veces_sin_pedirla: int = 0  # veces que el freno de "cita sin pedir" ha saltado
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
