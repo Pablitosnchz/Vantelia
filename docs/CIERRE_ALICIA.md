@@ -11,7 +11,7 @@ La fecha objetivo no sustituye revisión ni pruebas reales.
 | Horarios, vacaciones, servicios y profesionales | Núcleo compartido y regresiones de cambios del portal | Recorridos reales con configuración de Alicia |
 | Agenda con marcas de 15 minutos | Cambio visual implementado; coordenadas y sintaxis verificadas | Revisión visual del candidato |
 | Recordatorios WhatsApp | Plantillas y respaldo existentes; estado visible implementado, 39 pruebas dirigidas verdes | Conexión, aprobación, facturación Meta y envío real autorizado a un destinatario de prueba |
-| Reentregas, reinicios y errores externos | Candidato de persistencia: snapshots por tenant/canal y comparación de versiones; pruebas con procesos distintos | Cerrar caída entre operación de agenda y registro de resultado; validar recorrido integrado y revisar candidato |
+| Reentregas, reinicios y errores externos | 530ae40: suite completa 2256 correctos, 1 omitido, revisión pedida. Descendiente en validación: resumen persistido, acuse e identidad de confirmación | Cerrar caída entre operación de agenda y registro de resultado; validar recorrido integrado y revisar candidato |
 | Segundo negocio | Reglas configurables y pruebas de aislamiento | Banco comparable con un segundo tenant |
 | Aceptación final | No completada | Sin críticos abiertos, resultados iniciales/reintentos/no medidos separados y revisión del SHA final |
 

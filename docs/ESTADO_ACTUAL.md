@@ -4,8 +4,8 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 11-sep-2026 tarde, Claude Code (Coexistence desbloqueado;
-el +31 contesta con el asistente de Alicia).
+Última actualización: 12-sep-2026, Astra (candidato de confirmación persistida;
+no implica cambios en producción).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
 fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** identidad persistida de creación en el núcleo, recuperación tras commit y bloqueo de resultados desconocidos del proveedor. Integrada la corrección 96e10b8 de persistencia. Pieza de ejecución todavía opcional, sin conectar a los canales.
-- **Rama:** astra/operaciones-recuperables, E:/Vantelia-astra-operaciones (062725f + corrección 96e10b8).
-- **Siguiente:** validar el candidato integrado con suite completa y pedir revisión exacta solo en verde. Después enlazar identidad y datos a una confirmación persistida de WhatsApp (contrato en DISENO_RECUPERACION_ESTADO). 15 dirigidos de operaciones verdes; mutación de recuperación roja. Suite padre 53f40c7: 2248 correctos, 1 omitido y 2 fallos (mapa y helper sin uso), corregidos en 96e10b8 con 10 dirigidos verdes; no sumar grupos ni presentar esa suite como verde.
-- **Espera a:** revisión de Claude (último aviso sin créditos hasta 22:40). No push ni despliegue. No afirmar ejecución exactamente una vez: faltan enlace con canales, reconciliar resultados inciertos y entrega de notificaciones. Pendientes banco real Alicia+segundo negocio y envío real de recordatorios. No hay nuevas reglas de Alicia.
+- **Tarea:** persistir el resumen de confirmación de WhatsApp antes de enviarlo; acreditar oferta tras el acuse y rechazar botones antiguos o datos distintos. La autoridad es Estado, no el paso visual del worker.
+- **Rama:** astra/confirmacion-reserva, E:/Vantelia-astra-confirmacion (hija de 530ae40).
+- **Siguiente:** suite completa del candidato congelado, revisión automática solo si pasa; después enlazar la aceptación con operation_key y el resultado de creación. Integración final: 81 correctos; pyflakes limpio. Tres casos rojos antes de adaptar el canal y una cuarta regresión roja de gestión terminada, ya corregida. La suite exacta 530ae40 terminó con 2256 correctos, 1 omitido y revisión automática pedida; no repetirla.
+- **Espera a:** revisión exacta de 530ae40 por Claude. El enlace de la creación recuperable al canal y la reconciliación de resultado incierto siguen pendientes. Sin push, despliegue, producción ni envíos reales. Pendientes banco comparable Alicia+segundo negocio, demás autoridades y recordatorios reales.
 
 
 

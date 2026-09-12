@@ -108,9 +108,50 @@ class Estado:
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
     propuesta_servicio: Optional[PropuestaServicio] = None
+    # Resumen exacto ofrecido por el canal, distinto de elegir un servicio.
+    confirmacion_reserva_json: str = ""
 
     def vigente(self) -> bool:
         return (time.time() - self.tocado) < CADUCA_EN
+
+
+def leer_confirmacion_reserva(estado: Estado):
+    """Un snapshot malformado o vencido no acredita que se ofreciera una cita."""
+    if estado.hecho:
+        return None
+    try:
+        p = json.loads(estado.confirmacion_reserva_json)
+        if (not isinstance(p, dict) or not isinstance(p.get("id"), str) or not p["id"]
+                or p.get("estado") not in ("preparada", "ofrecida", "aceptada")
+                or type(p.get("creada")) not in (int, float)
+                or not math.isfinite(p["creada"])
+                or not 0 <= time.time() - p["creada"] < CADUCA_EN
+                or not isinstance(p.get("datos"), dict)
+                or not p["datos"]
+                or any(not isinstance(k, str) or not isinstance(v, str)
+                       for k, v in p["datos"].items())):
+            return None
+        return p
+    except (ValueError, TypeError):
+        return None
+
+
+def preparar_confirmacion_reserva(estado: Estado, datos):
+    if not datos or any(not isinstance(k, str) or not isinstance(v, str) for k, v in datos.items()):
+        raise ValueError("Los datos del resumen deben ser textos")
+    propuesta = {"id": uuid4().hex, "creada": time.time(), "estado": "preparada", "datos": dict(datos)}
+    estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
+    return propuesta["id"]
+
+
+def avanzar_confirmacion_reserva(estado: Estado, identidad: str, siguiente: str) -> bool:
+    propuesta = leer_confirmacion_reserva(estado)
+    anterior = {"ofrecida": "preparada", "aceptada": "ofrecida"}.get(siguiente)
+    if not propuesta or propuesta["id"] != identidad or propuesta["estado"] != anterior:
+        return False
+    propuesta["estado"] = siguiente
+    estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
+    return True
 
 
 def preparar_propuesta_servicio(estado: Estado, *, servicio_id: str, nombre: str,
@@ -849,6 +890,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     creo nunca.
     """
     invalidar_propuesta_servicio(estado)
+    estado.confirmacion_reserva_json = ""
     estado.intencion = "reservar"
     estado.servicio = ""
     estado.servicio_exacto = ""

@@ -70,7 +70,9 @@ def test_el_resumen_ofrece_confirmar_corregir_o_anotar(api_module, monkeypatch):
         cliente_id="demo", phone_number_id="PN", to_number="34600123456", flow=flow, reconocido=True,
     ))
     ids = [b[0] for b in enviados[-1]["buttons"]]
-    assert ids == ["confirm_yes", "confirm_no", "data_fix"]
+    assert [i.partition(":")[0] for i in ids] == ["confirm_yes", "confirm_no", "data_fix"]
+    identidad = ids[0].partition(":")[2]
+    assert identidad and ids[1] == "confirm_no:" + identidad
     assert "Te he reconocido" in enviados[-1]["body"]
     assert flow.flow == "booking_confirm"
 
@@ -79,7 +81,9 @@ def test_el_resumen_ofrece_confirmar_corregir_o_anotar(api_module, monkeypatch):
         cliente_id="demo", phone_number_id="PN", to_number="34600123456", flow=flow,
     ))
     ids = [b[0] for b in enviados[-1]["buttons"]]
-    assert ids == ["confirm_yes", "confirm_no", "notes_write"]
+    assert [i.partition(":")[0] for i in ids] == ["confirm_yes", "confirm_no", "notes_write"]
+    assert ids[0].partition(":")[2] != identidad
+    assert ids[1].partition(":")[2] == ids[0].partition(":")[2]
     assert "Te he reconocido" not in enviados[-1]["body"]
 
 

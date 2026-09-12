@@ -118,3 +118,27 @@ incierto de hueco ocupado y no describir una fila cancelada como confirmada.
 La identidad no acredita autorización: la transición aceptada vigente sigue
 siendo un requisito independiente. Reiniciar o reenviar el mismo mensaje no
 puede inventar una autorización nueva ni una nueva identidad de ejecución.
+
+
+## Confirmación de resumen en WhatsApp (siguiente candidato)
+
+`Estado.confirmacion_reserva_json` conserva id, fecha, estado y los datos exactos
+del resumen: servicio, fecha, hora, contacto, notas, centro y preferencia de
+profesional. El código valida el contenido y la caducidad antes de usarlo.
+Se guarda preparada antes del envío y ofrecida solo tras el acuse; el CAS impide
+que un acuse tardío recupere una versión descartada. Los botones Confirmar y
+Cancelar llevan la identidad; los antiguos genéricos no autorizan otra cita.
+El paso visual se reconstruye como una proyección de esos datos tras reiniciar.
+
+La aceptación se publica antes de llamar a crear; otra entrega no puede ejecutar
+la misma aceptación mientras sigue en proceso. Modificar datos o notas invalida
+el resumen. Un sí con los datos del worker cambiados tampoco autoriza ejecutar.
+El botón para crear las dos citas referencia el mismo resumen; el recorrido de
+mover una cita existente y los formularios nativos conservan por ahora su flujo
+anterior y requieren su propia migración.
+
+Límite: esta fase todavía no enlaza la identidad con `operation_key` del núcleo.
+Falta conservar la profesional asignada y recuperar el resultado de la operación
+antes de comprobar el hueco otra vez. Una aceptación en proceso tras una caída
+se bloquea; no se interpreta como cita creada ni se reejecuta automáticamente.
+El banco real y la revisión exacta siguen siendo puertas pendientes.

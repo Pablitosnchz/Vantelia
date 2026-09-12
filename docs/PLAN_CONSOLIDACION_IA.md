@@ -17,7 +17,8 @@ un tenant limpia sus filas sin tocar al vecino.
 Evidencia: tres recuperaciones entre procesos y tres respuestas ambiguas rojas
 antes del cambio. La carrera aceptación/rechazo falla al retirar la comparación
 de revisión. 181 dirigidos de integración, 52 de cierre y 17 de primitivas aisladas verdes
-(grupos con solapamiento); suite completa y revisión del candidato exacto pendientes.
+(grupos con solapamiento). El descendiente integrado 530ae40 terminó con 2256
+correctos y 1 omitido; revisión exacta pedida automáticamente.
 Referencia 12d2614: 2226 correctos y 1 omitido. 44dddf8 terminó con 2231 correctos, 1 omitido y revisión exacta pedida.
 
 Siguiente puerta: operación de agenda con identidad persistida y resultado
@@ -215,6 +216,13 @@ comportamiento pertinente; indicar configuración inválida/conflictiva; dos ten
 con reglas opuestas no se contaminan. Horarios y catálogo siguen en sus secciones.
 
 ## Fase 4 — consolidación de canales y retirada de duplicados
+
+Siguiente candidato: astra/confirmacion-reserva, hija de 530ae40. El resumen de
+WhatsApp se guarda antes de enviarlo, solo se ofrece tras el acuse, se recupera
+al perder el worker y sus botones llevan identidad. La aceptación se publica con
+versión antes de ejecutar; las opciones antiguas no autorizan datos nuevos.
+Queda conectar esa identidad al resultado de la creación, además de migrar los
+formularios nativos y las confirmaciones de gestión de citas existentes.
 
 Avance local 12-sep: `53f40c7` persiste Estado con versión y aceptación explícita;
 su suite terminó con 2248 correctos, 1 omitido y 2 fallos de mapa/código muerto,
