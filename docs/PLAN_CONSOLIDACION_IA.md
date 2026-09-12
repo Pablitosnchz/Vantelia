@@ -3,6 +3,15 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Actualización tras asumir los encargos de Claude
+
+Astra ha implementado las piezas pendientes de servicio retirado en creación y
+reprogramación y el cierre del calendario/métricas. Recorridos reales de WhatsApp,
+voz y endpoint widget probados, sin sustituir núcleo ni resolución de profesional.
+Pendiente suite completa y revisión del SHA integrado, después medición real.
+Estos arreglos no completan la encapsulación de políticas ni la recuperación
+tras reinicios; no se presenta el candidato como final para Alicia.
+
 ## Estado comprobado al retomar (12-sep)
 
 El objetivo sigue pendiente: no hay candidato final aprobado ni evidencia de

@@ -6,7 +6,7 @@ las mismas fechas. La salida imprime los valores elegidos para comparar tiradas.
 
 Marcadores:
 - `{dia_abierto}`: fecha ISO futura con los huecos necesarios.
-- `{dia_abierto_nombre}`: esa misma fecha con día de semana, mes y año en español.
+- `{dia_abierto_nombre}`: esa misma fecha en DD/MM/AAAA, sin día semanal ambiguo.
 - `{dia_cerrado}` y `{dia_cerrado_nombre}`: fecha sin horas de horario reservable;
   una agenda llena no se considera cerrada. No usar para probar simplemente ocupación.
 - `{codigo}`: se conserva hasta preparar la cita de cancelación/reprogramación.
@@ -43,3 +43,6 @@ las fechas intencionales de recordatorios, interpretación y preparaciones por S
 El caso `test_servicio_desactivado_no_vacia_la_agenda` tiene una aserción condicional
 que puede no ejercitarse en día cerrado; queda como deuda separada, sin afirmar
 que esta búsqueda haya validado todos los instrumentos del repositorio.
+
+El titular distingue medidos, no medidos, no aplicables y previstos. El humo
+bloquea una medición incompleta sin atribuirla a caminos rotos.

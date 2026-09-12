@@ -244,6 +244,7 @@ def main() -> int:
 
     casos = [c for c in CASOS if not args.caso or c["id"] == args.caso]
     fallos = []
+    no_medidos = []
     print("humo: %d conversaciones enteras sobre una copia de la base de datos" % len(casos))
     print()
     for indice, caso in enumerate(casos):
@@ -257,7 +258,7 @@ def main() -> int:
             mensajes, fechas = calendario.resolver_mensajes(args.cliente, caso)
         except calendario.CalendarioNoDisponible as exc:
             print("NO MEDIDO %s: %s" % (caso["id"], exc))
-            fallos.append((caso, "precondición de calendario no disponible"))
+            no_medidos.append(caso["id"])
             continue
         if fechas:
             print("  calendario %s: %s" % (caso["id"], fechas))
@@ -287,10 +288,14 @@ def main() -> int:
             print("       por que importa: %s" % caso["por_que"])
 
     print()
+    if no_medidos:
+        print("  MEDICION INCOMPLETA: %d no medidos (%s)" % (len(no_medidos), ", ".join(no_medidos)))
     if fallos:
         print("=" * 70)
         print("  NO DESPLEGAR: %d de %d caminos rotos" % (len(fallos), len(casos)))
         print("=" * 70)
+        return 1
+    if no_medidos:
         return 1
     print("  los %d caminos llegan hasta el final" % len(casos))
     return 0

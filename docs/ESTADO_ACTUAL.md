@@ -37,10 +37,11 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** segunda revisión CAMBIOS de 6eb8ae5. Corregido hallazgo2: aviso persistente de reglas inactivas (6d10eba). Corregido hallazgo5: renuncia compartida por agente y booking con ventana de 30 mensajes, sin recorte de familia obligatoria a 1500 caracteres. 19 dirigidos verdes; regresiones rojas antes.
-- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado. Correcciones integradas desde 038e9f2.
-- **Siguiente:** 36 dirigidos verdes en la base y 58 de integración verdes en 2bca446; cerrados localmente 3 (menos candidatos cuenta como progreso aunque haya duda), 4 (sello de catálogo compartido solo durante responder; Q&A consulta solo su ámbito) y 6 (limpieza solo de IDs creados por el instrumento); integrar encargo de Claude sobre servicio retirado antes de resolver profesional; suite completa estable y revisión. No se ha solicitado nueva revisión todavía. No lanzar suite completa hasta integrar las entregas pendientes para evitar repetirla sobre un candidato conocido incompleto.
-- **Espera a:** Claude hallazgo1 con recorridos reales WA sin profesional, voz/chat y widget; no basta mock del núcleo. Otros encargos previos: calendario y reprogramación. Arquitectura conservada en astra/estado-propuestas. Medición crítico 6+6: tratamiento 0/6 al primer intento, no final. No desplegar sin Pablo.
+- **Tarea:** asumidos encargos pendientes durante cuota agotada de Claude. Servicio retirado validado antes de resolver profesional y en núcleo compartido; voz conserva motivo. Reprogramar rechaza cambio a retirado y permite mover el histórico sin cambiar profesional. Banco distingue medidos/no medidos/no aplican; humo incompleto no se etiqueta roto; guiones relativos corregidos.
+- **Rama:** astra/estado-propuestas, E:/Vantelia-astra-estado.
+- **Siguiente:** suite completa sobre candidato estable y revisión exacta. Recorridos reales sin mocks del núcleo: 4 rojos antes, 19 verdes después; reprogramación 2 rojos antes, 26 dirigidos verdes; widget endpoint 2 verdes; métricas 2 rojos antes, 17 verdes. Correcciones previas integradas y verificadas con58 dirigidos.
+- **Espera a:** revisión de Claude cuando vuelva; NO debe duplicar encargos asumidos. No desplegar. Pendientes del plan: encapsulación restante en Q&A, retirar otros correctores, reinicios/reentregas/proveedores, recordatorios (plantilla/envío real) y medición Alicia+otro negocio. El crítico sigue sin aceptación al primer intento.
+
 
 
 Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios

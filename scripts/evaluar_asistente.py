@@ -407,8 +407,9 @@ def main() -> int:
                 print("           > %s" % r.replace("\n", " ")[:160])
 
     print("\n" + "=" * 68)
-    print("  %d de %d%s" % (aciertos, len(casos) - saltados,
-                            ("  (%d no aplican a este negocio)" % saltados) if saltados else ""))
+    print("  %d de %d medidos; %d no medidos; %d no aplican; %d previstos" % (
+        aciertos, len(casos) - saltados - len(sin_calendario),
+        len(sin_calendario), saltados, len(casos)))
     for gravedad in ("critico", "importante", "deseable"):
         if fallos[gravedad]:
             print("  %s: %s" % (

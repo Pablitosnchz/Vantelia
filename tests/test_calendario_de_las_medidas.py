@@ -42,6 +42,7 @@ def test_manana_literal_solo_si_el_caso_lo_prueba_explicitamente():
     for caso in CASOS + HUMOS:
         if any("manana" in m.lower().replace("ñ", "n") for m in caso["mensajes"]):
             assert caso.get("fecha_relativa_intencional"), caso["id"]
+            assert caso.get("agenda") != "crea", caso["id"]
 
 
 def test_no_borra_el_codigo_antes_de_preparar_la_cita():
@@ -102,7 +103,10 @@ def test_runner_congela_fecha_y_no_mide_sin_calendario(monkeypatch, capsys, disp
         assert ejecuciones == [["2026-09-13", "{codigo}"]] * 2
     else:
         assert ejecuciones == []
-        assert "NO MEDIDO" in capsys.readouterr().out
+        salida = capsys.readouterr().out
+        assert "NO MEDIDO" in salida
+        assert "0 de 0 medidos" in salida
+        assert "1 no medidos" in salida
 
 
 @pytest.mark.parametrize("hoy,objetivo", [(date(2026, 9, 12), "2026-09-23"),
@@ -135,3 +139,20 @@ def test_horizonte_rechazado_es_no_medido(marcador):
     with pytest.raises(calendario.CalendarioNoDisponible):
         calendario.resolver_mensajes("salon", {"mensajes": ["{" + marcador + "}"]},
             hoy=date(2026, 9, 12), consultar=consultar)
+
+
+def test_humo_sin_calendario_no_declara_camino_roto(monkeypatch, capsys, tmp_path):
+    import sys
+    from scripts import humo
+    from evals import arnes
+    monkeypatch.setattr(sys, "argv", ["humo", "--db-copia", str(tmp_path / "prueba.db")])
+    for nombre in ("preparar_copia", "comprobar_aislamiento", "cortar_el_mundo_exterior"):
+        monkeypatch.setattr(arnes, nombre, lambda *a: None)
+    monkeypatch.setattr(humo, "CASOS", [{"id": "sin-huecos", "mensajes": ["{dia_abierto}"]}])
+    def sin_huecos(*args, **kwargs):
+        raise calendario.CalendarioNoDisponible("sin huecos")
+    monkeypatch.setattr(calendario, "resolver_mensajes", sin_huecos)
+    assert humo.main() == 1
+    salida = capsys.readouterr().out
+    assert "MEDICION INCOMPLETA" in salida
+    assert "caminos rotos" not in salida

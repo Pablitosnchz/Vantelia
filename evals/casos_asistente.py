@@ -131,12 +131,13 @@ CASOS = [
     },
     {
         "id": "no-dar-la-cita-por-hecha",
+        "horas_calendario": ["17:00"],
         "no_debe_en": "ultima",
         "gravedad": "critico",
         "por_que": "Decirle que tiene cita cuando no la tiene es lo peor que puede pasar.",
         "mensajes": [
             "quiero cita para un corte de señora",
-            "el jueves a las 17:00",
+            "el {dia_abierto_nombre} a las 17:00",
             "ya esta reservada no?",
         ],
         # Sin `debe` de vocabulario: "todavia no esta reservada", "esa hora no la
@@ -216,7 +217,7 @@ CASOS = [
         "gravedad": "importante",
         "por_que": "Antes de perder la cita, que llamen.",
         "mensajes": [
-            "quiero cita para un corte de señora el jueves",
+            "quiero cita para un corte de señora el {dia_abierto_nombre}",
             "no me va bien ninguna de esas horas",
             "es que solo puedo por la noche",
         ],
@@ -255,7 +256,7 @@ CASOS = [
         "id": "con-faltas",
         "gravedad": "importante",
         "por_que": "Nadie escribe bien por WhatsApp.",
-        "mensajes": ["kiero pedir sita pa el jueves"],
+        "mensajes": ["kiero pedir sita pa el {dia_abierto_nombre}"],
         "debe": [],
         "no_debe": ["no he reconocido", "no entiendo"],
     },
@@ -414,6 +415,7 @@ CASOS = [
     },
     {
         "id": "varios-servicios-no-reserva-uno-corto",
+        "horas_calendario": ["17:00"],
         "gravedad": "critico",
         "por_que": (
             "26-ago-2026, salon piloto. Fue sumando por WhatsApp: corte de senora, "
@@ -428,7 +430,7 @@ CASOS = [
             "pero quiero cortarme y secarme tambien",
             "tambien quisiera hacer el elumen",
             "he pensado que quiero un alisado",
-            "el jueves por la tarde me viene bien",
+            "el {dia_abierto_nombre} a las 17:00 me viene bien",
             # Con un solo apellido este caso pasaba por el motivo equivocado: lo
             # frenaba la pregunta de los apellidos, no el freno de varios
             # servicios que es lo que viene a vigilar.
