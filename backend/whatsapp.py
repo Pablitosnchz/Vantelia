@@ -1267,9 +1267,8 @@ async def _wa_enviar_propuesta_de_precio(*, cliente_id: str, phone_number_id: st
     propuesta = estado.propuesta_servicio
     if propuesta is None or propuesta.estado != "preparada":
         return False, ""
-    actual = booking.alternativa_vigente_de_propuesta(cliente_id, propuesta)
-    if not actual or actual["revision"] != propuesta.revision_config:
-        reserva.invalidar_propuesta_servicio(estado)
+    actual = booking.revalidar_alternativa_de_propuesta(cliente_id, estado)
+    if not actual:
         cuerpo = "La opción ha cambiado. Dime qué servicio quieres y lo consultamos de nuevo."
         enviado = await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=cuerpo)

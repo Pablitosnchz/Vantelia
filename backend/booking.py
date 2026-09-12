@@ -6978,6 +6978,22 @@ def alternativa_vigente_de_propuesta(cliente_id: str, propuesta) -> Dict[str, An
     return alternativa_de_precio_vigente(cliente_id, propuesta.servicio_origen, propuesta.location_id)
 
 
+def revalidar_alternativa_de_propuesta(cliente_id: str, estado) -> Dict[str, Any]:
+    """La aceptación histórica no elude caducidad ni cambios del portal."""
+    from backend import reserva
+    propuesta = estado.propuesta_servicio
+    if propuesta is None or reserva._propuesta_servicio_vigente(estado, propuesta.id) is None:
+        return {}
+    if propuesta.estado not in ("preparada", "ofrecida", "aceptada"):
+        return {}
+    actual = alternativa_vigente_de_propuesta(cliente_id, propuesta)
+    if (not actual or actual["servicio_id"] != propuesta.servicio_id
+            or actual["revision"] != propuesta.revision_config):
+        reserva.invalidar_propuesta_servicio(estado)
+        return {}
+    return actual
+
+
 def contestar_alternativa_de_precio(cliente_id: str, estado, propuesta_id: str,
                                   respuesta: str) -> bool:
     """Transición compartida por texto y botones; vuelve a leer regla y catálogo."""
@@ -6985,9 +7001,8 @@ def contestar_alternativa_de_precio(cliente_id: str, estado, propuesta_id: str,
     propuesta = estado.propuesta_servicio
     if propuesta is None or propuesta.id != propuesta_id:
         return False
-    actual = alternativa_vigente_de_propuesta(cliente_id, propuesta)
-    if not actual or actual["servicio_id"] != propuesta.servicio_id:
-        reserva.invalidar_propuesta_servicio(estado)
+    actual = revalidar_alternativa_de_propuesta(cliente_id, estado)
+    if not actual:
         return False
     if not reserva.responder_propuesta_servicio(
             estado, propuesta_id, respuesta, revision_config=actual["revision"]):

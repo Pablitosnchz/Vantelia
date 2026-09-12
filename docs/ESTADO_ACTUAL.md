@@ -37,10 +37,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** orientación declarada desde Q&A reutiliza propuesta, acuse y aceptación compartidos. En este recorrido sustituye rescate por Q&A y nota genérica; ofrecer no selecciona ni crea. Repeticiones conservan id y las ofertas caducadas se renuevan. Alicia sigue sin política nueva inferida.
-- **Rama:** astra/nucleo-decisiones, E:/Vantelia-astra-nucleo, basada en 6e040e1 (agenda 15 minutos y estado de recordatorios incluidos).
-- **Siguiente:** validar candidato estable completo y revisión exacta. 60 pruebas dirigidas verdes; fallo reproducido antes al repetir oferta y al desactivar la nueva vía. Regla guardada real, pedir foto, expiración y fallo de envío cubiertos. Después, recuperación segura y políticas todavía globales.
-- **Espera a:** revisión de Claude al recuperar créditos (último aviso: 22:40). No desplegar ni hacer push. Pendientes: revisión visual, demás autoridades, recuperación entre procesos, banco real Alicia+segundo negocio y envío real autorizado de recordatorios. La fecha objetivo lunes14/martes15 no sustituye aceptación.
+- **Tarea:** candidata orientación declarada 12d2614 en suite completa. Se corrige en rama hija la reutilización de aceptaciones caducadas o con política/catálogo editados; tres casos rojos reproducidos antes del arreglo. WhatsApp comparte esa validación antes de enviar botones; un cuarto caso rojo demostraba el envío de una oferta caducada. Diseño de persistencia y concurrencia en docs/DISENO_RECUPERACION_ESTADO.md, aún sin implementar.
+- **Rama:** astra/recuperacion-propuestas, E:/Vantelia-astra-recuperacion (hija de 12d2614).
+- **Siguiente:** suite del candidato estable tras la actual y revisión exacta. 64 dirigidos verdes de aceptación/núcleo; 19 verdes después de integrar el acuse (incluido el caso nuevo de oferta caducada). Base 6e040e1 terminó: 2221 correctos, 1 omitido, revisión exacta pedida. Orientación 12d2614: 60 dirigidos verdes; su suite corre en E:/Vantelia-astra-nucleo.
+- **Espera a:** revisión de Claude al recuperar créditos (último aviso 22:40). No desplegar ni hacer push. Pendientes: persistencia y concurrencia, retirada de inferencias históricas restantes, revisión visual, banco real Alicia+segundo negocio y envío real autorizado de recordatorios. No se ha cambiado la política de orientación de Alicia.
 
 
 

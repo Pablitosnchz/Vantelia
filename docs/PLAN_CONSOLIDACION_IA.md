@@ -3,6 +3,18 @@
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
 Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
+## Revalidación y recuperación (en curso)
+
+Base de agenda/recordatorios 6e040e1: suite 2221 correctos y 1 omitido, revisión
+exacta en cola. Orientación 12d2614 en suite completa. Rama hija de recuperación:
+se revalida también una aceptación anterior antes de reutilizarla; tres pruebas
+fallaron sin la corrección (caducidad, cambio de política y cambio de catálogo).
+La validación vive en booking y se comparte con la transición de aceptación y el envío de la oferta por WhatsApp. Cuarto caso rojo: se enviaban botones de una propuesta ya caducada. 64 dirigidos verdes y, tras adaptar el envío, otros 19 verdes de los recorridos afectados. Suite completa y revisión exacta pendientes.
+
+La persistencia no está resuelta: diseño y puertas concretas en
+`DISENO_RECUPERACION_ESTADO.md`. No confundir la revalidación de un objeto presente
+con recuperar una conversación tras reiniciar ni con resolver carreras de workers.
+
 ## Candidato de orientación declarada (12-sep, Astra)
 
 Base integrada: 6e040e1, que incorpora servicios retirados, calendario de medidas,

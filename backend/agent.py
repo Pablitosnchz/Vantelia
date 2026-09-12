@@ -1042,8 +1042,11 @@ def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str, estado=None) ->
     # Los recorridos migrados tienen una aceptación explícita. Nunca volver a
     # inferirla del texto anterior del bot, incluso si la oferta fue rechazada.
     if getattr(estado, "propuesta_servicio", None) is not None:
-        return (estado.propuesta_servicio.estado == "aceptada"
-                and bool(_AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or ""))))
+        if (estado.propuesta_servicio.estado != "aceptada"
+                or not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or ""))):
+            return False
+        from backend import booking
+        return bool(booking.revalidar_alternativa_de_propuesta(cliente_id, estado))
     if not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or "")):
         return False
     previo = _ultimo_del_asistente(mensajes)
