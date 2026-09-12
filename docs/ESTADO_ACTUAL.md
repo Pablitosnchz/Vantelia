@@ -40,10 +40,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** nadie
-- **Tarea:** ninguna abierta. «La primera que tengas» ya acaba en cita (ver «Lo último»).
-- **Rama:** main.
-- **Siguiente:** de los recordatorios por WhatsApp quedan el estado de la plantilla en el portal y el envío real (ver «Lo último» y el plan). Astra tiene en el buzón la revisión de todo lo desplegado hoy, recordatorios incluidos (`f6fa490`, `4fe20fc`, `57f6d45`).
-- **Espera a:** nada. Astra, sin créditos hasta las 20:46.
+- **Tarea:** ninguna abierta. Producción en `aab4d02` (lo de Astra integrado + el freno de la hora inventada).
+- **Rama:** main. Sin integrar: `claude/hora-sin-mirar`, con DOS intentos **sin validar** sobre el caso crítico (ver «El crítico que no cierra»). No subirlos sin medir a una hora decente.
+- **Siguiente:** (1) medir en condiciones el caso `dice-que-si-y-acaba-en-cita` —de día y con «mañana» abierto—, (2) de los recordatorios por WhatsApp quedan el estado de la plantilla en el portal y el envío real.
+- **Espera a:** nada. Astra volvió a tener créditos a las 02:5x del 12-sep; tiene el resumen en el buzón.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
@@ -133,6 +133,55 @@ Esto mide comportamiento determinista, no la tasa de fallos del modelo real.
   se le piden nombre y dos apellidos antes del resumen (freno en `crear_cita` del
   agente y en el flujo con listas, que junta lo que va diciendo; a la tercera se le
   ofrece llamar). A una clienta conocida no se le pide nada.
+- **No ofrece una hora que no existe** (12-sep, `e6be556`): tras enseñarle
+  09:00-10:00, a un «a las 15» contestaba *«mañana a las 15:00 tengo disponible»*,
+  ella decía que sí, y la mentira solo se descubría al crear la cita, tres turnos
+  después (la cita imposible NUNCA nació: el hueco se comprueba al crearla). Ahora,
+  si ofrece una hora que no está en los huecos que tenemos y no ha mirado la agenda
+  en ese turno, se le obliga a mirarla. En las trazas se ve funcionando: contesta
+  «las 15:00 no las tengo, tengo estas por la mañana» en el turno bueno.
+- **Lo de Astra, verificado e integrado** (12-sep, `aab4d02`): el botón de mover
+  cita ya no canta éxito cuando el núcleo rechaza el cambio; el pack de la cita no
+  se convierte en el servicio suelto al moverla; a una clienta ya conocida no se le
+  vuelven a pedir los apellidos; y una respuesta que Meta rechaza no queda en el
+  historial como enviada. Comprobado antes de integrar: sus 5 tests fallan contra
+  main sin sus arreglos, suite entera sobre su rama (2082) y sobre la fusión (2116).
+
+## El crítico que no cierra (12-sep, medido de madrugada)
+
+El caso `dice-que-si-y-acaba-en-cita` sigue siendo INTERMITENTE y es lo único rojo
+del banco: **42 de 43** contra copia fresca de producción con la config viva.
+
+Lo que se sabe, medido:
+
+- Con el freno de la hora inventada: 4 de 9. La MENTIRA está tapada; lo que falla
+  es el cierre. La conversación se atasca porque el servicio sigue sin concretarse
+  («no lo tengo claro») y el modelo vuelve a preguntar la técnica en vez de cerrar.
+- **El atajo que debería cortar eso lleva desde el 8-sep muerto.**
+  `_hay_que_cogerle_la_valoracion` corta a la TERCERA pregunta y coge el
+  diagnóstico, pero el contador (`veces_falta`) solo subía si faltaba el MISMO dato
+  dos veces seguidas, y el modelo alterna (técnica, largo, técnica): se reiniciaba
+  siempre. No saltó ni una vez en 12 conversaciones medidas. Hay un intento de
+  arreglo en `claude/hora-sin-mirar` (`_veces_sin_concretar`), **sin validar**: con
+  él tampoco llegó a saltar, así que la causa puede ser otra.
+- Ampliar el freno de la hora (que frenara también sin huecos sobre la mesa):
+  1 de 6. Descartado de momento.
+
+**DOS TRAMPAS DEL INSTRUMENTO, las dos costaron conclusiones falsas esta noche:**
+
+1. Medir desde un worktree NO vale: no tiene `.env`, así que no hay clave de
+   OpenAI y todas las conversaciones fallan por lo mismo. Dio un 0 de 4 que no
+   medía nada. Los worktrees valen para tests, no para el banco.
+2. **El guion del caso dice «manana», y el resultado depende de qué día sea.**
+   Medido en la madrugada del sábado al domingo: «mañana» cae en domingo, que el
+   salón CIERRA, así que la conversación correcta ya no puede acabar en cita. Peor:
+   algunas tiradas «pasaban» porque el modelo reservaba HOY llamándolo «mañana».
+   Comparar medidas tomadas a un lado y otro de la medianoche es comparar días
+   distintos. Si se toca este caso, medir de día y con «mañana» abierto.
+
+Fragilidad aparte: `tests/test_estirar_la_cita.py` da 11 errores en un worktree
+limpio (fixture que reserva y recibe 409) y pasa en `E:/Vantelia`. Depende de
+estado local, no es hermético. No es de esta noche: pasa igual en `aab4d02`.
 
 ## Bloqueado por fuera del código
 
