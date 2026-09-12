@@ -1257,10 +1257,39 @@ async def _respuesta_del_negocio_con_remate(
     return "Ya sé que te lo he dicho, cariño, y te entiendo. %s" % texto + chr(10) * 2 + remate
 
 
+async def _wa_enviar_propuesta_de_precio(*, cliente_id: str, phone_number_id: str,
+                                        to_number: str, from_number: str, estado):
+    """Único acuse del canal para esta alternativa; devuelve envío y texto real."""
+    from backend import reserva
+    propuesta = estado.propuesta_servicio
+    if propuesta is None or propuesta.estado != "preparada":
+        return False, ""
+    actual = booking.alternativa_de_precio_vigente(
+        cliente_id, propuesta.servicio_origen, propuesta.location_id)
+    if not actual or actual["revision"] != propuesta.revision_config:
+        reserva.invalidar_propuesta_servicio(estado)
+        cuerpo = "La opción ha cambiado. Dime qué servicio quieres y lo consultamos de nuevo."
+        enviado = await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=cuerpo)
+    else:
+        cuerpo = "%s\n¿Quieres una cita de %s?" % (
+            actual.get("texto") or "Podemos ofrecerte una valoración.",
+            textnorm.nombre_de_servicio_publico(propuesta.nombre))
+        enviado = await messaging._send_whatsapp_buttons(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            body=cuerpo, buttons=[("prop_acepta_" + propuesta.id, "Sí, esa cita"),
+                                  ("prop_rechaza_" + propuesta.id, "No, gracias")])
+        if enviado:
+            reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "oferta:" + propuesta.id)
+    reserva.guardar(cliente_id, from_number, estado)
+    return enviado, cuerpo
+
+
 async def _wa_explicar_la_regla_del_precio(
     *, cliente_id: str, phone_number_id: str, to_number: str,
-    freno: Dict[str, Any], estado, from_number: str,
-) -> None:
+    freno: Dict[str, Any], estado, from_number: str, location_id: str = "",
+    servicio_origen: str = "",
+) -> bool:
     """Le cuenta lo que hace el negocio en vez de cogerle el tratamiento.
 
     El texto es del negocio (su regla), no nuestro. Si su regla es ofrecer la cita
@@ -1271,26 +1300,28 @@ async def _wa_explicar_la_regla_del_precio(
     lineas = []
     if freno.get("texto_del_negocio"):
         lineas.append(freno["texto_del_negocio"])
-    elif freno.get("reserva_esto_en_su_lugar"):
-        lineas.append(
-            "De %s no te puedo dar precio sin verte el pelo, cariño. Lo que te cojo "
-            "es una cita de %s: es corta, sin compromiso, y ahí te damos el "
-            "presupuesto exacto." % (freno.get("en_lugar_de") or "eso",
-                                     freno["reserva_esto_en_su_lugar"]))
     else:
-        lineas.append("De eso no te puedo dar precio por aquí sin verte antes, cariño.")
+        lineas.append("Ese presupuesto requiere una valoración previa del negocio.")
 
-    # Se cambia el servicio del estado para que, si dice que si, se le coja la cita
-    # CORRECTA sin volver a empezar.
+    # La regla ofrece una alternativa: solo la aceptación selecciona el servicio.
     if freno.get("reserva_esto_en_su_lugar"):
-        estado.servicio = freno["reserva_esto_en_su_lugar"]
-        estado.servicio_exacto = freno["reserva_esto_en_su_lugar"]
-        estado.hora = ""
-        estado.huecos = []
-        reserva.guardar(cliente_id, from_number, estado)
-        lineas.append("¿Te la cojo?")
+        original = servicio_origen or estado.servicio_exacto or estado.servicio or freno.get("en_lugar_de", "")
+        actual = booking.alternativa_de_precio_vigente(cliente_id, original, location_id)
+        if not actual:
+            return await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                text="La opción ha cambiado. Voy a consultar de nuevo lo que podemos ofrecerte.")
+        estado.intencion = estado.intencion or "reservar"
+        reserva.preparar_propuesta_servicio(
+            estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
+            origen=actual["origen"], revision_config=actual["revision"],
+            servicio_origen=original, location_id=location_id)
+        enviado, _ = await _wa_enviar_propuesta_de_precio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            from_number=from_number, estado=estado)
+        return enviado
 
-    await messaging._send_whatsapp_text(
+    return await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
         text=chr(10).join(lineas),
     )
@@ -1315,6 +1346,10 @@ async def _wa_freno_del_precio(
         return False
     numero = flow.from_number or to_number
     estado = reserva.cargar(cliente_id, numero)
+    propuesta = estado.propuesta_servicio
+    if (propuesta is not None and propuesta.estado == "rechazada"
+            and propuesta.servicio_origen == servicio):
+        return False
     # Si ya ha dicho que quiere el tratamiento SIN pasar por la valoracion, se le
     # coge: es su decision. Sugerirselo la primera vez es la politica del salon;
     # insistir despues de que lo rechace es lo que le hizo quedarse sin cita
@@ -1332,6 +1367,8 @@ async def _wa_freno_del_precio(
     await _wa_explicar_la_regla_del_precio(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
         freno=parada, estado=estado, from_number=numero,
+        location_id=flow.location_id or "",
+        servicio_origen=servicio,
     )
     # El flujo de listas se suelta -no `_wa_clear_flow`, que tambien borraria lo
     # que el agente acaba de apuntar: la valoracion-. Si no, la clienta se queda
@@ -2182,6 +2219,19 @@ async def _wa_turno_del_agente(
         # La cita la confirma la clienta con un boton, no el modelo por su cuenta.
         remate_manual=True,
     )
+    from backend import reserva
+    estado = reserva.cargar(cliente_id, from_number)
+    propuesta = estado.propuesta_servicio
+    if propuesta is not None and propuesta.estado == "preparada":
+        enviado, cuerpo = await _wa_enviar_propuesta_de_precio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            from_number=from_number, estado=estado)
+        if enviado:
+            _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                          respuesta=cuerpo,
+                          intent="oferta_propuesta")
+        flow.flow = "agente"
+        return True
     # Con todos los datos en la mano, la cita NO se crea sola: se le ensena el
     # resumen y lo confirma ella. Es el mismo resumen con botones de siempre; al
     # unificar en el agente se habia perdido, y con el la ultima oportunidad de
@@ -2425,6 +2475,31 @@ async def _handle_whatsapp_message(
 
     iid = (interactive_id or "").strip()
     text_norm = textnorm._strip_accents((incoming_text or "").lower().strip())
+
+    if iid.startswith(("prop_acepta_", "prop_rechaza_")):
+        from backend import reserva
+        _, respuesta, propuesta_id = iid.split("_", 2)
+        estado = reserva.cargar(cliente_id, from_number)
+        ok = booking.contestar_alternativa_de_precio(cliente_id, estado, propuesta_id, respuesta)
+        reserva.guardar(cliente_id, from_number, estado)
+        if not ok:
+            texto = "Esta opción ya no está vigente. Dime qué servicio quieres y lo consultamos de nuevo."
+        elif respuesta == "acepta":
+            texto = "De acuerdo, buscamos una cita de %s. %s" % (
+                estado.servicio, "¿A qué hora te viene bien?" if estado.fecha else "¿Qué día te viene bien?")
+            flow.flow = "agente"
+            flow.servicio = estado.servicio_exacto
+            flow.hora = ""
+        else:
+            texto = "De acuerdo, no selecciono esa alternativa. ¿Cómo quieres continuar?"
+            flow.flow = "agente"
+        enviado = await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text=texto)
+        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                      entrante=incoming_text, respuesta=texto if enviado else "",
+                      intent="respuesta_propuesta")
+        return
 
     # Respuesta a los botones del recordatorio (confirmo / cancelar cita).
     if iid.startswith("bkok_") or iid.startswith("bkcancel_"):

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend import catalog_pick, clients, db, settings, textnorm, timeutils
@@ -65,8 +66,8 @@ def disponible(cliente_id: str) -> bool:
 
 # ─── Las herramientas que se le ofrecen ────────────────────────────────────
 
-def _herramientas() -> List[Dict[str, Any]]:
-    return [
+def _herramientas(estado=None) -> List[Dict[str, Any]]:
+    herramientas = [
         {
             "type": "function",
             "function": {
@@ -264,6 +265,23 @@ def _herramientas() -> List[Dict[str, Any]]:
             },
         },
     ]
+
+
+    propuesta = getattr(estado, "propuesta_servicio", None)
+    if propuesta is not None and propuesta.estado == "ofrecida":
+        herramientas.append({"type": "function", "function": {
+            "name": "responder_propuesta",
+            "description": (
+                "La oferta vigente es %s. Interpreta si el ÚLTIMO mensaje acepta o rechaza "
+                "esa alternativa. Una fecha sola o un sí a otra pregunta es ambiguo; "
+                "en ese caso pide aclaración. Esta herramienta no crea una cita." % propuesta.nombre),
+            "parameters": {"type": "object", "properties": {
+                "propuesta_id": {"type": "string", "enum": [propuesta.id]},
+                "respuesta": {"type": "string", "enum": ["acepta", "rechaza"]}},
+                "required": ["propuesta_id", "respuesta"], "additionalProperties": False}}})
+    if propuesta is not None and propuesta.estado in ("preparada", "ofrecida"):
+        herramientas = [h for h in herramientas if h["function"]["name"] != "crear_cita"]
+    return herramientas
 
 
 # Lo que escribe un modelo cuando le falta el nombre y la tool se lo exige. No son
@@ -772,13 +790,10 @@ def _valoracion_en_lugar_del_tratamiento(
     """
     from backend import booking
 
-    familias = booking._familias_que_exigen_valoracion(cliente_id)
-    if not familias or not booking._exige_valoracion(servicio, familias):
+    actual = booking.alternativa_de_precio_vigente(cliente_id, servicio, location_id)
+    if not actual:
         return {}
-    valoracion = booking._servicio_de_valoracion(cliente_id, location_id=location_id)
-    nombre = str((valoracion or {}).get("nombre") or "").strip()
-    if not nombre:
-        return {}
+    nombre = actual["nombre"]
     detalle = _detalle_servicio(cliente_id, nombre)
     # Con el nombre CRUDO se le colaba la palabra "pack" a la clienta ("el servicio
     # que mencionas es el Pack cambio de color y mechas..."). El salon lo pidio
@@ -790,11 +805,10 @@ def _valoracion_en_lugar_del_tratamiento(
         "servicio": textnorm.nombre_de_servicio_publico(nombre),
         "servicio_en_agenda": nombre,
         "en_lugar_de": hablado,
-        "motivo": ("De %s no se da precio ni se coge cita sin ver antes a la "
-                   "clienta. La cita que se reserva es la de valoracion." % hablado),
-        "nota": ("Explicaselo con naturalidad: le vas a coger la cita de valoracion, "
-                 "que es corta y sin compromiso, y ahi le dicen el precio. NUNCA le "
-                 "des una cifra de %s." % hablado),
+        "alternativa": actual,
+        "motivo": "El negocio ofrece valoración para presupuestar %s." % hablado,
+        "nota": ("Ofrece la alternativa y espera a que la acepte antes de seleccionarla. "
+                 "NUNCA le des una cifra de %s." % hablado),
         **detalle,
     }
 
@@ -1010,7 +1024,7 @@ def _ultimo_del_asistente(mensajes) -> str:
     return ""
 
 
-def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str) -> bool:
+def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str, estado=None) -> bool:
     """Le ha ofrecido el diagnostico y ella ha dicho que si.
 
     Visto en produccion el 8-sep-2026:
@@ -1024,6 +1038,11 @@ def _acepta_la_valoracion(cliente_id: str, mensajes, dicho: str) -> bool:
     turnos despues para que se lo cogieran. Un si a una pregunta que acabas de
     hacer es la forma mas normal de pedir algo, y era la unica que no valia.
     """
+    # Los recorridos migrados tienen una aceptación explícita. Nunca volver a
+    # inferirla del texto anterior del bot, incluso si la oferta fue rechazada.
+    if getattr(estado, "propuesta_servicio", None) is not None:
+        return (estado.propuesta_servicio.estado == "aceptada"
+                and bool(_AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or ""))))
     if not _AFIRMA_A_SECAS.match(catalog_pick._norm(dicho or "")):
         return False
     previo = _ultimo_del_asistente(mensajes)
@@ -1769,7 +1788,7 @@ def _es_la_valoracion(cliente_id: str, servicio: str) -> bool:
 _PIDE_VALORACION_RE = re.compile(r"\b(diagnostic\w*|valoracion\w*|valorarme|valorar)\b")
 
 
-def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None) -> bool:
+def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None, estado=None) -> bool:
     """Lo que dice AHORA es pedir la cita de diagnostico del negocio.
 
     Se mira lo que acaba de decir, no el estado: pedir el diagnostico es una
@@ -1782,7 +1801,7 @@ def _pide_la_valoracion(cliente_id: str, dicho: str, mensajes=None) -> bool:
     if not dicho:
         return False
     if not _PIDE_VALORACION_RE.search(catalog_pick._norm(dicho)):
-        return _acepta_la_valoracion(cliente_id, mensajes, dicho)
+        return _acepta_la_valoracion(cliente_id, mensajes, dicho, estado=estado)
     try:
         from backend import booking
 
@@ -1911,7 +1930,7 @@ def _nota_al_repetir_la_pregunta(cliente_id: str, config=None) -> str:
 
 
 def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
-                             mensajes=None, traza=None):
+                             mensajes=None, traza=None, estado=None):
     """Que se le pasa a `buscar_servicio` y que queda acumulado despues.
 
     Devuelve (descripcion, servicio_texto). Al buscar el servicio va TODO lo que
@@ -1923,7 +1942,7 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
     # Lo primero, antes incluso de mirar lo acumulado: pedir el diagnostico -o
     # decir que si cuando se lo ofrecen- es lo que quiere, no un detalle de lo
     # anterior.
-    if _pide_la_valoracion(cliente_id, dicho, mensajes=mensajes):
+    if _pide_la_valoracion(cliente_id, dicho, mensajes=mensajes, estado=estado):
         # Queda anotado en la traza: la primera vez que este arreglo no salto en
         # produccion hubo que deducir a mano si habia entrado o no, y no se pudo.
         if traza is not None:
@@ -3512,7 +3531,10 @@ async def responder(
     dicho_de_ella = " ".join(
         [str(mensaje)] + [m.get("content", "") for m in historial if m.get("role") == "user"]
     )
-    estado = reserva.cargar(cliente_id, telefono)
+    # En web no hay teléfono verificado: dos sesiones no pueden compartir una
+    # propuesta ni una aceptación por usar ambas la clave vacía.
+    clave_estado = telefono or ("web:" + session_id if session_id else "turno:" + secrets.token_hex(16))
+    estado = reserva.cargar(cliente_id, clave_estado)
     reserva.anotar_intencion(estado, intencion)
     # Si viene a tocar SU cita y solo tiene una, el codigo no se le pide: ya lo
     # sabemos por su telefono, que en estos canales viene verificado.
@@ -3683,7 +3705,9 @@ async def responder(
             # El canal puede querer que la cita la confirme la clienta con un
             # boton, no el modelo por su cuenta: un resumen con "¿Confirmamos?"
             # antes de tocar la agenda. Cancelar y reprogramar siguen igual.
-            if remate == "crear_cita" and remate_manual:
+            if remate == "crear_cita" and (remate_manual or (
+                    estado.propuesta_servicio is not None
+                    and estado.propuesta_servicio.estado in ("preparada", "ofrecida"))):
                 remate = ""
             if remate and not obligar:
                 eleccion = {"type": "function", "function": {"name": remate}}
@@ -3695,7 +3719,7 @@ async def responder(
             respuesta = cliente.chat.completions.create(
                 model=_modelo_del_negocio(cfg),
                 messages=turno,
-                tools=_herramientas(),
+                tools=_herramientas(estado),
                 tool_choice=eleccion,
                 temperature=_temperatura_del_negocio(cfg),
                 max_tokens=400,
@@ -4042,7 +4066,7 @@ async def responder(
                 # Solo cuenta como dicho si de verdad ha salido en su respuesta.
                 if aviso and "25" in texto_final:
                     estado.recargo_dicho = True
-                reserva.guardar(cliente_id, telefono, estado,
+                reserva.guardar(cliente_id, clave_estado, estado,
                                 pedido=reserva.que_falta(estado, conocido))
                 final = _con_el_telefono_si_hace_falta(
                     cliente_id, mensaje,
@@ -4073,6 +4097,24 @@ async def responder(
                     argumentos = json.loads(llamada.function.arguments or "{}")
                 except (ValueError, TypeError):
                     argumentos = {}
+                if llamada.function.name == "responder_propuesta":
+                    ok = booking.contestar_alternativa_de_precio(
+                        cliente_id, estado, str(argumentos.get("propuesta_id") or ""),
+                        str(argumentos.get("respuesta") or ""))
+                    reserva.guardar(cliente_id, clave_estado, estado)
+                    resultado = {"ok": ok, "servicio": estado.servicio_exacto,
+                                 "estado_propuesta": (estado.propuesta_servicio.estado
+                                                       if estado.propuesta_servicio else "inexistente"),
+                                 "nota": "No se ha creado ninguna cita. Consulta disponibilidad antes de reservar."}
+                    mensajes.append({"role": "tool", "tool_call_id": llamada.id,
+                                     "content": json.dumps(resultado, ensure_ascii=False)})
+                    continue
+                if (llamada.function.name == "crear_cita" and estado.propuesta_servicio is not None
+                        and estado.propuesta_servicio.estado in ("preparada", "ofrecida")):
+                    mensajes.append({"role": "tool", "tool_call_id": llamada.id,
+                                     "content": json.dumps({"ok": False,
+                                         "error": "La alternativa aún no está aceptada; aclara su elección."})})
+                    continue
                 # "La primera que tengas": la llamada lleva la hora que eligio el
                 # codigo pero OTRO dia (el primero de la lista que el modelo le
                 # habia ofrecido). Medido el 11-sep-2026: se le dijo "viernes 11 a
@@ -4143,6 +4185,10 @@ async def responder(
                 # pegado a la conversacion, y en cada intento de cerrar le volvia a
                 # salir el diagnostico aunque lo hubiera rechazado cuatro veces.
                 renuncio = _bk_renuncio(cliente_id, dicho_de_ella)
+                if (estado.propuesta_servicio is not None
+                        and estado.propuesta_servicio.estado == "rechazada"
+                        and estado.propuesta_servicio.servicio_origen == argumentos.get("servicio")):
+                    renuncio = True
                 if (llamada.function.name == "crear_cita" and estado.veces_sin_precio
                         and not renuncio
                         and argumentos.get("servicio")):
@@ -4171,22 +4217,27 @@ async def responder(
                         })
                         continue
                     if cambio.get("servicio"):
-                        resultado = {
-                            "ok": False,
-                            "error": ("De %s no se coge cita sin ver antes el pelo: lo "
-                                      "que se reserva es %s."
-                                      % (cambio.get("en_lugar_de") or "eso",
-                                         cambio["servicio"])),
-                            "reserva_esto_en_su_lugar": cambio["servicio"],
-                            "que_hacer": ("Explicaselo en una linea -es corta, sin "
-                                          "compromiso, y ahi le dan el presupuesto- y "
-                                          "vuelve a llamar a crear_cita con ese "
-                                          "servicio."),
-                        }
-                        mensajes.append({
-                            "role": "tool", "tool_call_id": llamada.id,
-                            "content": json.dumps(resultado, ensure_ascii=False),
-                        })
+                        original = str(argumentos.get("servicio") or estado.servicio_exacto or estado.servicio)
+                        actual = cambio["alternativa"]
+                        if actual:
+                            estado.intencion = estado.intencion or "reservar"
+                            propuesta = reserva.preparar_propuesta_servicio(
+                                estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
+                                origen=actual["origen"], revision_config=actual["revision"],
+                                servicio_origen=original, location_id=location_id)
+                            final = "%s\n¿Quieres una cita de %s?" % (
+                                regla.get("texto") or "Podemos ofrecerte una valoración.",
+                                textnorm.nombre_de_servicio_publico(actual["nombre"]))
+                            # Los canales de retorno directo entregan este turno al
+                            # devolverlo. WhatsApp acredita su aceptación por separado.
+                            if not remate_manual:
+                                reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "turno:" + propuesta.id)
+                            reserva.guardar(cliente_id, clave_estado, estado)
+                            traza.guardar(mensaje=mensaje, respuesta=final)
+                            return final, False
+                        mensajes.append({"role": "tool", "tool_call_id": llamada.id,
+                                         "content": json.dumps({"ok": False,
+                                             "error": "La alternativa ya no está disponible; consulta la regla actual."})})
                         continue
                 # La cita se crea con el nombre EXACTO del catalogo. El modelo
                 # habla con el nombre publico -sin "Pack"- y ese puede ser OTRO
@@ -4264,7 +4315,7 @@ async def responder(
                     # pregunta.
                     argumentos["descripcion"], estado.servicio_texto = _descripcion_para_buscar(
                         cliente_id, argumentos.get("descripcion"), estado.servicio_texto,
-                        mensajes=mensajes, traza=traza,
+                        mensajes=mensajes, traza=traza, estado=estado,
                     )
                 # "cualquier hueco que tengas me vale" le hacia pedir el calendario
                 # dia a dia (ocho de una tacada) hasta agotar el turno.
@@ -4392,7 +4443,7 @@ async def responder(
             temperature=_temperatura_del_negocio(cfg),
             max_tokens=300,
         )
-        reserva.guardar(cliente_id, telefono, estado,
+        reserva.guardar(cliente_id, clave_estado, estado,
                         pedido=reserva.que_falta(estado, conocido))
         remate_final = (cierre.choices[0].message.content or "").strip()
         traza.freno("se_acabaron_las_vueltas")

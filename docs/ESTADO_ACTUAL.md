@@ -40,10 +40,10 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra (diseño e implementación); Claude auxiliar de medición y revisión.
-- **Tarea:** fase 2, primer paso implementado: propuesta en `reserva.Estado` y transiciones de envío/aceptación/rechazo/invalidación. Todavía no se activa en agente ni canales. Diseño en `DISENO_FASE2_PROPUESTAS.md`.
+- **Tarea:** fase 2, integración de alternativas de PRESUPUESTO con regla `ofrecer_cita`: agente y botones WA comparten aceptación y revalidación de política/servicio. Ofrecer no selecciona; pendiente no permite crear. Diseño en `DISENO_FASE2_PROPUESTAS.md`.
 - **Rama:** `astra/estado-propuestas`, worktree `E:/Vantelia-astra-estado`, desde `1a9d56c`. El candidato de calendario permanece intacto en su worktree mientras termina la suite.
-- **Siguiente:** suite completa/revisión del primer paso y conectar conjuntamente política, agente y canal, retirando la selección prematura. 92 pruebas dirigidas verdes (17 nuevas); al quitar la guarda de envío, el test acepta indebidamente y falla. Guarda restaurada. La aceptación almacena un hecho, no selecciona ni ejecuta una cita. Comprobado que `_familias_que_exigen_valoracion` cubre precio/presupuesto y no permite inferir una regla de indecisión para alisados.
-- **Espera a:** datos saneados de Claude sobre política de indecisión; referencia completa con calendario nuevo y comparación crítica. Calendario: 11 tests propios y 11 de fixture verdes, suite/revisión pendientes. `afecf80`: revisión OK y 2138 passed/1 skipped. La medición vieja no demuestra mejora clara del cierre. No desplegar sin orden.
+- **Siguiente:** suite completa y revisión del candidato integrado: 168 pruebas dirigidas verdes. Base `bb4083b`: suite 2166 passed/1 skipped. Dos regresiones WA fallaban antes (selección previa incluso si fallaba el envío); restaurar la clave web vacía hace fallar la prueba de aislamiento. Ambos arreglos restaurados. Edición de regla persistida probada; no crear con propuesta pendiente aunque el modelo ignore el esquema.
+- **Espera a:** referencia completa de Claude y validación del candidato. Dato recibido: la indecisión de Alicia solo vive en Q&A; no se activa una regla por inferencia. Presupuestar alisados pide foto y asesorar sobre técnica es otra condición por confirmar. Calendario `1a9d56c` tiene revisión OK. Arquitectura sigue a cargo de Astra; Claude auxiliar. No desplegar sin orden.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);

@@ -1,11 +1,35 @@
 # Fase 2: propuestas de servicio y confirmación
 
-Diseño de Astra, 12-sep-2026. Primer paso implementado en `reserva`: datos y
-transiciones de propuesta con pruebas deterministas. Todavía NO conectado a
-WhatsApp ni al agente; los pasos 2–6 y sus pruebas de integración siguen pendientes.
+Diseño de Astra, 12-sep-2026. Datos y transiciones implementados en `reserva`.
+Integración en validación para alternativas de PRESUPUESTO con regla declarada
+`ofrecer_cita`: agente y WhatsApp usan la misma transición del núcleo. No se ha
+migrado la indecisión ni se ha aprobado una política nueva de Alicia.
 Complementa docs/PLAN_CONSOLIDACION_IA.md y docs/NORMAS_AGENTE_IA.md.
 
 ## Evidencia y alcance
+
+Avance actual:
+- `booking.alternativa_de_precio_vigente` lee regla y servicio público del tenant
+  y centro. Su huella incluye los datos actuales; no incorpora horarios duplicados.
+- `booking.contestar_alternativa_de_precio` revalida antes de aceptar/rechazar;
+  aceptar selecciona el servicio leído y descarta huecos del tratamiento anterior.
+- Tool `responder_propuesta`, disponible solo con oferta enviada: interpreta la
+  respuesta libre dentro de la llamada normal al modelo. Código valida identidad,
+  estado y revisión. Una fecha permite consultar, no seleccionar ni crear.
+- WhatsApp ofrece botones por id de propuesta; `_wa_enviar_propuesta_de_precio`
+  acredita la aceptación de Meta. El modelo no puede crear mientras está pendiente.
+- Se retiran de este recorrido la selección anticipada de WhatsApp, la instrucción
+  de cambiar servicio y volver a crear, y la aceptación deducida del texto del bot.
+- Web sin teléfono usa su session_id; no comparte la clave vacía con otras sesiones.
+- Reinicios descartan propuestas en memoria: no se recupera aceptación de un texto.
+  Persistencia entre procesos, confirmación provisional en un único acto y migración
+  del resto de recorridos siguen pendientes. No atribuir estas garantías a todos
+  los caminos antiguos ni declarar resuelto el caso crítico sin nueva medición.
+
+La referencia [Anthropic: herramientas eficaces](https://www.anthropic.com/engineering/writing-tools-for-agents)
+recomienda responsabilidades claras y medir herramientas con resultados verificables.
+Aplicación aquí: una transición para texto y botón y una prueba que intenta crear
+saltándose el esquema. El esquema orienta al modelo; el código frena la ejecución.
 
 Lectura acotada del candidato:
 - agent._acepta_la_valoracion: exige afirmación, palabra de diagnóstico y signo

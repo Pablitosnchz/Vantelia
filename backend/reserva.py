@@ -57,6 +57,8 @@ class PropuestaServicio:
     creada: float
     estado: str = "preparada"
     mensaje_id: str = ""
+    servicio_origen: str = ""
+    location_id: str = ""
 
 
 @dataclass
@@ -107,7 +109,8 @@ class Estado:
 
 
 def preparar_propuesta_servicio(estado: Estado, *, servicio_id: str, nombre: str,
-                               origen: str, revision_config: str) -> PropuestaServicio:
+                               origen: str, revision_config: str,
+                               servicio_origen: str = "", location_id: str = "") -> PropuestaServicio:
     """Registra una alternativa que el llamador YA autorizó para este tenant.
 
     Primera pieza de la migración: aún no conectada al recorrido conversacional.
@@ -121,7 +124,8 @@ def preparar_propuesta_servicio(estado: Estado, *, servicio_id: str, nombre: str
         raise ValueError("La propuesta requiere servicio, origen y revisión")
     propuesta = PropuestaServicio(
         id=uuid4().hex, servicio_id=servicio_id, nombre=nombre,
-        origen=origen, revision_config=revision_config, creada=time.time())
+        origen=origen, revision_config=revision_config, creada=time.time(),
+        servicio_origen=servicio_origen, location_id=location_id)
     if estado.propuesta_servicio is not None:
         invalidar_propuesta_servicio(estado)
     estado.propuesta_servicio = propuesta
@@ -309,6 +313,7 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
     # que se aparto para el. Lo demas de ella -su nombre, lo que ya se le conto-
     # se conserva: eso no cambia porque quiera otra cosa.
     if cliente_id and not estado.hecho and cambia_de_servicio(cliente_id, estado, mensaje):
+        invalidar_propuesta_servicio(estado)
         estado.servicio = ""
         estado.servicio_exacto = ""
         estado.servicio_texto = ""
@@ -572,6 +577,12 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
     """
     if not isinstance(resultado, dict):
         return
+    if (estado.propuesta_servicio is not None
+            and estado.propuesta_servicio.estado in ("preparada", "ofrecida")
+            and tool in ("buscar_servicio", "consultar_disponibilidad", "crear_cita")):
+        # Consultar una alternativa no es elegirla. Los datos provisionales se
+        # devuelven al modelo, pero no pisan la reserva ni habilitan su resumen.
+        return
     if resultado.get("pendiente_de_confirmacion"):
         # La creacion se ha frenado a proposito (la confirma la clienta con un
         # boton), pero los datos que traia la llamada son buenos y son los unicos
@@ -768,6 +779,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     contesto tres veces seguidas describiendole la PRIMERA. La segunda no se
     creo nunca.
     """
+    invalidar_propuesta_servicio(estado)
     estado.intencion = "reservar"
     estado.servicio = ""
     estado.servicio_exacto = ""
@@ -881,6 +893,8 @@ def _nombra_por_la_raiz(texto: str, familia: str) -> bool:
 
 def anotar_intencion(estado: Estado, intencion: str) -> None:
     if intencion in ("reservar", "cancelar", "reprogramar") and not estado.hecho:
+        if intencion != estado.intencion:
+            invalidar_propuesta_servicio(estado)
         estado.intencion = intencion
 
 
@@ -895,6 +909,9 @@ def que_falta(estado: Estado, nombre_conocido: str = "") -> str:
     """
     if estado.hecho:
         return ""
+    if (estado.propuesta_servicio is not None
+            and estado.propuesta_servicio.estado in ("preparada", "ofrecida")):
+        return "propuesta"
     if not estado.intencion:
         # Sin una intencion declarada NO se dirige nada: quien pregunta cuanto dura
         # unas mechas no esta cogiendo cita, y contestarle "dime que te quieres

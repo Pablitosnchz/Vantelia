@@ -6893,6 +6893,62 @@ def pidio_la_duracion_en_la_conversacion(cliente_id: str, session_id: str) -> bo
         return False
 
 
+def alternativa_de_precio_vigente(cliente_id: str, servicio: str,
+                                 location_id: str = "") -> Dict[str, Any]:
+    """Resuelve la alternativa permitida por una regla declarada de presupuesto.
+
+    No deduce permisos de Q&A. La huella permite detectar cambios del portal
+    entre oferta y respuesta; horarios y huecos se validan en el núcleo de agenda.
+    """
+    import hashlib
+    regla = regla_de_precio_para(cliente_id, servicio)
+    if regla.get("accion") != "ofrecer_cita" or not regla.get("id"):
+        return {}
+    fila = _servicio_de_valoracion(cliente_id, location_id=location_id)
+    if not fila.get("id") or not fila.get("nombre"):
+        return {}
+    politica = {k: regla.get(k) for k in (
+        "id", "intenciones", "familias", "accion", "texto", "prioridad", "activa")}
+    contenido = json.dumps([politica, fila, location_id], sort_keys=True, ensure_ascii=True)
+    return {"servicio_id": str(fila["id"]), "nombre": str(fila["nombre"]),
+            "duracion": int(fila.get("duration_minutes") or 0),
+            "texto": str(regla.get("texto") or ""),
+            "origen": "regla:" + str(regla["id"]),
+            "revision": hashlib.sha256(contenido.encode("utf-8")).hexdigest()}
+
+
+def contestar_alternativa_de_precio(cliente_id: str, estado, propuesta_id: str,
+                                  respuesta: str) -> bool:
+    """Transición compartida por texto y botones; vuelve a leer regla y catálogo."""
+    from backend import reserva
+    propuesta = estado.propuesta_servicio
+    if propuesta is None or propuesta.id != propuesta_id:
+        return False
+    actual = alternativa_de_precio_vigente(
+        cliente_id, propuesta.servicio_origen, location_id=propuesta.location_id)
+    if not actual or actual["servicio_id"] != propuesta.servicio_id:
+        reserva.invalidar_propuesta_servicio(estado)
+        return False
+    if not reserva.responder_propuesta_servicio(
+            estado, propuesta_id, respuesta, revision_config=actual["revision"]):
+        return False
+    if respuesta == "acepta":
+        # La selección viene de la lectura actual del núcleo, no del nombre
+        # escrito por el modelo ni de la hora ofrecida para el tratamiento anterior.
+        estado.servicio = textnorm.nombre_de_servicio_publico(actual["nombre"])
+        estado.servicio_exacto = actual["nombre"]
+        estado.duracion = actual["duracion"]
+        estado.servicio_texto = ""
+        estado.hora = ""
+        estado.huecos = []
+        estado.fecha_de_los_huecos = ""
+        estado.hora_del_codigo = False
+        estado.esperando_confirmacion = False
+        estado.ultimo_falta = ""
+        estado.veces_falta = 0
+    return True
+
+
 def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool) -> Dict[str, Any]:
     """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.
 
