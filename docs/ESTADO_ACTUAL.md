@@ -39,11 +39,18 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Astra (instrumentos de medida); Claude revisa y mide el modelo.
-- **Tarea:** quitar supuestos de calendario del banco/humo y compartir la preparación de fechas de tests. Diseño de propuestas pendiente de revisión de Claude.
-- **Rama:** `astra/calendario-evals`, worktree `E:/Vantelia-astra-valoracion`, desde `afecf80`.
-- **Siguiente:** suite completa y revisión del encargo de calendario. 11 pruebas del calendario y runner verdes; fixture de estirar citas: 11 verdes. La guarda contra mañana literal fallaba antes. No toca agent.py, reserva.py ni intents.py.
-- **Espera a:** suite/revisión del candidato de calendario y medición posterior de Claude con los guiones nuevos. `afecf80` ya tiene revisión OK y suite 2138 passed/1 skipped. Medición vieja: activa la salida de valoración, pero el calendario y los reintentos no permiten concluir una mejora clara del cierre. No desplegar sin orden.
+- **Testigo:** Astra corrige calendario; Claude auxiliar corrige guiones y cómputo NO MEDIDO.
+- **Tarea:** revisión CAMBIOS de 1a9d56c: incorporadas correcciones comunes de 6eb8ae5; fecha exacta sin día semanal ambiguo; fixture compartida comprueba ocupación real.
+- **Rama:** astra/calendario-evals, E:/Vantelia-astra-valoracion.
+- **Siguiente:** integrar entrega de Claude (hallazgos 5/6/7), suite completa estable y nueva revisión. Tres regresiones rojas antes del arreglo: fecha a más de siete días, cambio de año y rejilla ocupada.
+- **Espera a:** entrega de Claude para guiones/métricas. 6eb8ae5 sigue validándose por separado; no desplegar. Resto de arquitectura c22cc42 y cambios de alicia-final preservados. Recordatorios y comparación real 6+6 pendientes; no promover claude/hora-sin-mirar sin validación.
+
+
+Pendientes operativos que no deben perderse: estado de la plantilla de recordatorios
+y prueba de envío real; confirmar situación actual con Claude. Última referencia
+documental anterior de producción: `aab4d02`, no verificada de nuevo en esta revisión.
+Los relatos de medición antiguos de más abajo son históricos; la referencia con
+calendario reproducible se distingue arriba y no oculta los reintentos.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
 contra el código sin el arreglo y pasan con él; pytest completo en verde (2026);
