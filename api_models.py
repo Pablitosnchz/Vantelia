@@ -1198,6 +1198,7 @@ class AppWhatsAppPayload(BaseModel):
 
 
 class AppWhatsAppResponse(BaseModel):
+    plantilla_recordatorio_estado: str = "NOT_CREATED"
     ok: bool = True
     cliente_id: str
     enabled: bool = False

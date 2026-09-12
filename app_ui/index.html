@@ -2551,6 +2551,7 @@
         <span class="pro-pill" id="waStatusPill" style="background:var(--accent-soft); color:var(--accent);">Cargando</span>
       </div>
 
+      <p id="waReminderStatus" class="panel-sub" role="status"></p>
       <div id="waPlanNotice" class="panel-sub" style="display:none; margin-top:14px; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">
         Tu plan actual no incluye WhatsApp. Puedes solicitar la activación, pero necesitarás un plan con WhatsApp para que el asistente empiece a responder.
         <button class="btn btn-ghost" id="waGoBillingBtn" type="button" style="margin-left:10px; padding:6px 10px;">Ver planes</button>
@@ -6109,6 +6110,16 @@ function renderWhatsApp(data) {
   pill.style.color = statusColor[1];
 
   document.getElementById('waPlanNotice').style.display = data.plan_allows_whatsapp ? 'none' : '';
+  const estadosPlantilla = {
+    APPROVED: 'Plantilla aprobada. Para enviar recordatorios también deben estar activos WhatsApp y los avisos de citas.',
+    PENDING: 'Plantilla de recordatorios pendiente de aprobación por WhatsApp.',
+    REJECTED: 'Plantilla de recordatorios rechazada. Contacta con soporte para revisarla.',
+    PAUSED: 'Plantilla de recordatorios pausada por WhatsApp.',
+    DISABLED: 'Plantilla de recordatorios desactivada por WhatsApp.',
+    NOT_CREATED: 'Todavía no consta una plantilla de recordatorios para tu negocio.',
+  };
+  document.getElementById('waReminderStatus').textContent = estadosPlantilla[data.plantilla_recordatorio_estado]
+    || 'El estado de la plantilla de recordatorios no está disponible.';
   renderWhatsAppChecklist(data);
 }
 

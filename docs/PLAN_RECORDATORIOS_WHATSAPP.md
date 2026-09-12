@@ -5,8 +5,7 @@
 envío fuera de ventana y email de respaldo, y alta + consulta de la aprobación
 desde el worker de recordatorios (`wa_plantillas.refrescar_pendientes`; no hace
 falta suscribirse a `message_template_status_update`). Además, las citas de demo
-ya no entran en el reparto de recordatorios ni de llamadas. **Pendiente:** paso 4
-(estado de la plantilla en el portal) y paso 5 (prueba real). Para las plantillas
+ya no entran en el reparto de recordatorios ni de llamadas. **Actualización local de Astra, 12-sep:** paso 4 implementado en astra/politicas-portal; 39 pruebas dirigidas verdes, pendiente revisión. **Pendiente:** paso 5 (prueba real). Para las plantillas
 fuera de ventana, el negocio necesita un **método de pago en Meta** (WhatsApp
 Manager → pagos): sin él, Meta rechaza el envío y el aviso sigue por email.
 

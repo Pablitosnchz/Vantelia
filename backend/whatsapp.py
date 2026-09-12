@@ -45,6 +45,8 @@ from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
 from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, fotos, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding, wa_plantillas
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
+    from backend import wa_plantillas
+
     cfg = clients._get_client_config(cliente_id)
     wa = dict(cfg.get("whatsapp", {}) or {})
     webhook_url = f"{textnorm._public_base_url(request).rstrip('/')}/whatsapp/webhook/{cliente_id}"
@@ -72,6 +74,7 @@ def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResp
     if cuenta:
         status_value, status_label = "ready", "Conectado"
     return AppWhatsAppResponse(
+        plantilla_recordatorio_estado=str(wa_plantillas.estado(cliente_id).get("status") or "NOT_CREATED").upper(),
         cliente_id=cliente_id,
         enabled=enabled,
         phone_number_id=phone_number_id,

@@ -37,10 +37,11 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** regla de identificación del salón encapsulada por tenant y editable desde Q&A; independiente del interruptor de interpretación. Recuperados selectivamente cambios antiguos de alicia-final, que permanece intacto. Conservada configuración local explícita del salón.
-- **Rama:** astra/politicas-portal, E:/Vantelia-astra-politicas, desde 0b6043f.
-- **Siguiente:** suite completa cuando acabe la del candidato base, y revisión exacta. 27 dirigidos verdes; desactivar guardado del ajuste hace fallar la prueba. UI y API conservan activación separada; vecinos no cambian.
-- **Espera a:** suite/revisión; Claude sin créditos hasta22:40 según último aviso. 0b6043f sigue validándose en su copia intacta. Pendientes: demás políticas, resiliencia, recordatorios/medición real Alicia+otro negocio. No final ni despliegue.
+- **Tarea:** aplicado eje de agenda con horas y marcas cada15 minutos según foto de Alicia (61be499). Portal muestra estado de plantilla de recordatorios del tenant, sin exponer errores internos ni confundir aprobación con envío verificado. Lista de cierre en docs/CIERRE_ALICIA.md.
+- **Rama:** astra/politicas-portal, E:/Vantelia-astra-politicas.
+- **Siguiente:** suite completa del candidato actualizado y revisión exacta. 39 dirigidos verdes de plantillas, recordatorios seguros, cancelación y duplicados; 4 casos de estado del portal rojos antes. Coordenadas del eje y sintaxis JS verificadas. Bases ya verdes: 0b6043f 2216/1 omitido;550aafe 2217/1 omitido.
+- **Espera a:** revisión de Claude al recuperar créditos. No desplegar. Pendientes: revisión visual final, demás políticas/autoridades, recuperación entre procesos y banco real Alicia+segundo negocio, envío real autorizado de recordatorios. Sin nuevas reglas de Alicia aparte del eje visual; lunes14/martes15 es objetivo, no aceptación automática.
+
 
 
 

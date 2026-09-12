@@ -10,7 +10,7 @@ La fecha objetivo no sustituye revisión ni pruebas reales.
 | Reglas aisladas y editables | 550aafe: 2217 tests, 1 omitido; apellidos por tenant en Q&A | Revisión y completar auditoría de las demás reglas |
 | Horarios, vacaciones, servicios y profesionales | Núcleo compartido y regresiones de cambios del portal | Recorridos reales con configuración de Alicia |
 | Agenda con marcas de 15 minutos | Cambio visual implementado; coordenadas y sintaxis verificadas | Revisión visual del candidato |
-| Recordatorios WhatsApp | Plantillas y respaldo existentes; estado visible en preparación | Conexión, aprobación, facturación Meta y envío real autorizado a un destinatario de prueba |
+| Recordatorios WhatsApp | Plantillas y respaldo existentes; estado visible implementado, 39 pruebas dirigidas verdes | Conexión, aprobación, facturación Meta y envío real autorizado a un destinatario de prueba |
 | Reentregas, reinicios y errores externos | Hay tests específicos; propuestas aún en estado de proceso | Auditoría y pruebas de recuperación/idempotencia del recorrido integrado |
 | Segundo negocio | Reglas configurables y pruebas de aislamiento | Banco comparable con un segundo tenant |
 | Aceptación final | No completada | Sin críticos abiertos, resultados iniciales/reintentos/no medidos separados y revisión del SHA final |
