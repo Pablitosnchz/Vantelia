@@ -278,8 +278,16 @@ def main() -> int:
                 # se estira arrastrando su borde como en su programa de siempre.
                 page.locator('.nav-item[data-tab="citas"]').click()
                 page.locator("#page-citas.active").wait_for()
+                # Nueva cita hereda el dia visible. Usar la fecha ya sembrada:
+                # hoy puede estar cerrado o tener toda la jornada en el pasado.
+                for _ in range(dias_hasta_la_cita):
+                    page.locator("#cdNext").click()
+                    page.wait_for_timeout(600)
                 page.locator("#citasNuevaBtn").click()
                 page.locator("#newBookingDrawer.open").wait_for()
+                assert page.locator("#nbFecha").input_value() == _fecha_cita, (
+                    "Nueva cita no heredo el dia abierto de la cita de prueba"
+                )
                 assert page.evaluate("() => document.activeElement && document.activeElement.id") == "nbServicio", (
                     "al abrir Nueva cita el cursor tiene que estar en el servicio"
                 )
@@ -307,10 +315,6 @@ def main() -> int:
                 page.keyboard.press("Enter")
                 assert "largo" in page.input_value("#nbServicio").lower()
                 page.locator("#newBookingClose").click()
-
-                for _ in range(dias_hasta_la_cita):
-                    page.locator("#cdNext").click()
-                    page.wait_for_timeout(600)
 
                 # Pinchar un hueco vacio de la agenda y DESPUES elegir el servicio: la
                 # hora pinchada tiene que seguir puesta. Antes se perdia -los huecos se
