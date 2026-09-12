@@ -31,13 +31,32 @@ cierra el historial: la charla de otro dia no cuenta.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from dataclasses import dataclass, field, replace
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from backend import appstate, settings
 
 # Una conversacion parada mas de esto ya es otra conversacion.
 CADUCA_EN = settings.SESSION_TTL_SECONDS
+
+
+@dataclass(frozen=True)
+class PropuestaServicio:
+    """Alternativa validada por una regla/tool; no es una reserva ni una elección.
+
+    El adaptador acredita el envío y la interpretación del usuario referencia el
+    id vigente. No contiene disponibilidad: el núcleo debe consultarla de nuevo.
+    """
+
+    id: str
+    servicio_id: str
+    nombre: str
+    origen: str
+    revision_config: str
+    creada: float
+    estado: str = "preparada"
+    mensaje_id: str = ""
 
 
 @dataclass
@@ -81,9 +100,84 @@ class Estado:
     veces_sin_pedirla: int = 0  # veces que el freno de "cita sin pedir" ha saltado
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
+    propuesta_servicio: Optional[PropuestaServicio] = None
 
     def vigente(self) -> bool:
         return (time.time() - self.tocado) < CADUCA_EN
+
+
+def preparar_propuesta_servicio(estado: Estado, *, servicio_id: str, nombre: str,
+                               origen: str, revision_config: str) -> PropuestaServicio:
+    """Registra una alternativa que el llamador YA autorizó para este tenant.
+
+    Primera pieza de la migración: aún no conectada al recorrido conversacional.
+    No interpreta Q&A, no selecciona servicio y no confirma una operación.
+    La revisión debe representar servicio y política actuales, leídos por código.
+    """
+    if estado.intencion != "reservar":
+        raise ValueError("La alternativa requiere una reserva en curso")
+    if not all(isinstance(v, str) and v.strip()
+               for v in (servicio_id, nombre, origen, revision_config)):
+        raise ValueError("La propuesta requiere servicio, origen y revisión")
+    propuesta = PropuestaServicio(
+        id=uuid4().hex, servicio_id=servicio_id, nombre=nombre,
+        origen=origen, revision_config=revision_config, creada=time.time())
+    if estado.propuesta_servicio is not None:
+        invalidar_propuesta_servicio(estado)
+    estado.propuesta_servicio = propuesta
+    return propuesta
+
+
+def invalidar_propuesta_servicio(estado: Estado) -> None:
+    """Un cambio de servicio/gestión descarta también su resumen pendiente."""
+    if estado.propuesta_servicio is not None:
+        estado.propuesta_servicio = replace(estado.propuesta_servicio, estado="invalidada")
+        estado.esperando_confirmacion = False
+
+
+def _propuesta_servicio_vigente(estado: Estado, propuesta_id: str) -> Optional[PropuestaServicio]:
+    propuesta = estado.propuesta_servicio
+    if propuesta is None or propuesta.id != propuesta_id:
+        return None
+    if estado.intencion != "reservar" or not estado.vigente() or (
+            time.time() - propuesta.creada >= CADUCA_EN):
+        invalidar_propuesta_servicio(estado)
+        return None
+    return propuesta
+
+
+def marcar_propuesta_ofrecida(estado: Estado, propuesta_id: str, mensaje_id: str) -> bool:
+    """Solo lo llama el canal después de aceptar la salida que ofrece este id.
+
+    Meta aporta su referencia cuando esté disponible; web/voz pueden usar la
+    referencia del turno entregado. Un fallo de envío no llama a esta transición.
+    Devuelve True solo si hubo transición, para que una reentrega sea inerte.
+    """
+    propuesta = _propuesta_servicio_vigente(estado, propuesta_id)
+    if propuesta is None or propuesta.estado != "preparada" or not mensaje_id:
+        return False
+    estado.propuesta_servicio = replace(propuesta, estado="ofrecida", mensaje_id=mensaje_id)
+    return True
+
+
+def responder_propuesta_servicio(estado: Estado, propuesta_id: str, respuesta: str,
+                                *, revision_config: str) -> bool:
+    """Recibe acepta/rechaza explícitos; fecha o respuesta ambigua no autorizan.
+
+    La revisión actual la aporta el código, nunca un argumento libre del modelo.
+    Aceptar conserva el hecho: resolver el servicio y reservar son pasos distintos.
+    """
+    propuesta = _propuesta_servicio_vigente(estado, propuesta_id)
+    if propuesta is None:
+        return False
+    if propuesta.revision_config != revision_config:
+        invalidar_propuesta_servicio(estado)
+        return False
+    if propuesta.estado != "ofrecida" or respuesta not in ("acepta", "rechaza"):
+        return False
+    estado.propuesta_servicio = replace(
+        propuesta, estado="aceptada" if respuesta == "acepta" else "rechazada")
+    return True
 
 
 def _clave(cliente_id: str, telefono: str) -> str:

@@ -40,9 +40,9 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra (diseño e implementación); Claude auxiliar de medición y revisión.
-- **Tarea:** fase 2, propuestas y aceptación. Plan reforzado con referencias técnicas y criterios operativos; todavía sin cambio de runtime en esta rama.
+- **Tarea:** fase 2, primer paso implementado: propuesta en `reserva.Estado` y transiciones de envío/aceptación/rechazo/invalidación. Todavía no se activa en agente ni canales. Diseño en `DISENO_FASE2_PROPUESTAS.md`.
 - **Rama:** `astra/estado-propuestas`, worktree `E:/Vantelia-astra-estado`, desde `1a9d56c`. El candidato de calendario permanece intacto en su worktree mientras termina la suite.
-- **Siguiente:** pruebas de autorización explícita de la alternativa y estado de propuesta. Auditoría de Claude recibida: Q&A solo explica; el canal acredita envío; pérdida de estado no autoriza acciones. Comprobado que `_familias_que_exigen_valoracion` cubre precio/presupuesto y no permite inferir una regla de indecisión para alisados.
+- **Siguiente:** suite completa/revisión del primer paso y conectar conjuntamente política, agente y canal, retirando la selección prematura. 92 pruebas dirigidas verdes (17 nuevas); al quitar la guarda de envío, el test acepta indebidamente y falla. Guarda restaurada. La aceptación almacena un hecho, no selecciona ni ejecuta una cita. Comprobado que `_familias_que_exigen_valoracion` cubre precio/presupuesto y no permite inferir una regla de indecisión para alisados.
 - **Espera a:** datos saneados de Claude sobre política de indecisión; referencia completa con calendario nuevo y comparación crítica. Calendario: 11 tests propios y 11 de fixture verdes, suite/revisión pendientes. `afecf80`: revisión OK y 2138 passed/1 skipped. La medición vieja no demuestra mejora clara del cierre. No desplegar sin orden.
 
 Por qué se integró antes de su revisión (Claude): sus 8 tests nuevos fallan 7
