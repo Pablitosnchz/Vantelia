@@ -560,3 +560,42 @@ a fin en todas.
   listas/botones y 1 respuesta errónea (manicura).
 - Criterio del crítico endurecido (00a7726). Informe completo en ACEPTACION_CANDIDATO_IA (13-sep).
 - Siguiente: limpieza de copias con datos de clientas y orden de despliegue de Pablo.
+
+## 2026-09-13 15:35–16:51 +0200 - cambios del portal y reinicios, dos revisiones y sus arreglos (Claude)
+
+- 24a4a51: `scripts/medir_portal_y_reinicio.py`, seis escenarios con modelo real (vacaciones
+  tras ofrecer el día, hora bloqueada y servicio retirado con el resumen delante, regla apagada
+  tras ofrecer, reinicio a mitad de reserva y con el resumen delante). Cada intento sobre copia
+  nueva de snap4_conregla (producción 13-sep 15:52 + regla de orientación solo en la copia),
+  config cfg4. Tirada 15:55–16:13: 6/6 OK.
+- Leídas las conversaciones: «hora bloqueada con el resumen delante» aprobaba en falso (se
+  bloqueaban las 17:00 y el resumen estaba en las 18:00). c0bc746 bloquea la hora del resumen;
+  ese escenario otra vez 16:27–16:28: OK. El juez tiene test con ese caso.
+- En esa tirada salió un resumen a nombre de «Cliente»: el freno de apellidos iba antes que el de
+  nombres de relleno y «me llamo Ana Ruiz Perez» no lo sustituía. Arreglado en 1630583
+  (`tests/test_nombre_de_relleno_no_es_su_nombre.py`).
+- Revisión de Astra sobre 782a53f..45d7f85 (buzón, 16:12): «PACK MECHAS LARGO» contaba como
+  cambio de servicio al reprogramar y se auditaba una actualización sin cambio. Arreglado en
+  a329fe0: 3 regresiones rojas sin el arreglo, 149 verdes. Pedido su veredicto sobre a329fe0;
+  sin respuesta a las 16:51.
+- Revisión independiente en frío (subagente de solo lectura) de 782a53f..1630583: VEREDICTO
+  CAMBIOS. Reproducidos ejecutando:
+  1. `_hora_coloquial` tomaba el número del día: «el jueves 18 a las 11», con huecos a las 11 y
+     a las 18, daba las 18:00. Al aceptar el diagnóstico se guardaba una hora que no dijo.
+  2. `booking_name` guardaba cualquier texto como nombre («perdona, mejor a las 16»).
+  3. «sí, el jueves a las 17» aceptaba la oferta como un sí a secas y perdía día y hora.
+  4. El freno `cancelar_sin_pedirlo` bloqueaba cancelaciones legítimas («no puedo venir,
+     quítamela», «bórramela», el «sí» a «¿quieres que la cancele?»).
+  Menores: `hora_sin_hueco` no se soltaba al cambiar de servicio ni al empezar otra gestión
+  (arreglado). Anotados sin arreglar: una nota del agente se sobrescribe en `agent.py`;
+  posible callejón si con clienta conocida `_wa_resumen_para_confirmar` devuelve False tras
+  pasar a `booking_confirm`; `_ya_se_le_dijo` mira 8 mensajes sin corte por tiempo.
+- 2a794c2 arregla 1–4 y los menores marcados. `tests/test_revision_independiente_13sep.py`:
+  30 de 36 en rojo sin el arreglo (los 6 restantes son controles); 124 verdes en las suites
+  relacionadas; pyflakes limpio.
+- Re-medición en curso sobre 2a794c2 con árbol limpio (cambia el núcleo de la hora): banco de
+  Alicia, crítico `dice-que-si-y-acaba-en-cita` ×6, humo, los seis escenarios de portal y
+  reinicio, metareview conversacional (datos RAG traídos otra vez del servidor en solo lectura)
+  y suite completa.
+- Siguiente: leer resultados y conversaciones, actualizar el informe de aceptación y contar a
+  Pablo los hallazgos serios antes de desplegar.
