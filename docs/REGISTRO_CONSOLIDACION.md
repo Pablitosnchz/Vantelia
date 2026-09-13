@@ -627,3 +627,20 @@ a fin en todas.
   segundo intento (el primero acabó en el resumen del diagnóstico retirado, sin cita); suite 2641
   passed, 1 skipped.
 - Siguiente: informe de aceptación, contar a Pablo los hallazgos y pedir la orden de despliegue.
+
+## 2026-09-14 01:15–01:30 +0200 - despliegue del candidato 0bca1eb y regla de orientación de Alicia (Claude)
+
+- Orden de Pablo (14-sep, 01:13): «si crees que es óptimo para funcionar ya en el negocio de alicia
+  despliégalo y continúa con el resto de pasos».
+- Antes: producción en bd7a6da (VERSION.json del 12-sep), contenedor sano, `/health` 200. Local en
+  `claude/candidato` 109b091 (código 0bca1eb), árbol limpio, `py_compile` de los puntos de entrada OK.
+  Despliegue con `-SkipLocalChecks`: la suite completa ya pasó sobre 0bca1eb (2641 passed, 1 skipped) y
+  109b091 solo añade docs.
+- Despliegue: 01:16:59–01:20:03, exit 0. Foto previa `pre-deploy-20260913-231725.db`; imagen nueva, `/health` ok, acceso público OK, humo en el servidor 5/5. VERSION.json: 109b091 sin árbol sucio. La intención `orientacion` existe en el código desplegado.
+- Regla de orientación en producción (copia de seguridad previa `/srv/vantelia-backups/pre-regla-orientacion-20260913-232052.db`): creada `rule_eD_NnlJc1lQ` («Alisado: no sabe cual -> diagnostico», intención `orientacion`, familias alisado/alisados/keratina/acido lactico/lactico, `ofrecer_cita`, prioridad 15, playbook `derivar_a_valoracion`), mismos campos que la medida en copia; las otras tres reglas de Alicia, intactas.
+- Verificación sin escribir a nadie (caso crítico dentro del contenedor, sobre una copia en /tmp borrada
+  al acabar): `dice-que-si-y-acaba-en-cita` OK al primer intento: ofrece el diagnóstico con el texto de la regla, conserva «a las 15» y acaba en el resumen de Diagnóstico y presupuesto, martes 15 a las 15:00, a nombre de Ana Ruiz Perez. Copia e informe borrados; en `/tmp` del servidor quedaba `snap2.db` del 9-sep (copia SQLite de producción de una medición anterior): borrada; el contenedor, limpio.
+- Limpieza: borradas las copias de BD de cada tirada, el snapshot de producción y su config, la copia
+  local del 3-sep y las copias viejas de `storage/mediciones` (27-ago y 10-sep), con permiso de Pablo.
+- Astra sin créditos hasta el 13-oct.
+- Siguiente: vigilar las conversaciones reales de Alicia desde el despliegue (frenos, citas creadas); hacer determinista la elección del pack con `preferir_packs` (mechas en 75 min en vez de 360); que una oferta retirada desde el portal no vuelva a ofrecerse y una copia por intento en el medidor; fechas siempre en humano; recomendación ante caída del pelo; frenos en falso; plantilla de recordatorio de Meta; integrar en `main` y subirlo..

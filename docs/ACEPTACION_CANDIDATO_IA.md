@@ -1,6 +1,6 @@
 # Evidencia de aceptación del candidato IA
 
-Estado: **candidato final 0bca1eb revisado y medido el 13-sep (sección siguiente); pendiente de orden de despliegue de Pablo**. Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
+Estado: **candidato final 0bca1eb DESPLEGADO en producción el 14-sep a las 01:20 (VERSION.json 109b091) por orden de Pablo; regla de orientación de Alicia creada y verificada** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
 
@@ -12,6 +12,13 @@ Sobre 112b26c: 24a4a51 (medidor de portal y reinicios), a329fe0 (hallazgo de Ast
 3167313 (freno que negaba horas libres), 413c170 (docs) y 0bca1eb (hallazgos de Astra). Condiciones: copia nueva de `snap4_conregla` (producción
 13-sep 15:52 + regla de orientación de Alicia SOLO en la copia), config viva `cfg4`, modelo
 `gpt-4o-mini`, solo se inyecta la clave del modelo, árbol limpio y SHA estable en cada tirada.
+
+### Despliegue (14-sep-2026)
+
+`deploy/deploy.ps1 -SkipLocalChecks` (suite completa ya verde sobre 0bca1eb) 01:16:59–01:20:03, exit 0: foto
+previa de la BD, `/health` ok, acceso público OK, humo en el servidor 5/5, VERSION.json 109b091. Regla
+`rule_eD_NnlJc1lQ` creada con copia de seguridad previa; `dice-que-si-y-acaba-en-cita` dentro del contenedor
+sobre una copia: OK al primer intento con el resumen del diagnóstico a nombre de Ana Ruiz Perez.
 
 ### Revisiones antes de desplegar
 
