@@ -140,6 +140,8 @@ def test_aceptada_con_su_hora_se_le_pide_el_nombre_y_no_las_horas(politica, monk
     assert "apellidos" in anotado["textos"][0], "sin nombre no hay resumen: se le pide"
     assert anotado["resumen"] == []
     assert flow.hora == "15:00" and estado.hora == "15:00"
+    assert flow.flow == "booking_name", (
+        "con hueco ya validado el nombre no se devuelve al agente para que negocie otra vez")
 
 
 def test_aceptada_con_su_hora_y_conocida_va_al_resumen(politica, monkeypatch):  # noqa: F811
@@ -163,6 +165,36 @@ def test_aceptada_sin_hueco_a_su_hora_se_le_ofrecen_las_del_dia(politica, monkey
 
     assert len(anotado["huecos"]) == 1
     assert estado.hora == "" and flow.hora == ""
+
+
+def test_los_huecos_enviados_quedan_en_el_estado(politica, monkeypatch):  # noqa: F811
+    """La siguiente respuesta se interpreta contra las opciones que sí recibió."""
+    from backend import agenda, messaging, reserva, whatsapp
+
+    estado, _propuesta = _ofrecida_con_dia()
+    estado.hora = ""
+    estado.huecos = []
+    guardados = []
+
+    async def huecos(*args, **kwargs):
+        return {"10:00", "15:30"}, {"10:00", "15:30"}
+
+    async def texto(**kwargs):
+        return True
+
+    monkeypatch.setattr(agenda, "_public_slot_sets_for_day", huecos)
+    monkeypatch.setattr(messaging, "_send_whatsapp_text", texto)
+    monkeypatch.setattr(reserva, "cargar", lambda *args: estado)
+    monkeypatch.setattr(reserva, "guardar", lambda *args: guardados.append(args[2]))
+
+    assert asyncio.run(whatsapp._wa_ofrecer_huecos_hablando(
+        cliente_id="salon", phone_number_id="canal", to_number="persona",
+        fecha_iso="2030-01-08", fecha_humana="martes 8 de enero", servicio="Diagnóstico",
+    )) is True
+
+    assert estado.fecha_de_los_huecos == "2030-01-08"
+    assert estado.huecos == ["10:00", "15:30"]
+    assert guardados == [estado]
 
 
 # ─── La oferta repetida por el agente sigue siendo la oferta ─────────────

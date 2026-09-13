@@ -4,8 +4,8 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 13-sep-2026, Astra (suite de formularios y condiciones aceptadas;
-no implica cambios en producción).
+Última actualización: 13-sep-2026 12:58 Europe/Madrid, Astra (relevo de propuesta
+aceptada; no implica cambios en producción).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
 fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
@@ -45,10 +45,10 @@ página de sincronía lo enseña tal cual.
 Relevo anterior de Astra (histórico, sustituido por lo de arriba):
 
 - **Testigo:** Astra.
-- **Tarea:** términos efectivos y recuperación de checkout confirmados; arnés v2 guardado. Preparar el candidato integrado sin convertir dirigidos en aceptación global.
+- **Tarea:** integrar correcciones verificadas y cerrar el caso crítico de propuesta aceptada sin sustituir la decisión del negocio ni convertir dirigidos en aceptación global.
 - **Rama:** astra/condiciones-confirmadas, E:/Vantelia-astra-condiciones, hija de 2cb8a029. E:/Vantelia-astra-formularios conserva intacto el candidato medido; no editar ni repetir pruebas allí.
-- **Siguiente:** c9f19e6 corrige el único rojo del instrumento de 2cb8a029: el dirigido pasa con red bloqueada, pero falta una suite del hijo actual. 6c3ad4f selló las condiciones tras 112 passed (126,70 s) y revisión de código OK. 68c1fac reserva una clave Stripe antes de red y la reutiliza tras respuesta perdida: 23 condiciones y 2 regresiones previas verdes. Siguiente bloque: comprobar el conjunto integrado y, solo si el SHA queda estable, una suite exacta. Registro: docs/REGISTRO_CONSOLIDACION.md.
-- **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid), y revisión del siguiente SHA estable. Banco real Alicia/otro, recordatorios, reconciliación operativa y resto de gestión no están aceptados. Sin push ni despliegue.
+- **Siguiente:** `8ca6088` conserva en el estado los huecos que WhatsApp sí envía y, con una propuesta aceptada y hora validada, lleva el nombre por `booking_name` hacia el resumen en vez de devolverlo al modelo. Dirigidos terminados sin fallos en caché; falta la suite exacta del SHA integrado. La medición real de Claude sobre `1fe7a3e` falló dos intentos del crítico porque no llegaba al resumen; una nueva medición real está en curso y no se ha duplicado. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Espera a:** resultado de la medición real iniciada por Claude y, después de congelar SHA, suite exacta y revisión. Banco comparable Alicia/otro, recordatorios, reconciliación operativa y resto de gestión no están aceptados. Sin despliegue.
 
 QA visual exacta de de3d6d0 terminada: **exit 0**, 02:36:26–02:37:51 Europe/Madrid,
 SHA y árbol limpios antes/después. Instrumento externo verifica 37 marcas de
