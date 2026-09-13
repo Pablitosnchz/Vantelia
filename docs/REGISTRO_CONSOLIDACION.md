@@ -298,3 +298,21 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - No revisión formal nueva, modelo/Meta reales, push o despliegue. Se conserva
   el rojo documental de la suite exacta de entregas como resultado histórico,
   junto al dirigido verde que corrige el mapa en este hijo.
+
+## 2026-09-13 03:00:44.987 +0200 - suite de formularios activa y rama de condiciones
+
+- Una lectura de metadata de formularios-suite.result.json confirma inicio
+  Unix 1789261244.9869745 (hora del encabezado redondeada a ms), head
+  2cb8a029e70ac28b1ffdbee6eb750b6304909946. Suite en sesión 56124 sobre
+  E:/Vantelia-astra-formularios congelado. No se consulta progreso ni resultado
+  hasta el cierre del bloque; no se modifica ese árbol.
+- Nueva rama astra/condiciones-confirmadas en E:/Vantelia-astra-condiciones.
+  gestion_implementacion: preparado versionado de términos efectivos, resumen,
+  cotejo antes de ejecutar, recuperación primero y guardado/checkout sin
+  redefinir la condición aceptada. Sin impuestos/recargos nuevos ni Stripe real.
+- evidencia_real: instrumento observa botones emitidos y efectos; el producto
+  valida estado/autorización. Demostrar compatibilidad de transporte/IDs previos
+  sin HTTP, sin atribuir todavía comparación histórica ni éxito real.
+- Astra revisa ambos diseños/diffs y mantiene este relevo. Todavía no hay nuevos
+  verdes ni implementación aceptada en esta rama. QA exacta de etiqueta 2cb8a029
+  se puede preparar con aislamiento previo; no se ha ejecutado ni se repite de3d6d0.
