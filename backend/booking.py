@@ -7210,8 +7210,17 @@ def regla_de_orientacion_para(cliente_id: str, servicio: str) -> Dict[str, Any]:
     from backend import intents, rules, catalog_pick
     if not intents.config_enabled(cliente_id):
         return {}
+    # La familia se busca tambien en la CATEGORIA del servicio, igual que en
+    # `regla_de_precio_para`. Solo con lo que devuelve el detector, una regla que el
+    # negocio escribe «alisado» no casaba con «Keratina premium largo»: el detector
+    # da `keratina` (su primera palabra) y su familia de verdad esta en la
+    # categoria, «Alisados». La regla parecia bien puesta y no hacia nada (13-sep).
+    familias = catalog_pick.familias_pedidas(cliente_id, servicio)
+    categoria = _categoria_del_servicio(cliente_id, servicio)
+    if categoria:
+        familias = list(familias) + [categoria]
     return rules.match(cliente_id, {"intencion": "orientacion",
-                                   "familia": " | ".join(catalog_pick.familias_pedidas(cliente_id, servicio))}) or {}
+                                   "familia": " | ".join(familias)}) or {}
 
 
 def alternativa_de_orientacion_vigente(cliente_id: str, servicio: str,
