@@ -6,7 +6,12 @@ al plan y al registro horario; no completar casillas por inferencia.
 
 ## Referencias
 
-- Candidato local comprobado: 7ab7775, 2297 passed y 1 skipped; revisión pendiente.
+- Último candidato medido: 2235d25, suite roja (2347 passed, 1 skipped, 1 xfailed,
+  dos fallos de cancelación), fin 13-sep 02:15:01 Europe/Madrid. No se pidió revisión.
+- Antecesor local: 7ab7775, 2297 passed y 1 skipped; revisión pendiente.
+- Hijo listo para lanzar suite tras relevo limpio: c1db689/09aebfc/b5fa459/ca8e626.
+  ca8e626 adapta los dos tests de cancelación al ID aceptado: 34 dirigidos verdes
+  y revisión OK. No equivale a suite integrada nueva; todavía no se ha iniciado.
 - Referencia anterior con modelo real: pendiente de identificar SHA y artefactos.
 - Datos: solo copias saneadas autorizadas. No usar por defecto la BD del negocio.
 - Mantener separados los casos no aplicables y los que no se pudieron medir.
@@ -47,18 +52,40 @@ no anonimiza respuestas: usar únicamente datos de prueba saneados autorizados.
 | Recorrido | Prueba local | Evidencia real pendiente |
 | --- | --- | --- |
 | Crear y aceptar explícitamente | Cubierto en candidato 7ab7775 | Conversación y fila creada, primer intento y reintentos |
-| Cancelar/reprogramar | Cancelación guiada/botones en 9ede4f9: 57 dirigidos verdes; resto de gestión pendiente | Efecto exacto, sin cita duplicada ni acción por respuesta ambigua |
+| Cancelar/reprogramar | ca8e626 cierra los dos tests de contrato de 2235d25: 34 dirigidos verdes; pendiente nueva suite | Efecto exacto, sin cita duplicada ni acción por respuesta ambigua |
 | Cambios del portal | Invalidación/revalidación cubiertas localmente | Cambiar regla, servicio, horario o vacaciones durante conversación |
 | Aislamiento de negocio | Pruebas deterministas por tenant | Mismo banco con segundo negocio y políticas diferentes |
 | Reinicio/repetición | Estado y creación recuperable probados | Resto de gestión, entregas y resultado incierto |
-| Recordatorios | ff59b06 integrado: 31 dirigidos verdes y un xfail estricto de duplicación | Plantilla, envío autorizado, cancelación/reprogramación, duplicación |
-| Agenda visual | 7ab7775 parcial; QA corregida en árbol de gestión pasó, duración persistida 20→45 min | Revalidación del candidato final exacto; horas/cuartos no tienen aserción visual específica en este guion |
+| Recordatorios | 2235d25 conserva xfail; ledger b5fa459 revisado, 16 dirigidas finales verdes, pendiente suite integrada | Plantilla, envío autorizado, cancelación/reprogramación, duplicación |
+| Agenda visual | QA de gestión pasó, duración 20→45 min; eje y cuartos ya implementados con escala común | QA del SHA exacto con aserción geométrica de eje lateral y cuartos |
 | Revisión | Solicitada sobre 7ab7775 | OK del SHA exacto del candidato final |
 
 No se activa una regla de diagnóstico/foto para Alicia sin configuración acordada.
 Ese bloqueo de producto se aísla; no autoriza a elegir un servicio por la clienta.
 El despliegue y el push requieren una orden posterior de Pablo incluso si se
 cumplen todas las puertas anteriores.
+
+Trabajo del hijo aún sin aceptación global: transporte c1db689 revisado con 29
+pruebas propias y 56 relacionadas (selecciones solapadas); no acredita entrega.
+Ledger: 66 dirigidas y 2 de plantilla previas, 16 finales verdes y revisión local
+OK en b5fa459, aún sin suite integrada. Aceptación y evento del tope se guardan
+juntos; queda pendiente reconciliación, cupo entre citas distintas, ventana de
+cambio durante la red y fallback interno de email. Protección de copia/informe
+09aebfc revisada, 27 dirigidas verdes;
+rechaza alias de DB/WAL/SHM antes de cualquier escritura. Guardar un ID de Meta o una
+fila de cita no equivale a recibir el mensaje en el teléfono.
+
+Los instrumentos tampoco cierran fase 5: humo/simulador consultan confirmación
+después de añadir el turno de la clienta y usan un botón sin identidad vigente.
+El caso crítico del banco que acepta «Resumen» o «Confirmamos» no prueba creación
+ni aceptación por botón. Reproducción pura del orden pendiente; sin modelo real.
+
+La agenda ya implementa el eje y las marcas de quince minutos: coordinación
+verificó `app_ui/index.html`, `CD_AXIS_STEP=15` (8479), ticks laterales
+(8784–8786), líneas del cuerpo (8810) y CSS `.cd-tick`/`.hour` (812–813),
+con escala común de 2,2 px/min. No rehacer ese diseño. La QA anterior carece de
+aserción específica de su geometría: añadirla al próximo recorrido del SHA
+exacto, sin atribuir ahora validación visual que no se ejecutó.
 
 ## Recorrido visual aislado: 13-sep, 01:22 Europe/Madrid
 

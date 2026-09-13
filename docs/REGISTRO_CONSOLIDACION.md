@@ -98,3 +98,67 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Worktree de recordatorios actualizado limpiamente a rama astra/entregas-recordatorios, hija de 2235d25. Auxiliar diseña registro por generación/aviso/canal; otro contrasta resultados Meta con la interfaz existente. No se escriben reglas del negocio en los canales.
 - Tras nueva suite verde y solicitud de revisión exacta, el lanzador sustituirá solamente nuestra petición pendiente del antecesor 7ab7775 verificado, para evitar repetir validaciones. Sustitución no equivale a aprobación.
 - Banco real/copia saneada/segundo negocio y revisión de Claude esperan. No hay push, despliegue ni mensajes a clientas.
+
+## 2026-09-13 02:16 +0200 - suite roja y revisión del hijo
+
+- Coordinación verifica gestion-suite.result.json: 2235d25 terminó a las 02:15:01,
+  exit 1, 2347 passed, 1 skipped, 1 xfailed y dos fallos de cancelación. No se pidió
+  revisión automática y no se repite esta suite mientras se estabiliza el hijo.
+- Transporte c1db689 revisado: 29 pruebas propias verdes y 56 relacionadas,
+  selecciones solapadas. Resultado incierto no habilita fallback, se conservan
+  IDs parciales y aceptación tras cerrar el cliente. No acredita entrega real al teléfono.
+- Ledger y copia/informe están sin commit. Ledger: 66 dirigidas y 2 de plantilla
+  verdes antes del hallazgo de pérdida de auditoría/tope tras guardar aceptación;
+  evidencia_real lo cierra. Guard: 6 rojas previas y 21/8 verdes antes de extender
+  protección a sidecars del informe y normalizar rutas con ~; gestion_implementacion
+  lo cierra. La revisión final de ambos sigue pendiente, sin suite nueva del hijo.
+- Xfail de duplicación retirado solo en las pruebas del hijo en desarrollo; no
+  se atribuye ese cambio ni sus verdes a 2235d25.
+- Siguiente bloque de instrumentos: humo/simulador consultan el helper tras
+  añadir el turno de la clienta y conservan confirm_yes sin identidad; el caso
+  crítico del banco solo verifica texto Resumen/Confirmamos, no cita ni botón.
+  Reproducción pura del orden encargada, sin modelo; no se editan casos calendario.
+- Agenda: coordinación verificó eje y cuartos ya implementados en app_ui/index.html
+  (`CD_AXIS_STEP=15`, escala común 2,2 px/min). Falta aserción geométrica específica
+  en el siguiente QA del SHA exacto; no se rehace diseño ni se repite suite ahora.
+
+## 2026-09-13 02:20 +0200 - protección del banco cerrada
+
+- 09aebfc guarda solo script del banco y test de copia segura. Revisión independiente
+  OK; 27 dirigidas verdes finales, tras 6 rojas iniciales y 5 nuevas de sidecars/~.
+- Normalización compartida para copia, aislamiento e informe; compara identidad de
+  archivo y protege DB/WAL/SHM antes de borrar o escribir. Origen de solo lectura
+  abierto antes de limpiar el destino, sin crear una BD vacía si desaparece.
+- Ledger aún sin commit: se está cerrando aceptación y evento del tope en una
+  misma transacción. validar-entregas.py se prepara externamente, todavía sin
+  ejecutar. Los dos fallos de cancelación de 2235d25 siguen pendientes de cierre.
+
+## 2026-09-13 02:23:57 +0200 - ledger revisado, cierre dirigido verde
+
+- 16 pruebas dirigidas verdes en 54,28 s tras un rojo válido del caso de pérdida
+  de auditoría (02:21:37, contador 0 en lugar de 1). Revisión independiente OK.
+- CAS de aceptación y evento que alimenta el tope comparten transacción. Caída
+  tras commit conserva contador e identidad, recuperación sin nuevo POST. El
+  nombre auditado es el de la plantilla realmente enviada, tomado del payload.
+- Sigue sin commit ni suite integrada nueva. No se amplía a reconciliación de
+  incertidumbre, cupo entre citas distintas, ventana durante I/O ni fallback email.
+- El autor pasa a reproducir los dos fallos de cancelación de la suite 2235d25;
+  el candidato siguiente todavía no se declara estable para validación completa.
+- Después del cierre, b5fa459 guarda solo los seis archivos del ledger. Transporte
+  c1db689 y guard 09aebfc ya estaban guardados y revisados. Pendiente contrato de
+  cancelación, relevo final y suite exacta del candidato siguiente.
+
+## 2026-09-13 02:27:09 +0200 - contrato de cancelación cerrado
+
+- Los dos fallos de 2235d25 se reprodujeron a las 02:25:27 con el mismo error.
+  Ambos tests esperaban cancelar tras código o botón del recordatorio. Ahora
+  verifican cita confirmada tras oferta y aceptan el cancel_yes:<id> realmente
+  emitido antes de comprobar cancelación; se mantienen los controles de identidad.
+- 34 dirigidos verdes en 32,06 s (dos tests y contrato de cancelación), revisión
+  independiente OK. ca8e626 guarda exclusivamente los dos tests; no cambia producto.
+- Transporte c1db689, guard 09aebfc y ledger b5fa459 revisados. Preparada una suite
+  exacta del próximo SHA limpio con validar-entregas.py; ledger-suite.result.json
+  y .log conservarán identidad/horas/resultado. Aún no está iniciada.
+- Siguiente trabajo independiente: rama hija de formularios y harness con IDs
+  vigentes, manteniendo intacto el candidato que se mida. No se cierra fase 5 ni
+  se afirma medición real del modelo/Meta. Sin push, despliegue o revisión nueva.

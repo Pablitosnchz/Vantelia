@@ -220,8 +220,34 @@ humana no deben perder una operación aceptada pendiente ni entregarla a otro
 recorrido. Precondición del núcleo probada con mutación; no acredita atomicidad
 durante la red ni recuperación fuera del TTL.
 
+Los recorridos de cancelación en `test_api_smoke.py` y `test_booking_exhaustive.py`
+comprueban que código/botón de recordatorio solo ofrecen la propuesta: capturan
+el ID real, mantienen la cita activa hasta aceptarlo y conservan los asserts de
+cancelación y teléfono ajeno. La adaptación ca8e626 no sustituye el núcleo por un
+mock ni elimina comprobaciones de efecto en la base de datos.
+
 `test_recordatorio_omitido_y_fallido.py` prueba que omisión de email y fallo de
 WhatsApp sin entrega aceptada no marcan enviado. Mantiene los casos totalmente
-omitidos y las aceptaciones parciales sin reenvío. Contiene un **xfail estricto**
-que reproduce dos ejecutores enviando antes de registrar resultado: es un fallo
-pendiente conocido, no una garantía de exclusión ni una entrega real de Meta.
+omitidos y las aceptaciones parciales sin reenvío. El caso de dos ejecutores
+concurrentes ya es regresión normal en astra/entregas-recordatorios; conserva
+su xfail histórico en el candidato 2235d25, cuya suite fue roja por cancelación.
+
+`test_entregas_recordatorios.py` cubre generación monotónica al mover y devolver
+una cita, aislamiento por tenant, reclamación con dos conexiones, actor perdido,
+cancelación antes del envío y protección de la generación nueva durante I/O.
+Comprueba también respaldo entre canales y recuperación de aceptación sin repetir.
+
+`test_recordatorios_meta_ledger.py` recorre el builder real hasta un transporte
+simulado, guarda IDs y resultado, y verifica aceptación/auditoría en una misma
+transacción. Caída tras commit conserva el tope, sin reenvío ni evento duplicado;
+el nombre auditado coincide con el payload. No acredita entrega real al teléfono,
+reconciliación externa ni exclusión global del cupo entre citas distintas.
+
+`test_whatsapp_resultado_transporte.py` cubre resultado tipado y contrato booleano,
+POST único, respuestas ambiguas/5xx/timeout sin fallback y texto parcial con IDs
+conservados. Cerrar el cliente no borra una aceptación ya recibida.
+
+`test_copia_segura_banco.py` impide que copiar o guardar el informe borre origen,
+WAL o SHM mediante alias, distingue origen inexistente/desaparecido y conserva
+datos WAL. La copia de solo lectura y la comprobación de aislamiento comparten
+normalización, incluidas rutas con ~. Todo usa archivos temporales sintéticos.

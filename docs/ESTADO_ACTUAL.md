@@ -4,7 +4,7 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 13-sep-2026, Astra (candidato de creación recuperable WhatsApp;
+Última actualización: 13-sep-2026, Astra (suite de gestión y revisión de entregas;
 no implica cambios en producción).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
@@ -37,19 +37,29 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** suite integrada lanzada sobre 2235d25 limpio; mientras termina, diseñar y cerrar reclamación duradera de recordatorios por generación/aviso/canal. Sincronizar semántica de aceptación/rechazo/resultado incierto en el cliente Meta existente.
-- **Rama:** astra/entregas-recordatorios, E:/Vantelia-astra-recordatorios, hija de 2235d25. Conservar E:/Vantelia-astra-gestion y su rama astra/gestion-confirmada intactos durante la suite.
-- **Siguiente:** auxiliar implementa el registro tras contrastar diseño; otro audita solo la interfaz de resultados de Meta. Verificar una vez al completar gestion-suite.result.json en C:/Users/pabli/.codex/vantelia-coordination/. Se lanzó con validar-gestion.py (sesión 20917), revisión automática solo tras verde. No consultar progreso periódicamente ni repetir. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Tarea:** preparar la suite exacta del nuevo candidato de entregas. Transporte c1db689, protección del banco 09aebfc y ledger b5fa459 revisados. ca8e626 adapta los dos tests de cancelación a oferta/aceptación vigente: 34 dirigidos verdes y revisión local OK; todavía no hay suite nueva del hijo.
+- **Rama:** astra/entregas-recordatorios, E:/Vantelia-astra-recordatorios, hija de 2235d25. E:/Vantelia-astra-gestion conserva el candidato medido sin mezclarlo con este trabajo.
+- **Siguiente:** guardar relevo y lanzar una suite exacta con validar-entregas.py solo tras verificar candidato limpio; salida ledger-suite.result.json y .log externos. Mientras corre, abrir rama hija para formularios y harness con IDs de confirmación vigentes, sin tocar este candidato. La suite está preparada, aún no iniciada. Registro: docs/REGISTRO_CONSOLIDACION.md.
 - **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
 
-Resultado confirmado: C:/Users/pabli/.codex/vantelia-coordination/integrado-wa-suite.result.json
-y su .log. Suite terminada, exit 0; no sigue ejecutándose ni debe repetirse.
+Última suite confirmada: 2235d25, fin 13-sep **02:15:01 Europe/Madrid**, exit 1:
+**2347 passed, 1 skipped, 1 xfailed y 2 fallos de cancelación**. Coordinación
+verificó el resultado a las 02:16 en
+C:/Users/pabli/.codex/vantelia-coordination/gestion-suite.result.json y su .log.
+No sigue ejecutándose ni se pidió revisión automática de ese candidato.
+Los dos rojos se reprodujeron a las 02:25:27: exigían cancelar al código/botón del
+recordatorio sin aceptar propuesta. ca8e626 captura y acepta el ID real, mantiene
+la cita confirmada hasta entonces y conserva las comprobaciones finales.
+34 dirigidos verdes a las 02:27:09 (32,06 s), sin cambio de código productivo.
+El verde de 7ab7775 pertenece al antecesor, en integrado-wa-suite.result.json.
 El seguimiento cada 30 minutos está actualizado para retomar el último relevo y
 anotar avances con hora. No implica actividad continua entre ejecuciones.
 
 ff59b06 de astra/recordatorios-fiables ya está integrado. Su worktree se reutiliza
 ahora en astra/entregas-recordatorios, sin modificar ni borrar aquella rama. Se ha
-reproducido concurrencia de recordatorios (xfail estricto), todavía sin arreglar.
+reproducido concurrencia de recordatorios (xfail estricto en 2235d25). El xfail se
+retira únicamente en el hijo en desarrollo, donde la reclamación pasa dirigida;
+esto no cambia el resultado del candidato anterior ni acredita una suite nueva.
 El nuevo bloque no debe repetir envíos de resultado incierto ni introducir otra
 autoridad conversacional. La generación debe cambiar al reprogramar, también si
 la cita vuelve a su horario inicial; una fila de cita existente no acredita envío.
@@ -60,7 +70,23 @@ al agente tras atención humana. Banco, último cierre 14 verdes, con guard de r
 persistencia por intento y casos no medidos. Recordatorios: 31 verdes y un xfail
 de duplicación pendiente. QA navegador completa exit 0 sobre árbol de trabajo;
 no es evidencia del modelo/Meta ni atribución a un SHA estable. Detalles y límites
-en docs/ACEPTACION_CANDIDATO_IA.md.
+en docs/ACEPTACION_CANDIDATO_IA.md. Estas selecciones preceden a la suite roja y
+no sustituyen su resultado.
+
+Trabajo posterior revisado o en revisión (selecciones solapadas): transporte
+c1db689, 29 pruebas propias y 56 relacionadas verdes, aceptación HTTP distinta de
+entrega al teléfono. Ledger: 66 dirigidas y 2 de plantilla previas, cierre final
+de 16 verdes en 54,28 s (02:23:57) y revisión local OK. Aceptación y evento del
+tope se guardan en una transacción; caída posterior recupera sin reenviar ni
+perder el contador. Guardado en b5fa459; pendiente validar el candidato integrado.
+Copia/informe 09aebfc: 6 rojas iniciales, 5 nuevas de sidecars/normalización y
+27 dirigidas verdes finales, revisión independiente OK. Protege DB/WAL/SHM antes
+de escribir y conserva el origen mediante apertura de solo lectura.
+
+Límites del ledger: no reconcilia operativamente un resultado incierto, no reserva
+el cupo global entre citas diferentes y no elimina la ventana de cambio tras la
+última relectura y durante la red. El fallback interno de email sigue fuera de
+esta pieza. Aceptación del proveedor no equivale a entrega al teléfono.
 
 ## Notas históricas (el bloque En curso prevalece)
 

@@ -5,7 +5,18 @@ Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
 ## Candidato nocturno integrado (13-sep)
 
-Código integrado en a83021c, pendiente suite del commit estable con su relevo:
+Situación vigente del hijo: transporte c1db689, guard 09aebfc, ledger b5fa459 y
+tests de contrato ca8e626 revisados. Los dos fallos de 2235d25 se reprodujeron y
+sus pruebas ahora aceptan la propuesta vigente antes de cancelar: 34 dirigidos
+verdes (02:27:09), sin cambio productivo. La nueva suite está preparada mediante
+validar-entregas.py, aún no iniciada; conservar el SHA limpio que se lance y
+registrar su resultado en ledger-suite.result.json. Mientras corre, formularios
+y harness con IDs vigentes se trabajarán en una rama hija separada.
+
+Código integrado en a83021c y medido con relevo en 2235d25: suite terminada el
+13-sep a las 02:15:01 Europe/Madrid, exit 1, 2347 passed, 1 skipped, 1 xfailed y
+dos fallos de cancelación. No se pidió revisión automática. Las cifras dirigidas
+que siguen son antecedentes y no convierten esa suite en verde:
 
 - 9ede4f9 migra cancelación guiada y de botones WhatsApp a propuesta persistida,
   aceptación con identidad y snapshot validado por el núcleo. Resultado desconocido
@@ -27,6 +38,28 @@ con la BD. Fase 5 exige revisión de Claude del candidato exacto y banco real
 comparable de Alicia y otro negocio. La decisión foto/diagnóstico permanece aislada.
 Siguiente entrega independiente: exclusión duradera de recordatorios antes del envío,
 revalidación de la cita y tratamiento explícito de resultados inciertos por canal.
+
+En astra/entregas-recordatorios, transporte c1db689 y seguridad de copia/informe
+09aebfc revisados (27 dirigidas finales para DB/WAL/SHM y alias). Ledger b5fa459
+revisado, 16 dirigidas finales verdes: aceptación y auditoría que
+alimenta el tope ahora comparten transacción. El xfail se retiró solo
+en este hijo para sus regresiones dirigidas, no en el candidato 2235d25 medido.
+
+No incluye reconciliación operativa de incertidumbre, exclusión del cupo entre
+citas diferentes ni el fallback interno de email. La última relectura no vuelve
+atómico un cambio de cita durante la red. Son límites pendientes, no nuevas
+garantías derivadas de la reclamación por aviso.
+
+Antes de fase 5, corregir los instrumentos sin cambiar casos de calendario:
+humo/simulador añaden el turno de la clienta antes de consultar el helper de
+confirmación y usan `confirm_yes` sin identidad vigente. El caso crítico del banco
+solo admite texto «Resumen» o «Confirmamos»: no verifica crear la cita ni pulsar
+el botón. La reproducción del orden es pura, sin modelo, y está encargada a
+evidencia_real. No hay aún medición comparable nueva ni recibos reales de Meta.
+
+Agenda: eje lateral y cuartos ya implementados con escala común de 2,2 px/min
+y `CD_AXIS_STEP=15`. Falta la aserción de su geometría en el próximo QA del SHA
+exacto; no rehacer el diseño ni repetir la suite para acreditar algo no medido.
 
 ## Corte verificable: 13-sep, 01:15 Europe/Madrid
 
