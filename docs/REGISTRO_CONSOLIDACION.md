@@ -355,3 +355,22 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Siguiente: congelar un SHA limpio con estos cambios y ejecutar una sola suite
   exacta; después, revisión exacta y banco real comparable. Siguen pendientes
   reconciliación operativa, recordatorios completos y evidencia Alicia/otro tenant.
+
+## 2026-09-13 12:58 +0200 - relevo determinista tras propuesta aceptada
+
+- La medición real de Claude sobre `1fe7a3e` fue reproducible pero roja en sus
+  dos intentos: la alternativa de diagnóstico se aceptaba, pero no alcanzaba
+  «Resumen de tu cita»/«Confirmamos». No se presenta como mejora ni como caso
+  cerrado.
+- Causa localizada en el canal: al no conservar la hora inicial para el servicio
+  alternativo, WhatsApp enviaba huecos reales sin persistirlos; el nombre volvía
+  al modelo sin opciones trazables. `8ca6088` guarda sólo los huecos enviados y,
+  cuando fecha y hora ya están validadas, usa el paso existente `booking_name`
+  antes del resumen. No inventa una hora ni una regla de Alicia.
+- Regresiones dirigidas de propuesta, «sí» escrito y reserva conversacional
+  finalizaron sin fallos en la caché de pytest; dos controles nuevos específicos
+  del cambio también terminaron sin fallos. Falta una suite completa exacta, por
+  lo que este commit no es candidato aceptado.
+- Claude inició una medición real nueva del mismo caso sobre copia aislada; no se
+  relanza ni se consulta repetidamente. Rama `astra/condiciones-confirmadas`
+  subida con `8ca6088`; sin despliegue.
