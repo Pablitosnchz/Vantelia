@@ -306,8 +306,28 @@ def _le_pregunto_si_la_cancela(historial: List[Dict[str, str]], mensaje: str) ->
     ultimo = next((str(m.get("content") or "") for m in reversed(historial or [])
                    if m.get("role") == "assistant"), "")
     plano = textnorm._strip_accents(ultimo.lower())
-    return ("?" in plano and any(p in plano for p in ("cancel", "anul"))
-            and reserva._dice_que_si(mensaje or ""))
+    if not reserva._dice_que_si(mensaje or ""):
+        return False
+    # Cuenta la PREGUNTA, no el mensaje entero. Revision de Astra (13-sep-2026):
+    # "No puedo cancelar la cita pasada. ¿Quieres que te ayude con otra cosa?" -"si"
+    # autorizaba a anular. Tiene que ofrecer anular, sin negarlo y sin alternativa
+    # ("¿cancelarla o cambiarla de dia?" no se contesta con un si).
+    for pregunta in re.findall(r"[^.!?\n]*\?", plano.replace("¿", " ")):
+        if not _OFRECE_ANULAR.search(pregunta):
+            continue
+        if _NIEGA_O_ALTERNATIVA.search(pregunta):
+            continue
+        return True
+    return False
+
+
+# Una pregunta que ofrece anular: "¿quieres que la cancele?", "¿la anulo?",
+# "¿cancelamos tu cita del martes?", "¿confirmas que quieres cancelarla?".
+_OFRECE_ANULAR = re.compile(
+    r"\b(?:cancel|anul)(?:o|e|es|amos|emos|ar|arla|arlo|artela|amosla|ala|ela)\b")
+_NIEGA_O_ALTERNATIVA = re.compile(
+    r"\bno\s+(?:puedo|podemos|se\s+puede|es\s+posible|hace\s+falta|quieres)\b"
+    r"|\bo\s+(?:cambiar|mover|reprogram|pasar|prefieres)|\bcambiar|\bmover|\breprogram")
 
 
 def _lo_dijo_como_su_nombre(dicho: str, valor: str) -> bool:

@@ -193,3 +193,73 @@ def test_el_si_a_cancelar_llega_a_cancelar_cita(api_module, monkeypatch):  # noq
     ], mensaje="si", intencion="")
 
     assert ejecutadas == ["cancelar_cita"]
+
+
+# ─── Revision de Astra sobre 2a794c2 (13-sep-2026, 17:16) ────────────────
+
+@pytest.mark.parametrize("ultimo,mensaje,autoriza", [
+    # El caso de Astra: la pregunta no es de cancelar, cancelar va en otra frase.
+    ("No puedo cancelar la cita pasada. ¿Quieres que te ayude con otra cosa?", "sí", False),
+    ("Tu cita ya está cancelada. ¿Te ayudo en algo más?", "si", False),
+    ("¿Quieres cancelarla o cambiarla de día?", "si", False),       # dos opciones
+    ("¿No quieres cancelarla, verdad?", "si", False),
+    ("¿Cancelo tu cita del martes?", "sí", True),
+    ("¿Confirmas que quieres anularla?", "si, confirmo", True),
+])
+def test_solo_la_pregunta_de_anular_autoriza(api_module, ultimo, mensaje, autoriza):  # noqa: F811
+    from backend import agent
+
+    historial = [{"role": "user", "content": "tengo una cita el martes"},
+                 {"role": "assistant", "content": ultimo}]
+    assert agent._le_pregunto_si_la_cancela(historial, mensaje) is autoriza
+
+
+def test_un_si_a_otra_pregunta_no_llega_a_cancelar(api_module, monkeypatch):  # noqa: F811
+    """El recorrido por la herramienta: el modelo intenta cancelar y el freno lo para."""
+    from test_no_se_cancela_sin_pedirlo import _turno
+
+    ejecutadas = _turno(monkeypatch, historial=[
+        {"role": "user", "content": "queria saber de mi cita del martes pasado"},
+        {"role": "assistant", "content": ("No puedo cancelar la cita pasada. "
+                                          "¿Quieres que te ayude con otra cosa?")},
+    ], mensaje="si", intencion="")
+
+    assert "cancelar_cita" not in ejecutadas, "un si a otra pregunta ha anulado su cita"
+
+
+def test_booking_name_con_el_agente_caido_no_guarda_la_frase(api_module, monkeypatch):  # noqa: F811
+    from backend import appstate, clients, messaging, whatsapp
+
+    flow = appstate.WAFlowState(cliente_id="demo", from_number="34600777445", flow="booking_name",
+                                servicio="Diagnostico y presupuesto", fecha="2030-01-08", hora="15:00")
+    monkeypatch.setattr(whatsapp, "_wa_get_flow", lambda *a: flow)
+    monkeypatch.setattr(whatsapp, "_wa_modo_conversacional", lambda config: True)
+    monkeypatch.setattr(clients, "exige_dos_apellidos", lambda cliente_id: True)
+    monkeypatch.setattr(whatsapp.inbox, "remember_inbound_number", lambda *a: None)
+    monkeypatch.setattr(whatsapp.inbox, "bot_is_muted", lambda *a: False)
+    monkeypatch.setattr(whatsapp, "_wa_registrar", lambda **k: "sesion")
+    textos, resumenes = [], []
+
+    async def turno_caido(**kwargs):
+        return False
+
+    async def resumen(**kwargs):
+        resumenes.append(kwargs["flow"].nombre)
+        return True
+
+    async def enviar(**kwargs):
+        textos.append(kwargs.get("text") or "")
+        return True
+
+    monkeypatch.setattr(whatsapp, "_wa_turno_del_agente", turno_caido)
+    monkeypatch.setattr(whatsapp, "_wa_send_booking_summary", resumen)
+    monkeypatch.setattr(messaging, "_send_whatsapp_text", enviar)
+
+    asyncio.run(whatsapp._handle_whatsapp_message(
+        cliente_id="demo", phone_number_id="canal", from_number="34600777445",
+        incoming_text="perdona, mejor a las 16", interactive_id="", request=None))
+
+    assert resumenes == [], "resumen montado con la frase como nombre"
+    assert "perdona" not in (flow.nombre or "").lower()
+    assert flow.flow == "booking_name", "se ha perdido el paso del nombre"
+    assert any("nombre" in t.lower() for t in textos), textos

@@ -4038,7 +4038,17 @@ async def _handle_whatsapp_message(
                     from_number=from_number, incoming_text=incoming_text, flow=flow,
                     config=config, request=request):
                 return
+            # El agente no ha podido contestar (modelo caido): se sigue esperando el
+            # nombre, sin guardar la frase como tal (revision de Astra, 13-sep-2026).
             flow.flow = "booking_name"
+            repetir = "Perdona, ahora mismo no te he entendido. ¿Me dices tu nombre y apellidos? 😊"
+            _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                          respuesta=repetir, intent="pedir_nombre")
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=repetir,
+            )
+            return
         nombre = (_reserva_nombre.nombre_que_dice(incoming_text or "")
                   or (incoming_text or "").strip())
         if len(nombre) < 2:
