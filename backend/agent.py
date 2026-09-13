@@ -2080,6 +2080,28 @@ def _fechas_en_humano(texto: str) -> str:
     return _FECHA_ISO_SUELTA.sub(_humana, str(texto or ""))
 
 
+def _es_el_servicio_de_la_propuesta(servicio: Any, propuesta) -> bool:
+    """¿La cita que se pide es la del servicio de esa propuesta (con o sin «Pack»)?"""
+    from backend import agenda
+
+    pedido = str(servicio or "").strip()
+    if not pedido or propuesta is None:
+        return False
+    if agenda._normalize_service_id(pedido) == str(propuesta.servicio_id or ""):
+        return True
+    return (catalog_pick._norm(textnorm.nombre_de_servicio_publico(pedido))
+            == catalog_pick._norm(textnorm.nombre_de_servicio_publico(propuesta.nombre)))
+
+
+def _lo_pide_por_su_nombre(dicho: str, nombre: str) -> bool:
+    """Ella ha escrito la palabra que da nombre al servicio («diagnostico»)."""
+    palabras = [p for p in catalog_pick._norm(textnorm.nombre_de_servicio_publico(nombre)).split()
+                if len(p) >= 5]
+    if not palabras:
+        return False
+    return re.search(r"\b%s" % re.escape(palabras[0]), catalog_pick._norm(dicho or "")) is not None
+
+
 def _es_el_nombre_de_un_servicio(cliente_id: str, dicho: str,
                                  location_id: str = "") -> str:
     """Lo que ha dicho ES el nombre de un servicio del catalogo. Devuelve cual.
@@ -2888,6 +2910,56 @@ _DICE_QUE_CIERRAN = ("estamos cerrados", "estamos cerrado", "cerramos ese dia",
 def _dice_que_cierran(texto: str) -> bool:
     plano = catalog_pick._norm(texto or "")
     return any(pista in plano for pista in _DICE_QUE_CIERRAN)
+
+
+_DIAS_DE_LA_SEMANA = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+
+
+def _el_cierre_que_dice_es_verdad(cliente_id: str, texto: str, ahora, config=None) -> bool:
+    """¿Cada «estamos cerrados» habla de un dia que de verdad cierra?
+
+    Medido el 13-sep-2026, un domingo, en un negocio que cierra los domingos: «Hoy
+    estamos cerrados, pero mañana, lunes 14, abrimos» hizo saltar
+    `dijo_cerrado_estando_abierto` porque se habia consultado el lunes (abierto). El
+    freno no miraba de que dia hablaba la frase.
+
+    Se mira trozo a trozo (frases y comas): el dia al que se refiere cada «cerrados»
+    -hoy, mañana (no «por la mañana»), un dia de la semana, una fecha ISO- y si cierra
+    con el mismo horario que ve la agenda (`voice._dia_cerrado`). Si algun trozo no
+    dice de que dia habla, o alguno de esos dias abre, devuelve False y se frena como
+    siempre.
+    """
+    from datetime import date, timedelta
+
+    from backend import voice
+
+    if ahora is None:
+        return False
+    hoy = ahora.date() if hasattr(ahora, "date") else ahora
+    crudo = textnorm._strip_accents(str(texto or "").lower())
+    trozos = [catalog_pick._norm(t) for t in re.split(r"[.!?\n;,]+|\bpero\b", crudo)]
+    con_cierre = [t for t in trozos if any(pista in t for pista in _DICE_QUE_CIERRAN)]
+    if not con_cierre:
+        return False
+    for trozo in con_cierre:
+        dias = []
+        if re.search(r"\bhoy\b", trozo):
+            dias.append(hoy)
+        if re.search(r"(?<!la )\bmanana\b", trozo):
+            dias.append(hoy + timedelta(days=1))
+        for posicion, nombre in enumerate(_DIAS_DE_LA_SEMANA):
+            if re.search(r"\b%s\b" % nombre, trozo):
+                dias.append(hoy + timedelta(days=(posicion - hoy.weekday()) % 7))
+        for m in re.finditer(r"\b(20\d{2})\D(\d{2})\D(\d{2})\b", trozo):
+            try:
+                dias.append(date(int(m.group(1)), int(m.group(2)), int(m.group(3))))
+            except ValueError:
+                pass
+        if not dias:
+            return False
+        if not all(voice._dia_cerrado(cliente_id, d.isoformat(), config) for d in dias):
+            return False
+    return True
 
 
 # Anunciar en vez de hacer. Paso de verdad: "vamos a ver las horas disponibles
@@ -3836,6 +3908,7 @@ async def responder(
                 #       sin hueco no es cerrar, y para el cliente no es lo mismo:
                 #       uno se va a otro sitio y el otro pregunta por otro dia.
                 if (_dice_que_cierran(texto_final) and dias_abiertos_vistos
+                        and not _el_cierre_que_dice_es_verdad(cliente_id, texto_final, ahora_negocio, cfg)
                         and vuelta + 1 < MAX_VUELTAS):
                     traza.freno("dijo_cerrado_estando_abierto")
                     mensajes.append({
@@ -4156,6 +4229,23 @@ async def responder(
                                  "nota": "No se ha creado ninguna cita. Consulta disponibilidad antes de reservar."}
                     mensajes.append({"role": "tool", "tool_call_id": llamada.id,
                                      "content": json.dumps(resultado, ensure_ascii=False)})
+                    continue
+                # La oferta la RETIRO el negocio (regla apagada, servicio cambiado) y ella
+                # no ha pedido ese servicio por su nombre: no se le coge. 13-sep-2026, con
+                # modelo real: tras «esta opcion ya no esta vigente», al dar su nombre se
+                # le monto el resumen del diagnostico que ya no se ofrecia.
+                retirada = estado.propuesta_servicio
+                if (llamada.function.name == "crear_cita" and retirada is not None
+                        and retirada.estado == "invalidada"
+                        and _es_el_servicio_de_la_propuesta(argumentos.get("servicio"), retirada)
+                        and not _lo_pide_por_su_nombre(dicho_de_ella, retirada.nombre)):
+                    mensajes.append({"role": "tool", "tool_call_id": llamada.id,
+                                     "content": json.dumps({"ok": False, "error": (
+                                         "El negocio ha retirado la opcion de %s: ella no la ha pedido. "
+                                         "NO le propongas ni le resumas esa cita. Preguntale que "
+                                         "servicio quiere." % textnorm.nombre_de_servicio_publico(retirada.nombre))},
+                                         ensure_ascii=False)})
+                    traza.freno("cita_de_una_oferta_retirada")
                     continue
                 if (llamada.function.name == "crear_cita" and estado.propuesta_servicio is not None
                         and estado.propuesta_servicio.estado in ("preparada", "ofrecida")):
