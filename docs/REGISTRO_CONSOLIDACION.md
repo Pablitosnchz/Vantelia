@@ -541,3 +541,22 @@ a fin en todas.
   scratchpad de la sesión.
 - Siguiente: segundo negocio (metareview), cambio del portal a mitad de conversación, informe
   de aceptación y orden de despliegue de Pablo.
+
+## 2026-09-13 14:50–15:35 +0200 - referencia de producción, segundo negocio e informe de aceptación (Claude)
+
+- Referencia: código de bd7a6da extraído con `git archive` (sin `site_exports`/`hostinger_site`,
+  rutas demasiado largas para un worktree) con el instrumento del candidato encima; solo se inyecta
+  la clave del modelo desde E:/Vantelia/.env. Alicia: 43 medidos, 41 OK 1.er intento, 1 tras
+  reintento, **1 fallo crítico** tras recalificar (el reintento aprobaba un resumen de ácido
+  láctico a nombre de «clienta»). Candidato 112b26c: 42 + 1, 0 fallos.
+- Una prueba de importación de `backend.main` en la referencia tocó `storage/vantelia.db` local
+  (mtime 14:58:33; sin filas nuevas en `locations`): el arranque corre antes de redirigir la BD. No
+  se repitió; el banco redirige la BD antes de importar la app.
+- Segundo negocio `metareview`: sus datos RAG solo estaban en el servidor (copiados en solo lectura
+  a una carpeta temporal). Primer intento contó 12 «fallos» por «No hay datos configurados»: el
+  banco ahora no mide sin datos (ae7d9ff). Casos del salón condicionados a los datos del negocio y
+  `{un_servicio}` en los genéricos, idénticos para Alicia (5f5e10c). Conversacional (en copia):
+  referencia 16/16 y candidato 16/16. Guiado real: 12/16; 3 fallos por escribir en vez de pulsar
+  listas/botones y 1 respuesta errónea (manicura).
+- Criterio del crítico endurecido (00a7726). Informe completo en ACEPTACION_CANDIDATO_IA (13-sep).
+- Siguiente: limpieza de copias con datos de clientas y orden de despliegue de Pablo.

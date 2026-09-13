@@ -1,8 +1,107 @@
 # Evidencia de aceptación del candidato IA
 
-Estado: **pendiente**. Un resultado local verde no acredita mejora con el modelo
+Estado: **evidencia completa del 13-sep; pendiente de orden de despliegue de Pablo** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
+
+## Informe de aceptación del candidato: 13-sep-2026 (Claude, agente principal)
+
+Candidato: rama `claude/candidato`, código **112b26c** (+ instrumento 5f5e10c, ae7d9ff y 00a7726; docs).
+Contiene `astra/condiciones-confirmadas` (7740b45, checkout Stripe 68c1fac) y `main` (bd7a6da,
+lo desplegado). Referencia: **bd7a6da** (producción, VERSION.json del VPS), código extraído con
+`git archive` (sin `site_exports`/`hostinger_site`) y medido con el MISMO instrumento del
+candidato; solo se inyecta la clave del modelo (nunca en disco).
+
+Condiciones comunes: modelo `gpt-4o-mini`; copia `snap3_conregla` (producción 13-sep 08:59 +
+regla de orientación de Alicia declarada SOLO en la copia); config viva `cfg3`; calendario
+resuelto (día abierto 2026-09-15); árbol limpio y SHA estable en todas las tiradas del candidato.
+Informes JSON por tirada en el scratchpad de la sesión; copias de BD borradas tras leerlas.
+
+### Comparación de conversaciones completas
+
+| Negocio y versión | Previstos | No aplican | No medidos | OK 1.er intento | OK tras reintento | Fallos finales | Artefacto |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Alicia, referencia (bd7a6da) | 44 | 1 | 0 | 41 | 1 | **1 crítico** (recalificado) | ref_banco.json |
+| Alicia, candidato (112b26c) | 44 | 1 | 0 | **42** | 1 | **0** | banco_g.json |
+| Segundo negocio (metareview, conversacional en copia), referencia (bd7a6da) | 44 | 28 | 0 | 16 | 0 | 0 | ref_meta_conv.json |
+| Segundo negocio (metareview, conversacional en copia), candidato (ae7d9ff) | 44 | 28 | 0 | **16** | 0 | **0** | meta_conv2.json |
+| Segundo negocio (metareview, config real guiada), candidato (ae7d9ff) | 44 | 28 | 0 | 12 | 0 | 4 (ver abajo) | meta_guiado2.json |
+
+Nota del instrumento (leída en la referencia): `dice-que-si-y-acaba-en-cita` solo exigía «Resumen
+de tu cita». En la referencia el reintento aprobó con un resumen de «Acido lactico bio premium
+corto, 1 h 30 min, fianza 50 €» a nombre de «clienta» (le eligió la técnica a quien no la tenía
+clara y le inventó el nombre); el primer intento acabó pidiendo una foto. Criterio endurecido en
+00a7726 (en la última respuesta no puede haber técnica ni «clienta») y recalificados sin volver a medir
+todos los informes guardados: ninguna tirada del candidato cambia; la referencia pasa a fallo
+crítico. `recomienda-ante-un-problema` necesita reintento en ambos. En el segundo negocio
+(conversacional) referencia y candidato empatan en los 16 casos genéricos: la diferencia medible
+está en el salón. La referencia de Alicia usó el instrumento de d8c5907, el mismo del banco del
+candidato en 112b26c; la de metareview, el de ae7d9ff, el mismo de su medida del candidato.
+
+Otras mediciones del candidato:
+
+| Medición | SHA | Resultado |
+| --- | --- | --- |
+| Suite completa | 112b26c | 2541 passed, 1 skipped (22 min 47 s) |
+| Humo (5 recorridos) | d8c5907 (código 112b26c) | 5/5 |
+| `dice-que-si-y-acaba-en-cita` ×6 | e197dee y 6bed2f1 | 6/6 al 1.er intento en ambos (1fe7a3e: 0/6) |
+| `cambiar-la-hora-de-verdad` ×6 | 6bed2f1 y 112b26c | 6/6 al 1.er intento; una cita viva movida, leído en las copias |
+| Banco completo Alicia | 5e9f8d7 / 6bed2f1 / 112b26c | 41+2 / 41+2 / 42+1, 0 fallos |
+
+Segundo negocio: `metareview` (tenant de la revisión de Meta; varios centros, sin reglas, sin
+teléfono publicado, precios visibles, Q&A genérica). Es el único negocio con booking distinto de
+Alicia; `van` es un clon antiguo del salón. Su config real es guiada (listas y botones): el banco
+escribe texto libre y no pulsa botones, así que la medición representativa del agente se hizo con
+`booking.estilo=conversacional` SOLO en una copia de la config. Sus datos RAG se copiaron del
+servidor en solo lectura (información pública del negocio). 28 casos no aplican por pedir el
+catálogo o las políticas del salón (condiciones `solo_si` sobre sus datos).
+
+Guiado real, 4 fallos leídos: 3 son clientas que escriben en vez de pulsar (elegir centro,
+confirmar la cancelación, pedir otro hueco): límite del instrumento y hueco real del modo guiado;
+1 es contenido erróneo (a «me quiero hacer la manicura» responde «no podemos realizar servicios
+como la manicura los domingos», como si la hicieran).
+
+### Fallos encontrados y arreglados hoy (todos con test rojo sin el arreglo)
+
+- Crítico del salón (quien no sabe qué alisado quiere): oferta repetida no contaba, «sí» escrito no
+  aceptaba, «a las 15» sin huecos se perdía, el freno del precio frenaba la propia valoración, una
+  pregunta de precio de otro día contaba, el nombre «me llamo…» se guardaba entero
+  (3a899f8, 1fe7a3e, 197afb0, e197dee).
+- **Cancelar una cita que nadie pidió anular** (la clienta se quedaba sin cita) — 6bed2f1.
+- **«He reprogramado» sin mover nada** (misma fecha, hora y servicio escrito sin tildes) — 112b26c.
+- Instrumento: el banco mide un segundo negocio sin perder la comparabilidad de Alicia (5f5e10c);
+  sin datos RAG locales el banco no mide en vez de inventar fallos (ae7d9ff).
+
+### Pendiente de producto (no arreglado, sin efecto en la agenda salvo que se diga)
+
+- A «se me cae mucho el pelo» recomienda alisados/color (Alicia; también en producción).
+- Recitar horas de un día que no ha elegido (`pregunta-el-dia-en-vez-de-recitar`, a veces).
+- Modo guiado: respuestas escritas a listas/botones no se entienden (reserva, cancelar, mover).
+- Chat genérico: la manicura inexistente se contesta como si se hiciera.
+- Frenos que saltan sin motivo: `dijo_que_hay_cita_sin_haberla` con la cita existente; en
+  metareview, al dar el nombre, «la sesión estándar no cubre lo que necesitas».
+- Política: cancelar por teléfono verificado en el primer mensaje, sin preguntar cuál ni
+  confirmar (metareview). Revisar si debe confirmar antes.
+- Coste/latencia: `se_acabaron_las_vueltas` en los dos primeros turnos al reprogramar.
+- `whatsapp._ya_se_le_dijo` mira 8 respuestas sin corte de tiempo (solo añade un remate).
+- Copia de producción con 64 sesiones de teléfonos del banco del 22-ago: primeros intentos de
+  mediciones anteriores pueden estar contaminados (desde e197dee lo de otro día no cuenta).
+
+### Puertas de aceptación
+
+| Recorrido | Evidencia de hoy | Pendiente |
+| --- | --- | --- |
+| Crear y aceptar explícitamente | Crítico 6/6; `reserva-completa-de-verdad` OK en Alicia y metareview (cita creada leída en la copia) | Confirmación con el botón real de Meta |
+| Cancelar/reprogramar | Banco + 6/6 reprogramar; freno de cancelar sin pedir; reprogramar a lo mismo rechazado | Política de confirmar antes de cancelar |
+| Cambios del portal | Tests deterministas | Cambio real a mitad de conversación con modelo: NO MEDIDO |
+| Aislamiento de negocio | Mismo banco en dos negocios con políticas distintas | — |
+| Reinicio/repetición | Tests de estado persistido | NO MEDIDO con modelo |
+| Recordatorios | Plantilla `vantelia_recordatorio_cita` PENDIENTE en Meta | Envío real |
+| Revisión | Astra revisó 8ca6088 (en su rama); Claude revisó 8ca6088 y corrigió el nombre | Revisión del SHA final por otro agente |
+
+Límites: un día de calendario, una copia, un modelo; seis tiradas no fijan una tasa; WhatsApp real
+de Meta no probado; el segundo negocio es un tenant de demostración medido en modo conversacional
+en copia. El despliegue y la regla de orientación de Alicia en producción requieren orden de Pablo.
 
 ## Referencias
 

@@ -40,7 +40,7 @@ página de sincronía lo enseña tal cual.
 - **Tarea:** validar el candidato integrado y preparar la entrega a Alicia.
 - **Rama:** `claude/candidato` en E:/Vantelia (único árbol con credenciales para medir), código en **112b26c**. Contiene `astra/condiciones-confirmadas` (7740b45, con el checkout Stripe 68c1fac) y `main` (bd7a6da, lo desplegado). Evidencia en 112b26c: suite **2541 passed, 1 skipped**; banco completo con modelo real **43/43, 42 al primer intento, 0 fallos**; `cambiar-la-hora-de-verdad` 6/6. Crítico `dice-que-si-y-acaba-en-cita` 6/6 al primer intento en e197dee y 6bed2f1 (antes 0/6). Humo 5/5 en 5e9f8d7. Detalle en REGISTRO_CONSOLIDACION.
 - **Decisión de Alicia confirmada (13-sep):** a quien no sabe qué alisado quiere se le ofrece la cita «Diagnóstico y presupuesto». Se declara como regla de orientación, no se deduce de su Q&A. Probada SOLO en copia.
-- **Siguiente (Claude):** humo sobre 112b26c; segundo negocio (metareview: modo guiado y sin reglas, límites a declarar); cambio del portal a mitad de conversación; informe de aceptación (ACEPTACION_CANDIDATO_IA); orden de despliegue de Pablo; tras desplegar, crear la regla de orientación de Alicia en producción y verificarla. Pendiente de producto sin arreglar: recomendación ante caída del pelo y recitar horas sin preguntar el día.
+- **Siguiente (Claude):** informe de aceptación completo (ACEPTACION_CANDIDATO_IA, 13-sep): Alicia candidato 42+1 sin fallos frente a producción 41+1 con 1 fallo crítico; segundo negocio empatado. Espera orden de despliegue de Pablo; tras desplegar, crear la regla de orientación de Alicia en producción y verificarla. Pendientes de producto listados en el informe.
 
 Relevo anterior de Astra (histórico, sustituido por lo de arriba):
 
