@@ -1141,6 +1141,20 @@ def que_falta(estado: Estado, nombre_conocido: str = "") -> str:
 
 
 _COMO_PEDIRLO = {
+    # `que_falta` devuelve "propuesta" en cuanto hay una alternativa ofrecida, pero
+    # esta tabla no tenia esa entrada: el modelo se quedaba SIN instruccion y volvia
+    # a lo suyo, pedirle la tecnica del tratamiento. Medido el 13-sep-2026 con la
+    # regla de orientacion declarada: le ofrecia la cita de diagnostico, ella decia
+    # "si", y el asistente contestaba "para agendarte el diagnostico necesito que
+    # elijas entre Keratina o Acido lactico" -que ademas es falso: esa cita existe
+    # precisamente para no tener que elegir-.
+    "propuesta": (
+        "Le has ofrecido una alternativa y estas esperando su respuesta. NO le pidas "
+        "que elija tecnica ni tratamiento -esa cita existe para no tener que "
+        "elegir- y NO le repitas la oferta. Si su ultimo mensaje la acepta o la "
+        "rechaza, dilo con `responder_propuesta`. Si no queda claro a que contesta, "
+        "preguntaselo en una frase."
+    ),
     "servicio": (
         "Aun no sabes QUE se quiere hacer, y de eso dependen la duracion y el "
         "precio. Preguntaselo con tus palabras. No propongas dias ni horas todavia, "
