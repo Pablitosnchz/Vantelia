@@ -1321,6 +1321,13 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "", cliente_id:
         herramienta = "reprogramar_cita" if estado.intencion == "reprogramar" else "crear_cita"
         return ("Tienes todo lo que hace falta. Llama a `%s` AHORA; no vuelvas a "
                 "preguntarle lo que ya te ha dicho." % herramienta)
+    # Con una alternativa ofrecida, lo que falta es SU RESPUESTA a esa oferta. La
+    # guia estaba escrita en `_COMO_PEDIRLO["propuesta"]`, pero esta funcion -la
+    # unica de este modulo que `agent.responder` inyecta en cada turno- no tenia
+    # la rama, asi que el modelo no la leia nunca (comprobado el 13-sep-2026:
+    # `reserva.instruccion` no se usa en el agente) y seguia pidiendole la tecnica.
+    if falta == "propuesta":
+        return _COMO_PEDIRLO["propuesta"]
     # El PRIMER dato si se dirige: sin saber que se quiere hacer, ofrecer horas es
     # empezar la casa por el tejado (y de eso dependen la duracion y el precio).
     # Solo la primera vez: repetir la peticion palabra por palabra era el muro que

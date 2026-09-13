@@ -2456,6 +2456,75 @@ async def _wa_resumen_para_confirmar(
     return True
 
 
+async def _wa_contestar_propuesta(*, cliente_id: str, phone_number_id: str, from_number: str,
+                                  propuesta_id: str, respuesta: str, flow: appstate.WAFlowState,
+                                  incoming_text: str, request) -> bool:
+    """Aceptar o rechazar la alternativa ofrecida: UN solo camino para botón y texto.
+
+    Solo lo usaba el botón. Un «sí» ESCRITO a la misma pregunta no tenía camino:
+    el modelo tenía `responder_propuesta` y no la usaba, así que a quien escribía
+    en vez de pulsar se le volvía a preguntar «¿Keratina o Ácido láctico?» hasta
+    que se iba (medido el 13-sep-2026 contra copia de producción, conversación
+    repetida turno a turno). Botón y texto llegan ahora aquí, con la misma
+    transición compartida (`booking.contestar_alternativa_de_precio`) y los mismos
+    textos; no hay dos formas de aceptar lo mismo.
+    """
+    from backend import reserva
+    estado = reserva.cargar(cliente_id, from_number)
+    ok = booking.contestar_alternativa_de_precio(cliente_id, estado, propuesta_id, respuesta)
+    reserva.guardar(cliente_id, from_number, estado)
+    if not ok:
+        texto = "Esta opción ya no está vigente. Dime qué servicio quieres y lo consultamos de nuevo."
+    elif respuesta == "acepta":
+        texto = ("De acuerdo, buscamos una cita de %s para el %s." % (
+            estado.servicio, _wa_fecha_humana(estado.fecha)) if estado.fecha else
+            "De acuerdo, buscamos una cita de %s. ¿Qué día te viene bien?" % estado.servicio)
+        flow.flow = "agente"
+        flow.servicio = estado.servicio_exacto
+        flow.fecha = estado.fecha
+        flow.hora = ""
+    else:
+        texto = ("De acuerdo, seguimos con %s." % textnorm.nombre_de_servicio_publico(estado.servicio)
+                 if estado.servicio else "De acuerdo. ¿Qué servicio te gustaría reservar?")
+        flow.flow = "agente"
+    enviado = await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=from_number, text=texto)
+    _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                  entrante=incoming_text, respuesta=texto if enviado else "",
+                  intent="respuesta_propuesta")
+    if enviado and ok and respuesta == "acepta" and estado.fecha:
+        await _wa_ofrecer_huecos_hablando(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            fecha_iso=estado.fecha, fecha_humana=_wa_fecha_humana(estado.fecha),
+            servicio=estado.servicio_exacto, location_id=estado.propuesta_servicio.location_id,
+            request=request)
+    elif (enviado and ok and respuesta == "rechaza"
+          and estado.servicio and estado.fecha and estado.hora and estado.nombre):
+        await _wa_resumen_para_confirmar(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, flow=flow, texto_previo="", request=request)
+    return ok
+
+
+def _wa_lo_ultimo_fue_la_oferta(cliente_id: str, session_id: str) -> bool:
+    """¿Lo ÚLTIMO que el asistente le envió en esta conversación fue la oferta?
+
+    Sin esto, un «sí» que respondía a OTRA pregunta posterior («¿te va a las 10?»)
+    aceptaría una alternativa que ya nadie tenía delante. Solo el sí a la oferta
+    recién hecha la acepta; el resto lo sigue interpretando el agente.
+    """
+    try:
+        with db._get_db_connection() as connection:
+            fila = connection.execute(
+                "SELECT intent FROM chat_messages WHERE session_id = ? AND cliente_id = ?"
+                " AND role = 'assistant' ORDER BY id DESC LIMIT 1",
+                (session_id, cliente_id),
+            ).fetchone()
+    except Exception:  # noqa: BLE001 - ante la duda no se acepta nada
+        return False
+    return bool(fila) and str(fila["intent"] or "") == "oferta_propuesta"
+
+
 async def _wa_turno_del_agente(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
@@ -2493,6 +2562,23 @@ async def _wa_turno_del_agente(
         cliente_id=cliente_id, from_number=from_number, request=request,
         entrante=incoming_text,
     )
+    # Un «sí» escrito a la oferta que se le acaba de hacer es aceptarla, igual que
+    # pulsar «Sí, esa cita». Solo si lo ÚLTIMO que se le envió fue esa oferta y el
+    # sí no trae pega (`_wa_dice_que_si` ya separa «sí» de «sí, pero mejor...»): un
+    # sí a otra pregunta, o con condiciones, lo sigue interpretando el agente.
+    from backend import reserva as _reserva
+    _pendiente = _reserva.cargar(cliente_id, from_number).propuesta_servicio
+    if (_pendiente is not None and _pendiente.estado == "ofrecida"
+            # Normalizado como en el resumen: «Sí» con tilde (lo pone el teclado del
+            # movil) no casaba con `_ASIENTE`, que va sin tildes.
+            and _wa_dice_que_si(textnorm._strip_accents((incoming_text or "").lower().strip()))
+            and _wa_lo_ultimo_fue_la_oferta(cliente_id, session_id)):
+        await _wa_contestar_propuesta(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            propuesta_id=_pendiente.id, respuesta="acepta", flow=flow,
+            # Su mensaje ya se registró arriba: no se duplica en el historial.
+            incoming_text="", request=request)
+        return True
     # El canal SI sabe a que viene (ha pulsado "Cancelar mi cita", o su texto ha
     # disparado ese camino). Pasarselo evita que el agente lo adivine.
     texto, cita_creada = await agent.responder(
@@ -2940,41 +3026,11 @@ async def _handle_whatsapp_message(
         iid = accion
 
     if iid.startswith(("prop_acepta_", "prop_rechaza_")):
-        from backend import reserva
         _, respuesta, propuesta_id = iid.split("_", 2)
-        estado = reserva.cargar(cliente_id, from_number)
-        ok = booking.contestar_alternativa_de_precio(cliente_id, estado, propuesta_id, respuesta)
-        reserva.guardar(cliente_id, from_number, estado)
-        if not ok:
-            texto = "Esta opción ya no está vigente. Dime qué servicio quieres y lo consultamos de nuevo."
-        elif respuesta == "acepta":
-            texto = ("De acuerdo, buscamos una cita de %s para el %s." % (
-                estado.servicio, _wa_fecha_humana(estado.fecha)) if estado.fecha else
-                "De acuerdo, buscamos una cita de %s. ¿Qué día te viene bien?" % estado.servicio)
-            flow.flow = "agente"
-            flow.servicio = estado.servicio_exacto
-            flow.fecha = estado.fecha
-            flow.hora = ""
-        else:
-            texto = ("De acuerdo, seguimos con %s." % textnorm.nombre_de_servicio_publico(estado.servicio)
-                     if estado.servicio else "De acuerdo. ¿Qué servicio te gustaría reservar?")
-            flow.flow = "agente"
-        enviado = await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id,
-            to_number=from_number, text=texto)
-        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
-                      entrante=incoming_text, respuesta=texto if enviado else "",
-                      intent="respuesta_propuesta")
-        if enviado and ok and respuesta == "acepta" and estado.fecha:
-            await _wa_ofrecer_huecos_hablando(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                fecha_iso=estado.fecha, fecha_humana=_wa_fecha_humana(estado.fecha),
-                servicio=estado.servicio_exacto, location_id=estado.propuesta_servicio.location_id,
-                request=request)
-        elif (enviado and ok and respuesta == "rechaza"
-              and estado.servicio and estado.fecha and estado.hora and estado.nombre):
-            await _wa_resumen_para_confirmar(cliente_id=cliente_id, phone_number_id=phone_number_id,
-                from_number=from_number, flow=flow, texto_previo="", request=request)
+        await _wa_contestar_propuesta(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            propuesta_id=propuesta_id, respuesta=respuesta, flow=flow,
+            incoming_text=incoming_text, request=request)
         return
 
     # Respuesta a los botones del recordatorio (confirmo / cancelar cita).
