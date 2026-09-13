@@ -450,3 +450,46 @@ Rama `claude/candidato`. Sin despliegue ni cambios en producción.
 - Claude inició una medición real nueva del mismo caso sobre copia aislada; no se
   relanza ni se consulta repetidamente. Rama `astra/condiciones-confirmadas`
   subida con `8ca6088`; sin despliegue.
+
+## 2026-09-13 12:00–13:30 +0200 - el crítico llega al resumen al primer intento (Claude)
+
+Rama `claude/candidato`. Sin despliegue ni cambios en producción. Todas las series:
+copia `snap3_conregla` (producción 13-sep 08:59 + regla de orientación de Alicia
+declarada SOLO en la copia), config viva `cfg3`, desde E:/Vantelia, árbol limpio,
+caso `dice-que-si-y-acaba-en-cita`, calendario resuelto al 2026-09-15. Cada fallo se
+leyó en chat_messages/agent_turns antes de tocar código.
+
+| SHA medido | Tiradas | OK 1.er intento | OK tras reintento | Fallo | Muro leído |
+| --- | --- | --- | --- | --- | --- |
+| 3a899f8 | 1 (parada) | 0 | 0 | 1 | el agente repetía la oferta con sus palabras; su «si» iba al modelo |
+| 1fe7a3e | 6 | 0 | 1 | 5 | «a las 15» sin huecos no se anotaba; tras aceptar, horas otra vez |
+| 197afb0 | 6 | 0 | 6 | 0 | 1.er intento: freno del precio sobre la propia valoración |
+| e197dee | 6 | **6** | 0 | 0 | — resumen correcto en las 6: Ana Ruiz Perez, Diagnóstico y presupuesto, 15:00 |
+
+- 1fe7a3e: `_wa_vuelve_a_ofrecer` y `booking.conservar_la_hora_dicha` (canal y
+  `responder_propuesta`). Sus tests partían con la hora puesta a mano, estado que la
+  conversación real no alcanza.
+- 197afb0: `Estado.hora_sin_hueco`, resuelto al aceptar con `_hora_coloquial` contra los
+  huecos del servicio aceptado. Tests construidos con los mensajes medidos.
+- Astra, con cuota nueva: cherry-pick de lo anterior en `astra/condiciones-confirmadas`
+  (para no perder 68c1fac), 8ca6088 (huecos enviados al estado; nombre por
+  `booking_name` tras aceptar) y 7740b45 (docs). Coordinado por buzón.
+- Fusiones en `claude/candidato`: 1b19d12 (68c1fac, 4703830), aa9638a (main: bd7a6da,
+  02bd1a7, 5a23f21, lo desplegado) y la de 8ca6088/7740b45, sin conflictos de código.
+  87 verdes en zonas fusionadas; pyflakes igual que main.
+- e197dee: la valoración no se frena a sí misma (`es_servicio_de_valoracion`; la regla
+  «Color y mechas» casaba con «Diagnóstico y presupuesto» por su categoría «Trabajos de
+  color»); «en esta conversación» con el corte por silencio compartido
+  (`agent._filas_de_esta_conversacion`; antes 30 mensajes del teléfono sin tiempo, y el
+  del primer intento arrastraba 17 preguntas de precio del 22-ago); `booking_name` con
+  `nombre_que_dice` (hallazgo de revisión de 8ca6088: guardaba «me llamo Ana Ruiz
+  Perez»). 10 tests, 7 rojos sin los arreglos y 3 controles; 234 verdes relacionados.
+- Evidencia por arreglo: rojo sin él (neutralizado) y verde con él en 1fe7a3e (6),
+  3a899f8 (4), 197afb0 (3) y e197dee (7). Informes JSON por tirada en el scratchpad de la
+  sesión; las copias de BD de las series se borran por llevar datos de clientas.
+- Límites: un solo caso y un solo día de calendario; seis tiradas no fijan una tasa. La
+  copia de producción guarda 64 sesiones de teléfonos del banco del 22-ago: los
+  primeros intentos de mediciones anteriores pueden estar contaminados.
+  `whatsapp._ya_se_le_dijo` sigue mirando 8 respuestas sin tiempo (solo añade un remate).
+- Siguiente: suite completa, banco completo y humo sobre el SHA con este registro;
+  después segundo negocio, informe de aceptación y orden de despliegue de Pablo.

@@ -36,11 +36,11 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
-- **Testigo:** Claude, agente principal desde el 13-sep (decisión de Pablo). Astra sin créditos hasta el 19-sep 11:24; sus copias de trabajo no se tocan.
-- **Tarea:** cerrar el crítico `dice-que-si-y-acaba-en-cita` sobre el candidato y preparar la entrega a Alicia.
-- **Rama:** `claude/candidato` en E:/Vantelia (único árbol con credenciales para medir), HEAD `762800a`, descendiente de `astra/condiciones-confirmadas` 6c3ad4f (que contiene todas las ramas de Astra). Suite completa 2473 verdes en be6bec9; banco 42/43 en 782a53f.
-- **Decisión de Alicia confirmada (13-sep):** a quien no sabe qué alisado quiere se le ofrece la cita «Diagnóstico y presupuesto». Se declara como regla de orientación, no se deduce de su Q&A.
-- **Siguiente (Claude):** medir el crítico ≥6 tiradas con la regla en copia (en curso); arreglar la trampa de familias (una regla escrita «alisado» no casa con «Keratina premium»); suite + banco + humo; segundo negocio; cambio del portal a mitad de conversación; informe de aceptación; orden de despliegue de Pablo.
+- **Testigo:** Claude, agente principal desde el 13-sep (decisión de Pablo). Astra tuvo cuota nueva el 13-sep por la mañana: cherry-pick de lo de Claude, 8ca6088 y 7740b45, todo integrado; sus copias de trabajo no se tocan.
+- **Tarea:** validar el candidato integrado y preparar la entrega a Alicia.
+- **Rama:** `claude/candidato` en E:/Vantelia (único árbol con credenciales para medir), HEAD tras e197dee. Contiene `astra/condiciones-confirmadas` (7740b45, con el checkout Stripe 68c1fac) y `main` (bd7a6da, lo desplegado). Crítico `dice-que-si-y-acaba-en-cita`: **6/6 al primer intento en e197dee** (antes 0/6); detalle en REGISTRO_CONSOLIDACION.
+- **Decisión de Alicia confirmada (13-sep):** a quien no sabe qué alisado quiere se le ofrece la cita «Diagnóstico y presupuesto». Se declara como regla de orientación, no se deduce de su Q&A. Probada SOLO en copia.
+- **Siguiente (Claude):** suite completa + banco completo + humo sobre este SHA; segundo negocio (metareview: modo guiado y sin reglas, límites a declarar); cambio del portal a mitad de conversación; informe de aceptación (ACEPTACION_CANDIDATO_IA); orden de despliegue de Pablo; tras desplegar, crear la regla de orientación de Alicia en producción y verificarla.
 
 Relevo anterior de Astra (histórico, sustituido por lo de arriba):
 
