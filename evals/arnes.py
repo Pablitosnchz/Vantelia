@@ -61,40 +61,119 @@ def comprobar_aislamiento(destino: str) -> None:
         raise SystemExit("las conexiones siguen abriendo %s. Se aborta." % fichero)
 
 
-def capturar_envios() -> List[str]:
-    """Sustituye los envios de WhatsApp y devuelve la lista donde caen.
+VERSION_INTERACCION = "botones-explicitos-v1"
 
-    Las listas y los botones se aplanan a texto: para medir da igual como se
-    presente, lo que cuenta es lo que lee la clienta.
-    """
+
+class AccionNoDisponible(ValueError):
+    """El guion pidio una accion que no se ofrecio o ya no esta vigente."""
+
+
+def _propuesta_vigente(cliente_id, telefono):
+    from backend import reserva
+    return reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, telefono))
+
+
+class CapturaEnvios(list):
+    """Conserva la lista de textos legacy y la evidencia de interaccion emitida."""
+
+    def __init__(self):
+        super().__init__()
+        self.eventos = []
+        self._pendientes = {}
+
+    def registrar(self, texto, tipo, cliente_id, telefono, botones=(), *, enviado=True):
+        evento = {"texto": texto, "tipo": tipo, "cliente_id": cliente_id,
+                  "destinatario": telefono, "enviado": enviado,
+                  "botones": [{"id": b[0], "titulo": b[1]} for b in botones]}
+        self.eventos.append(evento)
+        self._pendientes[(cliente_id, telefono)] = evento
+        if enviado:
+            self.append(texto)
+
+    def opciones(self, cliente_id, telefono):
+        evento = self._pendientes.get((cliente_id, telefono))
+        if not evento or not evento["enviado"] or not evento["botones"]:
+            return []
+        propuesta = _propuesta_vigente(cliente_id, telefono)
+        if not propuesta or propuesta["estado"] != "ofrecida":
+            return []
+        return [dict(b) for b in evento["botones"]
+                if b["id"] in tuple(prefijo + propuesta["id"] for prefijo in
+                                    ("confirm_yes:", "confirm_no:", "cancel_yes:", "cancel_no:"))]
+
+
+def preparar_entrada(captura, cliente_id, telefono, entrada):
+    """Texto libre sigue siendo texto; solo una accion explicita puede pulsar."""
+    opciones = captura.opciones(cliente_id, telefono) if isinstance(entrada, dict) else []
+    captura._pendientes.pop((cliente_id, telefono), None)
+    if isinstance(entrada, str):
+        return entrada, ""
+    if isinstance(entrada, dict):
+        aceptaciones = [o for o in opciones if "_yes:" in o["id"]]
+        if entrada == {"accion": "aceptar_oferta"} and len(aceptaciones) == 1:
+            return aceptaciones[0]["titulo"], aceptaciones[0]["id"]
+        if set(entrada) == {"boton"}:
+            for opcion in opciones:
+                if entrada["boton"] == opcion["id"]:
+                    return opcion["titulo"], opcion["id"]
+    raise AccionNoDisponible("Accion sin boton enviado y vigente para esta clienta")
+
+
+def capturar_envios() -> CapturaEnvios:
+    """Sustituye envios, conserva textos e IDs y simula su aceptacion sin red."""
     from backend import messaging
+    from unittest.mock import patch
 
-    dichos: List[str] = []
+    dichos = CapturaEnvios()
+    botones_reales = getattr(messaging._send_whatsapp_buttons, "_arnes_original", messaging._send_whatsapp_buttons)
+    payload_real = getattr(messaging._send_whatsapp_payload, "_arnes_original", messaging._send_whatsapp_payload)
+
+    def guardar(texto, tipo, kwargs, botones=(), enviado=True):
+        dichos.registrar(texto, tipo, kwargs.get("cliente_id", ""),
+                         kwargs.get("to_number") or (kwargs.get("payload") or {}).get("to", ""),
+                         botones, enviado=enviado)
+        if kwargs.get("detailed"):
+            return messaging.WhatsAppSendResult("aceptado" if enviado else "rechazado",
+                                              motivo="captura_sin_red")
+        return enviado
 
     async def texto(*, text="", **kwargs):
-        dichos.append(text)
-        return True
+        return guardar(text, "texto", kwargs)
 
     async def lista(*, body="", sections=None, **kwargs):
         filas = [f["title"] for s in (sections or []) for f in s.get("rows", [])]
-        dichos.append("%s || %s" % (body, " / ".join(filas)))
-        return True
+        return guardar("%s || %s" % (body, " / ".join(filas)), "lista", kwargs)
 
-    async def botones(*, body="", **kwargs):
-        dichos.append(body)
-        return True
+    async def botones(*, body="", buttons=None, **kwargs):
+        return await botones_reales(body=body, buttons=buttons or (), **kwargs)
 
     async def cta(*, body="", **kwargs):
-        dichos.append(body)
-        return True
+        return guardar(body, "cta", kwargs)
 
-    async def formulario(**kwargs):
+    async def post_sin_red(**kwargs):
+        payload = kwargs["payload"]
+        interactive = payload.get("interactive") or {}
+        if payload.get("type") == "interactive" and interactive.get("type") == "button":
+            normalizados = [(b["reply"]["id"], b["reply"]["title"])
+                            for b in interactive["action"]["buttons"]]
+            guardar(interactive["body"]["text"], "botones", kwargs, normalizados)
+            return messaging.WhatsAppSendResult("aceptado", motivo="captura_sin_red")
         # El formulario de reserva (WhatsApp Flows) sale por aqui, y sin esto iba a
         # Meta DE VERDAD con el token del .env (11-sep-2026, en el propio humo del
         # despliegue). El numero de pruebas no existe, Meta contestaba 400 y el
         # asistente seguia por mensajes: se da por rechazado sin salir de aqui, que
         # es el mismo camino, pero sin peticion a nadie.
-        return False
+        guardar("", "formulario", kwargs, enviado=False)
+        return messaging.WhatsAppSendResult("rechazado", motivo="captura_sin_red")
+
+    async def formulario(**kwargs):
+        # El builder y la conversion bool/detailed son los del producto. El POST
+        # falso termina sin suspenderse; se restaura el transporte al salir.
+        with patch.object(messaging, "_post_whatsapp_message", post_sin_red):
+            return await payload_real(**kwargs)
+
+    botones._arnes_original = botones_reales
+    formulario._arnes_original = payload_real
 
     messaging._send_whatsapp_text = texto
     messaging._send_whatsapp_list = lista
@@ -125,50 +204,6 @@ def cortar_el_mundo_exterior() -> None:
     booking._send_booking_to_webhook = webhook_mudo
     emailing._send_client_email = email_mudo
     messaging._send_client_sms = sms_mudo
-
-
-def _sin_tildes(texto: str) -> str:
-    import unicodedata
-
-    limpio = unicodedata.normalize("NFKD", str(texto or "").lower())
-    return "".join(c for c in limpio if not unicodedata.combining(c))
-
-
-def le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
-    """Lo ultimo que le mandaron fue el resumen con el boton de confirmar.
-
-    Por WhatsApp la cita se cierra PULSANDO, y en una prueba no hay dedo que pulse:
-    hay que entregar el "confirmo" como el boton. Sin esto, toda conversacion bien
-    llevada acaba contando como "se fue sin cita", porque el asistente manda el
-    resumen y ahi se queda.
-    """
-    ultimas = []
-    for linea in reversed(conversacion):
-        if linea["quien"] != "asistente":
-            break
-        ultimas.append(_sin_tildes(linea["texto"]))
-    # El boton SOLO existe con el resumen delante. Antes bastaba con que el
-    # asistente dijera "confirmamos la cita", y eso lo dice tambien al REPROGRAMAR:
-    # el arnes pulsaba el boton de crear y aparecia una cita duplicada que en
-    # WhatsApp real no existiria. Medido el 7-sep-2026: 3 de cada 100 "duplicadas"
-    # eran esto, y son el fallo mas caro del recuento.
-    return any("resumen de tu cita" in t for t in ultimas)
-
-
-def dice_que_si(texto: str) -> bool:
-    """El MISMO si que reconoce el producto, no uno propio del arnes.
-
-    Tenia su lista aparte, y eso escondia el fallo que venia a medir: el arnes
-    daba por dicho que si -y pulsaba el boton- en frases que el producto de verdad
-    rechazaba, asi que la cita salia en la agenda y la conversacion contaba como
-    buena. La clienta real no habria tenido cita.
-
-    Delegando, cuando el producto no entiende un si, aqui tampoco se pulsa y la
-    conversacion cuenta como lo que es: se fue sin cita.
-    """
-    from backend import whatsapp
-
-    return whatsapp._wa_dice_que_si(_sin_tildes(texto).strip(" .!¡"))
 
 
 def citas_de(cliente_id: str, telefono: str) -> List[Dict[str, Any]]:

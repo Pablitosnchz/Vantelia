@@ -43,7 +43,8 @@ import unicodedata
 from collections import Counter
 from typing import Any, Dict, List
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if __name__ == "__main__":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 MAX_TURNOS = 12          # una conversacion de WhatsApp no da mucho mas de si
@@ -57,12 +58,17 @@ def _norm(texto: str) -> str:
 
 # ─── La clienta ────────────────────────────────────────────────────────────
 
-def _hablar_como_clienta(guion: str, conversacion: List[Dict[str, str]]) -> str:
+def _hablar_como_clienta(guion: str, conversacion: List[Dict[str, str]], opciones=None) -> str:
     """El siguiente mensaje de la clienta. Vacio si el modelo falla."""
     from backend import settings
     from openai import OpenAI
 
     mensajes = [{"role": "system", "content": guion}]
+    mensajes.append({"role": "system", "content": (
+        "Puedes escribir texto libre o pulsar un boton disponible. Para pulsar devuelve "
+        'solo un objeto JSON {"boton":"ID exacto"}, eligiendo uno de estos botones: '
+        + json.dumps(opciones or [], ensure_ascii=False)
+        + ". No inventes IDs. Un si escrito es texto, no una pulsacion.")})
     # Se le da la vuelta a los papeles: lo que dijo el asistente es lo que ELLA
     # lee, asi que entra como "user" desde su punto de vista.
     for linea in conversacion:
@@ -70,7 +76,7 @@ def _hablar_como_clienta(guion: str, conversacion: List[Dict[str, str]]) -> str:
             mensajes.append({"role": "assistant", "content": linea["texto"]})
         else:
             mensajes.append({"role": "user", "content": linea["texto"]})
-    if len(mensajes) == 1:
+    if not conversacion:
         mensajes.append({"role": "user", "content": "(escribes tu el primer mensaje)"})
     try:
         cliente = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -84,19 +90,6 @@ def _hablar_como_clienta(guion: str, conversacion: List[Dict[str, str]]) -> str:
 
 
 # ─── Una conversacion entera ───────────────────────────────────────────────
-
-def _le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
-    """En el arnes: una sola forma de saberlo para todos los guiones."""
-    from evals import arnes
-
-    return arnes.le_han_pedido_confirmar(conversacion)
-
-
-def _dice_que_si(texto: str) -> bool:
-    from evals import arnes
-
-    return arnes.dice_que_si(texto)
-
 
 def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> Dict[str, Any]:
     from evals import arnes, clientas
@@ -124,25 +117,33 @@ def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> D
     conversacion: List[Dict[str, str]] = []
 
     for _ in range(MAX_TURNOS):
-        suyo = _hablar_como_clienta(guion, conversacion)
+        suyo = _hablar_como_clienta(guion, conversacion, dichos.opciones(cliente_id, telefono))
         if not suyo:
             break
         if _norm(suyo).strip().strip(".!") == "listo":
             break
-        conversacion.append({"quien": "clienta", "texto": suyo})
-
+        entrada = suyo
+        try:
+            candidata = json.loads(suyo)
+            if isinstance(candidata, dict):
+                entrada = candidata
+        except (ValueError, TypeError):
+            pass
+        try:
+            texto, boton = arnes.preparar_entrada(dichos, cliente_id, telefono, entrada)
+        except arnes.AccionNoDisponible as exc:
+            conversacion.append({"quien": "clienta", "texto": suyo})
+            whatsapp._wa_clear_flow(cliente_id, telefono)
+            return {"id": combinacion["id"], "objetivo": persona["objetivo"],
+                    "veredicto": "fallo", "motivo": str(exc), "fallos": ["accion_no_disponible"],
+                    "turnos": sum(t["quien"] == "clienta" for t in conversacion),
+                    "conversacion": conversacion, "instrumento": arnes.VERSION_INTERACCION}
+        conversacion.append({"quien": "clienta", "texto": texto, "interactive_id": boton})
         marca = len(dichos)
-        # Por WhatsApp la cita se cierra pulsando "Confirmar", y aqui no hay dedo
-        # que pulse: su "confirmo" se entrega como el boton. Sin esto, TODA
-        # conversacion bien llevada acababa contando como "se fue sin cita",
-        # porque el asistente mandaba el resumen y ahi se quedaba.
-        boton = ""
-        if _le_han_pedido_confirmar(conversacion) and _dice_que_si(suyo):
-            boton = "confirm_yes"
         try:
             asyncio.run(whatsapp._handle_whatsapp_message(
                 cliente_id=cliente_id, phone_number_id="phone_sim",
-                from_number=telefono, incoming_text=suyo,
+                from_number=telefono, incoming_text=texto,
                 interactive_id=boton, request=None,
             ))
         except Exception as exc:  # noqa: BLE001
@@ -717,10 +718,14 @@ def main() -> int:
                 print("        %s: %s" % (quien, linea["texto"].replace("\n", " ")[:150]))
 
     informe = _informe(resultados)
+    informe["instrumento"] = arnes.VERSION_INTERACCION
     anterior = None
     if args.comparar and os.path.exists(args.comparar):
         with open(args.comparar, encoding="utf-8") as fichero:
             anterior = json.load(fichero)
+        if anterior.get("instrumento") != arnes.VERSION_INTERACCION:
+            print("Informe historico de otro instrumento: no se comparan porcentajes.")
+            anterior = None
     _pintar(informe, anterior)
 
     if args.guardar:

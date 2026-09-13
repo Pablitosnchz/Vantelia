@@ -149,7 +149,7 @@ def _dejarle_una_cita(cliente_id: str, telefono: str):
     return None
 
 
-def _hablar(cliente_id: str, telefono: str, mensajes: List[str]) -> List[Dict[str, str]]:
+def _hablar(cliente_id: str, telefono: str, mensajes: List[Any]) -> List[Dict[str, str]]:
     """Le manda los mensajes por el camino REAL de WhatsApp y devuelve el ida y vuelta."""
     from evals import arnes
     from backend import whatsapp
@@ -157,13 +157,10 @@ def _hablar(cliente_id: str, telefono: str, mensajes: List[str]) -> List[Dict[st
     dichos = arnes.capturar_envios()
     whatsapp._wa_clear_flow(cliente_id, telefono)
     conversacion: List[Dict[str, str]] = []
-    for mensaje in mensajes:
-        conversacion.append({"quien": "clienta", "texto": mensaje})
+    for entrada in mensajes:
+        mensaje, boton = arnes.preparar_entrada(dichos, cliente_id, telefono, entrada)
+        conversacion.append({"quien": "clienta", "texto": mensaje, "interactive_id": boton})
         marca = len(dichos)
-        # La cita se cierra pulsando: su "confirmo" se entrega como el boton.
-        boton = ""
-        if arnes.le_han_pedido_confirmar(conversacion) and arnes.dice_que_si(mensaje):
-            boton = "confirm_yes"
         asyncio.run(whatsapp._handle_whatsapp_message(
             cliente_id=cliente_id, phone_number_id="phone_humo",
             from_number=telefono, incoming_text=mensaje,
@@ -246,6 +243,7 @@ def main() -> int:
     fallos = []
     no_medidos = []
     print("humo: %d conversaciones enteras sobre una copia de la base de datos" % len(casos))
+    print("instrumento: %s (texto libre no pulsa botones)" % arnes.VERSION_INTERACCION)
     print()
     for indice, caso in enumerate(casos):
         # Al otro lado hay un modelo, no una funcion: la misma conversacion puede
@@ -270,7 +268,7 @@ def main() -> int:
                 motivo = "(no se le ha podido dejar una cita)"
                 break
             try:
-                _hablar(args.cliente, telefono, mensajes)
+                _hablar(args.cliente, telefono, mensajes + caso.get("acciones_finales", []))
                 motivo = _juzgar(args.cliente, telefono, caso, previa)
             except Exception as exc:  # noqa: BLE001 - un caso roto es un fallo, no un crash
                 motivo = "ha reventado: %s" % str(exc)[:160]
