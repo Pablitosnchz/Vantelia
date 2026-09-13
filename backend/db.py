@@ -207,6 +207,29 @@ def _init_database() -> None:
         # servicio despues, la agenda de las citas ya cogidas no se descoloca.
         if "gap_json" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN gap_json TEXT NOT NULL DEFAULT ''")
+        if "reminder_generation" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN reminder_generation INTEGER NOT NULL DEFAULT 0")
+        connection.execute("""CREATE TABLE IF NOT EXISTS booking_notice_deliveries (
+            cliente_id TEXT NOT NULL, booking_id TEXT NOT NULL,
+            generation INTEGER NOT NULL, kind TEXT NOT NULL, channel TEXT NOT NULL,
+            state TEXT NOT NULL, owner_token TEXT NOT NULL, updated_at TEXT NOT NULL,
+            provider_message_id TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '',
+            provider_message_ids_json TEXT NOT NULL DEFAULT '[]',
+            PRIMARY KEY (cliente_id, booking_id, generation, kind, channel)
+        )""")
+        # Monotona incluso si una cita vuelve al horario anterior. Las marcas de
+        # envio/tracking no cambian la identidad del aviso ni disparan este trigger.
+        connection.execute("""CREATE TRIGGER IF NOT EXISTS booking_notice_generation
+            AFTER UPDATE OF status, booking_date, booking_time, start_at, end_at,
+                employee_id, servicio, email, telefono, nombre ON bookings
+            WHEN OLD.status IS NOT NEW.status OR OLD.booking_date IS NOT NEW.booking_date
+                OR OLD.booking_time IS NOT NEW.booking_time OR OLD.start_at IS NOT NEW.start_at
+                OR OLD.end_at IS NOT NEW.end_at OR OLD.employee_id IS NOT NEW.employee_id
+                OR OLD.servicio IS NOT NEW.servicio OR OLD.email IS NOT NEW.email
+                OR OLD.telefono IS NOT NEW.telefono OR OLD.nombre IS NOT NEW.nombre
+            BEGIN
+                UPDATE bookings SET reminder_generation=OLD.reminder_generation+1 WHERE id=NEW.id;
+            END""")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup

@@ -963,7 +963,8 @@ async def _enviar_recordatorio_con_plantilla(
     *,
     phone_number_id: str,
     to_number: str,
-) -> bool:
+    detailed: bool = False,
+) -> Any:
     """Recordatorio fuera de la ventana de 24 h, con la plantilla del negocio.
 
     Devuelve False cuando no se puede mandar, para que el aviso siga su camino por
@@ -979,7 +980,7 @@ async def _enviar_recordatorio_con_plantilla(
             booking_row["id"], cliente_id, "reminder_whatsapp_skipped",
             {"kind": kind, "reason": motivo},
         )
-        return False
+        return messaging.WhatsAppSendResult("omitido", motivo=motivo) if detailed else False
 
     plantilla = wa_plantillas.estado(cliente_id)
     if (plantilla.get("status") or "") != wa_plantillas.APROBADA:
@@ -1014,7 +1015,11 @@ async def _enviar_recordatorio_con_plantilla(
     )
     enviado = await messaging._send_whatsapp_payload(
         cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+        **({"detailed": True} if detailed else {}),
     )
+    if detailed:
+        from dataclasses import replace
+        return replace(enviado, template_name=payload["template"]["name"])
     if not enviado:
         return _saltado("meta_rechazo_la_plantilla")
     _record_booking_audit(
@@ -1028,7 +1033,8 @@ async def _send_booking_whatsapp_reminder(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
-) -> bool:
+    *, detailed: bool = False,
+) -> Any:
     config = clients._get_client_config(booking_row["cliente_id"])
     whatsapp_cfg = config.get("whatsapp", {}) or {}
     to_number = _booking_customer_phone_for_channel(booking_row, "whatsapp")
@@ -1039,7 +1045,7 @@ async def _send_booking_whatsapp_reminder(
         whatsapp_cfg.get("phone_number_id", "") or ""
     ).strip()
     if not (phone_number_id and to_number):
-        return False
+        return messaging.WhatsAppSendResult("omitido", motivo="destinatario_ausente") if detailed else False
     if kind in ("confirmed", "rescheduled"):
         # Texto corto + boton "Gestionar cita" (el enlace son ~80 caracteres que
         # nadie lee y que en el movil parten el mensaje en dos).
@@ -1048,15 +1054,21 @@ async def _send_booking_whatsapp_reminder(
             to_number=to_number, body=_whatsapp_notice_text(booking_row, kind),
             button_label="Gestionar cita",
             url=_booking_row_manage_url(booking_row, request),
+            **({"detailed": True} if detailed else {}),
         )
-        if enviado:
+        if detailed and enviado.estado != "rechazado":
+            return enviado
+        if not detailed and enviado:
             return True
     if kind == "cancelled":
         # Sin boton: la cita ya no existe, no hay nada que gestionar.
         enviado = await messaging._send_whatsapp_text(
             cliente_id=booking_row["cliente_id"], phone_number_id=phone_number_id,
             to_number=to_number, text=_whatsapp_notice_text(booking_row, kind),
+            **({"detailed": True} if detailed else {}),
         )
+        if detailed:
+            return enviado
         if enviado:
             return True
     # Los recordatorios tambien van en corto; lo que cambia es que llevan botones.
@@ -1073,6 +1085,7 @@ async def _send_booking_whatsapp_reminder(
             # una plantilla aprobada. Es el caso normal de un recordatorio.
             return await _enviar_recordatorio_con_plantilla(
                 booking_row, kind, phone_number_id=phone_number_id, to_number=to_number,
+                **({"detailed": True} if detailed else {}),
             )
         sent = await messaging._send_whatsapp_buttons(
             cliente_id=booking_row["cliente_id"],
@@ -1083,8 +1096,11 @@ async def _send_booking_whatsapp_reminder(
                 (f"bkok_{booking_row['id']}", "✅ Confirmo"),
                 (f"bkcancel_{booking_row['id']}", "❌ Cancelar cita"),
             ],
+            **({"detailed": True} if detailed else {}),
         )
-        if sent:
+        if detailed and sent.estado != "rechazado":
+            return sent
+        if not detailed and sent:
             return True
         # Fallback a texto plano si la API rechaza el mensaje interactivo.
     return await messaging._send_whatsapp_text(
@@ -1092,6 +1108,7 @@ async def _send_booking_whatsapp_reminder(
         phone_number_id=phone_number_id,
         to_number=to_number,
         text=message_text,
+        **({"detailed": True} if detailed else {}),
     )
 
 
@@ -4096,6 +4113,20 @@ async def _send_booking_reminder_by_kind(
     entrega por ningún canal y ``raise_on_failure`` es True (comportamiento historico
     de los flujos automaticos) se lanza ``RuntimeError``; con False se devuelve el
     resultado con los errores en ``failed`` para que el caller los muestre."""
+    from backend import notice_deliveries
+
+    generation = None
+    if sent_column:
+        referencia = booking_row if "reminder_generation" in booking_row.keys() else _get_booking_row_by_id(booking_row["id"])
+        if referencia is None or referencia["cliente_id"] != booking_row["cliente_id"]:
+            raise RuntimeError("No se puede verificar la cita del aviso")
+        generation = referencia["reminder_generation"]
+
+    def marcar_aviso(status, error=""):
+        if not notice_deliveries.mark_notice_complete(
+                booking_row["cliente_id"], booking_row["id"], generation, sent_column, status, error):
+            raise RuntimeError("La cita cambio durante el aviso; no se marca la nueva generacion")
+
     if kind == "confirmed" and booking_row["status"] == "pending_payment":
         # Decirle "tu cita ha quedado confirmada" a quien todavia tiene que pagar la
         # senal es mentirle. Ya recibe el resumen y el boton de pago; la confirmación
@@ -4118,12 +4149,7 @@ async def _send_booking_reminder_by_kind(
     config = clients._get_client_config(booking_row["cliente_id"])
     if respect_enabled and not _booking_email_enabled(config, kind):
         if sent_column:
-            _mark_booking_email_result(
-                booking_row["id"],
-                status=f"disabled:{kind}",
-                sent_column=sent_column,
-                error="",
-            )
+            marcar_aviso(f"disabled:{kind}")
         _record_booking_audit(
             booking_row["id"],
             booking_row["cliente_id"],
@@ -4147,15 +4173,12 @@ async def _send_booking_reminder_by_kind(
     followup_cfg = _follow_up_config(booking_row["cliente_id"])
     delivery_priority = followup_cfg.get("delivery_priority") or list(_FOLLOWUP_DELIVERY_CHANNELS)
     prefer_single_delivery = respect_enabled and channel_override is None
+    notice_blocked = False
+    delivery_outcomes = {}
 
     if not any(bool(channels.get(name)) for name in _FOLLOWUP_DELIVERY_CHANNELS):
         if sent_column:
-            _mark_booking_email_result(
-                booking_row["id"],
-                status=f"disabled:{kind}",
-                sent_column=sent_column,
-                error="",
-            )
+            marcar_aviso(f"disabled:{kind}")
         _record_booking_audit(
             booking_row["id"],
             booking_row["cliente_id"],
@@ -4164,7 +4187,7 @@ async def _send_booking_reminder_by_kind(
         )
         return {"sent": [], "failed": {}, "skipped": {"all": "no_channels"}}
 
-    async def _attempt_channel(channel_name: str) -> None:
+    async def _send_unclaimed_channel(channel_name: str) -> None:
         if channel_name == "email":
             if not (booking_row["email"] or "").strip():
                 skipped_channels["email"] = "La cita no tiene email."
@@ -4182,12 +4205,27 @@ async def _send_booking_reminder_by_kind(
                 skipped_channels["whatsapp"] = motivo
                 return
             try:
-                if await _send_booking_whatsapp_reminder(booking_row, kind, request):
+                resultado = await _send_booking_whatsapp_reminder(
+                    booking_row, kind, request, **({"detailed": True} if sent_column else {}))
+                estado_resultado = getattr(resultado, "estado", "")
+                if estado_resultado:
+                    delivery_outcomes["whatsapp"] = (
+                        estado_resultado, getattr(resultado, "provider_message_id", ""),
+                        getattr(resultado, "motivo", ""), getattr(resultado, "message_ids", ()),
+                        getattr(resultado, "template_name", ""))
+                if estado_resultado == "aceptado" or (not estado_resultado and resultado is True):
                     sent_channels.append("whatsapp")
+                elif estado_resultado == "omitido":
+                    skipped_channels["whatsapp"] = getattr(resultado, "motivo", "No emitido")
                 else:
                     failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta teléfono válido."
             except Exception as exc:  # noqa: BLE001
                 failed_channels["whatsapp"] = str(exc)
+                resultado = getattr(exc, "resultado", None)
+                if resultado is not None:
+                    delivery_outcomes["whatsapp"] = (
+                        "desconocido", resultado.provider_message_id, resultado.motivo,
+                        resultado.message_ids, resultado.template_name)
             return
 
         if channel_name == "sms":
@@ -4202,6 +4240,44 @@ async def _send_booking_reminder_by_kind(
             except Exception as exc:  # noqa: BLE001
                 failed_channels["sms"] = str(exc)
 
+    async def _attempt_channel(channel_name: str) -> None:
+        nonlocal notice_blocked
+        if not sent_column:
+            await _send_unclaimed_channel(channel_name)
+            return
+        identidad = (booking_row["cliente_id"], booking_row["id"], generation, kind, channel_name)
+        claim = notice_deliveries.claim_notice_delivery(*identidad, single_delivery=prefer_single_delivery)
+        if claim["estado"] == "aceptado":
+            sent_channels.append(claim["canal"])
+            return
+        if claim["estado"] == "omitido":
+            skipped_channels[channel_name] = claim.get("motivo") or "No emitido"
+            return
+        if claim["estado"] != "reclamado":
+            notice_blocked = True
+            failed_channels[channel_name] = "Aviso pendiente de verificar o cita modificada"
+            return
+        if notice_deliveries.current_notice_booking(*identidad[:3]) is None:
+            notice_deliveries.finish_notice_delivery(*identidad, claim["owner_token"], "omitido", reason="cita_modificada")
+            notice_blocked = True
+            failed_channels[channel_name] = "La cita cambio antes del envio"
+            return
+        await _send_unclaimed_channel(channel_name)
+        if channel_name in delivery_outcomes:
+            estado, provider_id, motivo, provider_ids, template_name = delivery_outcomes[channel_name]
+        elif channel_name in sent_channels:
+            estado, provider_id, motivo, provider_ids, template_name = "aceptado", "", "", (), ""
+        elif channel_name in skipped_channels:
+            estado, provider_id, motivo, provider_ids, template_name = "omitido", "", "canal_no_disponible", (), ""
+        else:
+            # Los adaptadores legacy no distinguen rechazo de respuesta perdida.
+            estado, provider_id, motivo, provider_ids, template_name = "desconocido", "", "resultado_no_verificado", (), ""
+        notice_deliveries.finish_notice_delivery(
+            *identidad, claim["owner_token"], estado, provider_message_id=provider_id,
+            provider_message_ids=provider_ids, reason=motivo, template_name=template_name)
+        if estado == "desconocido":
+            notice_blocked = True
+
     if prefer_single_delivery:
         # En produccion los canales activos son una lista de respaldo, no envios
         # duplicados: se intenta el orden elegido y se para al primer canal entregado.
@@ -4209,6 +4285,8 @@ async def _send_booking_reminder_by_kind(
             if not channels.get(channel_name):
                 continue
             await _attempt_channel(channel_name)
+            if notice_blocked:
+                break
             if sent_channels:
                 for skipped_name in _FOLLOWUP_DELIVERY_CHANNELS:
                     if channels.get(skipped_name) and skipped_name not in sent_channels and skipped_name not in failed_channels and skipped_name not in skipped_channels:
@@ -4218,6 +4296,8 @@ async def _send_booking_reminder_by_kind(
         for channel_name in _FOLLOWUP_DELIVERY_CHANNELS:
             if channels.get(channel_name):
                 await _attempt_channel(channel_name)
+                if notice_blocked:
+                    break
 
     # Un canal omitido no rescata el fallo de otro: sin ninguna entrega hay que
     # dejar el aviso pendiente. Todos omitidos si es terminal (evita un bucle sin
@@ -4225,12 +4305,7 @@ async def _send_booking_reminder_by_kind(
     if sent_channels or (skipped_channels and not failed_channels):
         status_value = kind if sent_channels == ["email"] else f"{kind}:{','.join(sent_channels or ['skipped'])}"
         if sent_column:
-            _mark_booking_email_result(
-                booking_row["id"],
-                status=status_value,
-                sent_column=sent_column,
-                error="; ".join(f"{name}: {err}" for name, err in failed_channels.items()),
-            )
+            marcar_aviso(status_value, "; ".join(f"{name}: {err}" for name, err in failed_channels.items()))
         _record_booking_audit(
             booking_row["id"],
             booking_row["cliente_id"],

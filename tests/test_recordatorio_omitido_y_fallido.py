@@ -43,19 +43,24 @@ def entorno(vantelia_env_factory, monkeypatch):
 def test_email_omitido_y_whatsapp_fallido_permiten_reintento(entorno, monkeypatch, respuesta):
     b, booking_id = entorno.booking, entorno.booking_id
     intentos = []
-    async def enviar(*a):
+    async def enviar(*a, **kwargs):
         intentos.append(1)
         if len(intentos) > 1:
             return True
         if isinstance(respuesta, Exception):
             raise respuesta
-        return respuesta
+        from backend import messaging
+        return messaging.WhatsAppSendResult("rechazado", motivo="rechazo_explicito")
     monkeypatch.setattr(b, "_send_booking_whatsapp_reminder", enviar)
     primero = asyncio.run(b._run_booking_reminders())
     assert primero.failed == 1
     assert primero.sent_24h == 0
     assert not b._get_booking_row_by_id(booking_id)["reminder_24h_sent_at"]
     segundo = asyncio.run(b._run_booking_reminders())
+    if isinstance(respuesta, Exception):
+        assert len(intentos) == 1, "un timeout no autoriza repetir el aviso"
+        assert not b._get_booking_row_by_id(booking_id)["reminder_24h_sent_at"]
+        return
     assert segundo.sent_24h == 1
     assert b._get_booking_row_by_id(booking_id)["reminder_24h_sent_at"]
     asyncio.run(b._run_booking_reminders())
@@ -64,8 +69,9 @@ def test_email_omitido_y_whatsapp_fallido_permiten_reintento(entorno, monkeypatc
 
 def test_caller_sin_excepcion_tambien_conserva_fallo_sin_marcar_enviado(entorno, monkeypatch):
     b = entorno.booking
-    async def rechazado(*a):
-        return False
+    async def rechazado(*a, **kwargs):
+        from backend import messaging
+        return messaging.WhatsAppSendResult("rechazado", motivo="rechazo_explicito")
     monkeypatch.setattr(b, "_send_booking_whatsapp_reminder", rechazado)
     resultado = asyncio.run(b._send_booking_reminder_by_kind(
         b._get_booking_row_by_id(entorno.booking_id), "reminder_24h",
@@ -97,8 +103,9 @@ def test_aceptacion_parcial_no_repite_el_canal_ya_enviado(entorno, monkeypatch):
     def email_aceptado(*a):
         emails.append(1)
         return True
-    async def whatsapp_rechazado(*a):
-        return False
+    async def whatsapp_rechazado(*a, **kwargs):
+        from backend import messaging
+        return messaging.WhatsAppSendResult("rechazado", motivo="rechazo_explicito")
     monkeypatch.setattr(b, "_send_booking_email", email_aceptado)
     monkeypatch.setattr(b, "_send_booking_whatsapp_reminder", whatsapp_rechazado)
     resultado = asyncio.run(b._send_booking_reminder_by_kind(
@@ -112,19 +119,24 @@ def test_aceptacion_parcial_no_repite_el_canal_ya_enviado(entorno, monkeypatch):
     assert len(emails) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="Pendiente exclusion duradera por cita, aviso y canal antes de I/O")
 def test_dos_ejecutores_no_deben_enviar_el_mismo_recordatorio(entorno, monkeypatch):
     b = entorno.booking
     enviados = []
     async def carrera():
-        dos_dentro = asyncio.Event()
-        async def enviar(*a):
+        primero_dentro = asyncio.Event()
+        continuar = asyncio.Event()
+        async def enviar(*a, **kwargs):
             enviados.append(1)
-            if len(enviados) == 2:
-                dos_dentro.set()
-            await asyncio.wait_for(dos_dentro.wait(), timeout=3)
+            primero_dentro.set()
+            await asyncio.wait_for(continuar.wait(), timeout=3)
             return True
         monkeypatch.setattr(b, "_send_booking_whatsapp_reminder", enviar)
-        await asyncio.gather(b._run_booking_reminders(), b._run_booking_reminders())
+        primero = asyncio.create_task(b._run_booking_reminders())
+        await primero_dentro.wait()
+        segundo = asyncio.create_task(b._run_booking_reminders())
+        await asyncio.sleep(0)
+        continuar.set()
+        await asyncio.gather(primero, segundo)
     asyncio.run(carrera())
     assert len(enviados) == 1, "dos workers leen timestamp vacio antes del envio: %s" % len(enviados)
+    assert b._get_booking_row_by_id(entorno.booking_id)["reminder_24h_sent_at"]
