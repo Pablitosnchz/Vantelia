@@ -110,6 +110,8 @@ class Estado:
     propuesta_servicio: Optional[PropuestaServicio] = None
     # Resumen exacto ofrecido por el canal, distinto de elegir un servicio.
     confirmacion_reserva_json: str = ""
+    # Correlación de la entrada nativa vigente; la propuesta sigue siendo única.
+    formulario_reserva_json: str = ""
 
     def vigente(self) -> bool:
         return (time.time() - self.tocado) < CADUCA_EN
@@ -136,11 +138,50 @@ def leer_confirmacion_reserva(estado: Estado, *, incluir_hecha: bool = False):
         return None
 
 
-def preparar_confirmacion_reserva(estado: Estado, datos):
+def leer_formulario_reserva(estado: Estado):
+    try:
+        formulario = json.loads(estado.formulario_reserva_json)
+        if (isinstance(formulario, dict) and len(formulario.get("token", "")) == 64
+                and all(isinstance(v, str) for v in formulario.values())):
+            return formulario
+    except (ValueError, TypeError):
+        pass
+    return {}
+
+
+def preparar_formulario_reserva(estado: Estado, token: str) -> bool:
+    pendiente = leer_confirmacion_reserva(estado)
+    if pendiente and pendiente["estado"] == "aceptada":
+        return False
+    if not isinstance(token, str) or len(token) != 64:
+        raise ValueError("El formulario necesita una identidad")
+    estado.formulario_reserva_json = json.dumps({"token": token})
+    return True
+
+
+def preparar_confirmacion_reserva(estado: Estado, datos, *, formulario_token="", formulario_respuesta=""):
     if not datos or any(not isinstance(k, str) or not isinstance(v, str) for k, v in datos.items()):
         raise ValueError("Los datos del resumen deben ser textos")
+    if formulario_token:
+        formulario = leer_formulario_reserva(estado)
+        anterior = leer_confirmacion_reserva(estado, incluir_hecha=True)
+        if (formulario.get("token") != formulario_token or len(formulario_respuesta) != 64
+                or (anterior and anterior["estado"] == "aceptada" and not estado.hecho)):
+            raise ValueError("El formulario ya no puede preparar otra operación")
+        if formulario.get("respuesta"):
+            if (anterior and not estado.hecho and anterior["id"] == formulario.get("propuesta")
+                    and formulario["respuesta"] == formulario_respuesta and anterior["datos"] == datos):
+                return anterior["id"]
+            raise ValueError("La respuesta del formulario ya fue consumida")
     propuesta = {"id": uuid4().hex, "creada": time.time(), "estado": "preparada", "datos": dict(datos)}
     estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
+    if formulario_token:
+        # Una sola publicación/CAS guarda consumo e identidad; no hay ventana
+        # donde el token se haya consumido sin una propuesta recuperable.
+        estado.formulario_reserva_json = json.dumps({"token": formulario_token,
+            "respuesta": formulario_respuesta, "propuesta": propuesta["id"]})
+        estado.hecho = False
+        estado.intencion = "reservar"
     return propuesta["id"]
 
 

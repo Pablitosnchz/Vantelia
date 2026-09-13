@@ -3272,6 +3272,62 @@ def es_servicio_retirado(detalle: Any) -> bool:
     return SERVICIO_RETIRADO.lower() in str(detalle or "").lower()
 
 
+async def _prepare_booking_creation(
+    cliente_id: str, *, employee_row: sqlite3.Row, servicio: str, telefono: str,
+    booking_date: str, booking_time: str, source: str, fuera_de_horario: bool = False,
+) -> Dict[str, Any]:
+    """Prepara sin escribir ni llamar al proveedor; el núcleo revalida al ejecutar.
+
+    Conserva las excepciones del mostrador y la misma duración, precio y
+    disponibilidad que la creación. No reclama una operación ni acepta la cita.
+    """
+    service_row = agenda._find_service_by_name(cliente_id, servicio)
+    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = agenda._service_price_cents_resolved(
+        cliente_id, service_row, employee_row["location_id"] or ""
+    )
+
+    # Entre lo que se ofrecio y el "si, quiero" el negocio ha podido retirar el
+    # servicio desde el panel. La propuesta se revalida AQUI, que es donde se
+    # ejecuta: cerrar una cita de algo que ya no esta a la venta es prometer un
+    # dato obsoleto. El MOSTRADOR si puede apuntarlo a mano (lo retiran del
+    # catalogo publico y lo siguen haciendo a quien ya lo tenia hablado).
+    if source != "portal_manual":
+        validar_servicio_publico(cliente_id, servicio, fila=service_row)
+
+    if not await agenda._booking_slot_available(
+        cliente_id, booking_date, booking_time,
+        employee_id=employee_row["id"], duration_minutes=service_duration,
+        en_rejilla=not fuera_de_horario,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese horario ya no esta disponible. Elige otro tramo.",
+        )
+
+    ya = _cita_suya_a_esa_hora(
+        cliente_id, telefono, booking_date, booking_time, service_duration, source,
+    )
+    if ya:
+        # Medido en la simulacion del 2-sep: reservo "Mechas medio" a las 11:00,
+        # cambio de idea a mitad de conversacion y se le confirmo ADEMAS "Corte
+        # mecha" a las 11:00. Dos citas a la vez, la primera sin cancelar, y el
+        # negocio con el hueco ocupado dos veces. Cambiar de servicio es CAMBIAR
+        # la cita, no coger otra.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Esta persona ya tiene una cita a esa hora (%s, %s). Si quiere otra "
+                "cosa, hay que CAMBIAR esa cita, no crear una segunda."
+                % (ya["booking_code"] or ya["id"], ya["servicio"] or "sin servicio")
+            ),
+        )
+
+    return {"service_row": service_row, "service_duration": service_duration,
+            "service_id": service_id, "service_price": service_price}
+
+
 async def _create_booking_core(
     cliente_id: str,
     *,
@@ -3316,48 +3372,13 @@ async def _create_booking_core(
         if recuperada is not None:
             return recuperada
     config = clients._get_client_config(cliente_id)
-    service_row = agenda._find_service_by_name(cliente_id, servicio)
-    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
-    service_id = service_row["slug"] if service_row else ""
-    service_price = agenda._service_price_cents_resolved(
-        cliente_id, service_row, employee_row["location_id"] or ""
-    )
-
-    # Entre lo que se ofrecio y el "si, quiero" el negocio ha podido retirar el
-    # servicio desde el panel. La propuesta se revalida AQUI, que es donde se
-    # ejecuta: cerrar una cita de algo que ya no esta a la venta es prometer un
-    # dato obsoleto. El MOSTRADOR si puede apuntarlo a mano (lo retiran del
-    # catalogo publico y lo siguen haciendo a quien ya lo tenia hablado).
-    if source != "portal_manual":
-        validar_servicio_publico(cliente_id, servicio, fila=service_row)
-
-    if not await agenda._booking_slot_available(
-        cliente_id, booking_date, booking_time,
-        employee_id=employee_row["id"], duration_minutes=service_duration,
-        en_rejilla=not fuera_de_horario,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese horario ya no esta disponible. Elige otro tramo.",
-        )
-
-    ya = _cita_suya_a_esa_hora(
-        cliente_id, telefono, booking_date, booking_time, service_duration, source,
-    )
-    if ya:
-        # Medido en la simulacion del 2-sep: reservo "Mechas medio" a las 11:00,
-        # cambio de idea a mitad de conversacion y se le confirmo ADEMAS "Corte
-        # mecha" a las 11:00. Dos citas a la vez, la primera sin cancelar, y el
-        # negocio con el hueco ocupado dos veces. Cambiar de servicio es CAMBIAR
-        # la cita, no coger otra.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Esta persona ya tiene una cita a esa hora (%s, %s). Si quiere otra "
-                "cosa, hay que CAMBIAR esa cita, no crear una segunda."
-                % (ya["booking_code"] or ya["id"], ya["servicio"] or "sin servicio")
-            ),
-        )
+    preparada = await _prepare_booking_creation(
+        cliente_id, employee_row=employee_row, servicio=servicio, telefono=telefono,
+        booking_date=booking_date, booking_time=booking_time, source=source,
+        fuera_de_horario=fuera_de_horario)
+    service_duration = preparada["service_duration"]
+    service_id = preparada["service_id"]
+    service_price = preparada["service_price"]
 
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
     if operation_key:

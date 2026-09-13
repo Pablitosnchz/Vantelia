@@ -234,20 +234,27 @@ def test_si_meta_rechaza_el_formulario_se_usa_el_flujo_de_siempre(api_module, cl
 # --- De la respuesta del formulario a la cita ------------------------------
 
 
-def test_la_respuesta_del_formulario_crea_la_cita(api_module, claves, monkeypatch):
-    """El formulario solo cambia COMO se recogen los datos: la reserva la sigue
-    creando el mismo `_wa_create_booking` que el flujo por mensajes."""
-    from backend import whatsapp
+def test_la_respuesta_del_formulario_pasa_al_resumen_compartido(api_module, claves, monkeypatch):
+    """Recoger datos no es aceptar: el efecto real tras el botón se prueba en
+    test_formulario_confirmacion_compartida, sin stub del núcleo de creación."""
+    from backend import messaging, whatsapp
 
     capturado = {}
 
-    async def fake_create(**kwargs):
+    async def fake_summary(**kwargs):
         capturado["flow"] = kwargs["flow"]
         return True
 
-    monkeypatch.setattr(whatsapp, "_wa_create_booking", fake_create)
+    async def fake_payload(**kwargs):
+        capturado["token"] = kwargs["payload"]["interactive"]["action"]["parameters"]["flow_token"]
+        return True
 
-    token = whatsapp.wa_flows.make_flow_token("demo", "34600111222")
+    monkeypatch.setattr(whatsapp, "_wa_send_booking_summary", fake_summary)
+    monkeypatch.setattr(messaging, "_send_whatsapp_payload", fake_payload)
+
+    asyncio.run(whatsapp._wa_send_booking_form(
+        cliente_id="demo", phone_number_id="PN", to_number="34600111222"))
+    token = capturado["token"]
     respuesta = json.dumps({
         "flow_token": token, "servicio": "Corte", "employee_id": "",
         "hueco": "2026-09-01T10:30", "nombre": "Pablo Sanchez",

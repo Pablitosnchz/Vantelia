@@ -1483,7 +1483,8 @@ def _wa_reiniciar_la_demo(cliente_id: str, from_number: str) -> None:
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     flow: appstate.WAFlowState, reconocido: bool = False, request=None,
-) -> None:
+    formulario_token: str = "", formulario_respuesta: str = "",
+) -> bool:
     """Resumen final con botones de confirmar, corregir datos o anadir nota.
 
     Punto UNICO donde termina el flujo, venga el cliente de escribir sus datos o de
@@ -1491,10 +1492,44 @@ async def _wa_send_booking_summary(
     obligatorios: costaban una interaccion a todo el mundo para algo que casi nadie
     usaba.
     """
+    from backend import reserva
+    pendiente = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, to_number))
+    if pendiente and pendiente["estado"] == "aceptada":
+        if pendiente["datos"].get("accion") == "cancelar":
+            await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=to_number, request=request,
+                texto="Hay una cancelación aceptada pendiente de comprobar. Utiliza su botón o contacta con el negocio.")
+        else:
+            await _wa_recuperar_creacion_confirmada(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=to_number, propuesta=pendiente, request=request)
+        return False
+    try:
+        booking.validar_servicio_publico(cliente_id, flow.servicio)
+        agenda._validate_booking_window(cliente_id, textnorm._parse_date(flow.fecha))
+        empleado = (agenda._resolve_employee_for_booking(cliente_id, flow.employee_id)
+                    if flow.employee_id else await agenda._resolve_public_booking_employee(
+                        cliente_id, flow.fecha, flow.hora, servicio=flow.servicio,
+                        location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id)))
+        await booking._prepare_booking_creation(
+            cliente_id, employee_row=empleado, servicio=flow.servicio, telefono=flow.from_number,
+            booking_date=flow.fecha, booking_time=flow.hora, source="whatsapp")
+        # Se acepta la profesional realmente consultada, con su centro y recargo.
+        # El botón no autoriza una asignación distinta si ese hueco se ocupa.
+        flow.employee_id = str(empleado["id"])
+        flow.employee_name = str(empleado["name"])
+        flow.location_id = str(empleado["location_id"] or "")
+    except HTTPException as exc:
+        texto = "⚠️ %s" % exc.detail
+        enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, text=texto)
+        if enviado:
+            _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                respuesta=texto, intent="resumen_no_disponible")
+        return False
     if await _wa_freno_del_precio(
             cliente_id=cliente_id, phone_number_id=phone_number_id,
             to_number=to_number, flow=flow):
-        return
+        return False
     flow.flow = "booking_confirm"
     # Si ha pedido a alguien que cuesta mas y todavia no se le ha explicado POR QUE,
     # se le explica ANTES del resumen, con el texto que ha escrito el negocio. El
@@ -1551,7 +1586,12 @@ async def _wa_send_booking_summary(
     lineas.append("¿Confirmamos la cita?")
     from backend import reserva
     estado = reserva.cargar(cliente_id, to_number)
-    identidad = reserva.preparar_confirmacion_reserva(estado, _wa_datos_del_resumen(flow))
+    try:
+        identidad = reserva.preparar_confirmacion_reserva(
+            estado, _wa_datos_del_resumen(flow), formulario_token=formulario_token,
+            formulario_respuesta=formulario_respuesta)
+    except ValueError:
+        return False  # Otra respuesta/aceptación ganó durante la preparación.
     reserva.guardar(cliente_id, to_number, estado)
     botones = [("confirm_yes:" + identidad, "✅ Confirmar"), ("confirm_no:" + identidad, "❌ Cancelar")]
     # WhatsApp solo admite 3 botones: el tercero es corregir datos si le reconocimos
@@ -1560,17 +1600,20 @@ async def _wa_send_booking_summary(
         ("data_fix", "✏️ Otros datos") if reconocido else ("notes_write", "✍️ Anadir nota")
     )
     cuerpo = chr(10).join(lineas)
-    enviado = await messaging._send_whatsapp_buttons(
-        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-        header="Confirmar cita", body=cuerpo, buttons=botones,
-    )
+    try:
+        enviado = await messaging._send_whatsapp_buttons(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            header="Confirmar cita", body=cuerpo, buttons=botones,
+        )
+    except messaging.WhatsAppDeliveryUnknown:
+        return False  # Preparada no acredita oferta; conserva identidad, sin fallback.
     if not enviado:
         # Si Meta lo rechaza, el resumen NO existe para la clienta: registrarlo
         # igual pintaba en el panel un mensaje que nadie recibio y hacia leer la
         # conversacion al reves (me paso el 10-sep-2026 diagnosticando esto).
         settings.logger.error(
             "[whatsapp] el resumen para confirmar no salio (%s -> %s)", cliente_id, to_number)
-        return
+        return False
     # Otro worker pudo sustituir o descartar el resumen durante el envío.
     # Un acuse tardío no puede resucitar esa versión.
     from backend import conversation_state
@@ -1578,7 +1621,7 @@ async def _wa_send_booking_summary(
         try:
             reserva.guardar(cliente_id, to_number, estado)
         except conversation_state.ConversationStateConflict:
-            return
+            return False
     # El resumen es un mensaje mas de la conversacion y tiene que QUEDAR GUARDADO.
     # No lo estaba: en el panel, la conversacion se cortaba justo antes de la
     # confirmacion -el negocio veia "¿me confirmas?" y despues nada- y al leerla
@@ -1592,6 +1635,7 @@ async def _wa_send_booking_summary(
         )
     except Exception as exc:  # noqa: BLE001 - el historial nunca tumba un envio
         settings.logger.warning("[whatsapp] no se pudo registrar el resumen: %s", exc)
+    return True
 
 
 async def _wa_hora_que_no_existe(cliente_id: str, fecha: str, hora: str) -> str:
@@ -1972,6 +2016,15 @@ async def _wa_send_booking_form(
     """
     if not wa_flows.enabled():
         return False
+    from backend import reserva
+    estado = reserva.cargar(cliente_id, to_number)
+    token = wa_flows.make_flow_token(cliente_id, to_number)
+    token_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    if not reserva.preparar_formulario_reserva(estado, token_digest):
+        await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, text="Hay una solicitud aceptada pendiente de comprobar. Utiliza su botón o contacta con el negocio.")
+        return True  # Atendida sin abrir otra gestión ni activar el fallback.
+    reserva.guardar(cliente_id, to_number, estado)
     config = clients._get_client_config(cliente_id)
     empresa = str(config.get("empresa") or "").strip() or config.get("nombre", "")
     payload = {
@@ -1988,7 +2041,7 @@ async def _wa_send_booking_form(
                 "name": "flow",
                 "parameters": {
                     "flow_message_version": "3",
-                    "flow_token": wa_flows.make_flow_token(cliente_id, to_number),
+                    "flow_token": token,
                     "flow_id": wa_flows.flow_id(),
                     "flow_cta": "Pedir cita",
                     "flow_action": "data_exchange",
@@ -2011,19 +2064,40 @@ async def _wa_handle_flow_reply(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     response_json: str, request: Request,
 ) -> bool:
-    """Crea la cita con lo que devuelve el formulario.
-
-    Reutiliza el mismo `_wa_create_booking` que el flujo por mensajes: el
-    formulario solo cambia COMO se recogen los datos, no como se reserva.
-    """
+    """Adapta datos del formulario al resumen y aceptación compartidos."""
+    from backend import reserva
     datos = wa_flows.parse_flow_response(response_json)
     contexto = wa_flows.read_flow_token(datos.get("flow_token", ""))
-    if not contexto or contexto.get("cliente_id") != cliente_id:
+    phone = crm._normalize_crm_phone(from_number)
+    if (not contexto or contexto.get("cliente_id") != cliente_id or not phone
+            or crm._normalize_crm_phone(contexto.get("phone", "")) != phone):
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text="Esa solicitud ha caducado. Escribe *cita* para empezar de nuevo.",
         )
         return False
+    estado = reserva.cargar(cliente_id, from_number)
+    formulario = reserva.leer_formulario_reserva(estado)
+    token_digest = hashlib.sha256(datos["flow_token"].encode("utf-8")).hexdigest()
+    respuesta_digest = hashlib.sha256(json.dumps(datos, sort_keys=True).encode("utf-8")).hexdigest()
+    propuesta = reserva.leer_confirmacion_reserva(estado, incluir_hecha=True)
+    if (formulario.get("token") != token_digest
+            or (formulario.get("respuesta") and (
+                formulario["respuesta"] != respuesta_digest or not propuesta
+                or formulario.get("propuesta") != propuesta["id"]))):
+        await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, text="Ese formulario ya no está vigente. Utiliza el último resumen o pide una nueva cita.")
+        return False
+    if propuesta and propuesta["estado"] == "aceptada" and (
+            not estado.hecho or formulario.get("propuesta") == propuesta["id"]):
+        if propuesta["datos"].get("accion") == "cancelar":
+            await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, request=request,
+                texto="Hay una cancelación aceptada pendiente de comprobar. Utiliza su botón o contacta con el negocio.")
+        else:
+            await _wa_recuperar_creacion_confirmada(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=from_number, propuesta=propuesta, request=request)
+        return True
     if not (datos.get("fecha") and datos.get("hora")):
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -2032,6 +2106,13 @@ async def _wa_handle_flow_reply(
         return False
 
     flow = _wa_get_flow(cliente_id, from_number)
+    if formulario.get("respuesta"):
+        if not _wa_restaurar_datos_del_resumen(flow, propuesta["datos"]):
+            return False
+        return await _wa_send_booking_summary(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            flow=flow, request=request, formulario_token=token_digest,
+            formulario_respuesta=respuesta_digest)
     _wa_reset_booking_fields(flow)
     flow.servicio = datos["servicio"]
     flow.employee_id = datos["employee_id"]
@@ -2048,15 +2129,11 @@ async def _wa_handle_flow_reply(
         conocido = crm.contact_by_phone(cliente_id, from_number)
         flow.nombre = str(conocido["name"]).strip() if conocido else "Cliente WhatsApp"
 
-    config = clients._get_client_config(cliente_id)
-    flow.flow = ""
-    creada = await _wa_create_booking(
+    return await _wa_send_booking_summary(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-        flow=flow, config=config, request=request,
+        flow=flow, request=request, formulario_token=token_digest,
+        formulario_respuesta=respuesta_digest,
     )
-    if flow.flow != "booking_service":
-        _wa_clear_flow(cliente_id, from_number)
-    return creada
 
 
 def _wa_modo_conversacional(config: Dict[str, Any]) -> bool:
@@ -4312,7 +4389,7 @@ async def _handle_whatsapp_webhook(
                         incoming_text = str(reply.get("title", "")).strip()
                     elif itype == "nfm_reply":
                         # Respuesta del formulario de reserva (Flows): trae la cita
-                        # entera, asi que se crea aqui y no pasa por el orquestador.
+                        # entera; se adapta al mismo resumen, sin aceptar ni crear.
                         reply = interactive_block.get("nfm_reply", {}) or {}
                         try:
                             await _wa_handle_flow_reply(
@@ -4322,12 +4399,14 @@ async def _handle_whatsapp_webhook(
                                 request=request,
                             )
                             processed += 1
+                        except messaging.WhatsAppDeliveryUnknown:
+                            settings.logger.warning("[flow] resultado de envío desconocido; se conserva la solicitud")
                         except Exception as exc:  # noqa: BLE001
-                            settings.logger.exception("[flow] error creando la cita: %s", exc)
+                            settings.logger.exception("[flow] error preparando la solicitud: %s", exc)
                             await messaging._send_whatsapp_text(
                                 cliente_id=cliente_id, phone_number_id=phone_number_id,
                                 to_number=from_number,
-                                text="No he podido registrar la cita. Escribe *cita* para intentarlo de nuevo.",
+                                text="No he podido comprobar esa solicitud. Conserva el último resumen o contacta con el negocio antes de iniciar otra cita.",
                             )
                         continue
                     else:

@@ -1,17 +1,22 @@
 import asyncio
 import uuid
-from datetime import date, timedelta
 
 import pytest
 
+from test_huecos_para_mover_la_cita import api_module, agenda_de_dos  # noqa: F401
+
 
 @pytest.fixture
-def conversacion(api_module, monkeypatch):
+def conversacion(agenda_de_dos, monkeypatch):
     from backend import whatsapp, messaging, reserva, appstate, inbox
     numero = uuid.uuid4().hex
     flow = whatsapp._wa_get_flow("demo", numero)
     flow.nombre, flow.servicio = "Ana Prueba", "Corte"
-    flow.fecha, flow.hora = (date.today() + timedelta(days=7)).isoformat(), "10:00"
+    # El resumen ahora consulta la agenda real; esta fixture abre ese día incluso
+    # en fin de semana y aporta un profesional libre a las 10 y a las 11.
+    _, dia, empleados, _ = agenda_de_dos
+    flow.fecha, flow.hora = dia, "10:00"
+    flow.employee_id, flow.employee_name = empleados[0]["id"], empleados[0]["name"]
     botones, creadas, textos = [], [], []
     async def sin_freno(**kw): return False
     async def nada(**kw): return True

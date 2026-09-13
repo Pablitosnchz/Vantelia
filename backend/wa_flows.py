@@ -22,6 +22,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 from datetime import timedelta
 from typing import Any, Dict, List, Tuple
 
@@ -85,7 +86,8 @@ def _token_secret() -> bytes:
 
 
 def make_flow_token(cliente_id: str, phone: str) -> str:
-    payload = f"{cliente_id}|{phone}|{timeutils._utc_now_iso()}"
+    # Dos aperturas en el mismo segundo son formularios distintos.
+    payload = f"{cliente_id}|{phone}|{timeutils._utc_now_iso()}|{secrets.token_hex(16)}"
     raw = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
     firma = hmac.new(_token_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()[:32]
     return f"{raw}.{firma}"
@@ -99,7 +101,10 @@ def read_flow_token(token: str) -> Dict[str, str]:
         if not hmac.compare_digest(firma, esperada):
             return {}
         relleno = "=" * (-len(raw) % 4)
-        cliente_id, phone, emitido = base64.urlsafe_b64decode(raw + relleno).decode("utf-8").split("|", 2)
+        partes = base64.urlsafe_b64decode(raw + relleno).decode("utf-8").split("|")
+        if len(partes) not in (3, 4):
+            return {}
+        cliente_id, phone, emitido = partes[:3]
     except Exception:  # noqa: BLE001 - token manipulado o de otra version
         return {}
     emitido_dt = timeutils._from_utc_iso(emitido)
