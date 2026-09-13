@@ -3372,6 +3372,32 @@ def _ofrece_una_hora_que_no_tiene(estado: Any, texto: str) -> str:
     return ""
 
 
+async def _libre_fuera_de_la_muestra(cliente_id: str, estado, hora: str, *,
+                                     location_id: str = "", ahora=None) -> bool:
+    """¿La hora que ofrece esta libre de verdad aunque no salga en la muestra?
+
+    `consultar_disponibilidad` da una MUESTRA por franja (5 de manana, 5 de tarde,
+    4 de noche) y el estado guarda las 8 primeras. Medido el 13-sep-2026 con modelo
+    real (escenario de reinicio a mitad de reserva): a «el 15/09/2026 a las 17:00»
+    el freno de la hora inventada obligo a contestar «a las 17:00 no tengo
+    disponibilidad», y la cita se creo despues a las 17:00 sin conflicto. Antes de
+    frenar se mira el dia con los mismos huecos que se ofrecen. Ante la duda (sin
+    dia, un error), se frena como siempre.
+    """
+    from backend import agenda, reserva   # tardio: agent y reserva se importan en cadena
+
+    fecha = estado.fecha_de_los_huecos or estado.fecha
+    if not fecha or not hora:
+        return False
+    try:
+        _todas, libres = await agenda._public_slot_sets_for_day(
+            cliente_id, fecha, servicio=estado.servicio_exacto or estado.servicio,
+            location_id=location_id or "")
+    except Exception:  # noqa: BLE001 - ante la duda, se frena
+        return False
+    return hora in libres and bool(reserva.huecos_con_margen(fecha, [hora], ahora))
+
+
 # Como dice una clienta que ninguna opcion le sirve. El salon pidio que en ese
 # momento -y solo en ese- se le ofrezca llamar, porque ellas pueden cuadrar a mano
 # lo que el sistema no puede.
@@ -3726,6 +3752,12 @@ async def responder(
                 #    clienta dice que si a una hora que no existe: cuando la
                 #    herramienta la frena, ya se han gastado tres turnos.
                 fuera_de_los_huecos = _ofrece_una_hora_que_no_tiene(estado, texto_final)
+                # La muestra no es todo lo libre del dia: una hora libre de verdad
+                # no se niega (13-sep-2026, «a las 17:00 no tengo» con las 17 libres).
+                if fuera_de_los_huecos and await _libre_fuera_de_la_muestra(
+                        cliente_id, estado, fuera_de_los_huecos, location_id=location_id,
+                        ahora=ahora_negocio):
+                    fuera_de_los_huecos = ""
                 if (fuera_de_los_huecos and not consultada
                         and vuelta + 1 < MAX_VUELTAS):
                     obligar = True
