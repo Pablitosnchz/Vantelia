@@ -5,13 +5,15 @@ Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
 ## Candidato nocturno integrado (13-sep)
 
-Situación vigente del hijo: transporte c1db689, guard 09aebfc, ledger b5fa459 y
-tests de contrato ca8e626 revisados. Los dos fallos de 2235d25 se reprodujeron y
-sus pruebas ahora aceptan la propuesta vigente antes de cancelar: 34 dirigidos
-verdes (02:27:09), sin cambio productivo. La nueva suite está preparada mediante
-validar-entregas.py, aún no iniciada; conservar el SHA limpio que se lance y
-registrar su resultado en ledger-suite.result.json. Mientras corre, formularios
-y harness con IDs vigentes se trabajarán en una rama hija separada.
+Situación vigente: de3d6d0 terminó suite exacta a las 02:52:00.149448 +02:00,
+exit 1, 2401 passed, 1 skipped, 1 failed, sin xfail. Único rojo: arquitectura
+omite notice_deliveries; c4d4f6a lo documenta con 5 dirigidos verdes, sin repetir
+suite congelada. No se pidió revisión formal. El hijo astra/formularios-confirmados
+incluye formulario 99fdaf1 (66 dirigidos), arnés 2533fe9 (23 dirigidos), UI 23139ca
+y mapa revisados. Cinco fixtures heredadas guardadas en 891a730 tienen 38 dirigidos
+y revisión OK. Runner externo preparado: congelar el SHA limpio del relevo y
+lanzar una única suite del hijo, todavía NO iniciada. Términos efectivos y
+medición del arnés se trabajan después en otra rama hija, sin tocar el candidato.
 
 Código integrado en a83021c y medido con relevo en 2235d25: suite terminada el
 13-sep a las 02:15:01 Europe/Madrid, exit 1, 2347 passed, 1 skipped, 1 xfailed y
@@ -31,13 +33,14 @@ que siguen son antecedentes y no convierten esa suite en verde:
 - ff59b06 evita marcar enviado si email se omite y WhatsApp falla sin aceptación.
   31 dirigidos verdes, un xfail estricto de duplicación entre ejecutores pendiente.
 
-No se cierra fase 4: faltan registro duradero de envíos, generación por cambio de
-cita, reconciliación, formularios nativos y gestión conversacional/otros canales.
+No se cierra fase 4: registro duradero y generación están en b5fa459, formulario
+nativo en 99fdaf1; faltan validación integrada del hijo, reconciliación y gestión
+conversacional/otros canales.
 La recuperación de cancelación sigue limitada al TTL y no hace atómico el proveedor
 con la BD. Fase 5 exige revisión de Claude del candidato exacto y banco real
 comparable de Alicia y otro negocio. La decisión foto/diagnóstico permanece aislada.
-Siguiente entrega independiente: exclusión duradera de recordatorios antes del envío,
-revalidación de la cita y tratamiento explícito de resultados inciertos por canal.
+Siguiente entrega independiente: términos efectivos aceptados y corrección del
+límite de medida del arnés, en otra rama mientras se valida este candidato.
 
 En astra/entregas-recordatorios, transporte c1db689 y seguridad de copia/informe
 09aebfc revisados (27 dirigidas finales para DB/WAL/SHM y alias). Ledger b5fa459
@@ -50,16 +53,26 @@ citas diferentes ni el fallback interno de email. La última relectura no vuelve
 atómico un cambio de cita durante la red. Son límites pendientes, no nuevas
 garantías derivadas de la reclamación por aviso.
 
-Antes de fase 5, corregir los instrumentos sin cambiar casos de calendario:
-humo/simulador añaden el turno de la clienta antes de consultar el helper de
-confirmación y usan `confirm_yes` sin identidad vigente. El caso crítico del banco
-solo admite texto «Resumen» o «Confirmamos»: no verifica crear la cita ni pulsar
-el botón. La reproducción del orden es pura, sin modelo, y está encargada a
-evidencia_real. No hay aún medición comparable nueva ni recibos reales de Meta.
+Antes de fase 5, terminar instrumentos sin cambiar casos de calendario:
+2533fe9 usa acción explícita e ID emitido por builder real, pero filtra la oferta
+por API/estado actual antes de entregar el click al producto. Eso impide medir
+su rechazo de botones obsoletos y no demuestra compatibilidad con una baseline
+anterior sin API/UUID. Próxima rama: transportar acciones explícitas emitidas y
+observar efectos, dejando al producto validar estado/autorización. No deducir
+consentimiento del texto. El banco crítico que acepta «Resumen» o «Confirmamos»
+sigue sin medir creación final real; no hay comparación nueva ni recibos Meta.
 
-Agenda: eje lateral y cuartos ya implementados con escala común de 2,2 px/min
-y `CD_AXIS_STEP=15`. Falta la aserción de su geometría en el próximo QA del SHA
-exacto; no rehacer el diseño ni repetir la suite para acreditar algo no medido.
+En esa rama, reproducir cambio de duración/precio/fianza/política entre oferta
+y aceptación. Sellar términos efectivos desde preparación compartida y evitar
+que el guardado vuelva a calcularlos; recuperación de operación ya aceptada
+debe conservar identidad y condiciones. De momento solo existe evidencia por
+trazado, no regresión ejecutada ni arreglo de esta brecha preexistente.
+
+Agenda: geometría verificada en QA exacta de3d6d0, 37 ticks cada 15 min/33 px,
+alineados con líneas y horas visibles; tipografía de sistema por bloqueo de
+Google Fonts. La captura reveló etiqueta 20 min frente a bloque/BD 45; UI23139ca
+corrige con cdDur y prueba Node roja/verde. Falta QA del nuevo candidato para
+esa etiqueta; no atribuir el arreglo a la captura antigua ni repetir QA de3d6d0.
 
 ## Corte verificable: 13-sep, 01:15 Europe/Madrid
 

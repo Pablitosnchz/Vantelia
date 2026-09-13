@@ -37,9 +37,9 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** suite exacta de3d6d0 terminada con un fallo documental; corregir el mapa en esta rama hija y cerrar fixtures de formularios, manteniendo botones realmente emitidos y consentimiento explícito.
+- **Tarea:** candidato de formularios integrado y revisado localmente; preparar su única suite exacta tras relevo limpio. La suite de3d6d0 terminó con un fallo documental ya corregido en c4d4f6a.
 - **Rama:** astra/formularios-confirmados, E:/Vantelia-astra-formularios, hija de de3d6d0. E:/Vantelia-astra-recordatorios conserva intacta astra/entregas-recordatorios como candidato medido; no editar ese árbol ni repetir pruebas allí.
-- **Siguiente:** formulario 99fdaf1 revisado y 66 dirigidos verdes (92,44 s); arnés 2533fe9 revisado y 23 dirigidos verdes. evidencia_real adapta cinco fixtures heredadas a la revalidación común del resumen; Astra revisa ese diff y añade notice_deliveries a arquitectura/mapa. La suite de esta rama hija aún no ha empezado. Resultado exacto de entregas conservado en ledger-suite.result.json y .log externos. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Siguiente:** congelar el SHA limpio de este relevo y lanzar una única suite exacta con el runner externo preparado, todavía NO iniciada. Formulario 99fdaf1 (66 dirigidos), arnés 2533fe9 (23), fixtures 891a730 (38), UI 23139ca y mapa c4d4f6a (5) revisados; cifras solapadas, no sumarlas. Mientras se mida, siguiente rama hija para términos efectivos aceptados y brecha de medición del arnés. Resultado de entregas conservado en ledger-suite.result.json y .log externos. Registro: docs/REGISTRO_CONSOLIDACION.md.
 - **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
 
 QA visual exacta de de3d6d0 terminada: **exit 0**, 02:36:26–02:37:51 Europe/Madrid,
@@ -64,6 +64,20 @@ Meta reales; los informes de otra versión no se comparan. El caso crítico del
 banco real todavía no acredita el efecto final en agenda; queda pendiente medir
 antes/después con la misma versión del instrumento.
 
+Límite de medida confirmado por lectura: CapturaEnvios.opciones depende de
+reserva.leer_confirmacion_reserva y filtra estado ofrecida/IDs del protocolo
+actual. Un botón realmente emitido pero ya obsoleto se detiene en el arnés,
+sin probar el rechazo del producto; una baseline sin esa API tampoco está
+soportada. La comparación histórica no queda demostrada solo por compartir
+versión del instrumento. Siguiente: transportar la acción explícita emitida y
+dejar al producto validar su autorización, comprobando después agenda/estado;
+conservar aislamiento de destinatario y no deducir clicks del texto.
+
+Cinco fixtures heredadas guardadas en 891a730 y revisadas OK: 38 passed a las 02:55:28, frente a siete
+rojos y un control previamente verde. Usan huecos reales del tenant y mantienen
+los validadores; el caso sin fianza exige además que exista resumen. No se
+repitieron dirigidos durante la revisión ni se ha lanzado suite del hijo.
+
 Siguiente riesgo identificado por lectura, aún sin reproducción ejecutada:
 la propuesta y la huella de creación no sellan duración/precio/fianza/política.
 Un cambio de catálogo entre resumen y botón puede conservar la identidad del
@@ -71,8 +85,8 @@ resumen y ejecutar condiciones nuevas. Preparar regresión sintética y cotejar
 los términos efectivos en la preparación compartida antes de ejecutar; no
 añadir cálculos paralelos ni dar este caso preexistente por resuelto con el
 formulario. La revisión del formulario cierra disponibilidad y profesional
-resuelto: 66 dirigidos verdes en 92,44 s; cinco fixtures heredadas pendientes
-de adaptación y revisión. No hay suite nueva del hijo ni medición real.
+resuelto: 66 dirigidos verdes en 92,44 s; cinco fixtures heredadas ya adaptadas
+y revisadas en 891a730. Suite exacta del hijo preparada, NO iniciada; sin medición real.
 
 Última suite exacta de3d6d00e22e6f089055a1370c23fe9831205c8d terminada a las
 **02:52:00.149448 +02:00**, exit 1: **2401 passed, 1 skipped, 1 failed**, sin

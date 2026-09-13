@@ -247,6 +247,20 @@ reconciliación externa ni exclusión global del cupo entre citas distintas.
 POST único, respuestas ambiguas/5xx/timeout sin fallback y texto parcial con IDs
 conservados. Cerrar el cliente no borra una aceptación ya recibida.
 
+`test_formulario_confirmacion_compartida.py` verifica token tenant/teléfono,
+replay, propuesta compartida, aceptación única y recuperación sin repetir
+proveedor. Exige disponibilidad real antes del resumen y fija profesional/centro
+para no reasignar tras aceptación; no prueba estabilidad de términos económicos
+si cambia el catálogo entre oferta y click (bloque siguiente).
+
+`test_acciones_del_arnes.py` mantiene texto libre como texto y exige acción
+estructurada. `test_arnes_boton_crea_cita.py` recorre resumen/botón/núcleo/agenda
+sin modelo ni POST real; verifica normalización del builder y cuarto botón
+descartado. El arnés aún filtra propuestas obsoletas antes del producto: no
+demuestra rechazo productivo de esos botones ni compatibilidad con baseline
+anterior. Las fixtures de resumen heredadas consultan huecos sintéticos reales,
+sin reemplazar los validadores por stubs.
+
 `test_copia_segura_banco.py` impide que copiar o guardar el informe borre origen,
 WAL o SHM mediante alias, distingue origen inexistente/desaparecido y conserva
 datos WAL. La copia de solo lectura y la comprobación de aislamiento comparten

@@ -267,3 +267,34 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
   QA exacta y corrección UI separadas, arnés 2533fe9 y formulario 99fdaf1 con
   sus dirigidos. Las fixtures heredadas y la suite del hijo siguen pendientes;
   no se declara aprobación formal, medición real ni despliegue.
+
+## 2026-09-13 - revisión de fixtures y límite de comparación del arnés
+
+- Autor confirma 38 passed a las 02:55:28 en cinco archivos; siete rojos previos
+  y un control antes verde. Revisión independiente OK: agenda real con servicio
+  en vez de fechas caducadas, configuración sintética completa y mismos guards.
+  El caso sin fianza exige resumen presente para no pasar por rechazo temprano.
+- Brecha comprobada por lectura, pendiente de cambio: CapturaEnvios.opciones
+  requiere la API de propuesta persistida y filtra estado ofrecida/IDs actuales.
+  Un botón que se emitió pero ya es inválido nunca llega al producto. Esta
+  versión no demuestra rechazo productivo de acciones obsoletas ni comparación
+  con una baseline sin esa API/protocolo. No se presenta como compatible.
+- Próxima fase del instrumento: transportar acciones explícitas emitidas y
+  comprobar después el resultado y autorización del producto, sin convertir
+  texto en click. No se modifica ahora ni bloquea la adaptación de fixtures.
+
+## 2026-09-13 02:59:43 +0200 - candidato de formularios preparado para congelar
+
+- 891a730 guarda las cinco fixtures revisadas, con 38 dirigidos verdes. El
+  candidato incorpora formulario 99fdaf1, arnés 2533fe9, UI23139ca y mapa c4d4f6a;
+  las selecciones dirigidas se solapan y no equivalen a nueva suite completa.
+- Relevo final en ESTADO/PLAN/ACEPTACION/REGISTRO y cobertura en tests/README.
+  Runner externo preparado, suite del hijo todavía NO iniciada. Coordinación
+  congelará este SHA limpio antes de una única ejecución exacta.
+- Siguiente rama hija: términos efectivos aceptados (regresión antes) y arnés
+  que observe acciones explícitas/efectos sin anticipar la autorización del
+  producto. Compatibilidad con baseline antigua no demostrada. QA de etiqueta
+  corregida aún pendiente; no repetir la QA de3d6d0 ni atribuirle el arreglo.
+- No revisión formal nueva, modelo/Meta reales, push o despliegue. Se conserva
+  el rojo documental de la suite exacta de entregas como resultado histórico,
+  junto al dirigido verde que corrige el mapa en este hijo.
