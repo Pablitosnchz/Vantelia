@@ -51,9 +51,13 @@ sustituyó por CSS vacío para impedir red externa: tipografía de sistema.
 
 La captura reveló etiqueta de catálogo «20 min» sobre bloque/BD de 45 min.
 23139ca corrige la etiqueta reutilizando cdDur y preserva precio/ausencia de
-datos; regresión Node roja antes y verde después. QA del repo añade comprobación
-de token exacto de duración, todavía sin ejecutar sobre ese arreglo. No atribuir
-la corrección a la captura anterior ni repetir la QA de de3d6d0.
+datos; regresión Node roja antes y verde después. Una nueva QA exacta sobre
+2cb8a029 pasó el 13-sep 03:05:16–03:06:56 Europe/Madrid (exit 0, árbol/SHA
+limpios antes/después): etiqueta «45 min» coincide con BD45 y conserva precio
+18 €. También pasa geometría de 37 ticks/10 horas (8 visibles) y recorrido
+completo. Artefactos portal-formularios.* externos; Fonts bloqueado con CSS
+vacío y tipografía de sistema. Este resultado acredita el arreglo en 2cb8a029,
+no en la captura anterior de de3d6d0. No se repite ninguna de esas QA verdes.
 
 Arnés 2533fe9 revisado: `botones-explicitos-v1` exige una acción estructurada y un ID
 realmente emitido por el builder productivo para esa clienta/tenant y propuesta

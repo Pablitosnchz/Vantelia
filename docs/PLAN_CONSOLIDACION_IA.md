@@ -71,8 +71,11 @@ trazado, no regresión ejecutada ni arreglo de esta brecha preexistente.
 Agenda: geometría verificada en QA exacta de3d6d0, 37 ticks cada 15 min/33 px,
 alineados con líneas y horas visibles; tipografía de sistema por bloqueo de
 Google Fonts. La captura reveló etiqueta 20 min frente a bloque/BD 45; UI23139ca
-corrige con cdDur y prueba Node roja/verde. Falta QA del nuevo candidato para
-esa etiqueta; no atribuir el arreglo a la captura antigua ni repetir QA de3d6d0.
+corrige con cdDur y prueba Node roja/verde. QA exacta 2cb8a029 terminada a las
+03:06:56 Europe/Madrid, exit0, SHA/árbol limpio antes/después: etiqueta45=BD45,
+precio18, cuartos/horas y recorrido completo, captura revisada por coordinación.
+Artefactos portal-formularios.*; Fonts vacío por aislamiento, sin modelo/Meta.
+No atribuir ese arreglo a la captura antigua ni repetir ninguna QA verde.
 
 ## Corte verificable: 13-sep, 01:15 Europe/Madrid
 

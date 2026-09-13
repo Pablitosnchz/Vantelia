@@ -59,7 +59,7 @@ no anonimiza respuestas: usar únicamente datos de prueba saneados autorizados.
 | Aislamiento de negocio | Pruebas deterministas por tenant | Mismo banco con segundo negocio y políticas diferentes |
 | Reinicio/repetición | Estado y creación recuperable probados | Resto de gestión, entregas y resultado incierto |
 | Recordatorios | Suite exacta de3d6d0 sin xfail y único rojo documental corregido en c4d4f6a; no es suite global verde | Plantilla, envío autorizado, cancelación/reprogramación, duplicación |
-| Agenda visual | QA exacta de3d6d0 verifica geometría y BD45; UI23139ca corrige etiqueta20 con prueba Node roja/verde | QA del nuevo SHA exacto con etiqueta frente a BD; aún no ejecutada |
+| Agenda visual | QA exacta 2cb8a029 exit0: etiqueta45=BD45, precio18, geometría de cuartos y recorrido completo; captura revisada | Tipografía externa no medida (Fonts bloqueado); no acredita cambios posteriores |
 | Revisión | Solicitada sobre 7ab7775 | OK del SHA exacto del candidato final |
 
 No se activa una regla de diagnóstico/foto para Alicia sin configuración acordada.
@@ -98,8 +98,12 @@ con escala común de 2,2 px/min. QA externa exacta de3d6d0 verificó 37 marcas,
 tres cuartos interiores y alineación con horas/líneas (02:36:26–02:37:51, exit 0,
 árbol limpio antes/después; portal-ledger.*). Fonts bloqueado con CSS vacío:
 tipografía de sistema. Reveló etiqueta20 sobre bloque/BD45; UI23139ca la corrige
-usando cdDur. La nueva aserción de etiqueta todavía no se ha ejecutado en QA;
-la captura anterior no acredita el arreglo. No repetir la QA del SHA viejo.
+usando cdDur. Nueva QA exacta 2cb8a029, 03:05:16–03:06:56 Europe/Madrid,
+exit 0 y SHA/árbol limpios antes/después: etiqueta45 coincide con BD45 y mantiene
+precio18; geometría y recorrido completo pasan. Captura inspeccionada también
+por coordinación. Evidencia portal-formularios.* externa, Fonts bloqueado con
+CSS vacío. Sin modelo/Meta ni suite repetida. La captura anterior no acredita
+el arreglo; esta ejecución nueva sí lo verifica. No repetir las QA verdes.
 
 ## Recorrido visual aislado: 13-sep, 01:22 Europe/Madrid
 

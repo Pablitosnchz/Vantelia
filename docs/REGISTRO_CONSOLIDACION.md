@@ -316,3 +316,22 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Astra revisa ambos diseños/diffs y mantiene este relevo. Todavía no hay nuevos
   verdes ni implementación aceptada en esta rama. QA exacta de etiqueta 2cb8a029
   se puede preparar con aislamiento previo; no se ha ejecutado ni se repite de3d6d0.
+
+## 2026-09-13 03:06:56 +0200 - QA exacta de etiqueta y geometría terminada
+
+- Una ejecución justificada por UI23139ca sobre el candidato limpio
+  2cb8a029e70ac28b1ffdbee6eb750b6304909946: 03:05:16.492–03:06:56.229 +02:00,
+  exit 0, mismo SHA/árbol limpio antes y después. No se consulta la suite.
+- Aserción nueva compara token exacto «45 min» de etiqueta con duración BD45.
+  Captura inspeccionada: «Corte señora · 45 min · 18 €». Se mantienen recorrido
+  completo, 37 ticks cada 15 min/33 px, tres interiores por hora, alineación y
+  diez horas (ocho visibles), sin errores capturados.
+- Artefactos externos portal-formularios: .result.json, .log, .geometry.json,
+  .agenda.png, .cuartos.png. SHA256 del instrumento ejecutado en disco:
+  260a58b8407d5b57efac534c748eca93c040f51b9daad21ba19919b41bdce4e1.
+  Fuente exacta git verificada, datos/config temporales, dotenv desactivado,
+  Python/Chromium solo loopback. Dos peticiones Google Fonts impedidas con CSS
+  vacío; tipografía de sistema. Sin modelo/Meta ni otros servicios reales.
+- Esta evidencia nueva sí valida etiqueta corregida; no se atribuye a la QA
+  anterior ni se repite ninguna QA verde. Términos/arnés de la nueva rama siguen
+  en implementación; no hay suite final consultada ni aceptación global.
