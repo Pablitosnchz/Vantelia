@@ -162,3 +162,21 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Siguiente trabajo independiente: rama hija de formularios y harness con IDs
   vigentes, manteniendo intacto el candidato que se mida. No se cierra fase 5 ni
   se afirma medición real del modelo/Meta. Sin push, despliegue o revisión nueva.
+
+## 2026-09-13 02:29:58 +0200 - suite exacta activa y rama de formularios
+
+- Inicio real 2026-09-13T02:29:58.587437+02:00, SHA limpio
+  de3d6d00e22e6f089055a1370c23fe9831205c8d, sesión 35696, validar-entregas.py en
+  E:/Vantelia-astra-recordatorios. Coordinación leyó solo metadata inicial de
+  ledger-suite.result.json; no se consulta otra vez hasta cerrar el bloque.
+- astra/formularios-confirmados en E:/Vantelia-astra-formularios parte de ese SHA
+  para el trabajo independiente. gestion_implementacion: formularios a propuesta
+  compartida, identidad tenant/teléfono y replay sin crear directamente.
+  evidencia_real: captura de botones reales y orden de turnos en instrumentos;
+  Astra: revisión y relevo. No se toca el árbol que está ejecutando la suite.
+- El arnés no debe deducir consentimiento ni fabricar IDs; tampoco se crea otra
+  autoridad de reserva en el formulario. Los diseños están en contraste, aún
+  sin evidencia verde nueva ni implementación declarada terminada.
+- Banco real comparable de dos negocios, foto/diagnóstico y QA exacta de geometría
+  siguen pendientes. Eje/cuartos ya existen; falta su verificación visual exacta.
+  Sin cambio de casos calendario, push, despliegue ni envío a clientas.

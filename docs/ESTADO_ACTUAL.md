@@ -4,7 +4,7 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 13-sep-2026, Astra (suite de gestión y revisión de entregas;
+Última actualización: 13-sep-2026, Astra (suite de entregas y formularios confirmados;
 no implica cambios en producción).
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
@@ -37,12 +37,15 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** preparar la suite exacta del nuevo candidato de entregas. Transporte c1db689, protección del banco 09aebfc y ledger b5fa459 revisados. ca8e626 adapta los dos tests de cancelación a oferta/aceptación vigente: 34 dirigidos verdes y revisión local OK; todavía no hay suite nueva del hijo.
-- **Rama:** astra/entregas-recordatorios, E:/Vantelia-astra-recordatorios, hija de 2235d25. E:/Vantelia-astra-gestion conserva el candidato medido sin mezclarlo con este trabajo.
-- **Siguiente:** guardar relevo y lanzar una suite exacta con validar-entregas.py solo tras verificar candidato limpio; salida ledger-suite.result.json y .log externos. Mientras corre, abrir rama hija para formularios y harness con IDs de confirmación vigentes, sin tocar este candidato. La suite está preparada, aún no iniciada. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Tarea:** suite exacta de3d6d0 iniciada en el worktree de recordatorios; mientras termina, formularios nativos hacia propuesta/aceptación compartida e instrumentos que usen botones realmente emitidos, sin inventar consentimiento.
+- **Rama:** astra/formularios-confirmados, E:/Vantelia-astra-formularios, hija de de3d6d0. E:/Vantelia-astra-recordatorios conserva intacta astra/entregas-recordatorios durante su suite; no editar ese árbol ni repetir pruebas allí.
+- **Siguiente:** gestion_implementacion implementa token ligado a tenant/teléfono, propuesta compartida y replay; evidencia_real adapta captura de botones y orden del historial en humo/simulador/banco, sin tocar casos calendario de Claude; Astra revisa diseño y diffs. Suite de entregas iniciada a las 02:29:58.587437 +02:00, sesión 35696, con validar-entregas.py: resultado ledger-suite.result.json y .log externos, comprobar al cierre del bloque, no periódicamente. Registro: docs/REGISTRO_CONSOLIDACION.md.
 - **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
 
-Última suite confirmada: 2235d25, fin 13-sep **02:15:01 Europe/Madrid**, exit 1:
+Suite actual de3d6d00e22e6f089055a1370c23fe9831205c8d en ejecución; coordinación
+leyó únicamente metadata de inicio. No hay resultado final ni nuevos verdes que
+atribuir a formularios o instrumentos. Última suite terminada: 2235d25, fin
+13-sep **02:15:01 Europe/Madrid**, exit 1:
 **2347 passed, 1 skipped, 1 xfailed y 2 fallos de cancelación**. Coordinación
 verificó el resultado a las 02:16 en
 C:/Users/pabli/.codex/vantelia-coordination/gestion-suite.result.json y su .log.
