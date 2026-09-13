@@ -63,6 +63,17 @@ _send_booking_reminder_by_kind
     └── sms       → _send_booking_sms_reminder → también el texto del email
 ```
 
+**Para revisar duplicaciones o recuperación de recordatorios automáticos:**
+`backend/notice_deliveries.py` reclama antes de I/O por tenant, cita, generación,
+tipo y canal. `notice_deliveries.claim_notice_delivery` bloquea también el
+respaldo por otro canal ante un envío en curso o desconocido;
+`notice_deliveries.finish_notice_delivery` guarda el resultado y la auditoría de
+plantilla aceptada en una transacción. `backend/db.py` incrementa la generación
+al cambiar datos relevantes de la cita. El llamador sigue siendo
+`booking._send_booking_reminder_by_kind`; los avisos manuales no usan esta
+reclamación. La aceptación del proveedor no acredita entrega y la reconciliación
+de resultados desconocidos sigue pendiente.
+
 **Para cambiar el texto de un aviso:**
 
 - Email y SMS → `_booking_email_bodies`.

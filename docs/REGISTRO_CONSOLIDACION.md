@@ -180,3 +180,90 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Banco real comparable de dos negocios, foto/diagnóstico y QA exacta de geometría
   siguen pendientes. Eje/cuartos ya existen; falta su verificación visual exacta.
   Sin cambio de casos calendario, push, despliegue ni envío a clientas.
+
+## 2026-09-13 02:37:51 +0200 - QA visual exacta y discrepancia de etiqueta
+
+- Una ejecución externa sobre de3d6d00e22e6f089055a1370c23fe9831205c8d,
+  02:36:26–02:37:51, exit 0, árbol limpio e idéntico antes/después. Aislamiento
+  temporal, dotenv desactivado, Python y Chromium sin red externa; Google Fonts
+  recibe CSS vacío local, con tipografía de sistema. No se toca el candidato.
+- 37 ticks, 10 horas (8 visibles), una columna: 15 min/33 px entre ticks,
+  tres interiores por hora y alineación con líneas dentro de 1 px. El recorrido
+  completo conserva duración de 45 min al arrastrar y termina sin errores capturados.
+- Evidencia externa portal-ledger: .result.json, .geometry.json, .log,
+  .agenda.png y .cuartos.png. SHA256 del instrumento en disco:
+  20f3716cce7aa01fe9e7d5148d27b5c3d422dea05669154ffbc048a7b44cdff7.
+  El hash preliminar dcb773… era texto LF antes de escribir CRLF; el artefacto
+  ejecutado y su resultado conservan el hash anterior completo.
+- La captura muestra etiqueta 20 min aunque bloque y BD son 45. Después se
+  corrigió en 23139ca: cdServiceMeta reutiliza cdDur sin fallback de slot para
+  datos ausentes; el dibujo mantiene su fallback y el precio se conserva.
+  Prueba Node sobre funciones reales: roja 20 frente a 45, verde tras arreglo,
+  controles de catálogo, precio, datos ausentes/fechas inválidas y fallback.
+- La QA del repo ahora compara el token exacto de duración con la BD para que
+  145 no pase como 45. No se ejecutó de nuevo navegador ni suite tras el cambio;
+  la captura antigua no acredita la etiqueta corregida.
+
+## 2026-09-13 02:49:33 +0200 - instrumento de botones explícitos revisado
+
+- 23 dirigidos verdes en 37,45 s. El ID legacy produjo antes cero citas frente
+  a una esperada; la captura previa falló con botones en diccionario y ofrecía
+  un cuarto botón descartado por el producto (dos rojos a las 02:47:36).
+- La captura reutiliza el builder real y registra el payload normalizado. El
+  transporte falso tipado se instala solo durante esa llamada y se restaura;
+  el spy de HTTP verifica ausencia de salida. La captura repetida conserva las
+  referencias originales y no contamina la anterior.
+- `botones-explicitos-v1`: entrada textual sigue siendo texto. La acción
+  estructurada exige botón emitido al tenant/destinatario y propuesta ofrecida
+  con el mismo ID; no fabrica consentimiento. Humo y simulador usan este
+  contrato, sin cambiar los casos calendario. No se comparan porcentajes de
+  informes históricos de otra versión. Revisión independiente OK; coordinación
+  autoriza guardar únicamente los cinco archivos del instrumento.
+- La prueba sintética verifica efecto en agenda sin modelo/Meta. El banco real
+  crítico sigue pendiente de medir efecto final con la misma versión antes y
+  después; este verde dirigido no cierra fase 5 ni acredita transporte real.
+- Revisión de formulario: preparación compartida extraída del núcleo y
+  profesional/centro consultados quedan fijados antes del resumen; no se
+  reasigna al pulsar si se ocupa después. Espera al cierre dirigido del autor.
+  Riesgo preexistente siguiente, identificado por lectura y sin ejecución:
+  snapshot/huella no incluyen términos económicos ni duración, mientras el
+  núcleo vuelve a resolver catálogo/política. Probar cambio de condiciones
+  entre oferta y botón y cerrar el contrato en la preparación compartida.
+
+## 2026-09-13 02:52:25 +0200 - relevo del cierre dirigido de formulario
+
+- Coordinación confirma 66 passed en 92,44 s y revisión independiente OK del
+  formulario. El autor está guardando producto/tests; no se anticipa su SHA.
+  Token ligado a tenant/teléfono, replay y propuesta compartida, disponibilidad
+  consultada en el núcleo y profesional/centro fijados antes del resumen.
+- Arnés guardado en 2533fe9. Cinco fixtures heredadas siguen en adaptación por
+  evidencia_real para usar agenda válida tras la revalidación común; después
+  se revisará ese diff sin repetir sus dirigidos.
+- La suite del hijo aún no se ha iniciado. La rama congelada de entregas queda
+  intacta y coordinación consultará su resultado al cerrar producto, sin sondeos
+  periódicos. Términos económicos cambiantes siguen como próximo bloque con
+  regresión antes del arreglo. No hay modelo/Meta reales ni fase 5 cerrada.
+
+## 2026-09-13 02:52:00 +0200 - resultado exacto de entregas verificado al cierre
+
+- Coordinación comunica cierre de de3d6d0 a las 02:52:00.149448 +02:00:
+  exit 1, 2401 passed, 1 skipped, 1 failed, sin xfail. Único rojo documental:
+  test_mapa_del_codigo_no_miente.py:125 detecta que ARQUITECTURA no nombra
+  notice_deliveries. Evidencia: ledger-suite.result.json y .log externos.
+- Se añade el módulo a arquitectura y el recorrido de reclamación al mapa en
+  la rama hija. El candidato congelado no se modifica; no se relanza suite
+  completa ni se solicita revisión formal. Este resultado no es verde.
+- Formulario guardado en 99fdaf1; cinco fixtures heredadas siguen pendientes.
+  La suite del hijo no está iniciada. Se validará únicamente el test del mapa
+  para cerrar esta omisión documental.
+
+## 2026-09-13 02:55:11 +0200 - omisión del mapa corregida
+
+- Dirigido tests/test_mapa_del_codigo_no_miente.py: 5 passed en 3,03 s,
+  una advertencia del manejador de excepciones de Trio. Log externo
+  mapa-notice-deliveries-verde.log; dotenv desactivado y sin caché de pytest.
+  El rojo previo está en la suite exacta de3d6d0; no se repitió esa suite.
+- Documentación preparada para relevo: arquitectura/módulo, mapa/recorrido,
+  QA exacta y corrección UI separadas, arnés 2533fe9 y formulario 99fdaf1 con
+  sus dirigidos. Las fixtures heredadas y la suite del hijo siguen pendientes;
+  no se declara aprobación formal, medición real ni despliegue.

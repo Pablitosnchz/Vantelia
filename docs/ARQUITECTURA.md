@@ -50,6 +50,7 @@ módulos transversales.
 | `backend/rag.py` | llama-index por cliente, info.txt IO, prompt de sistema, Q&A, sesiones/mensajes de chat, NLU de disponibilidad. |
 | `backend/crm.py` | CRM ligero: contactos unificados, normalización, auditoría, leads. |
 | `backend/booking.py` | Ciclo de vida de citas completo + pagos de cita (políticas, checkout Connect, webhooks, enlace de pago por IA) + worker de recordatorios. |
+| `backend/notice_deliveries.py` | Reclamación duradera de recordatorios automáticos por tenant, cita, generación, tipo y canal. Confirma la reclamación antes del envío, conserva aceptación/IDs y bloquea reenvío o respaldo ante resultado incierto. Aceptación y auditoría de plantilla se guardan juntas; no acredita entrega a la clienta ni reconcilia resultados desconocidos. |
 | `backend/demo_agenda.py` | Tenants demo con TTL, página demo, seed/purga de agenda de ejemplo. |
 | `backend/chat.py` | `_process_chat_message`: orquestador del chat multi-canal. |
 | `backend/whatsapp.py` | Webhook Cloud API y flujo conversacional de agendado. (`api.whatsapp_flows` sigue siendo el dict de estado de appstate.) |

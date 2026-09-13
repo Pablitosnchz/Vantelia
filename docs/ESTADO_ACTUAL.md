@@ -37,14 +37,52 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** suite exacta de3d6d0 iniciada en el worktree de recordatorios; mientras termina, formularios nativos hacia propuesta/aceptación compartida e instrumentos que usen botones realmente emitidos, sin inventar consentimiento.
-- **Rama:** astra/formularios-confirmados, E:/Vantelia-astra-formularios, hija de de3d6d0. E:/Vantelia-astra-recordatorios conserva intacta astra/entregas-recordatorios durante su suite; no editar ese árbol ni repetir pruebas allí.
-- **Siguiente:** gestion_implementacion implementa token ligado a tenant/teléfono, propuesta compartida y replay; evidencia_real adapta captura de botones y orden del historial en humo/simulador/banco, sin tocar casos calendario de Claude; Astra revisa diseño y diffs. Suite de entregas iniciada a las 02:29:58.587437 +02:00, sesión 35696, con validar-entregas.py: resultado ledger-suite.result.json y .log externos, comprobar al cierre del bloque, no periódicamente. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Tarea:** suite exacta de3d6d0 terminada con un fallo documental; corregir el mapa en esta rama hija y cerrar fixtures de formularios, manteniendo botones realmente emitidos y consentimiento explícito.
+- **Rama:** astra/formularios-confirmados, E:/Vantelia-astra-formularios, hija de de3d6d0. E:/Vantelia-astra-recordatorios conserva intacta astra/entregas-recordatorios como candidato medido; no editar ese árbol ni repetir pruebas allí.
+- **Siguiente:** formulario 99fdaf1 revisado y 66 dirigidos verdes (92,44 s); arnés 2533fe9 revisado y 23 dirigidos verdes. evidencia_real adapta cinco fixtures heredadas a la revalidación común del resumen; Astra revisa ese diff y añade notice_deliveries a arquitectura/mapa. La suite de esta rama hija aún no ha empezado. Resultado exacto de entregas conservado en ledger-suite.result.json y .log externos. Registro: docs/REGISTRO_CONSOLIDACION.md.
 - **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
 
-Suite actual de3d6d00e22e6f089055a1370c23fe9831205c8d en ejecución; coordinación
-leyó únicamente metadata de inicio. No hay resultado final ni nuevos verdes que
-atribuir a formularios o instrumentos. Última suite terminada: 2235d25, fin
+QA visual exacta de de3d6d0 terminada: **exit 0**, 02:36:26–02:37:51 Europe/Madrid,
+SHA y árbol limpios antes/después. Instrumento externo verifica 37 marcas de
+15 min, tres interiores entre horas, alineación con la columna y horas visibles;
+recorrido completo y duración persistida de 45 min. Capturas y resultado en
+C:/Users/pabli/.codex/vantelia-coordination/portal-ledger.*. Google Fonts se
+sustituyó por CSS vacío para impedir red externa: tipografía de sistema.
+
+La captura reveló etiqueta de catálogo «20 min» sobre bloque/BD de 45 min.
+23139ca corrige la etiqueta reutilizando cdDur y preserva precio/ausencia de
+datos; regresión Node roja antes y verde después. QA del repo añade comprobación
+de token exacto de duración, todavía sin ejecutar sobre ese arreglo. No atribuir
+la corrección a la captura anterior ni repetir la QA de de3d6d0.
+
+Arnés 2533fe9 revisado: `botones-explicitos-v1` exige una acción estructurada y un ID
+realmente emitido por el builder productivo para esa clienta/tenant y propuesta
+vigente. El texto libre nunca pulsa. 23 dirigidos verdes a las 02:49:33
+(37,45 s); rojo causal del ID legacy y dos rojos de diccionario/cuarto botón
+descartado antes del arreglo. Aceptación de transporte simulada, sin modelo ni
+Meta reales; los informes de otra versión no se comparan. El caso crítico del
+banco real todavía no acredita el efecto final en agenda; queda pendiente medir
+antes/después con la misma versión del instrumento.
+
+Siguiente riesgo identificado por lectura, aún sin reproducción ejecutada:
+la propuesta y la huella de creación no sellan duración/precio/fianza/política.
+Un cambio de catálogo entre resumen y botón puede conservar la identidad del
+resumen y ejecutar condiciones nuevas. Preparar regresión sintética y cotejar
+los términos efectivos en la preparación compartida antes de ejecutar; no
+añadir cálculos paralelos ni dar este caso preexistente por resuelto con el
+formulario. La revisión del formulario cierra disponibilidad y profesional
+resuelto: 66 dirigidos verdes en 92,44 s; cinco fixtures heredadas pendientes
+de adaptación y revisión. No hay suite nueva del hijo ni medición real.
+
+Última suite exacta de3d6d00e22e6f089055a1370c23fe9831205c8d terminada a las
+**02:52:00.149448 +02:00**, exit 1: **2401 passed, 1 skipped, 1 failed**, sin
+xfail. El único fallo exige incluir notice_deliveries en docs/ARQUITECTURA.md
+(test_mapa_del_codigo_no_miente.py:125). Coordinación verificó resultado/log;
+no se pidió revisión formal ni se declara verde. Se corrige el mapa en esta
+rama hija, sin tocar el SHA congelado ni repetir la suite completa. Los verdes
+dirigidos del hijo no son una suite completa. Corrección documental validada:
+5 tests del mapa verdes (3,03 s), log externo mapa-notice-deliveries-verde.log.
+Suite anterior: 2235d25, fin
 13-sep **02:15:01 Europe/Madrid**, exit 1:
 **2347 passed, 1 skipped, 1 xfailed y 2 fallos de cancelación**. Coordinación
 verificó el resultado a las 02:16 en
