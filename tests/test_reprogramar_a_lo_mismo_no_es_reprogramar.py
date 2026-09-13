@@ -104,3 +104,37 @@ def test_cambiar_solo_el_servicio_no_lo_frena_este_control(api_module, cita):  #
         servicio="Otro servicio distinto", telefono="600999777"))
 
     assert "YA es de ese dia" not in str(resultado.get("error") or ""), resultado
+
+
+# ─── Revisión de Astra (13-sep-2026): el pack y las mayúsculas ───────────
+
+@pytest.mark.parametrize("pedido,esperado", [
+    ("PACK MECHAS LARGO", "Pack Mechas largo"),   # el guardado, en mayusculas
+    ("Pack Mechas  Largo", "Pack Mechas largo"),  # espacios y mayusculas
+    ("mechas largo", "Pack Mechas largo"),        # el nombre publico, sin "Pack"
+    ("Mechas corto", "Mechas corto"),             # otro servicio de verdad
+])
+def test_el_mismo_servicio_con_pack_o_mayusculas_no_es_otro(api_module, pedido, esperado):  # noqa: F811
+    from backend import booking
+
+    assert booking._service_for_existing_booking({"servicio": "Pack Mechas largo"}, pedido) == esperado
+
+
+def test_reprogramar_a_lo_mismo_con_el_pack_en_mayusculas(api_module, cita):  # noqa: F811
+    """El caso de la revisión: cita de un pack, mismo día y hora, servicio en mayúsculas."""
+    from backend import booking, voice
+
+    fila, _ = _cita_guardada(cita["booking_code"])
+    booking._update_booking_record(fila["id"], servicio="Pack Consulta largo")
+    antes, eventos_antes = _cita_guardada(cita["booking_code"])
+
+    resultado = asyncio.run(voice._voice_reschedule_booking(
+        "demo", cita["booking_code"], antes["booking_date"], antes["booking_time"],
+        servicio="PACK CONSULTA LARGO", telefono="600999777"))
+
+    assert resultado.get("ok") is False, (
+        "reprogramada al mismo sitio por escribir el pack en mayusculas: %r" % resultado)
+    assert "YA es de ese dia" in str(resultado.get("error") or "")
+    despues, eventos_despues = _cita_guardada(cita["booking_code"])
+    assert despues["servicio"] == "Pack Consulta largo"
+    assert eventos_despues == eventos_antes, "se ha auditado un cambio que no existe"

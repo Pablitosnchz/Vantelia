@@ -2901,7 +2901,16 @@ def _service_for_existing_booking(booking_row: sqlite3.Row, servicio: str = "") 
     original = booking_row["servicio"] or ""
     pedido = textnorm._sanitize_text(servicio or "")
     publico = textnorm.nombre_de_servicio_publico(original)
-    if not pedido or textnorm._strip_accents(pedido.lower()) == textnorm._strip_accents(publico.lower()):
+
+    def _plano(texto: str) -> str:
+        return " ".join(textnorm._strip_accents(str(texto or "").lower()).split())
+
+    # Es el MISMO servicio si coincide con el nombre guardado o con el publico (sin
+    # "Pack"), sin mirar mayusculas, tildes ni espacios. Revision de Astra, 13-sep-2026:
+    # "PACK MECHAS LARGO" frente a "Pack Mechas largo" devolvia el texto pedido, y
+    # reprogramar a la misma fecha y hora contaba como cambio de servicio, asi que el
+    # control de "asi no cambia nada" de la voz y del agente se saltaba.
+    if not pedido or _plano(pedido) in (_plano(original), _plano(publico)):
         return original
     return pedido  # Cambiar explícitamente a otro servicio sigue siendo posible.
 
