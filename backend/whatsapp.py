@@ -2232,6 +2232,19 @@ async def _wa_ofrecer_huecos_hablando(
     enviado = await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=cuerpo,
     )
+    # Lo que acaba de recibir la clienta es parte del estado de la conversación.
+    # Sin guardarlo, después de una alternativa aceptada el siguiente turno volvía
+    # al modelo sin saber qué huecos se habían ofrecido; podía pedir la hora otra
+    # vez o incluso inventar una. Se persiste DESPUÉS de enviar: el historial y el
+    # estado nunca anuncian opciones que Meta no llegó a entregar.
+    if enviado:
+        from backend import reserva
+
+        estado = reserva.cargar(cliente_id, to_number)
+        if estado.intencion == "reservar" and not estado.hecho:
+            estado.huecos = list(libres)
+            estado.fecha_de_los_huecos = fecha_iso
+            reserva.guardar(cliente_id, to_number, estado)
     if enviado and request is not None:
         _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
                       respuesta=cuerpo, intent="huecos_tras_propuesta")
@@ -2492,7 +2505,11 @@ async def _wa_contestar_propuesta(*, cliente_id: str, phone_number_id: str, from
         if not conocido:
             texto += " ¿Me dices tu nombre y %s? 😊" % (
                 "tus dos apellidos" if clients.exige_dos_apellidos(cliente_id) else "apellidos")
-        flow.flow = "agente"
+        # Con el hueco ya validado no queda una decisión para el modelo: o pide
+        # el nombre o monta el resumen. Reutilizar `booking_name` impide que un
+        # turno libre vuelva a negociar una cita que ya está suficientemente
+        # definida; ese paso aplica también la política de apellidos.
+        flow.flow = "booking_name" if not conocido else "booking_confirm"
         flow.servicio = estado.servicio_exacto
         flow.fecha = estado.fecha
         flow.hora = estado.hora
