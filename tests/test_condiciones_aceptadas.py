@@ -279,3 +279,69 @@ def test_aceptar_minutos_despues_conserva_oferta_sin_cambio(condiciones, monkeyp
     f["confirmar"](iid)
     assert f["botones"][-1]["buttons"][0][0] == iid
     assert len(f["citas"]()) == len(f["proveedores"]) == len(f["checkouts"]) == 1
+
+
+def test_checkout_reintenta_con_la_misma_clave_si_stripe_respondio_y_fallo_el_guardado(condiciones, monkeypatch):
+    """Una caída local tras Stripe no puede abrir una segunda sesión de cobro."""
+    from backend import booking, db, stripe_gateway
+    f = condiciones
+    attempts = []
+    sessions = {}
+
+    def stripe_create(**kwargs):
+        key = kwargs["idempotency_key"]
+        attempts.append(key)
+        if key not in sessions:
+            sessions[key] = SimpleNamespace(
+                id="cs_" + str(len(sessions) + 1),
+                url="https://stripe.test.invalid/" + str(len(sessions) + 1),
+            )
+        return sessions[key]
+
+    original_persist = booking._persist_booking_payment_checkout
+    writes = {"count": 0}
+
+    def interrupted_persist(*args, **kwargs):
+        writes["count"] += 1
+        if writes["count"] == 1:
+            raise OSError("caída local después de la respuesta de Stripe")
+        return original_persist(*args, **kwargs)
+
+    monkeypatch.setattr(stripe_gateway.stripe.checkout.Session, "create", stripe_create)
+    monkeypatch.setattr(booking, "_persist_booking_payment_checkout", interrupted_persist)
+    f["confirmar"]()
+    booking_row = f["citas"]()[0]
+    with db._get_db_connection() as cx:
+        pending = cx.execute(
+            "SELECT checkout_idempotency_key,checkout_url FROM booking_payments WHERE booking_id=?",
+            (booking_row["id"],),
+        ).fetchone()
+    assert pending["checkout_idempotency_key"] and not pending["checkout_url"]
+
+    monkeypatch.setattr(booking, "_persist_booking_payment_checkout", original_persist)
+    recovered = booking.create_booking_payment_checkout("demo", booking_row["id"])
+    assert recovered == "https://stripe.test.invalid/1"
+    assert len(sessions) == 1
+    assert attempts == [pending["checkout_idempotency_key"], pending["checkout_idempotency_key"]]
+    # Una vez persistido, no se vuelve a tocar Stripe.
+    assert booking.create_booking_payment_checkout("demo", booking_row["id"]) == recovered
+    assert len(attempts) == 2
+
+
+def test_checkout_antiguo_sin_clave_ni_url_queda_para_reconciliacion_manual(condiciones):
+    """El formato viejo no demuestra si Stripe llegó a crear la sesión."""
+    from backend import booking, db
+    from fastapi import HTTPException
+    f = condiciones
+    f["confirmar"]()
+    booking_row = f["citas"]()[0]
+    with db._get_db_connection() as cx:
+        cx.execute(
+            "UPDATE booking_payments SET checkout_idempotency_key='',checkout_url='' WHERE booking_id=?",
+            (booking_row["id"],),
+        )
+        cx.commit()
+    with pytest.raises(HTTPException) as error:
+        booking.create_booking_payment_checkout("demo", booking_row["id"])
+    assert error.value.status_code == 409
+    assert len(f["checkouts"]) == 1

@@ -6153,6 +6153,97 @@ def _checkout_product_data(booking: sqlite3.Row, decision: Dict[str, Any]) -> Di
     return datos
 
 
+def _checkout_matches_reserved_payment(
+    payment: sqlite3.Row, decision: Dict[str, Any], capture_method: str
+) -> bool:
+    """Una reanudación solo puede usar exactamente el cobro que ya se reservó."""
+    return (
+        payment["stripe_account_id"] == decision["stripe_account_id"]
+        and int(payment["amount_cents"] or 0) == int(decision["amount_cents"] or 0)
+        and str(payment["currency"] or "").lower() == str(decision["currency"] or "").lower()
+        and payment["capture_method"] == capture_method
+    )
+
+
+def _reserve_booking_payment_checkout(
+    cliente_id: str,
+    booking_id: str,
+    decision: Dict[str, Any],
+    capture_method: str,
+) -> sqlite3.Row:
+    """Persiste la identidad Stripe antes de salir de la BD.
+
+    Si la red corta después de que Stripe acepte la petición, una segunda llamada
+    debe llevar la misma clave y recuperar aquella sesión; nunca abre otra.
+    Una fila antigua sin clave es un resultado no demostrable y no se reintenta.
+    """
+    now = timeutils._utc_now_iso()
+    key = "booking_checkout_" + secrets.token_urlsafe(24)
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO booking_payments
+                (id, cliente_id, booking_id, stripe_account_id, checkout_idempotency_key,
+                 amount_cents, currency, status, checkout_url, capture_method, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)
+            """,
+            (
+                "pay_" + secrets.token_urlsafe(10), cliente_id, booking_id,
+                decision["stripe_account_id"], key, decision["amount_cents"],
+                decision["currency"], capture_method, now, now,
+            ),
+        )
+        payment = connection.execute(
+            "SELECT * FROM booking_payments WHERE booking_id=?", (booking_id,)
+        ).fetchone()
+        connection.commit()
+    if payment is None:  # pragma: no cover - la UNIQUE de booking_id lo impide
+        raise HTTPException(status_code=409, detail="No se pudo reservar el cobro de la cita.")
+    if payment["checkout_url"]:
+        return payment
+    if not payment["checkout_idempotency_key"]:
+        raise HTTPException(
+            status_code=409,
+            detail="El resultado de un cobro anterior no está verificado; no se repetirá automáticamente.",
+        )
+    if not _checkout_matches_reserved_payment(payment, decision, capture_method):
+        raise HTTPException(
+            status_code=409,
+            detail="Las condiciones de pago han cambiado; no se reutilizará el cobro anterior.",
+        )
+    return payment
+
+
+def _persist_booking_payment_checkout(
+    booking_id: str, idempotency_key: str, session: Any
+) -> None:
+    """Guarda solo la respuesta correspondiente a la clave reservada."""
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        updated = connection.execute(
+            """
+            UPDATE booking_payments
+            SET checkout_session_id=?, checkout_url=?, updated_at=?
+            WHERE booking_id=? AND checkout_idempotency_key=? AND status='pending'
+            """,
+            (session.id or "", session.url or "", now, booking_id, idempotency_key),
+        )
+        if updated.rowcount != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="El cobro cambió mientras se recuperaba; no se sobrescribirá.",
+            )
+        connection.execute(
+            """
+            UPDATE bookings
+            SET payment_status = CASE WHEN status = 'pending_payment' THEN 'pending' ELSE 'optional' END
+            WHERE id = ?
+            """,
+            (booking_id,),
+        )
+        connection.commit()
+
+
 def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: Optional[Request] = None) -> str:
     booking = _load_booking_or_404(booking_id)
     if booking["cliente_id"] != cliente_id:
@@ -6169,8 +6260,6 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
     decision = resolve_payment_requirement(cliente_id, service, booking)
     if not decision["payment_required"] and not decision["payment_optional"]:
         raise HTTPException(status_code=409, detail="Esta reserva no tiene un pago Stripe disponible.")
-    if existing and existing["checkout_url"]:
-        return existing["checkout_url"]
     stripe_gateway._stripe_init()
     base_url = textnorm._preferred_public_base_url(request).rstrip("/")
     success_url, cancel_url = _booking_payment_return_urls(base_url, booking["manage_token"])
@@ -6185,6 +6274,11 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
     }
     if capture_method == "manual":
         payment_intent_data["capture_method"] = "manual"
+    payment = _reserve_booking_payment_checkout(
+        cliente_id, booking_id, decision, capture_method
+    )
+    if payment["checkout_url"]:
+        return payment["checkout_url"]
     try:
         session = stripe_gateway.stripe.checkout.Session.create(
             stripe_account=decision["stripe_account_id"],
@@ -6207,40 +6301,14 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
                 "booking_id": booking_id,
             },
             payment_intent_data=payment_intent_data,
+            idempotency_key=payment["checkout_idempotency_key"],
         )
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("Stripe booking checkout fallo cliente=%s booking=%s: %s", cliente_id, booking_id, exc)
         raise HTTPException(status_code=502, detail="No se pudo crear el enlace de pago.") from exc
-    now = timeutils._utc_now_iso()
-    with db._get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO booking_payments
-                (id, cliente_id, booking_id, stripe_account_id, checkout_session_id,
-                 amount_cents, currency, status, checkout_url, capture_method, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
-            ON CONFLICT(booking_id) DO UPDATE SET
-                checkout_session_id=excluded.checkout_session_id,
-                checkout_url=excluded.checkout_url,
-                capture_method=excluded.capture_method,
-                updated_at=excluded.updated_at
-            """,
-            (
-                f"pay_{secrets.token_urlsafe(10)}", cliente_id, booking_id,
-                decision["stripe_account_id"], session.id or "",
-                decision["amount_cents"], decision["currency"], session.url or "",
-                capture_method, now, now,
-            ),
-        )
-        connection.execute(
-            """
-            UPDATE bookings
-            SET payment_status = CASE WHEN status = 'pending_payment' THEN 'pending' ELSE 'optional' END
-            WHERE id = ?
-            """,
-            (booking_id,),
-        )
-        connection.commit()
+    _persist_booking_payment_checkout(
+        booking_id, payment["checkout_idempotency_key"], session
+    )
     return session.url or ""
 
 

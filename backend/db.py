@@ -1080,6 +1080,7 @@ def _init_database() -> None:
                 booking_id TEXT NOT NULL UNIQUE,
                 stripe_account_id TEXT NOT NULL DEFAULT '',
                 checkout_session_id TEXT NOT NULL DEFAULT '',
+                checkout_idempotency_key TEXT NOT NULL DEFAULT '',
                 payment_intent_id TEXT NOT NULL DEFAULT '',
                 amount_cents INTEGER NOT NULL DEFAULT 0,
                 currency TEXT NOT NULL DEFAULT 'eur',
@@ -1101,6 +1102,10 @@ def _init_database() -> None:
         if "capture_method" not in booking_payment_columns:
             connection.execute(
                 "ALTER TABLE booking_payments ADD COLUMN capture_method TEXT NOT NULL DEFAULT 'automatic'"
+            )
+        if "checkout_idempotency_key" not in booking_payment_columns:
+            connection.execute(
+                "ALTER TABLE booking_payments ADD COLUMN checkout_idempotency_key TEXT NOT NULL DEFAULT ''"
             )
 
         # --- Vantelia 2.0 self-serve tables (Sem 1 migration) ---
