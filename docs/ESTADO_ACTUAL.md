@@ -36,6 +36,14 @@ mensajero.
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
+- **Testigo:** Claude, agente principal desde el 13-sep (decisión de Pablo). Astra sin créditos hasta el 19-sep 11:24; sus copias de trabajo no se tocan.
+- **Tarea:** cerrar el crítico `dice-que-si-y-acaba-en-cita` sobre el candidato y preparar la entrega a Alicia.
+- **Rama:** `claude/candidato` en E:/Vantelia (único árbol con credenciales para medir), HEAD `762800a`, descendiente de `astra/condiciones-confirmadas` 6c3ad4f (que contiene todas las ramas de Astra). Suite completa 2473 verdes en be6bec9; banco 42/43 en 782a53f.
+- **Decisión de Alicia confirmada (13-sep):** a quien no sabe qué alisado quiere se le ofrece la cita «Diagnóstico y presupuesto». Se declara como regla de orientación, no se deduce de su Q&A.
+- **Siguiente (Claude):** medir el crítico ≥6 tiradas con la regla en copia (en curso); arreglar la trampa de familias (una regla escrita «alisado» no casa con «Keratina premium»); suite + banco + humo; segundo negocio; cambio del portal a mitad de conversación; informe de aceptación; orden de despliegue de Pablo.
+
+Relevo anterior de Astra (histórico, sustituido por lo de arriba):
+
 - **Testigo:** Astra.
 - **Tarea:** suite exacta de formularios 2cb8a029 iniciada; en rama hija, términos efectivos aceptados y arnés que observe transporte/efectos sin anticipar autorización del producto.
 - **Rama:** astra/condiciones-confirmadas, E:/Vantelia-astra-condiciones, hija de 2cb8a029. E:/Vantelia-astra-formularios queda congelado mientras se mide; no editar ese árbol ni repetir pruebas allí.

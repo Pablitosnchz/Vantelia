@@ -335,3 +335,52 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Esta evidencia nueva sí valida etiqueta corregida; no se atribuye a la QA
   anterior ni se repite ninguna QA verde. Términos/arnés de la nueva rama siguen
   en implementación; no hay suite final consultada ni aceptación global.
+
+## 2026-09-13 09:10–11:15 +0200 - Claude toma el relevo como principal
+
+Decisión de Pablo: Astra no disponible una semana (sin créditos hasta 19-sep
+11:24). Claude continúa sobre el candidato descendiente, en E:/Vantelia (único
+árbol con credenciales para medir con modelo real). Copias de Astra intactas.
+
+- Candidato: `astra/condiciones-confirmadas` 6c3ad4f contiene todas sus ramas;
+  rama de trabajo `claude/candidato`.
+- Suite completa 6c3ad4f: 3 fallos / 2470. Arreglados en be6bec9 (servicio
+  retirado al confirmar sin nombre ni selector; doble de test desfasado con
+  `minutos=`/`terms=`). Suite completa be6bec9: **2473 passed, 1 skipped**.
+- Banco sobre be6bec9: **0/41, falso**: "no such table: conversation_states".
+  La copia de producción va una versión por detrás y los instrumentos no migran
+  (el servidor sí, en `backend/main.py`). El humo del despliegue habría caído
+  igual. 782a53f migra la copia en `evals/arnes` (compartido por banco y humo);
+  test rojo sin el arreglo. Banco sobre 782a53f: **42/43**, 0 no medidos.
+- Único rojo: `dice-que-si-y-acaba-en-cita`, fallo en los dos intentos. Leído en
+  agent_turns: pregunta seis veces keratina/ácido láctico. Causa: el atajo
+  deducido de Q&A se retiró (bien) y Alicia no tenía regla de orientación.
+- Decisión de Pablo/Alicia (confirmada): quien no sabe qué alisado quiere →
+  cita «Diagnóstico y presupuesto». Regla probada SOLO en copia.
+- Con la regla, tres capas de bucle arregladas en 762800a: oferta repetida cada
+  turno, propuesta no reconocida por `servicio_origen` acumulado, y entrada
+  "propuesta" ausente en `_COMO_PEDIRLO`. 142 dirigidos verdes.
+- Trampa detectada: regla con familia «alisado» no casa con «Keratina premium
+  largo» (familias_pedidas → keratina). `regla_de_precio_para` ya lo resuelve
+  con `_categoria_del_servicio`; `regla_de_orientacion_para` no. Siguiente.
+- En curso: 6 tiradas del crítico con regla en copia sobre 762800a, separando
+  primer intento / reintento / fallo. Sin despliegue ni cambios en producción.
+
+## 2026-09-13 11:07–11:45 +0200 - el crítico sigue 0/6: causa localizada
+
+- 6 tiradas sobre 762800a con la regla en copia: **0/6**, las 12 conversaciones
+  fallan. Leídas en agent_turns: la oferta ya no se repite, pero el modelo nunca
+  llama a `responder_propuesta`; solo `buscar_servicio` con falta=técnica.
+- Descartado con lectura y datos: estado viejo en el canal (se recarga tras el
+  agente), claves distintas (ambos usan teléfono/whatsapp), revalidación que no
+  conozca orientación (la conoce), excepción tragada (no hay freno `revento`).
+- Sonda turno a turno sin filtrar avisos (probe2): la propuesta es None en todos
+  los turnos. En el turno 4 la rama SÍ entra y consulta la regla con
+  "no lo tengo claro el 2026-09-15 a las 15": falta «alisado». El primer mensaje
+  lo atendió el flujo de WhatsApp, no el agente, y `servicio_texto` empieza en el
+  segundo; la `descripcion` del modelo sí lo lleva.
+- 0442452: la regla de orientación casa también por categoría (trampa de
+  familias), igual que la de precio. 25 verdes, dos rojos sin el arreglo.
+- Arreglo en curso (sin commit): `agent._texto_de_la_duda` junta la descripción
+  que buscó el modelo con lo acumulado. 116 dirigidos verdes; sonda con el arreglo
+  y test rojo sin él pendientes.
