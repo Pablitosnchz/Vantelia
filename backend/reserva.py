@@ -449,12 +449,27 @@ def _hora_coloquial(texto: str, huecos: List[str]) -> str:
     """
     import re
 
+    from backend import textnorm
+
     if not huecos:
         return ""
-    plano = str(texto or "").lower()
+    plano = textnorm._strip_accents(str(texto or "").lower())
     de_tarde = any(p in plano for p in ("tarde", "noche", "pm"))
     candidatas = []
-    for cruda in re.findall(r"\b(\d{1,2})(?:[:.](\d{2}))?\b", plano):
+    # El numero del DIA no es una hora. Revision independiente del 13-sep-2026:
+    # "el jueves 18 a las 11" con huecos a las 11:00 y a las 18:00 daba las 18:00,
+    # y aceptada la cita de diagnostico se le guardaba a una hora que no habia dicho.
+    # Si dice "a las N" / "sobre las N" / "a la 1", solo cuenta ese numero; si no,
+    # antes de buscar se quita lo que es un dia ("el 15", "jueves 18", "15/09").
+    crudas = re.findall(r"\blas?\s+(\d{1,2})(?:[:.](\d{2}))?\b", plano)
+    if not crudas:
+        sin_dias = re.sub(r"\b\d{4}-\d{1,2}-\d{1,2}\b", " ", plano)
+        sin_dias = re.sub(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", " ", sin_dias)
+        sin_dias = re.sub(r"\b(?:el|dia|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+\d{1,2}\b",
+                          " ", sin_dias)
+        sin_dias = re.sub(r"\b\d{1,2}\s+de\s+[a-z]+", " ", sin_dias)
+        crudas = re.findall(r"\b(\d{1,2})(?:[:.](\d{2}))?\b", sin_dias)
+    for cruda in crudas:
         hora, minutos = int(cruda[0]), int(cruda[1] or 0)
         if hora > 23 or minutos > 59:
             continue
@@ -514,6 +529,7 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
         estado.duracion = 0
         estado.hora = ""
         estado.hora_del_codigo = False
+        estado.hora_sin_hueco = ""
         estado.huecos = []
         estado.candidatos_pendientes = 0
         estado.ultimo_falta = ""
@@ -964,6 +980,15 @@ PIDE_MOVER = ("cambiar", "mover", "reprogramar", "aplazar", "otro dia", "otra ho
               "mas tarde", "mas temprano", "adelantar", "retrasar", "pasar la cita")
 
 
+# Formas de pedir que se la quiten que no llevan "cancel" ni "anul". Solo autorizan
+# a cancelar (freno `cancelar_sin_pedirlo`); no cambian la intencion que se deduce.
+# Revision independiente del 13-sep-2026: "no puedo venir, quitamela" se bloqueaba.
+_TAMBIEN_ES_ANULAR = ("no puedo venir", "no podre venir", "no voy a poder venir",
+                      "no voy a ir", "quitamela", "quitala", "quita la cita", "quitar mi cita",
+                      "borramela", "borrala", "borra la cita", "borrar mi cita",
+                      "eliminamela", "eliminala", "elimina la cita", "eliminar mi cita")
+
+
 def pide_anular(dicho: str) -> bool:
     """Ha pedido anular la cita, aunque en la misma frase pida otra cosa.
 
@@ -974,7 +999,7 @@ def pide_anular(dicho: str) -> bool:
     from backend import catalog_pick
 
     plano = catalog_pick._norm(dicho or "")
-    return any(pista in plano for pista in PIDE_ANULAR)
+    return any(pista in plano for pista in PIDE_ANULAR + _TAMBIEN_ES_ANULAR)
 
 
 def pide_anular_y_solo_eso(dicho: str) -> bool:
@@ -1046,6 +1071,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.fecha_de_los_huecos = ""
     estado.dia_le_da_igual = False
     estado.hora_del_codigo = False
+    estado.hora_sin_hueco = ""
     estado.fecha_de_ella = False
     estado.hecho = False
     estado.cancelada = False

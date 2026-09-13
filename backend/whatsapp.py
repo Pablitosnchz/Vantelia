@@ -2569,6 +2569,51 @@ def _wa_lo_ultimo_fue_la_oferta(cliente_id: str, session_id: str) -> bool:
     return bool(fila) and str(fila["intent"] or "") == "oferta_propuesta"
 
 
+def _wa_trae_dia_u_hora(texto: str) -> bool:
+    """¿Ademas de lo que conteste, dice un dia o una hora?
+
+    Revision independiente del 13-sep-2026: "si, el jueves a las 17" contaba como un
+    si a secas; se aceptaba la oferta sin pasar por el agente y el dia y la hora
+    nuevos se perdian.
+    """
+    from backend import reserva
+
+    crudo = str(texto or "")
+    if textnorm._extract_time_from_text(crudo) or reserva._menciona_una_hora(crudo):
+        return True
+    try:
+        if textnorm._extract_date_from_text(crudo, "Europe/Madrid"):
+            return True
+    except Exception:  # noqa: BLE001 - ante la duda, se mira a mano
+        pass
+    plano = textnorm._strip_accents(crudo.lower())
+    return any(p in plano for p in ("lunes", "martes", "miercoles", "jueves", "viernes",
+                                    "sabado", "domingo", "manana", "pasado"))
+
+
+def _wa_no_parece_un_nombre(texto: str) -> bool:
+    """¿Esto es una conversacion y no un nombre?
+
+    Desde 8ca6088 al paso `booking_name` llega tambien la conversacion hablada. A
+    "¿me dices tu nombre y apellidos?" se puede contestar "perdona, mejor a las 16",
+    y eso se guardaba como su nombre (revision independiente del 13-sep-2026).
+    """
+    from backend import agent
+
+    crudo = " ".join(str(texto or "").split())
+    if not crudo:
+        return True
+    if any(c.isdigit() for c in crudo) or "?" in crudo or "¿" in crudo:
+        return True
+    if _wa_trae_dia_u_hora(crudo):
+        return True
+    primera = textnorm._strip_accents(crudo.lower()).split()[0].strip(",.!;:")
+    if primera in {"perdona", "perdon", "mejor", "no", "si", "vale", "espera", "oye",
+                   "pero", "cambia", "cambiame", "quiero", "puedo", "prefiero", "ok"}:
+        return True
+    return not agent._nombre_de_verdad(crudo)
+
+
 def _wa_vuelve_a_ofrecer(estado: Any, texto: str) -> bool:
     """¿El agente acaba de REPETIR, con sus palabras, la oferta que sigue pendiente?
 
@@ -2637,6 +2682,8 @@ async def _wa_turno_del_agente(
             # Normalizado como en el resumen: «Sí» con tilde (lo pone el teclado del
             # movil) no casaba con `_ASIENTE`, que va sin tildes.
             and _wa_dice_que_si(textnorm._strip_accents((incoming_text or "").lower().strip()))
+            # "si, el jueves a las 17" trae datos nuevos: lo lleva el agente, que los anota.
+            and not _wa_trae_dia_u_hora(incoming_text)
             and _wa_lo_ultimo_fue_la_oferta(cliente_id, session_id)):
         await _wa_contestar_propuesta(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
@@ -3980,6 +4027,18 @@ async def _handle_whatsapp_message(
         # de dos apellidos por tener cuatro palabras). Desde 8ca6088 aqui llega
         # tambien la conversacion hablada tras aceptar la valoracion, no solo quien
         # contesta a la lista con su nombre a secas.
+        # Lo que no es un nombre ("perdona, mejor a las 16") vuelve al agente en vez de
+        # guardarse como tal. Solo en conversacional: el flujo de listas no cambia.
+        if (_wa_modo_conversacional(config)
+                and not _reserva_nombre.nombre_que_dice(incoming_text or "")
+                and _wa_no_parece_un_nombre(incoming_text or "")):
+            flow.flow = "agente"
+            if await _wa_turno_del_agente(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    from_number=from_number, incoming_text=incoming_text, flow=flow,
+                    config=config, request=request):
+                return
+            flow.flow = "booking_name"
         nombre = (_reserva_nombre.nombre_que_dice(incoming_text or "")
                   or (incoming_text or "").strip())
         if len(nombre) < 2:

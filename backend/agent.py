@@ -293,6 +293,23 @@ _NOMBRES_QUE_NO_LO_SON = {
 }
 
 
+def _le_pregunto_si_la_cancela(historial: List[Dict[str, str]], mensaje: str) -> bool:
+    """Ella dice que si a la pregunta del asistente de si le anula la cita.
+
+    El freno `cancelar_sin_pedirlo` mira lo que ESCRIBIO ella, y un "si" no lleva
+    "cancelar": a "¿quieres que la cancele?" -"si" la cita no se cancelaba nunca
+    (revision independiente del 13-sep-2026). Cuenta solo si lo ULTIMO que le dijo
+    el asistente fue esa pregunta.
+    """
+    from backend import reserva   # tardio: agent y reserva se importan en cadena
+
+    ultimo = next((str(m.get("content") or "") for m in reversed(historial or [])
+                   if m.get("role") == "assistant"), "")
+    plano = textnorm._strip_accents(ultimo.lower())
+    return ("?" in plano and any(p in plano for p in ("cancel", "anul"))
+            and reserva._dice_que_si(mensaje or ""))
+
+
 def _lo_dijo_como_su_nombre(dicho: str, valor: str) -> bool:
     """Ella acaba de decir que se llama asi, aunque coincida con una peluquera.
 
@@ -4089,7 +4106,8 @@ async def responder(
                 if (llamada.function.name == "cancelar_cita"
                         and estado.intencion != "cancelar"
                         and intencion != "cancelar"
-                        and not reserva.pide_anular(dicho_de_ella)):
+                        and not reserva.pide_anular(dicho_de_ella)
+                        and not _le_pregunto_si_la_cancela(historial, mensaje)):
                     mensajes.append({
                         "role": "tool", "tool_call_id": llamada.id,
                         "content": json.dumps({
