@@ -115,7 +115,17 @@ def accionar(nombre: str, cliente_id: str, contexto: Dict[str, Any]) -> str:
         from api_models import PortalAgendaBlockPayload
         from backend import agenda
 
-        inicio, fin = ("00:00", "23:59") if nombre == "bloquear_dia" else ("17:00", "18:00")
+        if nombre == "bloquear_dia":
+            inicio, fin = "00:00", "23:59"
+        else:
+            # La hora que tiene DELANTE en el resumen, no una fija: el 13-sep-2026 el
+            # guion pedia las 17:00, el resumen salio a las 18:00 y el bloqueo de
+            # 17:00-18:00 no toco la hora que se iba a confirmar (falso aprobado).
+            inicio = contexto.get("hora") or ""
+            if not inicio:
+                raise RuntimeError("no se ve la hora del resumen: no se mide")
+            horas, minutos = (int(p) for p in inicio.split(":"))
+            fin = "23:59" if horas >= 23 else "%02d:%02d" % (horas + 1, minutos)
         filas, _saltadas, _desde, _hasta = agenda._create_agenda_blocks(cliente_id, PortalAgendaBlockPayload(
             fecha=contexto["dia"], hora_inicio=inicio, hora_fin=fin, motivo="medicion"))
         return "bloqueo %s %s-%s (%d filas)" % (contexto["dia"], inicio, fin, len(filas))
@@ -165,6 +175,19 @@ def accionar(nombre: str, cliente_id: str, contexto: Dict[str, Any]) -> str:
     raise ValueError("accion desconocida: %s" % nombre)
 
 
+def hora_del_resumen(respuestas: List[str]) -> str:
+    """La hora del ULTIMO resumen de cita que se le ha ensenado ("🕐 18:00")."""
+    import re
+
+    hora = ""
+    for texto in respuestas:
+        if "resumen de tu cita" in _norm(texto):
+            encontrada = re.search(r"🕐\s*(\d{1,2}:\d{2})", texto)
+            if encontrada:
+                hora = encontrada.group(1).zfill(5)
+    return hora
+
+
 # ─── El juicio: la agenda de la copia ────────────────────────────────────
 
 def juzgar(escenario: Dict[str, Any], citas_vivas: List[Dict[str, Any]], contexto: Dict[str, Any],
@@ -176,7 +199,10 @@ def juzgar(escenario: Dict[str, Any], citas_vivas: List[Dict[str, Any]], context
         malas = [c for c in citas_vivas if c["booking_date"] == dia]
         return "cita en un dia bloqueado: %s" % malas if malas else ""
     if espera == "sin_cita_a_esa_hora":
-        malas = [c for c in citas_vivas if c["booking_date"] == dia and c["booking_time"] == "17:00"]
+        if not contexto.get("hora"):
+            return "no se ve la hora del resumen: no se mide"
+        malas = [c for c in citas_vivas
+                 if c["booking_date"] == dia and c["booking_time"] == contexto["hora"]]
         return "cita en una hora bloqueada: %s" % malas if malas else ""
     if espera == "sin_cita_del_servicio_retirado":
         retirados = contexto.get("retirados") or []
@@ -225,6 +251,7 @@ def _un_intento(args, escenario, mensajes_antes, mensajes_despues, fechas, telef
     whatsapp._wa_clear_flow(args.cliente, telefono)
     contexto = {"dia": fechas.get("dia_abierto", "")}
     antes = _hablar(args.cliente, telefono, mensajes_antes, dichos)
+    contexto["hora"] = hora_del_resumen(antes)
     hecho = accionar(escenario["accion"], args.cliente, contexto)
     despues = _hablar(args.cliente, telefono, mensajes_despues, dichos)
     vivas = arnes.citas_vivas(args.cliente, telefono)

@@ -29,8 +29,10 @@ CITA_OTRO_DIA = dict(CITA_17, booking_date="2030-01-09")
 @pytest.mark.parametrize("espera,vivas,contexto,roto", [
     ("sin_cita_ese_dia", [CITA_17], {"dia": "2030-01-08"}, True),
     ("sin_cita_ese_dia", [CITA_OTRO_DIA], {"dia": "2030-01-08"}, False),
-    ("sin_cita_a_esa_hora", [CITA_17], {"dia": "2030-01-08"}, True),
-    ("sin_cita_a_esa_hora", [dict(CITA_17, booking_time="10:00")], {"dia": "2030-01-08"}, False),
+    ("sin_cita_a_esa_hora", [CITA_17], {"dia": "2030-01-08", "hora": "17:00"}, True),
+    ("sin_cita_a_esa_hora", [dict(CITA_17, booking_time="10:00")], {"dia": "2030-01-08", "hora": "17:00"}, False),
+    # El falso aprobado del 13-sep: se bloqueaba 17:00 y el resumen estaba en las 18:00.
+    ("sin_cita_a_esa_hora", [dict(CITA_17, booking_time="18:00")], {"dia": "2030-01-08", "hora": "18:00"}, True),
     ("sin_cita_del_servicio_retirado", [CITA_17], {"retirados": ["corte senora"]}, True),
     ("sin_cita_del_servicio_retirado", [dict(CITA_17, servicio="Mechas corto")],
      {"retirados": ["corte senora"]}, False),
