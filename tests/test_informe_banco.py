@@ -64,7 +64,7 @@ def test_incompatibilidad_del_consumidor_es_no_medida_con_actividad(
 
 @pytest.fixture
 def runner(monkeypatch):
-    for nombre in ("_preparar_copia", "_comprobar_aislamiento"):
+    for nombre in ("_preparar_copia", "_comprobar_aislamiento", "_motivo_para_no_medir"):
         monkeypatch.setattr(banco, nombre, lambda *a: None)
     monkeypatch.setattr(banco, "_quien_contesta", lambda *a: "agente simulado")
     monkeypatch.setattr(banco, "_ficha_del_negocio", lambda *a: "estilo=conversacional")

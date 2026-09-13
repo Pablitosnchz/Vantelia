@@ -79,7 +79,7 @@ def test_runner_congela_fecha_y_no_mide_sin_calendario(monkeypatch, capsys, disp
 
     caso = {"id": "prueba", "gravedad": "critico", "mensajes": ["{dia_abierto}", "{codigo}"]}
     monkeypatch.setattr(sys, "argv", ["banco", "--db-copia", "copia-simulada"])
-    for nombre in ("_preparar_copia", "_comprobar_aislamiento"):
+    for nombre in ("_preparar_copia", "_comprobar_aislamiento", "_motivo_para_no_medir"):
         monkeypatch.setattr(banco, nombre, lambda *a: None)
     for nombre in ("_quien_contesta", "_ficha_del_negocio"):
         monkeypatch.setattr(banco, nombre, lambda *a: "simulado")

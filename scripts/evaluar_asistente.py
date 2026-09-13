@@ -466,6 +466,22 @@ def _arbol_sucio_del_banco():
         return None
 
 
+def _motivo_para_no_medir(cliente_id: str) -> str:
+    """Por que esta maquina NO puede medir a ese negocio. Vacio si puede.
+
+    Sin los datos RAG del negocio en esta maquina, cada mensaje revienta con "No hay
+    datos configurados" y el banco lo contaba como FALLO del asistente. Paso el
+    13-sep-2026 midiendo metareview (sus datos solo estan en el servidor): 12 fallos
+    que no existian. Eso no es una medicion del asistente: no se mide.
+    """
+    from backend import settings
+
+    datos = settings.DATA_DIR / cliente_id
+    if not datos.exists():
+        return "NO MEDIBLE: no hay datos RAG locales de %s en %s" % (cliente_id, datos)
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cliente", default="alicia_rincon_estilistas")
@@ -507,6 +523,16 @@ def main() -> int:
     casos = [c for c in _cargar_casos() if not args.caso or c["id"] == args.caso]
     if not casos:
         print("no hay ningun caso con ese id")
+        return 2
+
+    # Sin los datos del negocio en esta maquina no se conversa (ver la funcion).
+    motivo = _motivo_para_no_medir(args.cliente)
+    if motivo:
+        print(motivo)
+        informe.update(estado="no_medible", motivo=motivo,
+                       fin_utc=datetime.now(timezone.utc).isoformat())
+        if args.guardar:
+            _guardar_informe(args.guardar, informe)
         return 2
 
     # Quien va a contestar, dicho en voz alta antes de empezar: una tirada

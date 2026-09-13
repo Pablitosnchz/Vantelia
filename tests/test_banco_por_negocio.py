@@ -154,3 +154,34 @@ def test_en_un_negocio_de_sesiones_quedan_los_genericos(monkeypatch):
     for del_salon in ("frase-partida", "no-negar-servicio-que-existe", "presupuesto-alisado-pide-foto",
                       "telefono-si-no-encaja-nada", "dice-que-si-y-acaba-en-cita", "que-servicios-hay"):
         assert del_salon not in aplican, del_salon
+
+
+# ─── Sin los datos del negocio en esta máquina no se mide ────────────────
+
+def test_sin_datos_rag_locales_no_se_mide(monkeypatch, tmp_path, capsys):
+    """13-sep-2026: metareview solo tiene sus datos en el servidor. Cada mensaje
+    reventaba con «No hay datos configurados» y el banco apuntó 12 FALLOS del
+    asistente que no existían. Eso no es medir: se para antes de conversar."""
+    import json
+    import sys
+
+    from backend import settings
+    from scripts import evaluar_asistente as banco
+
+    informe = tmp_path / "informe.json"
+    monkeypatch.setattr(sys, "argv", ["banco", "--cliente", "sin-datos", "--db-copia",
+                                      str(tmp_path / "copia.db"), "--guardar", str(informe)])
+    monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "data")
+    for nombre in ("_preparar_copia", "_comprobar_aislamiento"):
+        monkeypatch.setattr(banco, nombre, lambda *a: None)
+    monkeypatch.setattr(banco, "_cargar_casos", lambda: [{"id": "x", "gravedad": "critico",
+                                                         "mensajes": ["hola"]}])
+    ejecutados = []
+    monkeypatch.setattr(banco, "_ejecutar_caso", lambda *a, **k: ejecutados.append(a) or (False, [], ""))
+
+    assert banco.main() == 2
+    assert ejecutados == [], "se ha conversado sin los datos del negocio"
+    assert "NO MEDIBLE" in capsys.readouterr().out
+    datos = json.loads(informe.read_text(encoding="utf-8"))
+    assert datos["estado"] == "no_medible"
+    assert datos["contadores"]["fallos"] == {"critico": 0, "importante": 0, "deseable": 0}
