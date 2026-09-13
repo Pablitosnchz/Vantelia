@@ -147,3 +147,55 @@ def test_un_fallo_de_meta_no_borra_el_motivo_del_rechazo(api_module, monkeypatch
     assert guardado["motivo_rechazo"] == "INVALID_FORMAT"
     assert guardado["meta_id"] == "123"
     assert "Meta no contesta" in guardado["last_error"]
+
+
+def test_el_negocio_ve_si_puede_avisar_por_whatsapp(api_module, monkeypatch):  # noqa: F811
+    """Sin plantilla aprobada, por WhatsApp no sale nada y nadie se entera.
+
+    El aviso se va por el siguiente canal en silencio: el negocio cree que avisa
+    por WhatsApp y sus clientas no reciben nada por ahi. Por eso el portal lo
+    ensena donde decide sus avisos, y con el MOTIVO cuando Meta la rechaza, que
+    es el unico dato con el que se puede arreglar.
+    """
+    from backend import wa_onboarding, wa_plantillas
+
+    sin_conectar = wa_plantillas.resumen_para_el_negocio("demo")
+    assert sin_conectar["conectado"] is False
+    assert sin_conectar["puede_enviar"] is False
+    assert "Conecta tu WhatsApp" in sin_conectar["etiqueta"]
+
+    monkeypatch.setattr(wa_onboarding, "get_account",
+                        lambda cliente_id: {"waba_id": "waba_x", "phone_number_id": "pn_x"})
+
+    wa_plantillas.guardar_estado("demo", status="PENDING")
+    en_revision = wa_plantillas.resumen_para_el_negocio("demo")
+    assert en_revision["conectado"] is True
+    assert en_revision["puede_enviar"] is False, "en revision NO se puede enviar"
+
+    wa_plantillas.guardar_estado("demo", status="REJECTED", motivo_rechazo="INVALID_FORMAT")
+    rechazada = wa_plantillas.resumen_para_el_negocio("demo")
+    assert rechazada["puede_enviar"] is False
+    assert rechazada["motivo"] == "INVALID_FORMAT", "sin el motivo no puede arreglarla"
+
+    wa_plantillas.guardar_estado("demo", status="APPROVED")
+    lista = wa_plantillas.resumen_para_el_negocio("demo")
+    assert lista["puede_enviar"] is True
+    assert lista["aviso_coste"], "hay que decirle que esos mensajes los paga el"
+
+
+def test_el_estado_de_la_plantilla_llega_al_portal(api_module):  # noqa: F811
+    """De nada sirve saberlo en el backend si el negocio no lo ve."""
+    import pathlib
+
+    from backend import booking
+
+    datos = booking._follow_up_overview_dict("demo")
+    assert "plantilla_whatsapp" in datos, "el portal no recibe el estado"
+    assert set(datos["plantilla_whatsapp"]) >= {
+        "estado", "etiqueta", "motivo", "puede_enviar", "aviso_coste",
+    }
+
+    html = (pathlib.Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(
+        encoding="utf-8")
+    assert "fuPlantillaWa" in html, "no hay donde pintarlo"
+    assert "fuRenderPlantillaWa(data.plantilla_whatsapp)" in html, "no se pinta al cargar"
