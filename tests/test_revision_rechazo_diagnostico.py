@@ -37,9 +37,12 @@ def test_boton_no_no_reabre_diagnostico_al_llegar_al_resumen(agenda_salon, polit
     resumenes = []
     async def botones(**kw): resumenes.append(kw); return True
     monkeypatch.setattr(messaging, "_send_whatsapp_buttons", botones)
-    monkeypatch.setattr(whatsapp, "_wa_duracion_del_servicio", lambda *a: "")
-    monkeypatch.setattr(whatsapp, "_wa_linea_de_recargo", lambda *a: "")
-    monkeypatch.setattr(booking, "aviso_de_fianza", lambda *a: "")
+    # Los dobles aceptan argumentos con nombre: el resumen les pasa los terminos
+    # sellados (`minutos=`, `terms=`) y un `lambda *a` los rechazaba con TypeError,
+    # que es un fallo del DOBLE, no del producto.
+    monkeypatch.setattr(whatsapp, "_wa_duracion_del_servicio", lambda *a, **k: "")
+    monkeypatch.setattr(whatsapp, "_wa_linea_de_recargo", lambda *a, **k: "")
+    monkeypatch.setattr(booking, "aviso_de_fianza", lambda *a, **k: "")
     asyncio.run(whatsapp._handle_whatsapp_message(cliente_id="salon", phone_number_id="canal",
         from_number="persona", incoming_text="No, gracias", interactive_id="prop_rechaza_"+propuesta.id, request=None))
     assert estado.propuesta_servicio.estado == "rechazada", estado.propuesta_servicio

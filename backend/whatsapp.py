@@ -1521,6 +1521,17 @@ async def _wa_send_booking_summary(
         flow.employee_name = str(empleado["name"])
         flow.location_id = preparada["terms"]["location_id"]
     except HTTPException as exc:
+        # El servicio retirado tiene su propio camino: nombrarlo y dejar elegir
+        # otro. Aqui se contaba con el texto pelado del nucleo ("Ese servicio ya no
+        # esta disponible"), sin decir CUAL ni ofrecer la lista, asi que la clienta
+        # se quedaba mirando un aviso generico despues de pulsar Confirmar. Los
+        # otros dos sitios que traducen este mismo 409 ya llamaban al manejador.
+        if booking.es_servicio_retirado(exc.detail):
+            await _wa_servicio_retirado(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=to_number, flow=flow,
+                config=clients._get_client_config(cliente_id), request=request)
+            return False
         texto = "⚠️ %s" % exc.detail
         enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
             to_number=to_number, text=texto)
