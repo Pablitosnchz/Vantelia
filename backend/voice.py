@@ -2995,9 +2995,17 @@ async def _voice_reschedule_booking(
     limpia_fecha = textnorm._sanitize_text(fecha) or (row["booking_date"] or "")
     limpia_hora = textnorm._sanitize_text(hora) or (row["booking_time"] or "")
     fecha, hora = limpia_fecha, limpia_hora
+    # Pasar el MISMO servicio no es cambiarlo. Bastaba con que la llamada trajera
+    # `servicio` para saltarse este control: 13-sep-2026, banco sobre 6bed2f1,
+    # `cambiar-la-hora-de-verdad`, el modelo "reprogramo" al mismo 15-sep 17:45 con
+    # "Acido lactico bio premium-corto medio" (sin tildes), la tool dijo ok y ella leyo
+    # "he reprogramado tu cita" sin que nada cambiara. Se decide con el mismo resolver
+    # que guarda el servicio (`booking._service_for_existing_booking`).
+    cambia_servicio = bool(nuevo_servicio) and (
+        booking._service_for_existing_booking(row, nuevo_servicio) != (row["servicio"] or ""))
     if (limpia_fecha == (row["booking_date"] or "")
             and limpia_hora == (row["booking_time"] or "")
-            and not nuevo_servicio):
+            and not cambia_servicio):
         return {
             "ok": False,
             "error": ("Esa cita YA es de ese dia y esa hora: asi no cambia nada. Si "
