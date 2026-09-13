@@ -384,3 +384,31 @@ Decisión de Pablo: Astra no disponible una semana (sin créditos hasta 19-sep
 - Arreglo en curso (sin commit): `agent._texto_de_la_duda` junta la descripción
   que buscó el modelo con lo acumulado. 116 dirigidos verdes; sonda con el arreglo
   y test rojo sin él pendientes.
+
+## 2026-09-13 11:45–11:59 +0200 - la oferta sale; el «sí» escrito no la aceptaba
+
+Rama `claude/candidato`. Sin despliegue ni cambios en producción.
+
+- 38f931f: `agent._texto_de_la_duda` (descripción que buscó el modelo + lo
+  acumulado). Test del recorrido con `responder` y doble de regla que solo casa
+  si el texto dice «alisado»: rojo sin el arreglo.
+- Sonda turno a turno con 38f931f sobre copia con la regla: turno 4 la regla
+  casa, propuesta `ofrecida`, botones enviados. Turno 5 la clienta ESCRIBE «si»:
+  nadie la acepta y el turno 6 vuelve a preguntar la técnica. El modelo tiene
+  `responder_propuesta` y no la usa.
+- Además: `_COMO_PEDIRLO["propuesta"]` (762800a) era código muerto; el agente
+  solo inyecta `reserva.instruccion_de_cierre`, que no tenía esa rama.
+- 3a899f8: botón y texto por un solo camino (`whatsapp._wa_contestar_propuesta`
+  sobre `booking.contestar_alternativa_de_precio`). Un sí sin pega, normalizado
+  sin tildes, se acepta por código SOLO si el último mensaje del asistente en la
+  sesión fue la oferta (`intent = oferta_propuesta`); «sí, pero…», «no» o un sí a
+  otra pregunta siguen en el agente. Rama "propuesta" enchufada en
+  `instruccion_de_cierre`. Primer intento del test cazó un fallo propio: «Sí»
+  con tilde no casaba (el resumen normaliza antes de llamar).
+- Evidencia: `tests/test_si_escrito_acepta_la_oferta.py` 8 verdes; con el
+  arreglo neutralizado, 4 rojos (los tres «sí» y la guía). 79 dirigidos verdes
+  (propuestas, alternativa de precio, servicio retirado, mismo cerebro, duda,
+  orientación por categoría). pyflakes limpio en backend.
+- En curso: 6 tiradas del crítico sobre 3a899f8 (copia snap3_conregla, config
+  viva cfg3, desde E:/Vantelia), separando primer intento / reintento / fallo y
+  leyendo conversaciones.
