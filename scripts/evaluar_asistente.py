@@ -48,6 +48,21 @@ def _cargar_casos():
     return casos_asistente.CASOS
 
 
+def _ruta_del_banco(ruta):
+    return pathlib.Path(ruta).expanduser().resolve()
+
+
+def _mismo_archivo_del_banco(primero, segundo):
+    primero, segundo = _ruta_del_banco(primero), _ruta_del_banco(segundo)
+    return (os.path.normcase(str(primero)) == os.path.normcase(str(segundo))
+            or (primero.exists() and segundo.exists() and primero.samefile(segundo)))
+
+
+def _archivos_sqlite_del_banco(ruta):
+    base = _ruta_del_banco(ruta)
+    return [pathlib.Path(str(base) + sufijo) for sufijo in ("", "-wal", "-shm")]
+
+
 def _preparar_copia(origen: str, destino: str) -> None:
     """Trabajar sobre una copia: las citas de prueba no tocan la agenda real.
 
@@ -55,26 +70,44 @@ def _preparar_copia(origen: str, destino: str) -> None:
     asi que exportar DB_PATH no aislaba nada. Costo siete citas de prueba metidas en
     la agenda de un salon real. Hay que reapuntar el modulo, y despues comprobarlo.
     """
+    from contextlib import closing
     import sqlite3
 
     from backend import settings
 
+    origen_path = _ruta_del_banco(origen)
+    destino_path = _ruta_del_banco(destino)
+    if not origen_path.is_file():
+        raise SystemExit("No existe la base de datos de origen: %s. Se aborta sin crear una copia vacía." % origen_path)
+    protegidos = _archivos_sqlite_del_banco(origen_path)
+    destinos = _archivos_sqlite_del_banco(destino_path)
+    # Validar TODO antes de borrar: Windows puede representar el mismo fichero
+    # con mayúsculas, rutas relativas, enlaces o nombres cortos. Sus sidecars
+    # también pertenecen al origen y nunca pueden ser el destino de la limpieza.
+    for candidato in destinos:
+        for protegido in protegidos:
+            if _mismo_archivo_del_banco(candidato, protegido):
+                raise SystemExit("La copia debe estar separada del origen y sus archivos WAL/SHM. Se aborta sin borrar nada.")
+    # mode=ro también evita crear un origen vacío si desaparece tras validarlo.
+    # Abrirlo ANTES de limpiar el destino conserva la copia previa si no se puede abrir.
+    try:
+        origen_db = sqlite3.connect(origen_path.as_uri() + "?mode=ro", uri=True)
+    except sqlite3.Error as exc:
+        raise SystemExit("No se puede abrir la base de datos de origen; se aborta sin borrar la copia: %s" % exc) from exc
     # Con `shutil.copyfile` la copia sale DESFASADA: SQLite en modo WAL guarda los
     # ultimos cambios en un fichero aparte (-wal) que no se copia, asi que la copia
     # traia citas ya borradas y el dedup las daba por vivas. `backup()` consolida.
-    for sufijo in ("", "-wal", "-shm"):
-        try:
-            os.remove(destino + sufijo)
-        except OSError:
-            pass
-    origen_db = sqlite3.connect(origen)
-    destino_db = sqlite3.connect(destino)
-    with destino_db:
-        origen_db.backup(destino_db)
-    origen_db.close()
-    destino_db.close()
-    os.environ["DB_PATH"] = destino
-    settings.DB_PATH = pathlib.Path(destino)
+    with closing(origen_db):
+        for candidato in destinos:
+            try:
+                os.remove(str(candidato))
+            except FileNotFoundError:
+                pass
+        with closing(sqlite3.connect(str(destino_path))) as destino_db:
+            with destino_db:
+                origen_db.backup(destino_db)
+    os.environ["DB_PATH"] = str(destino_path)
+    settings.DB_PATH = destino_path
 
 
 def _comprobar_aislamiento(destino: str) -> None:
@@ -82,14 +115,14 @@ def _comprobar_aislamiento(destino: str) -> None:
     from backend import db, settings
 
     efectiva = str(settings.DB_PATH)
-    if os.path.abspath(efectiva) != os.path.abspath(destino):
+    if not _mismo_archivo_del_banco(efectiva, destino):
         raise SystemExit(
             "NO se esta usando la copia (%s), sino %s. Se aborta para no tocar la "
             "agenda del negocio." % (destino, efectiva)
         )
     with db._get_db_connection() as conexion:
         fichero = conexion.execute("PRAGMA database_list").fetchone()[2]
-    if os.path.abspath(fichero) != os.path.abspath(destino):
+    if not _mismo_archivo_del_banco(fichero, destino):
         raise SystemExit(
             "las conexiones siguen abriendo %s. Se aborta." % fichero
         )
@@ -335,7 +368,7 @@ class PrecondicionNoDisponible(ValueError):
 
 def _guardar_informe(destino, informe):
     """Reemplazo atomico: un fallo conserva el ultimo caso ya guardado."""
-    destino = pathlib.Path(destino)
+    destino = _ruta_del_banco(destino)
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=str(destino.parent),
                                      prefix=".banco-", suffix=".json", delete=False) as archivo:
         temporal = pathlib.Path(archivo.name)
@@ -399,10 +432,12 @@ def main() -> int:
     parser.add_argument("--guardar", default="", help="guarda informe JSON con todos los intentos")
     args = parser.parse_args()
     if args.guardar:
-        destino_informe = os.path.normcase(str(pathlib.Path(args.guardar).resolve()))
+        destino_informe = _ruta_del_banco(args.guardar)
         for ruta_bd in (args.db_origen, args.db_copia):
-            if ruta_bd and destino_informe == os.path.normcase(str(pathlib.Path(ruta_bd).resolve())):
-                parser.error("el informe debe guardarse en una ruta distinta de las bases de datos")
+            if ruta_bd and any(_mismo_archivo_del_banco(destino_informe, archivo)
+                               for archivo in _archivos_sqlite_del_banco(ruta_bd)):
+                parser.error("el informe debe guardarse fuera de las bases de datos y sus archivos WAL/SHM")
+        args.guardar = str(destino_informe)
     inicio = datetime.now(timezone.utc).isoformat()
     identidad = ({"sha": _sha_del_banco(), "arbol_sucio": _arbol_sucio_del_banco()}
                  if args.guardar else {})
