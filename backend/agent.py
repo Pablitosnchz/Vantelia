@@ -3157,16 +3157,41 @@ def _ya_dijo_esto(historial: List[Dict[str, str]], texto: str) -> bool:
     return False
 
 
+def _filas_de_esta_conversacion(filas) -> List[Any]:
+    """De filas de `chat_messages` (de mas reciente a mas antigua), las de ESTA conversacion.
+
+    En WhatsApp la conversacion es el numero de telefono: no se cierra nunca. Se
+    corta en el primer silencio largo hacia atras: una charla seguida se mantiene
+    entera, y la de otro dia no se cuela. Fuente UNICA del corte: la usan el
+    historial del agente y lo que el negocio mira "en esta conversacion"
+    (`booking._lo_que_escribio_en_esta_conversacion`). Cada fila necesita
+    `created_at` e `intent`.
+    """
+    dentro = []
+    siguiente = None  # el mensaje posterior, yendo hacia atras
+    for fila in filas:  # de mas reciente a mas antiguo
+        momento = timeutils._from_utc_iso(str(fila["created_at"] or ""))
+        if siguiente is not None and momento is not None:
+            # Lo que quedo antes del silencio lo llevaba una persona del equipo
+            # (su respuesta, o lo que escribio la clienta mientras la atendia):
+            # la conversacion sigue abierta mucho mas tiempo.
+            con_persona = str(fila["intent"] or "").startswith("human")
+            limite = SILENCIO_CON_PERSONA if con_persona else SILENCIO_QUE_CIERRA
+            if (siguiente - momento).total_seconds() > limite:
+                break  # a partir de aqui ya es otra conversacion
+        if momento is not None:
+            siguiente = momento
+        dentro.append(fila)
+    return dentro
+
+
 def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
     """Las ultimas frases de ESTA conversacion, para que "y el jueves?" tenga sentido.
 
-    En WhatsApp la conversacion es el numero de telefono: no se cierra nunca. Sin
-    cortar por tiempo, lo hablado hace dias sigue contando, y paso: dias despues de
-    preguntar por un corte, al saludar de nuevo y pulsar "Agendar cita" contesto
-    "para el corte, ¿que tipo prefieres?" a alguien que no habia dicho nada.
-
-    Se corta en el primer silencio largo hacia atras: una charla seguida se
-    mantiene entera, y la de otro dia no se cuela.
+    Sin cortar por tiempo, lo hablado hace dias sigue contando, y paso: dias despues
+    de preguntar por un corte, al saludar de nuevo y pulsar "Agendar cita" contesto
+    "para el corte, ¿que tipo prefieres?" a alguien que no habia dicho nada. El
+    corte vive en `_filas_de_esta_conversacion`.
     """
     try:
         with db._get_db_connection() as conexion:
@@ -3181,19 +3206,7 @@ def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
         return []
 
     mensajes = []
-    siguiente = None  # el mensaje posterior, yendo hacia atras
-    for fila in filas:  # de mas reciente a mas antiguo
-        momento = timeutils._from_utc_iso(str(fila["created_at"] or ""))
-        if siguiente is not None and momento is not None:
-            # Lo que quedo antes del silencio lo llevaba una persona del equipo
-            # (su respuesta, o lo que escribio la clienta mientras la atendia):
-            # la conversacion sigue abierta mucho mas tiempo.
-            con_persona = str(fila["intent"] or "").startswith("human")
-            limite = SILENCIO_CON_PERSONA if con_persona else SILENCIO_QUE_CIERRA
-            if (siguiente - momento).total_seconds() > limite:
-                break  # a partir de aqui ya es otra conversacion
-        if momento is not None:
-            siguiente = momento
+    for fila in _filas_de_esta_conversacion(filas):
         contenido = str(fila["content"] or "").strip()
         if contenido:
             rol = "assistant" if str(fila["role"]) == "assistant" else "user"

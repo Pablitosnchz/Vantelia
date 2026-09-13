@@ -3973,7 +3973,15 @@ async def _handle_whatsapp_message(
         return
 
     if flow.flow == "booking_name":
-        nombre = (incoming_text or "").strip()
+        from backend import reserva as _reserva_nombre
+
+        # "me llamo Ana Ruiz Perez" es un nombre dentro de una frase: tomado entero,
+        # la cita salia a nombre de "me llamo Ana Ruiz Perez" (y pasaba el control
+        # de dos apellidos por tener cuatro palabras). Desde 8ca6088 aqui llega
+        # tambien la conversacion hablada tras aceptar la valoracion, no solo quien
+        # contesta a la lista con su nombre a secas.
+        nombre = (_reserva_nombre.nombre_que_dice(incoming_text or "")
+                  or (incoming_text or "").strip())
         if len(nombre) < 2:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,

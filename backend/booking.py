@@ -7139,6 +7139,31 @@ def renuncio_al_diagnostico(dicho: str, *, solo_explicita: bool = False) -> bool
     return bool(_RENUNCIA_AL_DIAGNOSTICO.search(plano))
 
 
+def _lo_que_escribio_en_esta_conversacion(cliente_id: str, session_id: str,
+                                          limite: int = 30) -> List[str]:
+    """Lo que escribio ELLA en ESTA conversacion, de mas antiguo a mas reciente.
+
+    En WhatsApp la sesion es el telefono y no se cierra nunca. Leyendo sus ultimos
+    30 mensajes sin corte por tiempo, una pregunta de precio de hace semanas frenaba
+    la cita de hoy: 13-sep-2026, 6 de 6 primeros intentos del caso
+    `dice-que-si-y-acaba-en-cita` (el telefono arrastraba 17 preguntas de precio del
+    22 de agosto). El corte por silencio es el MISMO que el del historial del agente
+    (`agent._filas_de_esta_conversacion`); aqui se leen mas filas que alli porque
+    una pregunta hecha al principio de una charla larga tiene que seguir contando.
+    """
+    from backend import agent, db
+
+    with db._get_db_connection() as conexion:
+        filas = conexion.execute(
+            "SELECT role, content, created_at, intent FROM chat_messages"
+            " WHERE cliente_id = ? AND session_id = ? ORDER BY id DESC LIMIT ?",
+            (cliente_id, session_id, max(limite * 3, 60)),
+        ).fetchall()
+    escritos = [str(f["content"] or "") for f in agent._filas_de_esta_conversacion(filas)
+                if str(f["role"]) == "user"]
+    return list(reversed(escritos[:limite]))
+
+
 def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
     """Ha preguntado el precio en algun momento de ESTA conversacion.
 
@@ -7151,15 +7176,10 @@ def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
     Lo vi con la traza puesta: `veces_sin_precio: 0` despues de preguntar el precio.
     """
     try:
-        from backend import agent, db
+        from backend import agent
 
-        with db._get_db_connection() as conexion:
-            filas = conexion.execute(
-                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
-                " AND role = 'user' ORDER BY id DESC LIMIT 30",
-                (cliente_id, session_id),
-            ).fetchall()
-        return any(agent._pregunta_el_precio(str(f["content"] or "")) for f in filas)
+        return any(agent._pregunta_el_precio(texto)
+                   for texto in _lo_que_escribio_en_esta_conversacion(cliente_id, session_id))
     except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
         return False
 
@@ -7225,16 +7245,8 @@ def renuncio_al_diagnostico_en_la_conversacion(cliente_id: str, session_id: str)
     del diagnostico aunque ya lo hubiera rechazado.
     """
     try:
-        from backend import db
-
-        with db._get_db_connection() as conexion:
-            filas = conexion.execute(
-                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
-                " AND role = 'user' ORDER BY id DESC LIMIT 30",
-                (cliente_id, session_id),
-            ).fetchall()
         return renuncio_al_diagnostico_en_mensajes(
-            cliente_id, [f["content"] for f in reversed(filas)])
+            cliente_id, _lo_que_escribio_en_esta_conversacion(cliente_id, session_id))
     except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
         return False
 
@@ -7247,15 +7259,10 @@ def pidio_la_duracion_en_la_conversacion(cliente_id: str, session_id: str) -> bo
     ahora, y sin esto el freno taparia una respuesta que si le habian pedido.
     """
     try:
-        from backend import agent, db
+        from backend import agent
 
-        with db._get_db_connection() as conexion:
-            filas = conexion.execute(
-                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
-                " AND role = 'user' ORDER BY id DESC LIMIT 30",
-                (cliente_id, session_id),
-            ).fetchall()
-        return any(agent._pregunta_cuanto_dura(str(f["content"] or "")) for f in filas)
+        return any(agent._pregunta_cuanto_dura(texto)
+                   for texto in _lo_que_escribio_en_esta_conversacion(cliente_id, session_id))
     except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
         return False
 
@@ -7420,6 +7427,20 @@ async def conservar_la_hora_dicha(cliente_id: str, estado, hora: str, *,
     return True
 
 
+_PALABRAS_DE_VALORACION = ("diagnostico", "valoracion", "presupuesto")
+
+
+def es_servicio_de_valoracion(nombre: str) -> bool:
+    """El servicio ES una cita de valoracion (la general o la de un servicio suelto).
+
+    Misma lectura del catalogo que `_servicio_de_valoracion`: por el nombre que el
+    negocio le ha puesto, no por su categoria (el "Diagnostico y presupuesto" de
+    Alicia esta en "Trabajos de color").
+    """
+    plano = textnorm._strip_accents(str(nombre or "").lower())
+    return any(palabra in plano for palabra in _PALABRAS_DE_VALORACION)
+
+
 def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool,
                                location_id: str = "") -> Dict[str, Any]:
     """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.
@@ -7436,8 +7457,16 @@ def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bo
 
     Ojo al matiz que corrigio la duenya: quien viene a RESERVAR se lleva su cita.
     Esto solo se aplica si vino preguntando cuanto cuesta.
+
+    Y quien ya esta cogiendo la PROPIA valoracion no se frena. Medido el 13-sep-2026
+    (6 de 6 primeros intentos del caso `dice-que-si-y-acaba-en-cita`): aceptada la
+    cita de diagnostico, al dar su nombre le salia otra vez "el precio depende de tu
+    pelo, te cojo un diagnostico". La regla "Color y mechas" casaba con el
+    diagnostico por su categoria, "Trabajos de color".
     """
     if not pidio_precio or not servicio:
+        return {}
+    if es_servicio_de_valoracion(servicio):
         return {}
     regla = regla_de_precio_para(cliente_id, servicio)
     if not regla:
@@ -7569,7 +7598,7 @@ def _servicio_de_valoracion(cliente_id: str, location_id: str = "") -> Dict[str,
         if not isinstance(servicio, dict):
             continue
         plano = textnorm._strip_accents(str(servicio.get("nombre") or "").lower())
-        if any(p in plano for p in ("diagnostico", "valoracion", "presupuesto")):
+        if es_servicio_de_valoracion(plano):
             if "extension" not in plano:  # la generica, no la de un servicio suelto
                 return servicio
     return {}
