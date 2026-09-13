@@ -11,6 +11,57 @@ from scripts import evaluar_asistente as banco
 _EJECUTAR_CASO_REAL = banco._ejecutar_caso
 
 
+@pytest.mark.parametrize("primer_fallo_valido", [False, True])
+def test_incompatibilidad_del_consumidor_es_no_medida_con_actividad(
+        runner, api_module, monkeypatch, tmp_path, primer_fallo_valido):
+    from backend import whatsapp
+    from evals import arnes
+
+    destino = tmp_path / "incompatible.json"
+    monkeypatch.setattr(sys, "argv", ["banco", "--db-copia", "falsa", "--guardar", str(destino)])
+    monkeypatch.setattr(banco, "_cargar_casos", lambda: [{"id": "instrumento",
+        "gravedad": "critico", "mensajes": ["primer turno", "segundo turno"]}])
+    monkeypatch.setattr(calendario, "resolver_mensajes", lambda cid, caso: (caso["mensajes"], {}))
+    monkeypatch.setattr(banco, "_ejecutar_caso", _EJECUTAR_CASO_REAL)
+    monkeypatch.setattr(banco, "_citas_del_telefono", lambda *a: [])
+    monkeypatch.setattr(whatsapp, "_wa_clear_flow", lambda *a: None)
+    dichos, llamadas = [], []
+    monkeypatch.setattr(banco, "_instalar_captura", lambda: dichos)
+    async def conversar(**kwargs):
+        llamadas.append(kwargs["incoming_text"])
+        if primer_fallo_valido and len(llamadas) == 1:
+            dichos.append("respuesta del primer fallo valido")
+            raise ValueError("fallo real del asistente")
+        dichos.append("respuesta parcial " + "x" * 350)
+        if kwargs["incoming_text"] == "segundo turno":
+            raise arnes.InstrumentoNoCompatible("NO MEDIDO: transporte no compatible")
+    monkeypatch.setattr(whatsapp, "_handle_whatsapp_message", conversar)
+    assert banco.main() == 1
+    datos = json.loads(destino.read_text(encoding="utf-8"))
+    caso = datos["casos"][0]
+    assert caso["estado"] == "no_medido"
+    assert len(llamadas) == 2 + int(primer_fallo_valido)
+    assert caso["actividad_no_medida"] == {
+        "numero_intento": 1 + int(primer_fallo_valido),
+        "mensajes_iniciados": ["primer turno", "segundo turno"],
+        "mensajes_completados": 1,
+        "respuestas": ["respuesta parcial " + "x" * 350] * 2,
+    }
+    assert len(caso["intentos"]) == int(primer_fallo_valido)
+    if primer_fallo_valido:
+        assert caso["intentos"][0]["ok"] is False
+        assert caso["intentos"][0]["respuestas"] == ["respuesta del primer fallo valido"]
+        assert "fallo real del asistente" in caso["intentos"][0]["motivo"]
+    assert datos["contadores"]["medidos"] == 0
+    assert datos["contadores"]["no_medidos"] == 1
+    assert datos["contadores"]["primer_intento_medido"] == int(primer_fallo_valido)
+    assert datos["contadores"]["primer_intento_fallido"] == int(primer_fallo_valido)
+    assert datos["contadores"]["reintentos_no_medidos"] == int(primer_fallo_valido)
+    assert datos["contadores"]["reintentos"] == 0
+    assert datos["contadores"]["ok_primer_intento"] == 0
+    assert datos["contadores"]["fallos"]["critico"] == 0
+
+
 @pytest.fixture
 def runner(monkeypatch):
     for nombre in ("_preparar_copia", "_comprobar_aislamiento"):

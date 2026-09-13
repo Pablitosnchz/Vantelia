@@ -61,16 +61,15 @@ def comprobar_aislamiento(destino: str) -> None:
         raise SystemExit("las conexiones siguen abriendo %s. Se aborta." % fichero)
 
 
-VERSION_INTERACCION = "botones-explicitos-v1"
+VERSION_INTERACCION = "botones-emitidos-v2"
 
 
 class AccionNoDisponible(ValueError):
-    """El guion pidio una accion que no se ofrecio o ya no esta vigente."""
+    """El guion pidio una accion que no se emitio para esta clienta."""
 
 
-def _propuesta_vigente(cliente_id, telefono):
-    from backend import reserva
-    return reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, telefono))
+class InstrumentoNoCompatible(RuntimeError):
+    """La frontera de transporte no se puede medir con este instrumento."""
 
 
 class CapturaEnvios(list):
@@ -94,12 +93,7 @@ class CapturaEnvios(list):
         evento = self._pendientes.get((cliente_id, telefono))
         if not evento or not evento["enviado"] or not evento["botones"]:
             return []
-        propuesta = _propuesta_vigente(cliente_id, telefono)
-        if not propuesta or propuesta["estado"] != "ofrecida":
-            return []
-        return [dict(b) for b in evento["botones"]
-                if b["id"] in tuple(prefijo + propuesta["id"] for prefijo in
-                                    ("confirm_yes:", "confirm_no:", "cancel_yes:", "cancel_no:"))]
+        return [dict(b) for b in evento["botones"]]
 
 
 def preparar_entrada(captura, cliente_id, telefono, entrada):
@@ -109,33 +103,40 @@ def preparar_entrada(captura, cliente_id, telefono, entrada):
     if isinstance(entrada, str):
         return entrada, ""
     if isinstance(entrada, dict):
-        aceptaciones = [o for o in opciones if "_yes:" in o["id"]]
-        if entrada == {"accion": "aceptar_oferta"} and len(aceptaciones) == 1:
-            return aceptaciones[0]["titulo"], aceptaciones[0]["id"]
+        if (set(entrada) == {"accion", "indice"} and entrada["accion"] == "pulsar_boton"
+                and type(entrada["indice"]) is int and 0 <= entrada["indice"] < len(opciones)):
+            elegida = opciones[entrada["indice"]]
+            return elegida["titulo"], elegida["id"]
         if set(entrada) == {"boton"}:
-            for opcion in opciones:
-                if entrada["boton"] == opcion["id"]:
-                    return opcion["titulo"], opcion["id"]
-    raise AccionNoDisponible("Accion sin boton enviado y vigente para esta clienta")
+            # Repetir un boton ya emitido reproduce lo que permite el chat real.
+            # Solo el producto puede decidir si sigue vigente o fue aceptado.
+            for evento in reversed(captura.eventos):
+                if (evento["enviado"] and evento["cliente_id"] == cliente_id
+                        and evento["destinatario"] == telefono):
+                    for opcion in evento["botones"]:
+                        if entrada["boton"] == opcion["id"]:
+                            return opcion["titulo"], opcion["id"]
+    raise AccionNoDisponible("Accion sin boton emitido para esta clienta")
 
 
 def capturar_envios() -> CapturaEnvios:
     """Sustituye envios, conserva textos e IDs y simula su aceptacion sin red."""
     from backend import messaging
-    from unittest.mock import patch
 
     dichos = CapturaEnvios()
     botones_reales = getattr(messaging._send_whatsapp_buttons, "_arnes_original", messaging._send_whatsapp_buttons)
-    payload_real = getattr(messaging._send_whatsapp_payload, "_arnes_original", messaging._send_whatsapp_payload)
 
     def guardar(texto, tipo, kwargs, botones=(), enviado=True):
+        resultado = enviado
+        if kwargs.get("detailed"):
+            tipo_resultado = getattr(messaging, "WhatsAppSendResult", None)
+            if tipo_resultado is None:
+                raise InstrumentoNoCompatible("NO MEDIDO: detailed requiere WhatsAppSendResult; frontera no soportada")
+            resultado = tipo_resultado("aceptado" if enviado else "rechazado", motivo="captura_sin_red")
         dichos.registrar(texto, tipo, kwargs.get("cliente_id", ""),
                          kwargs.get("to_number") or (kwargs.get("payload") or {}).get("to", ""),
                          botones, enviado=enviado)
-        if kwargs.get("detailed"):
-            return messaging.WhatsAppSendResult("aceptado" if enviado else "rechazado",
-                                              motivo="captura_sin_red")
-        return enviado
+        return resultado
 
     async def texto(*, text="", **kwargs):
         return guardar(text, "texto", kwargs)
@@ -150,30 +151,23 @@ def capturar_envios() -> CapturaEnvios:
     async def cta(*, body="", **kwargs):
         return guardar(body, "cta", kwargs)
 
-    async def post_sin_red(**kwargs):
+    async def formulario(**kwargs):
+        # Frontera comun al transporte bool anterior y al tipado actual: el
+        # builder del producto ya normalizo los botones; aqui no hay HTTP.
         payload = kwargs["payload"]
         interactive = payload.get("interactive") or {}
         if payload.get("type") == "interactive" and interactive.get("type") == "button":
             normalizados = [(b["reply"]["id"], b["reply"]["title"])
                             for b in interactive["action"]["buttons"]]
-            guardar(interactive["body"]["text"], "botones", kwargs, normalizados)
-            return messaging.WhatsAppSendResult("aceptado", motivo="captura_sin_red")
+            return guardar(interactive["body"]["text"], "botones", kwargs, normalizados)
         # El formulario de reserva (WhatsApp Flows) sale por aqui, y sin esto iba a
         # Meta DE VERDAD con el token del .env (11-sep-2026, en el propio humo del
         # despliegue). El numero de pruebas no existe, Meta contestaba 400 y el
         # asistente seguia por mensajes: se da por rechazado sin salir de aqui, que
         # es el mismo camino, pero sin peticion a nadie.
-        guardar("", "formulario", kwargs, enviado=False)
-        return messaging.WhatsAppSendResult("rechazado", motivo="captura_sin_red")
-
-    async def formulario(**kwargs):
-        # El builder y la conversion bool/detailed son los del producto. El POST
-        # falso termina sin suspenderse; se restaura el transporte al salir.
-        with patch.object(messaging, "_post_whatsapp_message", post_sin_red):
-            return await payload_real(**kwargs)
+        return guardar("", "formulario", kwargs, enviado=False)
 
     botones._arnes_original = botones_reales
-    formulario._arnes_original = payload_real
 
     messaging._send_whatsapp_text = texto
     messaging._send_whatsapp_list = lista

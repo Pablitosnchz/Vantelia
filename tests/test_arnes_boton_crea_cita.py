@@ -58,7 +58,7 @@ def entorno(vantelia_env_factory, monkeypatch):
 def test_humo_accion_expresa_crea_una_cita_con_el_boton_real(entorno):
     from scripts import humo
     conversacion = humo._hablar("demo", "34600111001", [
-        "preparar oferta sintetica", {"accion": "aceptar_oferta"}])
+        "preparar oferta sintetica", {"accion": "pulsar_boton", "indice": 0}])
     entrada = [t for t in conversacion if t["quien"] == "clienta"][-1]
     citas = arnes.citas_de("demo", "34600111001")
     assert len(citas) == 1
@@ -121,7 +121,6 @@ def test_captura_detailed_rechaza_payload_sin_post(entorno, monkeypatch):
 
 def test_captura_admite_diccionario_que_normaliza_el_builder(entorno, monkeypatch):
     from backend import messaging
-    monkeypatch.setattr(arnes, "_propuesta_vigente", lambda *a: {"id": "actual", "estado": "ofrecida"})
     captura = arnes.capturar_envios()
     assert asyncio.run(messaging._send_whatsapp_buttons(
         cliente_id="demo", phone_number_id="PN", to_number="600", body="Resumen",
@@ -138,7 +137,6 @@ def test_captura_admite_diccionario_que_normaliza_el_builder(entorno, monkeypatc
 
 def test_cuarto_boton_descartado_no_es_una_accion_emitida(entorno, monkeypatch):
     from backend import messaging
-    monkeypatch.setattr(arnes, "_propuesta_vigente", lambda *a: {"id": "actual", "estado": "ofrecida"})
     captura = arnes.capturar_envios()
     assert asyncio.run(messaging._send_whatsapp_buttons(
         cliente_id="demo", phone_number_id="PN", to_number="600", body="Resumen",

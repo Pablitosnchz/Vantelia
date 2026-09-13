@@ -277,6 +277,7 @@ def _quien_contesta(cliente_id: str) -> str:
 def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     """Devuelve (paso, respuestas, motivo)."""
     from backend import whatsapp
+    from evals import arnes
 
     telefono = "34600%06d" % (990000 + indice)
     whatsapp._wa_clear_flow(cliente_id, telefono)
@@ -290,13 +291,20 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
 
     mensajes = [m.replace("{codigo}", (previa or {}).get("booking_code", ""))
                 for m in caso["mensajes"]]
-    for mensaje in mensajes:
+    for turno, mensaje in enumerate(mensajes, 1):
         try:
             asyncio.run(whatsapp._handle_whatsapp_message(
                 cliente_id=cliente_id, phone_number_id="phone_eval",
                 from_number=telefono, incoming_text=mensaje,
                 interactive_id="", request=None,
             ))
+        except arnes.InstrumentoNoCompatible as exc:
+            exc.actividad_no_medida = {
+                "mensajes_iniciados": mensajes[:turno], "mensajes_completados": turno - 1,
+                "respuestas": list(dichos[marca:]),
+            }
+            whatsapp._wa_clear_flow(cliente_id, telefono)
+            raise
         except Exception as exc:  # noqa: BLE001
             whatsapp._wa_clear_flow(cliente_id, telefono)
             return False, dichos[marca:], "ha reventado: %r" % exc
@@ -482,11 +490,12 @@ def main() -> int:
     fallos = {"critico": [], "importante": [], "deseable": []}
     aciertos = 0
 
-    from evals import calendario
+    from evals import arnes, calendario
 
     saltados = 0
     sin_calendario = []
     sin_preparacion = []
+    sin_instrumento = []
     for indice, caso in enumerate(casos):
         registro = {"id": caso["id"], "gravedad": caso["gravedad"],
                     "estado": "no_aplica", "motivo": "", "fechas": {},
@@ -532,6 +541,14 @@ def main() -> int:
                 registro["intentos"].append({"numero": 2, "ok": paso,
                                               "respuestas": list(respuestas), "motivo": motivo})
                 persistir()
+        except arnes.InstrumentoNoCompatible as exc:
+            registro.update(estado="no_medido", motivo=str(exc))
+            registro["actividad_no_medida"] = dict(
+                getattr(exc, "actividad_no_medida", {}), numero_intento=len(registro["intentos"]) + 1)
+            sin_instrumento.append(caso["id"])
+            print("NO MEDIDO %-34s instrumento: %s" % (caso["id"], exc))
+            persistir()
+            continue
         except PrecondicionNoDisponible as exc:
             registro.update(estado="no_medido", motivo=str(exc))
             sin_preparacion.append(caso["id"])
@@ -558,7 +575,7 @@ def main() -> int:
                 print("           > %s" % r.replace("\n", " ")[:160])
         persistir()
 
-    sin_medida = sin_calendario + sin_preparacion
+    sin_medida = sin_calendario + sin_preparacion + sin_instrumento
     print("\n" + "=" * 68)
     print("  %d de %d medidos; %d no medidos; %d no aplican; %d previstos" % (
         aciertos, len(casos) - saltados - len(sin_medida),
@@ -570,6 +587,9 @@ def main() -> int:
             ))
     informe.update(estado="terminado", fin_utc=datetime.now(timezone.utc).isoformat())
     persistir()
+    if sin_instrumento:
+        print("\n  MEDICION INCOMPLETA (instrumento): %s" % ", ".join(sin_instrumento))
+        return 1
     if sin_preparacion:
         print("\n  MEDICION INCOMPLETA (preparacion): %s" % ", ".join(sin_preparacion))
     if sin_calendario:

@@ -146,6 +146,8 @@ def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> D
                 from_number=telefono, incoming_text=texto,
                 interactive_id=boton, request=None,
             ))
+        except arnes.InstrumentoNoCompatible:
+            raise
         except Exception as exc:  # noqa: BLE001
             conversacion.append({"quien": "asistente", "texto": "[REVENTO] %r" % exc})
             break
@@ -705,7 +707,11 @@ def main() -> int:
     resultados = []
     for indice, combinacion in enumerate(elegidas):
         telefono = "34600%06d" % (700000 + indice)
-        resultado = _conversar(args.cliente, combinacion, telefono)
+        try:
+            resultado = _conversar(args.cliente, combinacion, telefono)
+        except arnes.InstrumentoNoCompatible as exc:
+            print(str(exc))
+            return 1
         if resultado["veredicto"] == "sin_montar":
             continue
         resultados.append(resultado)

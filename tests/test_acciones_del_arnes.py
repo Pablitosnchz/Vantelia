@@ -5,9 +5,7 @@ from evals import arnes
 
 
 @pytest.fixture
-def captura(monkeypatch):
-    monkeypatch.setattr(arnes, "_propuesta_vigente", lambda *a: {
-        "id": "actual", "estado": "ofrecida"}, raising=False)
+def captura():
     return arnes.CapturaEnvios()
 
 
@@ -23,12 +21,12 @@ def test_texto_libre_nunca_se_convierte_en_click(captura, texto):
     assert captura.opciones("demo", "600") == []
 
 
-def test_accion_explicita_usa_id_emitido_y_se_consume(captura):
+def test_indice_actual_y_repeticion_explicita_del_id_emitido(captura):
     ofrecer(captura)
     assert arnes.preparar_entrada(captura, "demo", "600", {
-        "accion": "aceptar_oferta"}) == ("Confirmar", "confirm_yes:actual")
-    with pytest.raises(arnes.AccionNoDisponible):
-        arnes.preparar_entrada(captura, "demo", "600", {"boton": "confirm_yes:actual"})
+        "accion": "pulsar_boton", "indice": 0}) == ("Confirmar", "confirm_yes:actual")
+    assert arnes.preparar_entrada(captura, "demo", "600", {
+        "boton": "confirm_yes:actual"}) == ("Confirmar", "confirm_yes:actual")
 
 
 @pytest.mark.parametrize("causa", ["otro_tenant", "otro_numero", "rechazada", "vieja", "id_inventado"])
@@ -53,9 +51,15 @@ def test_ultima_oferta_sustituye_la_anterior(captura):
         {"id": "confirm_yes:actual", "titulo": "Confirmar"}]
 
 
-@pytest.mark.parametrize("estado", ["preparada", "aceptada", "hecha"])
-def test_propuesta_que_no_esta_ofrecida_no_admite_click(captura, monkeypatch, estado):
+def test_id_antiguo_emitido_llega_al_producto(captura):
+    ofrecer(captura, "vieja")
+    ofrecer(captura, "actual")
+    assert arnes.preparar_entrada(captura, "demo", "600", {
+        "boton": "confirm_yes:vieja"}) == ("Confirmar", "confirm_yes:vieja")
+
+
+@pytest.mark.parametrize("indice", [-1, 1, True, "0"])
+def test_indice_inexistente_no_se_corrige(captura, indice):
     ofrecer(captura)
-    monkeypatch.setattr(arnes, "_propuesta_vigente", lambda *a: {"id": "actual", "estado": estado})
     with pytest.raises(arnes.AccionNoDisponible):
-        arnes.preparar_entrada(captura, "demo", "600", {"accion": "aceptar_oferta"})
+        arnes.preparar_entrada(captura, "demo", "600", {"accion": "pulsar_boton", "indice": indice})

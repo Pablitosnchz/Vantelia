@@ -270,6 +270,9 @@ def main() -> int:
             try:
                 _hablar(args.cliente, telefono, mensajes + caso.get("acciones_finales", []))
                 motivo = _juzgar(args.cliente, telefono, caso, previa)
+            except arnes.InstrumentoNoCompatible as exc:
+                print(str(exc))
+                return 1
             except Exception as exc:  # noqa: BLE001 - un caso roto es un fallo, no un crash
                 motivo = "ha reventado: %s" % str(exc)[:160]
             if not motivo:
