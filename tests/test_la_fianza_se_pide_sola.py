@@ -27,6 +27,7 @@ import asyncio
 import pytest
 
 from test_booking_exhaustive import api_module, client  # noqa: F401
+from test_wa_flujo_cita_corto import poner_hueco_real_en_resumen
 
 CON_FIANZA = "Alisado con fianza"
 SIN_FIANZA = "Corte normal"
@@ -103,14 +104,14 @@ def test_sale_en_el_resumen_encima_del_boton(catalogo, monkeypatch):
 
     async def _capturar(**kwargs):
         enviados.append(kwargs.get("body") or kwargs.get("text") or "")
+        return True
 
     monkeypatch.setattr(messaging, "_send_whatsapp_buttons", _capturar)
     monkeypatch.setattr(messaging, "_send_whatsapp_text", _capturar)
 
     flow = appstate.WAFlowState(cliente_id=catalogo, from_number="34600993333")
     flow.servicio = CON_FIANZA
-    flow.fecha = "2026-09-10"
-    flow.hora = "10:00"
+    poner_hueco_real_en_resumen(flow)
     flow.nombre = "Ana"
     asyncio.run(whatsapp._wa_send_booking_summary(
         cliente_id=catalogo, phone_number_id="phone_test",
@@ -131,18 +132,19 @@ def test_sin_fianza_el_resumen_no_inventa_ninguna(catalogo, monkeypatch):
 
     async def _capturar(**kwargs):
         enviados.append(kwargs.get("body") or kwargs.get("text") or "")
+        return True
 
     monkeypatch.setattr(messaging, "_send_whatsapp_buttons", _capturar)
     monkeypatch.setattr(messaging, "_send_whatsapp_text", _capturar)
 
     flow = appstate.WAFlowState(cliente_id=catalogo, from_number="34600993334")
     flow.servicio = SIN_FIANZA
-    flow.fecha = "2026-09-10"
-    flow.hora = "10:00"
+    poner_hueco_real_en_resumen(flow)
     flow.nombre = "Ana"
     asyncio.run(whatsapp._wa_send_booking_summary(
         cliente_id=catalogo, phone_number_id="phone_test",
         to_number="34600993334", flow=flow))
+    assert "Resumen de tu cita" in " ".join(enviados)
     assert "fianza" not in " ".join(enviados).lower()
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from test_booking_exhaustive import api_module, client  # noqa: F401
+from test_wa_flujo_cita_corto import poner_hueco_real_en_resumen
 
 
 @pytest.fixture
@@ -142,8 +143,7 @@ def test_el_freno_del_precio_tapa_tambien_el_camino_de_las_listas(api_module, cl
         flow = appstate.WAFlowState(cliente_id="demo", from_number=telefono)
         flow.flow = "booking_name"          # venia del camino de las listas
         flow.servicio = "Keratina listas xl"
-        flow.fecha = "2026-09-10"
-        flow.hora = "10:00"
+        poner_hueco_real_en_resumen(flow)
         flow.nombre = "Ana"
 
         asyncio.run(whatsapp._wa_send_booking_summary(

@@ -1,21 +1,31 @@
 import asyncio
+import copy
 import types
 from dataclasses import replace
 import pytest
 
 from test_alternativa_de_precio import politica, ofrecer
+from conftest import DEFAULT_DEMO_CONFIG
+from test_wa_flujo_cita_corto import poner_hueco_real_en_resumen
+
+
+@pytest.fixture
+def agenda_salon(vantelia_env_factory):
+    config = {"salon": copy.deepcopy(DEFAULT_DEMO_CONFIG["demo"])}
+    config["salon"]["booking"]["day_end"] = "18:00"
+    return vantelia_env_factory(config)
 
 
 @pytest.mark.parametrize("servicio", ["Pack mechas o balayage medio", "MECHAS O BALAYAGE MEDIO"])
-def test_boton_no_no_reabre_diagnostico_al_llegar_al_resumen(politica, monkeypatch, servicio):
+def test_boton_no_no_reabre_diagnostico_al_llegar_al_resumen(agenda_salon, politica, monkeypatch, servicio):
     from backend import booking, reserva, whatsapp, messaging, appstate
     estado, propuesta = ofrecer()
     estado.servicio, estado.servicio_exacto = "Mechas o balayage medio", "Pack mechas o balayage medio"
     estado.propuesta_servicio = replace(estado.propuesta_servicio, servicio_origen="Mechas o balayage medio")
     monkeypatch.setattr(reserva, "cargar", lambda *a: estado)
-    monkeypatch.setattr(whatsapp.clients, "_get_client_config", lambda *a: {"booking": {"enabled": True}})
     flow = appstate.WAFlowState(cliente_id="salon", from_number="persona")
-    flow.flow, flow.servicio, flow.hora, flow.fecha = "agente", servicio, "10:00", "2030-01-08"
+    flow.flow, flow.servicio = "agente", servicio
+    poner_hueco_real_en_resumen(flow)
     flow.nombre = "Ana Ruiz López"
     monkeypatch.setattr(whatsapp, "_wa_get_flow", lambda *a: flow)
     monkeypatch.setattr(whatsapp.inbox, "remember_inbound_number", lambda *a: None)

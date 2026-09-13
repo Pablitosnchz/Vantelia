@@ -11,8 +11,19 @@ nombre, email, notas y confirmar) para pedir hora en una peluqueria. Se recorto:
 from __future__ import annotations
 
 import asyncio
+from datetime import date, timedelta
 
 from test_booking_exhaustive import api_module  # noqa: F401
+
+
+def poner_hueco_real_en_resumen(flow):
+    """La fixture llega al resumen con un hueco que acepta la agenda del tenant."""
+    from backend import agenda
+    dia, horas = asyncio.run(agenda.primer_dia_con_hueco(
+        flow.cliente_id, servicio=flow.servicio,
+        desde=(date.today() + timedelta(days=2)).isoformat(), dias=14))
+    assert dia and horas, "la agenda sintetica no tiene un hueco para este servicio"
+    flow.fecha, flow.hora = dia, horas[0]
 
 
 def _contacto(api_module, cliente_id="demo", phone="34600123456", nombre="Pablo Sanchez", email="pablo@example.com"):
@@ -63,7 +74,7 @@ def test_el_resumen_ofrece_confirmar_corregir_o_anotar(api_module, monkeypatch):
     flow = appstate.WAFlowState(cliente_id="demo", from_number="34600123456")
     flow.nombre, flow.email = "Pablo Sanchez", "pablo@example.com"
     flow.servicio, flow.employee_name = "Corte", "Alicia"
-    flow.fecha, flow.hora = "2026-09-01", "12:30"
+    poner_hueco_real_en_resumen(flow)
 
     # Reconocido: el tercer boton permite corregir los datos que hemos puesto nosotros.
     asyncio.run(whatsapp._wa_send_booking_summary(
@@ -101,7 +112,8 @@ def test_el_resumen_omite_el_email_si_no_lo_hay(api_module, monkeypatch):
 
     flow = appstate.WAFlowState(cliente_id="demo", from_number="34600123456")
     flow.nombre, flow.email = "Pablo Sanchez", ""
-    flow.servicio, flow.fecha, flow.hora = "Corte", "2026-09-01", "12:30"
+    flow.servicio = "Corte"
+    poner_hueco_real_en_resumen(flow)
     asyncio.run(whatsapp._wa_send_booking_summary(
         cliente_id="demo", phone_number_id="PN", to_number="34600123456", flow=flow,
     ))

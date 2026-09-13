@@ -28,6 +28,7 @@ import asyncio
 import pytest
 
 from test_booking_exhaustive import api_module  # noqa: F401
+from test_wa_flujo_cita_corto import poner_hueco_real_en_resumen
 
 CID = "demo"
 
@@ -135,7 +136,7 @@ def test_el_resumen_no_se_guarda_si_no_se_envia(api_module, monkeypatch):  # noq
     def _flow():
         flow = appstate.WAFlowState(cliente_id=CID, from_number="34600123456")
         flow.nombre, flow.servicio = "Pablo Sanchez Ruiz", "Corte"
-        flow.fecha, flow.hora = "2026-09-01", "12:30"
+        poner_hueco_real_en_resumen(flow)
         return flow
 
     monkeypatch.setattr(messaging, "_send_whatsapp_buttons", rechazado)
