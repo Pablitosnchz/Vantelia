@@ -335,3 +335,23 @@ No guardar conversaciones, teléfonos, credenciales o datos personales.
 - Esta evidencia nueva sí valida etiqueta corregida; no se atribuye a la QA
   anterior ni se repite ninguna QA verde. Términos/arnés de la nueva rama siguen
   en implementación; no hay suite final consultada ni aceptación global.
+
+## 2026-09-13 11:45 +0200 - términos, arnés y checkout retomados
+
+- La suite congelada 2cb8a029 ya había terminado a las 03:23:06.385 +02:00 con
+  2442 passed, 1 skipped y un único rojo de `test_banco_sin_meta`. El contraste
+  dirigido de c9f19e6 pasa a las 03:30:44 con red externa bloqueada: la captura
+  v2 no llama al payload original, así que el producto conserva la autorización.
+  Esto no convierte la suite histórica en verde ni acredita modelo/Meta reales.
+- 6c3ad4f guarda términos efectivos aceptados: 112 dirigidos verdes en 126,70 s
+  y revisión independiente OK. Mantiene precio/fianza/decisión de pago sellados;
+  no resuelve respuestas desconocidas de Stripe.
+- 68c1fac persiste la clave de idempotencia de checkout antes de red y exige que
+  respuesta y guardado local compartan esa clave. Se simuló caída local tras una
+  respuesta Stripe: el reintento recibe la misma sesión sin una segunda creación.
+  Una fila histórica sin clave ni URL devuelve 409 para reconciliación manual.
+  `tests/test_condiciones_aceptadas.py`: 23 passed en 80,95 s; dos regresiones de
+  checkout/Bizum verdes en 21,59 s. Sin llamada Stripe real, push o despliegue.
+- Siguiente: congelar un SHA limpio con estos cambios y ejecutar una sola suite
+  exacta; después, revisión exacta y banco real comparable. Siguen pendientes
+  reconciliación operativa, recordatorios completos y evidencia Alicia/otro tenant.
