@@ -7367,6 +7367,38 @@ def contestar_alternativa_de_precio(cliente_id: str, estado, propuesta_id: str,
     return reserva.persistir_respuesta_de_propuesta(cliente_id, estado)
 
 
+async def conservar_la_hora_dicha(cliente_id: str, estado, hora: str, *,
+                                  del_codigo: bool = False, location_id: str = "") -> bool:
+    """La hora que dijo ELLA sobrevive a aceptar la alternativa, si le cabe.
+
+    Aceptar suelta la hora porque pudo apartarse para OTRO tratamiento, con otra
+    duración. Pero la que dijo ella («a las 15») mientras se le ofrecía la cita de
+    diagnóstico es la hora a la que quiere venir: soltarla es volver a preguntarle
+    lo que ya ha contestado. Medido el 13-sep-2026 (caso crítico
+    `dice-que-si-y-acaba-en-cita`): aceptada la oferta se le volvían a listar las
+    horas del día y la cita no llegaba al resumen.
+
+    Solo se conserva si la dijo ella (no la eligió el código para otro servicio) y
+    está libre para el servicio ACEPTADO, mirada con los mismos huecos que se
+    ofrecen. Lo llaman los dos caminos de aceptar: el canal y `responder_propuesta`.
+    El que llama persiste el estado.
+    """
+    propuesta = estado.propuesta_servicio
+    if (not hora or del_codigo or estado.hora or not estado.fecha
+            or propuesta is None or propuesta.estado != "aceptada"):
+        return False
+    try:
+        _todas, libres = await agenda._public_slot_sets_for_day(
+            cliente_id, estado.fecha, servicio=estado.servicio_exacto or estado.servicio,
+            location_id=location_id or propuesta.location_id or "")
+    except Exception:  # noqa: BLE001 - ante la duda se le pregunta la hora
+        return False
+    if hora not in libres:
+        return False
+    estado.hora = hora
+    return True
+
+
 def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool,
                                location_id: str = "") -> Dict[str, Any]:
     """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.

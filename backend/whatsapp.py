@@ -2471,10 +2471,31 @@ async def _wa_contestar_propuesta(*, cliente_id: str, phone_number_id: str, from
     """
     from backend import reserva
     estado = reserva.cargar(cliente_id, from_number)
+    hora_dicha, hora_del_codigo = estado.hora, estado.hora_del_codigo
     ok = booking.contestar_alternativa_de_precio(cliente_id, estado, propuesta_id, respuesta)
+    if ok and respuesta == "acepta":
+        # Aceptar suelta la hora; si la dijo ella y le cabe, no se le vuelve a preguntar.
+        await booking.conservar_la_hora_dicha(cliente_id, estado, hora_dicha,
+                                              del_codigo=hora_del_codigo,
+                                              location_id=getattr(flow, "location_id", "") or "")
     reserva.guardar(cliente_id, from_number, estado)
+    conocido = ""
     if not ok:
         texto = "Esta opción ya no está vigente. Dime qué servicio quieres y lo consultamos de nuevo."
+    elif respuesta == "acepta" and estado.fecha and estado.hora:
+        conocido = estado.nombre
+        if not conocido:
+            contacto = crm.contact_by_phone(cliente_id, from_number)
+            conocido = str(contacto["name"] or "").strip() if contacto is not None else ""
+        texto = "De acuerdo, cita de %s el %s a las %s." % (
+            estado.servicio, _wa_fecha_humana(estado.fecha), estado.hora)
+        if not conocido:
+            texto += " ¿Me dices tu nombre y %s? 😊" % (
+                "tus dos apellidos" if clients.exige_dos_apellidos(cliente_id) else "apellidos")
+        flow.flow = "agente"
+        flow.servicio = estado.servicio_exacto
+        flow.fecha = estado.fecha
+        flow.hora = estado.hora
     elif respuesta == "acepta":
         texto = ("De acuerdo, buscamos una cita de %s para el %s." % (
             estado.servicio, _wa_fecha_humana(estado.fecha)) if estado.fecha else
@@ -2493,7 +2514,13 @@ async def _wa_contestar_propuesta(*, cliente_id: str, phone_number_id: str, from
     _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
                   entrante=incoming_text, respuesta=texto if enviado else "",
                   intent="respuesta_propuesta")
-    if enviado and ok and respuesta == "acepta" and estado.fecha:
+    if enviado and ok and respuesta == "acepta" and estado.fecha and estado.hora:
+        # Con dia y hora ya dichos, lo que queda es el resumen (si se sabe quien es)
+        # o su nombre, que ya se le ha pedido en el texto de arriba.
+        if conocido:
+            await _wa_resumen_para_confirmar(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, flow=flow, texto_previo="", request=request)
+    elif enviado and ok and respuesta == "acepta" and estado.fecha:
         await _wa_ofrecer_huecos_hablando(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             fecha_iso=estado.fecha, fecha_humana=_wa_fecha_humana(estado.fecha),
@@ -2523,6 +2550,27 @@ def _wa_lo_ultimo_fue_la_oferta(cliente_id: str, session_id: str) -> bool:
     except Exception:  # noqa: BLE001 - ante la duda no se acepta nada
         return False
     return bool(fila) and str(fila["intent"] or "") == "oferta_propuesta"
+
+
+def _wa_vuelve_a_ofrecer(estado: Any, texto: str) -> bool:
+    """¿El agente acaba de REPETIR, con sus palabras, la oferta que sigue pendiente?
+
+    Medido el 13-sep-2026 (caso crítico `dice-que-si-y-acaba-en-cita`): tras la
+    oferta con botones ella escribió «a las 15» y el agente preguntó «¿Te gustaría
+    que te agende la cita de diagnóstico y presupuesto ... a las 15:00?». Es la
+    misma oferta, pero quedaba registrada como `agenda_agente`, así que el «si»
+    siguiente ya no contaba como respuesta a la oferta, volvía al modelo y el
+    modelo no la aceptaba: seis turnos preguntándole lo mismo.
+
+    Cuenta solo si la propuesta sigue ofrecida, el texto NOMBRA ese servicio y
+    pregunta. Lo demás sigue siendo conversación del agente.
+    """
+    propuesta = getattr(estado, "propuesta_servicio", None)
+    if propuesta is None or propuesta.estado != "ofrecida" or "?" not in str(texto or ""):
+        return False
+    nombre = textnorm._strip_accents(
+        textnorm.nombre_de_servicio_publico(propuesta.nombre).lower()).strip()
+    return bool(nombre) and nombre in textnorm._strip_accents(str(texto).lower())
 
 
 async def _wa_turno_del_agente(
@@ -2619,9 +2667,12 @@ async def _wa_turno_del_agente(
     # El helper es idempotente, asi que no se duplica si ya lo dice.
     texto = chat._con_gracias_a_ti(incoming_text, texto)
 
+    # Si lo que dice es la oferta pendiente otra vez, queda como oferta: su «sí»
+    # siguiente la acepta igual que el botón (ver `_wa_vuelve_a_ofrecer`).
     _wa_registrar(
         cliente_id=cliente_id, from_number=from_number, request=request,
-        respuesta=texto, intent="agenda_agente",
+        respuesta=texto,
+        intent="oferta_propuesta" if _wa_vuelve_a_ofrecer(estado, texto) else "agenda_agente",
     )
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,

@@ -34,8 +34,14 @@ from test_booking_exhaustive import api_module  # noqa: F401
 
 
 def _canal(monkeypatch, estado, *, ultimo_fue_la_oferta):
-    from backend import agent, appstate, messaging, reserva, whatsapp
+    from backend import agenda, agent, appstate, messaging, reserva, whatsapp
 
+    async def sin_huecos(*a, **k):
+        return set(), set()
+
+    # Sin hueco libre a su hora: aceptar sigue ofreciendo las horas del dia. El caso
+    # con la hora libre lo vigila `test_la_hora_dicha_sobrevive_a_aceptar.py`.
+    monkeypatch.setattr(agenda, "_public_slot_sets_for_day", sin_huecos)
     monkeypatch.setattr(agent, "disponible", lambda cliente_id: True)
     monkeypatch.setattr(whatsapp, "_wa_cita_recien_hecha", lambda *a, **k: "")
     monkeypatch.setattr(whatsapp, "_wa_registrar", lambda **k: "sesion-de-la-oferta")
