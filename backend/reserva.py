@@ -605,7 +605,9 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
         # con la llamada a `crear_cita`, asi que con dia y hora ya puestos seguia
         # "faltando el nombre", el codigo no forzaba el cierre y el modelo volvia a
         # ofrecerle horas (humo `corte-acaba-en-cita`, 11-sep-2026: sin cita).
-        if not estado.nombre:
+        # Tambien si lo que habia era un nombre de relleno ("Cliente"): lo que ella
+        # dice con todas las letras manda sobre lo que se invento el modelo.
+        if not estado.nombre or _es_nombre_de_relleno(estado.nombre):
             nombre = nombre_que_dice(mensaje or "")
             if nombre:
                 estado.nombre = nombre
@@ -641,6 +643,19 @@ def _codigo_en(texto: str) -> str:
 _CORTA_EL_NOMBRE = {"y", "e", "para", "que", "quiero", "pero", "porque", "por",
                     "gracias", "vale", "si", "no"}
 _NO_EMPIEZA_UN_NOMBRE = {"el", "la", "los", "las", "un", "una"}
+
+
+def _es_nombre_de_relleno(valor: str) -> bool:
+    """"Cliente", "la clienta", "sin nombre"...: un hueco relleno, no un nombre.
+
+    La lista vive en el agente (`agent._NOMBRES_QUE_NO_LO_SON`), que es quien la usa
+    para frenar la cita; aqui se consulta la misma para no guardarlo en el estado.
+    """
+    if not str(valor or "").strip():
+        return False
+    from backend import agent  # tardio: agent y reserva se importan en cadena
+
+    return not agent._nombre_de_verdad(valor)
 
 
 def nombre_que_dice(texto: str) -> str:
@@ -850,6 +865,8 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             estado.nombre = nombre_nuevo
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
+            if clave == "nombre" and _es_nombre_de_relleno(valor):
+                continue
             if valor and not getattr(estado, clave, ""):
                 setattr(estado, clave, valor)
         # Y esto es RESERVAR, aunque nadie lo haya declarado. Sin ponerlo, la
@@ -873,6 +890,8 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         if resultado.get("conserva_los_datos"):
             for clave in ("fecha", "hora", "nombre", "profesional"):
                 valor = str(argumentos.get(clave) or "").strip()
+                if clave == "nombre" and _es_nombre_de_relleno(valor):
+                    continue  # "Cliente" no es un dato bueno que conservar
                 if valor and not getattr(estado, clave, ""):
                     setattr(estado, clave, valor)
         return

@@ -513,6 +513,13 @@ async def _ejecutar(
     # WhatsApp se le piden los DOS apellidos, el mismo liston que el mostrador
     # (decision de Pablo, 11-sep-2026); a una conocida, lo de siempre.
     if nombre == "crear_cita":
+        # Un nombre de relleno ("Cliente") no es un nombre y se quita ANTES de pedir
+        # apellidos. Medido el 13-sep-2026 (cambios del portal con modelo real): el
+        # modelo llamo con nombre "Cliente", el freno de apellidos contesto "falta el
+        # apellido" conservando los datos, y el resumen salio "👤 Cliente" -tambien
+        # despues de que ella dijera "me llamo Ana Ruiz Perez"-.
+        if not _nombre_de_verdad(argumentos.get("nombre")):
+            argumentos["nombre"] = ""
         conocida = str((quien or {}).get("nombre", "")).strip()
         quien_nombre = str(argumentos.get("nombre") or conocida).strip()
         if (quien_nombre and telefono and not conocida
