@@ -493,3 +493,51 @@ leyó en chat_messages/agent_turns antes de tocar código.
   `whatsapp._ya_se_le_dijo` sigue mirando 8 respuestas sin tiempo (solo añade un remate).
 - Siguiente: suite completa, banco completo y humo sobre el SHA con este registro;
   después segundo negocio, informe de aceptación y orden de despliegue de Pablo.
+
+## 2026-09-13 13:30–14:50 +0200 - suite, banco y humo del candidato; dos fallos que tocaban la agenda (Claude)
+
+Rama `claude/candidato`. Sin despliegue ni cambios en producción. Mediciones con modelo
+real: copia `snap3_conregla` (producción 13-sep 08:59 + regla de orientación de Alicia SOLO
+en la copia), config viva `cfg3`, desde E:/Vantelia, árbol limpio y SHA estable de principio
+a fin en todas.
+
+| Medición | SHA | Resultado |
+| --- | --- | --- |
+| Suite completa | 5e9f8d7 | **2529 passed, 1 skipped**, exit 0, 25 min 14 s (13:31:41–13:57:03) |
+| Humo (5 recorridos) | 5e9f8d7 | **5/5** llegan al final (cita, opción, precio→diagnóstico, cancelar, reprogramar) |
+| Banco completo | 5e9f8d7 | 44 previstos, 1 no aplica, 43 medidos: **41 OK 1.er intento, 2 tras reintento, 0 fallos** |
+| `cambiar-la-hora-de-verdad` ×6 | 6bed2f1 | **6/6 al 1.er intento**; una cita viva movida al 22-sep 18:30 |
+| `dice-que-si-y-acaba-en-cita` ×6 | 6bed2f1 | **6/6 al 1.er intento**; resumen Ana Ruiz Perez / Diagnóstico y presupuesto / 15:00 |
+| Banco completo | 6bed2f1 | 43 medidos: **41 OK 1.er intento, 2 tras reintento, 0 fallos** |
+| `cambiar-la-hora-de-verdad` ×6 | 112b26c | **6/6 al 1.er intento**; una cita viva movida al 22-sep 18:30 en las 6 (leído en las copias) |
+| Banco completo | 112b26c | 43 medidos: **42 OK 1.er intento, 1 tras reintento, 0 fallos** (12:26:42–12:45:31 UTC) |
+| Suite completa | 112b26c | **2541 passed, 1 skipped**, exit 0, 22 min 47 s (14:26:44–14:49:37) |
+
+- No aplica en Alicia: `precio-cerrado-si-se-dice` (no da precios por mensaje).
+- Todos los primeros intentos fallidos se leyeron. Dos tocaban la agenda y se arreglaron:
+  - 5e9f8d7, `cambiar-la-hora-de-verdad`: **la clienta perdió la cita**. Ya movida, dijo «vale,
+    la primera opcion que me has dicho» y el modelo llamó a `cancelar_cita` para «crear otra»:
+    cancelación ejecutada, creación frenada; en la copia, cancelada y ninguna otra. Crear sin
+    pedir tenía freno; cancelar sin pedir, no. **6bed2f1**: `cancelar_cita` solo si ella lo pide
+    en esta conversación (`reserva.pide_anular`) o el canal declara `intencion=cancelar`; si no,
+    error a la tool y freno `cancelar_sin_pedirlo`. 1 rojo sin el freno, 7 controles; 211 verdes.
+  - 6bed2f1, `cambiar-la-hora-de-verdad`: **«he reprogramado» sin mover nada**. Tras un rechazo
+    por misma fecha y hora, el modelo repitió la llamada con `servicio` (el mismo, sin tildes) y
+    la tool dio ok: la auditoría anotó `booking_updated` sin cambio. El control solo se aplicaba
+    sin `servicio`. **112b26c**: el servicio cuenta como cambio solo si
+    `booking._service_for_existing_booking` devuelve otro. 3 rojos sin el arreglo, 1 control;
+    135 verdes. Con modelo real, en 4 de las 6 tiradas de 112b26c el modelo volvió a intentar
+    la misma hora y la tool lo rechazó.
+- Primeros intentos fallidos sin efecto en la agenda (pendientes de producto, no arreglados):
+  - `recomienda-ante-un-problema` (5e9f8d7, 6bed2f1): a «se me cae mucho el pelo» sugiere
+    alisados; en el reintento, color o mechas. Mala recomendación en los dos.
+  - `pregunta-el-dia-en-vez-de-recitar` (112b26c): recita las horas del 15 sin preguntar el día.
+- En 6bed2f1 el freno de cancelar no se ejecutó con modelo real (el modelo no intentó cancelar);
+  lo cubre el test.
+- Observado sin fallo: en reprogramar salta `se_acabaron_las_vueltas` en los dos primeros
+  turnos y, al final, `dijo_que_hay_cita_sin_haberla`/`dijo_haberlo_hecho_sin_hacerlo` con la
+  cita existente (posible falso positivo del freno).
+- Copias de BD de todas las series y bancos borradas (datos de clientas); informes JSON en el
+  scratchpad de la sesión.
+- Siguiente: segundo negocio (metareview), cambio del portal a mitad de conversación, informe
+  de aceptación y orden de despliegue de Pablo.
