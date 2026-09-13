@@ -90,6 +90,24 @@ def talla_de(texto: str) -> str:
     return candidatas[0][1]
 
 
+def _tecnica_sin_talla(tecnica: Any) -> str:
+    """La tecnica que ha dicho, sin la talla que el extractor le haya pegado.
+
+    Medido el 13-sep-2026 (humo `elegir-una-opcion-resuelve`, dos tiradas con el mismo
+    turno): a «mechas» + «lo tengo medio» el extractor apunto unas veces
+    `tecnica: ""` y otras `tecnica: "mechas medio"`. Con la segunda, el filtro «la
+    tecnica que ha nombrado manda» se quedaba solo con «Mechas medio» (75 min) y el
+    pack de 360 que el negocio prefiere ya no llegaba a elegirse.
+
+    Solo se toca si lleva una talla: una tecnica sin ella («extra volumen») se queda
+    como esta.
+    """
+    limpio = _norm(tecnica)
+    if not limpio or not talla_de(limpio):
+        return limpio
+    return tecnica_de(limpio)
+
+
 def tecnica_de(nombre: str) -> str:
     """El nombre del servicio SIN la talla: lo que lo distingue de otra familia.
 
@@ -300,8 +318,9 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         return Eleccion(falta="nada")
 
     familia = _norm(datos.get("familia"))
-    tecnica = _norm(datos.get("tecnica"))
-    talla = _norm(datos.get("talla"))
+    # La talla no es parte de la tecnica: "mechas medio" es mechas, de talla medio.
+    tecnica = _tecnica_sin_talla(datos.get("tecnica"))
+    talla = _norm(datos.get("talla")) or talla_de(str(datos.get("tecnica") or ""))
     para_quien = _norm(datos.get("para_quien"))
 
     # 1. Candidatos: los que encajan con la familia o la tecnica que ha dicho.

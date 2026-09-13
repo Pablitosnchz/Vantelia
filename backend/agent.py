@@ -2056,6 +2056,30 @@ _SOBRA_ANTES_DEL_NOMBRE = re.compile(
     r"cita de|cita para|el servicio de|servicio de)\s+")
 
 
+# Una fecha ISO suelta en lo que va a leer la clienta. No dentro de un enlace ni pegada
+# a otras cifras (un codigo, una URL con ?fecha=).
+_FECHA_ISO_SUELTA = re.compile(r"(?<![\w/=.-])(20\d{2})-(\d{2})-(\d{2})(?![\w/-])")
+
+
+def _fechas_en_humano(texto: str) -> str:
+    """«2026-09-15» -> «martes 15 de septiembre» en la respuesta a la clienta.
+
+    Medido el 13-sep-2026 con modelo real (caso critico, 3 de 6 tiradas de 0bca1eb):
+    «¿Te agendo la cita para el 2026-09-15 a las 15:00?». El modelo copia la fecha de
+    las herramientas tal cual; pedirselo en el prompt no basta. La fecha que no se
+    pueda leer se deja como esta.
+    """
+    from datetime import date
+
+    def _humana(m):
+        try:
+            return textnorm._format_date_es(date(int(m.group(1)), int(m.group(2)), int(m.group(3))))
+        except ValueError:
+            return m.group(0)
+
+    return _FECHA_ISO_SUELTA.sub(_humana, str(texto or ""))
+
+
 def _es_el_nombre_de_un_servicio(cliente_id: str, dicho: str,
                                  location_id: str = "") -> str:
     """Lo que ha dicho ES el nombre de un servicio del catalogo. Devuelve cual.
@@ -2181,7 +2205,7 @@ def _tool_buscar_servicio(
     # categoria es la misma bajada de gama que le colaba el acido lactico de 15
     # minutos a quien pedia el bio premium. Se dice que eso no se hace y se le
     # ensenyan los parecidos -que no es lo mismo que negarle un servicio real-.
-    tecnica_dicha = catalog_pick._norm(str(datos.get("tecnica") or ""))
+    tecnica_dicha = catalog_pick._tecnica_sin_talla(datos.get("tecnica"))
     if tecnica_dicha and len(tecnica_dicha) >= 8 and not _alguien_la_hace(
             cliente_id, tecnica_dicha, location_id=location_id):
         return {
@@ -4088,7 +4112,7 @@ async def responder(
                                 pedido=reserva.que_falta(estado, conocido))
                 final = _con_el_telefono_si_hace_falta(
                     cliente_id, mensaje,
-                    _sin_comillas_en_los_servicios(cliente_id, texto_final),
+                    _sin_comillas_en_los_servicios(cliente_id, _fechas_en_humano(texto_final)),
                     cita_creada,
                     veces_movida=int(getattr(estado, "veces_movida", 0)),
                 )
@@ -4542,7 +4566,7 @@ async def responder(
         )
         reserva.guardar(cliente_id, clave_estado, estado,
                         pedido=reserva.que_falta(estado, conocido))
-        remate_final = (cierre.choices[0].message.content or "").strip()
+        remate_final = _fechas_en_humano((cierre.choices[0].message.content or "").strip())
         traza.freno("se_acabaron_las_vueltas")
         traza.guardar(mensaje=mensaje, respuesta=remate_final)
         return remate_final, cita_creada
