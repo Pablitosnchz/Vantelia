@@ -82,6 +82,10 @@ class Estado:
     fecha_de_los_huecos: str = ""  # de que dia son esos huecos (no es "el dia elegido")
     dia_le_da_igual: bool = False
     hora_del_codigo: bool = False  # la hora la eligio el codigo ("la primera que tengas"), no ella
+    # Lo que dijo de la hora ("a las 15") cuando aun no habia huecos con que
+    # validarlo. No es una hora elegida: se resuelve contra huecos REALES cuando
+    # los hay (al aceptar una alternativa). Sin esto "a las 15" se perdia.
+    hora_sin_hueco: str = ""
     fecha_de_ella: bool = False    # el dia lo ha dicho ella (o viene en la cita que va a confirmar)
     hecho: bool = False          # la gestion se completo en esta conversacion
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
@@ -469,6 +473,18 @@ def _hora_coloquial(texto: str, huecos: List[str]) -> str:
     return ""
 
 
+def _menciona_una_hora(texto: str) -> bool:
+    """¿Dice una hora ("a las 15", "sobre las 5 de la tarde")? No la resuelve.
+
+    Solo sirve para guardar el texto en `Estado.hora_sin_hueco` cuando todavia no
+    hay huecos contra los que validarlo; la resuelve `_hora_coloquial`, siempre
+    contra huecos reales. "el 15" (un dia) no cuenta: hace falta "las".
+    """
+    import re
+
+    return bool(re.search(r"\blas?\s+\d{1,2}(?:[:.]\d{2})?\b", str(texto or "").lower()))
+
+
 def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
                        cliente_id: str = "") -> None:
     """Lo que se puede sacar de su mensaje SIN preguntarle al modelo.
@@ -538,6 +554,7 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
             estado.fecha = fecha
             estado.hora = ""      # el hueco de otro dia no vale
             estado.hora_del_codigo = False
+            estado.hora_sin_hueco = ""
             estado.huecos = []
         if not estado.hora:
             hora = textnorm._extract_time_from_text(mensaje or "")
@@ -546,6 +563,11 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
             if hora:
                 estado.hora = hora
                 estado.hora_del_codigo = False
+            elif not estado.huecos and _menciona_una_hora(mensaje or ""):
+                # "a las 15" sin huecos con que validarlo: no se da por elegida,
+                # pero tampoco se tira (13-sep-2026, caso dice-que-si-y-acaba-en-cita:
+                # aceptada la cita de diagnostico se le volvian a listar las horas).
+                estado.hora_sin_hueco = " ".join(str(mensaje).split())[:80]
         # "la primera que tengas", "me da igual la hora": ELIGE EL CODIGO. Estaba
         # escrito como instruccion -"coge el primero"- y el modelo respondia
         # volviendo a ofrecerle la lista de horas, otra vez, y otra. Es el fallo
@@ -576,6 +598,9 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
                 estado.hora_del_codigo = True
                 if not estado.fecha and estado.fecha_de_los_huecos:
                     estado.fecha = estado.fecha_de_los_huecos
+        # Con una hora de verdad ya elegida, lo que dijo antes sin huecos no manda.
+        if estado.hora:
+            estado.hora_sin_hueco = ""
         # "me llamo Ana Ruiz": el nombre entra en cuanto lo dice. Antes solo llegaba
         # con la llamada a `crear_cita`, asi que con dia y hora ya puestos seguia
         # "faltando el nombre", el codigo no forzaba el cierre y el modelo volvia a

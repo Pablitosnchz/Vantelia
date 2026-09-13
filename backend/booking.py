@@ -7388,9 +7388,19 @@ async def conservar_la_hora_dicha(cliente_id: str, estado, hora: str, *,
     está libre para el servicio ACEPTADO, mirada con los mismos huecos que se
     ofrecen. Lo llaman los dos caminos de aceptar: el canal y `responder_propuesta`.
     El que llama persiste el estado.
+
+    La serie siguiente (6 tiradas sobre 1fe7a3e: 0 al primer intento) enseñó que
+    «a las 15» a secas no llega a ser `estado.hora`: sin huecos consultados no se
+    puede validar y queda en `estado.hora_sin_hueco`. Aquí sí hay huecos, los del
+    servicio aceptado, así que se resuelve con el mismo parser
+    (`reserva._hora_coloquial`). Una hora elegida de verdad manda sobre ese texto.
     """
+    from backend import reserva
+
     propuesta = estado.propuesta_servicio
-    if (not hora or del_codigo or estado.hora or not estado.fecha
+    dicha = "" if del_codigo else str(hora or "")
+    pendiente = str(getattr(estado, "hora_sin_hueco", "") or "")
+    if ((not dicha and not pendiente) or estado.hora or not estado.fecha
             or propuesta is None or propuesta.estado != "aceptada"):
         return False
     try:
@@ -7399,9 +7409,14 @@ async def conservar_la_hora_dicha(cliente_id: str, estado, hora: str, *,
             location_id=location_id or propuesta.location_id or "")
     except Exception:  # noqa: BLE001 - ante la duda se le pregunta la hora
         return False
-    if hora not in libres:
+    if dicha:
+        elegida = dicha if dicha in libres else ""
+    else:
+        elegida = reserva._hora_coloquial(pendiente, sorted(libres))
+    if not elegida:
         return False
-    estado.hora = hora
+    estado.hora = elegida
+    estado.hora_sin_hueco = ""
     return True
 
 
