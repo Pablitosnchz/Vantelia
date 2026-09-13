@@ -1,8 +1,109 @@
 # Evidencia de aceptación del candidato IA
 
-Estado: **evidencia completa del 13-sep; pendiente de orden de despliegue de Pablo** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
+Estado: **candidato final 0bca1eb revisado y medido el 13-sep (sección siguiente); pendiente de orden de despliegue de Pablo**. Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
+
+## Actualización 13-sep-2026, 17:55: dos revisiones, sus arreglos y medición del SHA final (Claude)
+
+Candidato final: rama `claude/candidato`, código **0bca1eb**.
+Sobre 112b26c: 24a4a51 (medidor de portal y reinicios), a329fe0 (hallazgo de Astra), c0bc746
+(escenario de hora bloqueada), 1630583 (nombre de relleno), 2a794c2 (revisión independiente),
+3167313 (freno que negaba horas libres), 413c170 (docs) y 0bca1eb (hallazgos de Astra). Condiciones: copia nueva de `snap4_conregla` (producción
+13-sep 15:52 + regla de orientación de Alicia SOLO en la copia), config viva `cfg4`, modelo
+`gpt-4o-mini`, solo se inyecta la clave del modelo, árbol limpio y SHA estable en cada tirada.
+
+### Revisiones antes de desplegar
+
+- **Astra** (782a53f..45d7f85, 16:12): «PACK MECHAS LARGO» al reprogramar contaba como cambio de
+  servicio y se auditaba una actualización sin cambio. Arreglado en a329fe0 (3 regresiones rojas
+  sin el arreglo). Astra da el arreglo por bueno (17:16: «cubre Pack/nombre público/capitalización»).
+- **Revisión independiente en frío** (subagente de solo lectura, 782a53f..1630583): VEREDICTO
+  CAMBIOS. Cuatro defectos reproducidos ejecutándolos, arreglados en 2a794c2 (30 de 36 tests en
+  rojo sin el arreglo; los otros 6 son controles):
+  1. La hora tomaba el número del día: «el jueves 18 a las 11» daba las 18:00.
+  2. `booking_name` guardaba conversación como nombre («perdona, mejor a las 16»).
+  3. «sí, el jueves a las 17» aceptaba la oferta y perdía el día y la hora.
+  4. El freno de cancelar bloqueaba cancelaciones legítimas («no puedo venir, quítamela»,
+     «bórramela», el «sí» a «¿quieres que la cancele?»).
+- **Leyendo las conversaciones de 2a794c2** (escenario de reinicio a mitad de reserva): el freno
+  `ofrecio_una_hora_que_no_tiene` obligó a decir «a las 17:00 no tengo disponibilidad» con las
+  17:00 libres, porque comparaba contra una MUESTRA de 8 huecos. Ya estaba en producción.
+  Arreglado en 3167313 (test con el estado de los turnos medidos, rojo sin el arreglo; el control
+  con la hora ocupada sigue frenando).
+
+- **Astra sobre 2a794c2 y 3167313** (17:16): CAMBIOS. [CRÍTICO] `_le_pregunto_si_la_cancela`
+  autorizaba cualquier «sí» si el último mensaje llevaba «?» y «cancelar» en otra frase («No puedo
+  cancelar la cita pasada. ¿Quieres que te ayude con otra cosa?»). [IMPORTANTE] En `booking_name`,
+  con el agente caído, la frase se guardaba como nombre. 3167313: sin hallazgo. Arreglados en
+  0bca1eb: solo cuenta una pregunta que ofrezca anular, sin negarlo ni dar alternativa (13 frases
+  comprobadas), con recorrido por la herramienta; con el agente caído se vuelve a pedir el nombre.
+
+### Comparación de conversaciones completas
+
+| Negocio y versión | Previstos | No aplican | No medidos | OK 1.er intento | OK tras reintento | Fallos finales | Artefacto |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Alicia, referencia (bd7a6da) | 44 | 1 | 0 | 41 | 1 | **1 crítico** | ref_banco.json |
+| Alicia, candidato (112b26c) | 44 | 1 | 0 | 42 | 1 | 0 | banco_g.json |
+| Alicia, candidato (2a794c2) | 44 | 1 | 0 | **43** | 0 | **0** | banco_h.json |
+| Alicia, candidato (3167313, commit 413c170) | 44 | 1 | 0 | 42 | 1 | **0** | banco_i.json |
+| Alicia, candidato final (0bca1eb) | 44 | 1 | 0 | **42** | 1 | **0** | banco_j.json |
+| metareview conversacional, referencia (bd7a6da) | 44 | 28 | 0 | 16 | 0 | 0 | ref_meta_conv.json |
+| metareview conversacional, candidato (2a794c2) | 44 | 28 | 0 | **16** | 0 | **0** | banco_meta_h.json |
+| metareview conversacional, candidato (3167313, commit 413c170) | 44 | 28 | 0 | 15 | 1 | **0** | banco_meta_i.json |
+| metareview conversacional, candidato final (0bca1eb) | 44 | 28 | 0 | **16** | 0 | **0** | banco_meta_j.json |
+
+Otras mediciones:
+
+| Medición | SHA | Resultado |
+| --- | --- | --- |
+| Suite completa | 2a794c2 | 2631 passed, 1 skipped (21 min 54 s) |
+| Suite completa | 413c170 (código 3167313) | 2633 passed, 1 skipped (21 min 47 s) |
+| Suite completa | 0bca1eb | 2641 passed, 1 skipped (22 min 7 s) |
+| Humo (5 recorridos) | 2a794c2 | 5/5; citas creadas, cancelada y movida leídas en la copia; avisos sin canales |
+| Humo (5 recorridos) | 413c170 | 5/5; citas de corte y pack mechas creadas, una cancelada y otra movida, leídas en la copia; avisos sin canales |
+| Humo (5 recorridos) | 0bca1eb | 5/5; citas de corte y mechas creadas, una cancelada y otra movida, leídas en la copia; avisos sin canales |
+| `dice-que-si-y-acaba-en-cita` ×6 | 2a794c2 | 6/6 al 1.er intento; resumen de Diagnóstico y presupuesto 15:00 a nombre de Ana Ruiz Perez en las 6 |
+| `dice-que-si-y-acaba-en-cita` ×6 | 413c170 | 6/6 al 1.er intento; mismo resumen en las 6 (Diagnóstico y presupuesto, martes 15 a las 15:00, Ana Ruiz Perez); fecha «2026-09-15» en una respuesta intermedia en 2 de 6 |
+| `dice-que-si-y-acaba-en-cita` ×6 | 0bca1eb | 6/6 al 1.er intento; mismo resumen en las 6; fecha «2026-09-15» en una respuesta intermedia en 3 de 6 |
+| Cambios del portal y reinicios (6 escenarios) | 24a4a51 / c0bc746 / 2a794c2 | 6/6 (1 falso aprobado corregido) / escenario corregido OK / 6/6 |
+| Cambios del portal y reinicios (6 escenarios) | 413c170 | 6/6; en el reinicio a mitad de reserva ya no se niega la hora libre (una cita viva a las 17:00); la única negativa es la del horario bloqueado |
+| Cambios del portal y reinicios (6 escenarios) | 0bca1eb | 6/6; `regla-apagada-despues-de-ofrecer` al 2.º intento (el 1.º acabó en el resumen del diagnóstico retirado); una cita viva en los dos reinicios |
+
+### Puertas de aceptación (cambios respecto a lo anterior)
+
+| Recorrido | Evidencia | Pendiente |
+| --- | --- | --- |
+| Cambios del portal | Vacaciones tras ofrecer el día, hora bloqueada y servicio retirado con el resumen delante, regla apagada tras ofrecer: con modelo real, sin cita en lo retirado | Solo un día de calendario |
+| Reinicio/repetición | Reinicio a mitad de reserva y con el resumen delante: una sola cita viva | — |
+| Revisión | Astra (a329fe0 OK; 3167313 sin hallazgo; 2a794c2 con 2 cambios, arreglados en 0bca1eb) + revisión independiente (4 hallazgos arreglados) | — (Astra, 17:38: «REVISION 0bca1eb: OK», sin hallazgos nuevos; a329fe0 OK) |
+
+### Pendiente de producto nuevo (además de la lista anterior)
+
+- Una respuesta intermedia escribe la fecha como «2026-09-15» (crítico: 2 de 6 tiradas en 2a794c2, 2 de 6 en 413c170 y 3 de 6 en 0bca1eb).
+- Con el día bloqueado por vacaciones contesta «la agenda está completa ese día» en vez de que está
+  cerrado (sin cita; ofrece otro día).
+- De la revisión independiente, sin arreglar: una nota del agente se sobrescribe en `agent.py`;
+  posible callejón si con clienta conocida `_wa_resumen_para_confirmar` devuelve False tras pasar a
+  `booking_confirm`.
+- metareview (413c170): `horario-escrito-manda` necesitó reintento; el primer intento dijo
+  «mañana» y no «lunes» (redacción). En ese caso salta `dijo_cerrado_estando_abierto` diciendo
+  «hoy estamos cerrados» en domingo, que es verdad (`closed_weekdays: [6]`): freno en falso, igual
+  en 2a794c2. Un intento dijo «para mañana ya no hay huecos» con el lunes abierto: sin verificar.
+- Alicia (413c170): `recomienda-ante-un-problema` necesitó reintento; a «se me cae mucho el pelo»
+  sugiere alisados y color o mechas (pendiente ya conocido, también en producción); en 0bca1eb igual, y el reintento propuso el diagnóstico de extensiones.
+- **Riesgo serio, ya en producción (código de elección de servicio sin cambios desde bd7a6da):** en
+  el humo `elegir-una-opcion-resuelve` («mechas», «lo tengo medio»), la MISMA llamada
+  `buscar_servicio("mechas lo tengo medio mechas medio")` dio en 413c170 «Pack mechas o balayage
+  medio» (360 min) y en 0bca1eb «Mechas medio» (75 min), con `preferir_packs` activo. La cita de
+  0bca1eb se habría apartado con cinco horas de menos. Varía la extracción del modelo
+  (`intents.extraer_datos_servicio`); el humo solo exige que haya cita. Leído en `agent_turns` y en
+  la cita de cada copia.
+- Regla apagada a mitad de conversación (0bca1eb, 1 de 2 intentos; con 24a4a51, 2a794c2 y 413c170
+  pasó al primero): tras «Esta opción ya no está vigente», al dar el nombre el modelo volvió al
+  diagnóstico y montó su resumen. Sin cita creada (la confirma ella). No lo toca 0bca1eb. Las
+  herramientas de ese intento no se pueden leer: el medidor reutiliza la copia del escenario en el
+  reintento (mejora pendiente del instrumento: una copia por intento).
 
 ## Informe de aceptación del candidato: 13-sep-2026 (Claude, agente principal)
 

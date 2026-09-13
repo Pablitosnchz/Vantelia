@@ -599,3 +599,31 @@ a fin en todas.
   y suite completa.
 - Siguiente: leer resultados y conversaciones, actualizar el informe de aceptación y contar a
   Pablo los hallazgos serios antes de desplegar.
+
+## 2026-09-13 16:51–17:50 +0200 - medición de 2a794c2, freno de hora, revisión de Astra y SHA final (Claude)
+
+- Medición de 2a794c2 (árbol limpio, copia nueva de snap4_conregla, cfg4, solo la clave del modelo):
+  banco Alicia 43/43 al primer intento; metareview conversacional 16/16; crítico
+  `dice-que-si-y-acaba-en-cita` 6/6 al primer intento; humo 5/5 con los efectos leídos en la
+  copia; portal y reinicios 6/6; suite 2631 passed, 1 skipped.
+- Leyendo las conversaciones (reinicio a mitad de reserva): el freno `ofrecio_una_hora_que_no_tiene`
+  obligó a decir «a las 17:00 no tengo disponibilidad» con las 17:00 libres (la cita se creó a esa
+  hora sin conflicto). Comparaba contra la muestra de 8 huecos. Ya en producción. 3167313: antes de
+  frenar mira la agenda real del día con margen. Test con el estado de los turnos medidos, rojo sin
+  el arreglo; control con la hora ocupada.
+- Medición de 413c170 (código 3167313): banco Alicia 42 + 1 reintento (`recomienda-ante-un-problema`,
+  pendiente conocido); metareview 15 + 1 (`horario-escrito-manda`, redacción); crítico 6/6; humo 5/5;
+  portal 6/6 (sin la negativa falsa); suite 2633 passed, 1 skipped.
+- Revisión de Astra sobre 2a794c2 y 3167313 (17:16): CAMBIOS. [CRÍTICO] el «sí» autorizaba a cancelar
+  si «cancelar» aparecía en otra frase del último mensaje; [IMPORTANTE] con el agente caído,
+  `booking_name` guardaba la frase como nombre. 3167313 sin hallazgo; a329fe0 OK. Arreglados en
+  0bca1eb (6 rojos sin el arreglo, 2 controles, 120 verdes). Astra (17:38): «REVISION 0bca1eb: OK».
+- Riesgo serio YA en producción (código sin cambios desde bd7a6da): con `preferir_packs`, la misma
+  llamada `buscar_servicio("mechas lo tengo medio mechas medio")` dio el pack de 360 min en una
+  tirada y «Mechas medio» (75 min) en otra. Varía la extracción del modelo; el humo solo exige cita.
+- Medición de 0bca1eb (SHA final, árbol limpio en todas las tiradas): banco Alicia 42 + 1 reintento
+  (`recomienda-ante-un-problema`), 0 fallos; metareview 16/16; crítico 6/6 al primer intento; humo
+  5/5 (efectos leídos en la copia); portal y reinicios 6/6, `regla-apagada-despues-de-ofrecer` al
+  segundo intento (el primero acabó en el resumen del diagnóstico retirado, sin cita); suite 2641
+  passed, 1 skipped.
+- Siguiente: informe de aceptación, contar a Pablo los hallazgos y pedir la orden de despliegue.
