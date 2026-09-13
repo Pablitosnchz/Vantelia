@@ -392,6 +392,7 @@ def main() -> int:
                     "la cita se guardo estirada pero se sigue pintando igual (%s -> %s)"
                     % (alto_antes, alto_despues)
                 )
+                etiqueta_duracion = page.locator(".cd-event .cd-ev-svc").first.inner_text()
                 # Y soltar el borde no puede abrir el panel de Gestionar cita.
                 assert page.get_by_role("heading", name="Gestionar cita").count() == 0, (
                     "estirar la cita abre el panel de Gestionar"
@@ -409,6 +410,9 @@ def main() -> int:
             _final = _booking._load_booking_or_404(_cita["id"])
             _dura = agenda._booking_row_duration_min(_final, CID)
             assert _dura > 20, "estirar la cita no cambio lo que ocupa (%s min)" % _dura
+            assert "%d min" % _dura in etiqueta_duracion.split(" · "), (
+                "la etiqueta no coincide con la duracion guardada: %r frente a %s min"
+                % (etiqueta_duracion, _dura))
 
             print("PASS: Informes, filtros, graficos, servicios, centros, Ventas, "
                   "agenda (servicio escrito + cita estirada a %d min) y responsive movil" % _dura)

@@ -8542,7 +8542,7 @@ function cdTramos(b, emp){
   if (ini === null) return [];
   return [[ini, ini + cdDur(b, emp)]];
 }
-function cdDur(b, emp){
+function cdDur(b, emp, useSlotFallback = true){
   // MANDA lo que ocupa la cita de verdad (su inicio y su fin), no la duracion del
   // catalogo. Era al reves y por eso estirar una cita se guardaba bien pero se
   // seguia pintando del tamanyo de antes: la agenda bloqueaba una cosa y el
@@ -8552,6 +8552,7 @@ function cdDur(b, emp){
   if (s && e && !isNaN(s) && !isNaN(e)) { const d = Math.round((e - s)/60000); if (d > 0 && d <= 1440) return d; }
   const svcDur = Number(b.service_duration_minutes || b.duration_minutes || 0);
   if (svcDur > 0 && svcDur <= 1440) return svcDur;
+  if (!useSlotFallback) return 0;
   return Number(emp?.slot_minutes) || Number(citasState.daySchedule?.slot_minutes) || 30;
 }
 // ── Estado de cobro de una cita ───────────────────────────────────────
@@ -8583,7 +8584,7 @@ function payPendingEuros(b) {
 
 function cdServiceMeta(b){
   const bits = [];
-  const dur = Number(b.service_duration_minutes || b.duration_minutes || 0);
+  const dur = cdDur(b, null, false);
   if (dur > 0) bits.push(`${dur} min`);
   if (b.service_price_label) bits.push(b.service_price_label);
   return bits.length ? ` · ${bits.join(' · ')}` : '';
