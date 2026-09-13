@@ -61,6 +61,14 @@ CASOS = [
         # aqui `agenda: crea` seria pedir que la cita naciera sin que ella la
         # confirme, que es justo lo que el canal evita a proposito.
         "debe": ["Resumen de tu cita", "Confirmamos"],
+        # Cualquier resumen NO vale. 13-sep-2026, referencia con el codigo de
+        # produccion (bd7a6da): el reintento "aprobo" con un resumen de "Acido
+        # lactico bio premium corto, 1 h 30 min, fianza 50 EUR" a nombre de
+        # "clienta", a quien habia dicho "no lo tengo claro" y "me llamo Ana Ruiz
+        # Perez". Le eligio la tecnica y le invento el nombre. El resumen tiene que
+        # ser el de la cita de diagnostico (decision de Alicia, 13-sep) y a su nombre.
+        "no_debe_en": "ultima",
+        "no_debe": ["acido lactico", "ácido láctico", "keratina", "clienta"],
     },
     # ─── La demo del 8-sep-2026, delante de la duenya ──────────────────────
     {
