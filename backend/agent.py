@@ -1823,6 +1823,25 @@ def _veces_sin_concretar(falta: str, ultimo: str, veces: int, *, duda: bool = Fa
     return veces + 1 if ultimo in pendientes and (falta == ultimo or duda) else 0
 
 
+def _texto_de_la_duda(estado: Any, argumentos: Dict[str, Any]) -> str:
+    """Sobre que servicio duda: lo que el modelo busco MAS lo que ella ha ido diciendo.
+
+    13-sep-2026, medido paso a paso contra copia de produccion: con la regla de
+    orientacion declarada, el diagnostico no se ofrecia nunca. La familia se
+    buscaba solo en `estado.servicio_texto`, y ese texto habia perdido el primer
+    mensaje: "quiero un alisado" lo atendio el flujo de WhatsApp, no el agente.
+    La regla recibia "no lo tengo claro el 2026-09-15 a las 15" -sin la palabra
+    alisado-, no casaba, y la clienta seguia oyendo "¿Keratina o Acido lactico?".
+
+    La `descripcion` con la que el modelo llama a `buscar_servicio` si lo lleva, y
+    es la MISMA busqueda que devuelve que falta la tecnica: lo que dice que falta
+    y lo que dice de que duda tienen que salir del mismo sitio.
+    """
+    partes = [str((argumentos or {}).get("descripcion") or "").strip(),
+              str(getattr(estado, "servicio_texto", "") or "").strip()]
+    return " ".join(parte for parte in partes if parte)
+
+
 def _nota_al_repetir_la_pregunta() -> str:
     """Ayuda a aclarar sin convertir una duda o una Q&A en selección de servicio."""
     return (
@@ -4285,7 +4304,7 @@ async def responder(
                     # recorrido. Ofrecer no selecciona ni crea una cita.
                     orientacion = {}
                     if falta and not progreso and estado.veces_falta >= 2:
-                        original = str(estado.servicio_texto or argumentos.get("descripcion") or "")
+                        original = _texto_de_la_duda(estado, argumentos)
                         orientacion = booking.regla_de_orientacion_para(cliente_id, original)
                         if orientacion.get("accion") == "ofrecer_cita":
                             actual = booking.alternativa_de_orientacion_vigente(cliente_id, original, location_id)
