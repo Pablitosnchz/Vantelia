@@ -945,6 +945,19 @@ PIDE_MOVER = ("cambiar", "mover", "reprogramar", "aplazar", "otro dia", "otra ho
               "mas tarde", "mas temprano", "adelantar", "retrasar", "pasar la cita")
 
 
+def pide_anular(dicho: str) -> bool:
+    """Ha pedido anular la cita, aunque en la misma frase pida otra cosa.
+
+    Lo que autoriza a CANCELAR. Distinto de `pide_anular_y_solo_eso`, que decide la
+    intencion: "cancelala y ponme otra el jueves" no es solo cancelar, pero si
+    autoriza a cancelar.
+    """
+    from backend import catalog_pick
+
+    plano = catalog_pick._norm(dicho or "")
+    return any(pista in plano for pista in PIDE_ANULAR)
+
+
 def pide_anular_y_solo_eso(dicho: str) -> bool:
     """Ha pedido cancelar, y no cambiar de dia.
 

@@ -4072,6 +4072,28 @@ async def responder(
                         and reserva.dia_cambiado_con_la_hora_elegida(estado, argumentos)):
                     argumentos["fecha"] = estado.fecha
                     traza.freno("dia_de_la_hora_elegida")
+                # Nadie pierde una cita que no ha pedido anular. Medido el 13-sep-2026
+                # (banco completo sobre 5e9f8d7, `cambiar-la-hora-de-verdad`): la cita
+                # ya estaba movida, ella dijo "vale, la primera opcion que me has
+                # dicho" y el modelo llamo a `cancelar_cita` para "crear otra". La
+                # cancelacion se ejecuto y la creacion no: se quedo sin cita. Crear una
+                # que nadie pidio tenia freno; cancelarla, no. Solo si lo ha pedido
+                # ella en esta conversacion o el canal lo declara (boton "Cancelar").
+                if (llamada.function.name == "cancelar_cita"
+                        and estado.intencion != "cancelar"
+                        and intencion != "cancelar"
+                        and not reserva.pide_anular(dicho_de_ella)):
+                    mensajes.append({
+                        "role": "tool", "tool_call_id": llamada.id,
+                        "content": json.dumps({
+                            "ok": False,
+                            "error": ("No ha pedido anular su cita. NO la canceles. Si "
+                                      "quiere otro dia u otra hora, usa reprogramar_cita; "
+                                      "nunca canceles una cita para crear otra."),
+                        }, ensure_ascii=False),
+                    })
+                    traza.freno("cancelar_sin_pedirlo")
+                    continue
                 # Nadie acaba con una cita que no ha pedido. Paso con quien solo
                 # preguntaba el horario: se iba con una cita que no sabia que
                 # tenia, y el negocio con un hueco ocupado por nadie.
