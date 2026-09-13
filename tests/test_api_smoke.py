@@ -1680,12 +1680,19 @@ def test_analytics_overview_and_portal_roles(client: TestClient, api_module):
 
 def test_whatsapp_reminder_buttons_confirm_and_cancel(client: TestClient, api_module, monkeypatch):
     sent_messages = []
+    sent_buttons = []
 
     async def _fake_send_text(**kwargs):
         sent_messages.append(kwargs.get("text", ""))
         return True
 
     monkeypatch.setattr(api_module, "_send_whatsapp_text", _fake_send_text)
+
+    async def _fake_send_buttons(**kwargs):
+        sent_buttons.append(kwargs)
+        return True
+
+    monkeypatch.setattr(api_module, "_send_whatsapp_buttons", _fake_send_buttons)
 
     wa_seed_counter = {"n": 0}
 
@@ -1731,12 +1738,23 @@ def test_whatsapp_reminder_buttons_confirm_and_cancel(client: TestClient, api_mo
     assert status_row[0] == "confirmed" and audit == 1
     assert any("confirmada" in m for m in sent_messages)
 
-    # Cancelacion -> cita cancelada
+    # El recordatorio ofrece la cita; solo aceptar su boton vigente la cancela.
     bk_cancel = _seed_future_booking("+34600777002")
     asyncio.run(
         api_module._wa_handle_reminder_reply(
             cliente_id="demo", phone_number_id="1234567890",
             from_number="+34600777002", interactive_id=f"bkcancel_{bk_cancel}", request=_FakeRequest(),
+        )
+    )
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        assert conn.execute("SELECT status FROM bookings WHERE id = ?", (bk_cancel,)).fetchone()[0] == "confirmed"
+    aceptar_cancelacion = sent_buttons[-1]["buttons"][0][0]
+    assert aceptar_cancelacion.startswith("cancel_yes:")
+    asyncio.run(
+        api_module._handle_whatsapp_message(
+            cliente_id="demo", phone_number_id="1234567890",
+            from_number="+34600777002", incoming_text="Sí, cancelar cita",
+            interactive_id=aceptar_cancelacion, request=_FakeRequest(),
         )
     )
     with sqlite3.connect(api_module.DB_PATH) as conn:

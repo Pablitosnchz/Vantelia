@@ -839,8 +839,9 @@ def test_cancelled_booking_cancel_is_idempotent(client: TestClient, api_module, 
 # ===========================================================================
 
 def test_whatsapp_cancel_via_handle_message(api_module, monkeypatch):
-    """El handler de WhatsApp cancela una cita cuando el usuario envía el código."""
+    """El codigo ofrece la cita y aceptar su boton vigente ejecuta la cancelacion."""
     wa_responses: list[str] = []
+    wa_buttons = []
 
     async def _fake_send(*, cliente_id, phone_number_id, to_number, text):
         wa_responses.append(text)
@@ -852,7 +853,12 @@ def test_whatsapp_cancel_via_handle_message(api_module, monkeypatch):
     async def _noop_email(*_a, **_kw):
         return True
 
+    async def _fake_buttons(**kwargs):
+        wa_buttons.append(kwargs)
+        return True
+
     monkeypatch.setattr(api_module, "_send_whatsapp_text", _fake_send)
+    monkeypatch.setattr(api_module, "_send_whatsapp_buttons", _fake_buttons)
     monkeypatch.setattr(api_module, "_cancel_provider_booking", _noop_cancel)
     monkeypatch.setattr(api_module, "_send_booking_email_by_kind", _noop_email)
 
@@ -884,6 +890,15 @@ def test_whatsapp_cancel_via_handle_message(api_module, monkeypatch):
             incoming_text=f"Cancelar cita {code}",
             interactive_id="",
             request=None,
+        ))
+        with api_module._get_db_connection() as conn:
+            assert conn.execute("SELECT status FROM bookings WHERE id = ?", (record["id"],)).fetchone()[0] == "confirmed"
+        assert code in wa_buttons[-1]["body"]
+        aceptar_cancelacion = wa_buttons[-1]["buttons"][0][0]
+        assert aceptar_cancelacion.startswith("cancel_yes:")
+        _run_async(api_module._handle_whatsapp_message(
+            cliente_id="demo", phone_number_id="WA_NUM_ID", from_number=phone,
+            incoming_text="Sí, cancelar cita", interactive_id=aceptar_cancelacion, request=None,
         ))
         assert any("cancelada" in m.lower() for m in wa_responses), \
             f"Respuesta de cancelación esperada, obtuvo: {wa_responses}"
