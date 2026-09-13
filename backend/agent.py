@@ -4295,24 +4295,52 @@ async def responder(
                                 estado.intencion = "reservar"
                                 propuesta = (reserva._propuesta_servicio_vigente(estado, anterior.id)
                                              if anterior else None)
+                                # La oferta se reconoce por lo que la IDENTIFICA -la
+                                # regla y el servicio al que lleva-, no por el texto
+                                # que ella va acumulando. `servicio_origen` cambia en
+                                # cada mensaje ("quiero un alisado" -> "...no lo tengo
+                                # claro" -> "...el martes"), asi que exigirlo igual
+                                # hacia que NUNCA se reconociera la propuesta anterior:
+                                # se preparaba una nueva y se le repetia la oferta
+                                # turno tras turno (medido el 13-sep-2026). Se sigue
+                                # guardando para saber de que vino, y si ella pide otra
+                                # cosa cambian la regla y el `origen`, que si invalidan.
                                 if not (propuesta and propuesta.estado in ("preparada", "ofrecida")
                                         and propuesta.origen == actual["origen"]
                                         and propuesta.revision_config == actual["revision"]
                                         and propuesta.servicio_id == actual["servicio_id"]
-                                        and propuesta.servicio_origen == original
                                         and propuesta.location_id == location_id):
                                     propuesta = reserva.preparar_propuesta_servicio(
                                         estado, servicio_id=actual["servicio_id"], nombre=actual["nombre"],
                                         origen=actual["origen"], revision_config=actual["revision"],
                                         servicio_origen=original, location_id=location_id)
-                                final = "%s\n¿Quieres una cita de %s?" % (
-                                    actual.get("texto") or "Podemos ofrecerte una valoración.",
-                                    textnorm.nombre_de_servicio_publico(actual["nombre"]))
-                                if not remate_manual:
-                                    reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "turno:" + propuesta.id)
-                                reserva.guardar(cliente_id, clave_estado, estado)
-                                traza.guardar(mensaje=mensaje, respuesta=final)
-                                return final, False
+                                # Se ofrece UNA vez. Si ya estaba ofrecida y sigue
+                                # viva, repetir la oferta es el bucle que la deja
+                                # sin cita: medido el 13-sep-2026 con la regla
+                                # declarada puesta, la clienta contestaba "si" y el
+                                # codigo cortaba el turno soltando otra vez
+                                # "¿quieres una cita de Diagnostico?" -cuatro veces
+                                # seguidas-, asi que el modelo no llegaba nunca a
+                                # interpretar su respuesta con `responder_propuesta`,
+                                # que existe justo para eso. Ahora, ofrecida ya, el
+                                # turno sigue y lo interpreta el modelo.
+                                if propuesta.estado == "ofrecida":
+                                    resultado = dict(resultado, politica_orientacion=orientacion,
+                                        nota=("Ya le has ofrecido la cita de %s y sigue pendiente de "
+                                              "respuesta. NO repitas la oferta: interpreta su ultimo "
+                                              "mensaje con `responder_propuesta` (aceptar o rechazar) y, "
+                                              "si no esta claro a que contesta, preguntaselo."
+                                              % textnorm.nombre_de_servicio_publico(actual["nombre"])))
+                                    reserva.guardar(cliente_id, clave_estado, estado)
+                                else:
+                                    final = "%s\n¿Quieres una cita de %s?" % (
+                                        actual.get("texto") or "Podemos ofrecerte una valoración.",
+                                        textnorm.nombre_de_servicio_publico(actual["nombre"]))
+                                    if not remate_manual:
+                                        reserva.marcar_propuesta_ofrecida(estado, propuesta.id, "turno:" + propuesta.id)
+                                    reserva.guardar(cliente_id, clave_estado, estado)
+                                    traza.guardar(mensaje=mensaje, respuesta=final)
+                                    return final, False
                         if orientacion:
                             resultado = dict(resultado, politica_orientacion=orientacion,
                                 nota="Aplica esta política declarada. No selecciones otra técnica ni confirmes una cita.")
