@@ -10,7 +10,8 @@ import hashlib
 import hmac
 import os
 import re
-from typing import Any, Dict, List, Tuple
+from dataclasses import dataclass, replace
+from typing import Any, Dict, List, Tuple, Union
 
 try:
     from twilio.request_validator import RequestValidator as _TwilioRequestValidator
@@ -126,29 +127,100 @@ def _whatsapp_chunks(text: str, *, max_length: int = 3500) -> List[str]:
     return chunks
 
 
-async def _send_whatsapp_payload(
+@dataclass(frozen=True)
+class WhatsAppSendResult:
+    """Aceptación del proveedor, nunca acreditación de entrega al teléfono.
+
+    message_ids conserva fragmentos aceptados aunque después se pierda otro.
+    El consumidor detallado debe decidir por estado, nunca por truthiness.
+    """
+
+    estado: str
+    provider_message_id: str = ""
+    motivo: str = ""
+    http_status: int = 0
+    message_ids: Tuple[str, ...] = ()
+    error_code: str = ""
+    template_name: str = ""
+
+    def __bool__(self):
+        raise TypeError("Consulta el estado del resultado de WhatsApp explícitamente")
+
+
+class WhatsAppDeliveryUnknown(RuntimeError):
+    """Compatibilidad booleana: desconocido no puede activar un fallback por False."""
+
+    def __init__(self, resultado: WhatsAppSendResult):
+        self.resultado = resultado
+        super().__init__(resultado.motivo or "Resultado de WhatsApp desconocido")
+
+
+def _whatsapp_result_for_caller(resultado: WhatsAppSendResult, detailed: bool):
+    if detailed:
+        return resultado
+    if resultado.estado == "desconocido":
+        raise WhatsAppDeliveryUnknown(resultado)
+    return resultado.estado == "aceptado"
+
+
+async def _post_whatsapp_message(
     *,
     cliente_id: str,
     phone_number_id: str,
     payload: Dict[str, Any],
-) -> bool:
+) -> WhatsAppSendResult:
+    """Único POST de mensajes Meta. La respuesta ambigua no autoriza reenvío.
+
+    Esquema de aceptación: POST /messages, messages[].id, colección oficial Meta:
+    https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api
+    Los recibos de entrega son otro contrato.
+    """
     access_token = _whatsapp_access_token_for_client(cliente_id)
     if not access_token:
-        settings.logger.warning("WhatsApp sin token configurado para %s; respuesta no enviada.", cliente_id)
-        return False
+        return WhatsAppSendResult("omitido", motivo="WhatsApp sin token configurado")
+    if not phone_number_id or not payload.get("to"):
+        return WhatsAppSendResult("omitido", motivo="Falta número emisor o destinatario de WhatsApp")
     url = f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/{phone_number_id}/messages"
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post(url, headers=headers, json=payload)
-        if response.status_code >= 300:
-            settings.logger.error(
-                "Error enviando WhatsApp interactive a %s (%s): %s",
-                cliente_id,
-                response.status_code,
-                response.text[:500],
-            )
-            return False
-    return True
+    response = None
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(url, headers=headers, json=payload)
+    except Exception as exc:  # No sabemos si el proveedor llegó a aceptar el POST.
+        if response is None:
+            return WhatsAppSendResult("desconocido", motivo="Sin respuesta concluyente: " + type(exc).__name__)
+        # Un fallo al cerrar el cliente no borra una respuesta ya recibida.
+    status = response.status_code
+    try:
+        body = response.json()
+    except (ValueError, TypeError):
+        body = None
+    if isinstance(body, dict) and 200 <= status < 300 and "error" not in body:
+        messages = body.get("messages")
+        if (isinstance(messages, list) and len(messages) == 1
+                and isinstance(messages[0], dict)
+                and isinstance(messages[0].get("id"), str) and messages[0]["id"].strip()):
+            message_id = messages[0]["id"].strip()
+            return WhatsAppSendResult("aceptado", provider_message_id=message_id,
+                http_status=status, message_ids=(message_id,))
+    error = body.get("error") if isinstance(body, dict) else None
+    # Solo una negativa explícita de cliente es un rechazo seguro. Un 5xx,
+    # timeout HTTP o cuerpo contradictorio se conserva como desconocido.
+    if (400 <= status < 500 and status != 408 and isinstance(error, dict)
+            and type(error.get("code")) is int and isinstance(error.get("message"), str)
+            and error["message"] and not body.get("messages")):
+        return WhatsAppSendResult("rechazado", motivo=error["message"][:300],
+            http_status=status, error_code=str(error["code"]))
+    return WhatsAppSendResult("desconocido", motivo="Respuesta Meta sin aceptación o rechazo concluyente",
+        http_status=status)
+
+
+async def _send_whatsapp_payload(
+    *, cliente_id: str, phone_number_id: str, payload: Dict[str, Any], detailed: bool = False,
+) -> Union[bool, WhatsAppSendResult]:
+    resultado = await _post_whatsapp_message(cliente_id=cliente_id,
+        phone_number_id=phone_number_id, payload=payload)
+    return _whatsapp_result_for_caller(resultado, detailed)
 
 
 async def _send_whatsapp_buttons(
@@ -160,7 +232,8 @@ async def _send_whatsapp_buttons(
     buttons: List[Tuple[str, str]],
     header: str = "",
     footer: str = "",
-) -> bool:
+    detailed: bool = False,
+) -> Union[bool, WhatsAppSendResult]:
     # Se admiten (id, texto) y {"id":..., "title":...}: un sitio los pasaba como
     # diccionario, al iterarlo salian las CLAVES, los dos botones se quedaban con
     # el id "id" y Meta devolvia 400 "Duplicate button id". El mensaje no llegaba,
@@ -189,7 +262,7 @@ async def _send_whatsapp_buttons(
         })
     if not btns:
         settings.logger.error("[whatsapp] sin botones validos para %s", cliente_id)
-        return False
+        return _whatsapp_result_for_caller(WhatsAppSendResult("omitido", motivo="Sin botones válidos"), detailed)
     interactive: Dict[str, Any] = {
         "type": "button",
         "body": {"text": body[:1024]},
@@ -208,6 +281,7 @@ async def _send_whatsapp_buttons(
     }
     return await _send_whatsapp_payload(
         cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+        **({"detailed": True} if detailed else {}),
     )
 
 
@@ -220,7 +294,8 @@ async def _send_whatsapp_cta_url(
     button_label: str,
     url: str,
     footer: str = "",
-) -> bool:
+    detailed: bool = False,
+) -> Union[bool, WhatsAppSendResult]:
     """Mensaje con un boton que abre un enlace, sin ensenar la URL.
 
     Un checkout de Stripe son ~300 caracteres ilegibles en el movil. Con el boton
@@ -245,6 +320,7 @@ async def _send_whatsapp_cta_url(
         payload["interactive"]["footer"] = {"text": footer[:60]}
     return await _send_whatsapp_payload(
         cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+        **({"detailed": True} if detailed else {}),
     )
 
 
@@ -258,7 +334,8 @@ async def _send_whatsapp_list(
     sections: List[Dict[str, Any]],
     header: str = "",
     footer: str = "",
-) -> bool:
+    detailed: bool = False,
+) -> Union[bool, WhatsAppSendResult]:
     interactive: Dict[str, Any] = {
         "type": "list",
         "body": {"text": body[:1024]},
@@ -277,6 +354,7 @@ async def _send_whatsapp_list(
     }
     return await _send_whatsapp_payload(
         cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+        **({"detailed": True} if detailed else {}),
     )
 
 
@@ -286,34 +364,23 @@ async def _send_whatsapp_text(
     phone_number_id: str,
     to_number: str,
     text: str,
-) -> bool:
-    access_token = _whatsapp_access_token_for_client(cliente_id)
-    if not access_token:
-        settings.logger.warning("WhatsApp sin token configurado para %s; respuesta no enviada.", cliente_id)
-        return False
-
-    url = f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/{phone_number_id}/messages"
-    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    delivered = True
-    async with httpx.AsyncClient(timeout=20) as client:
-        for chunk in _whatsapp_chunks(text):
-            payload = {
-                "messaging_product": "whatsapp",
-                "recipient_type": "individual",
-                "to": to_number,
-                "type": "text",
-                "text": {"preview_url": True, "body": chunk},
-            }
-            response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                delivered = False
-                settings.logger.error(
-                    "Error enviando WhatsApp a %s (%s): %s",
-                    cliente_id,
-                    response.status_code,
-                    response.text[:500],
-                )
-    return delivered
+    detailed: bool = False,
+) -> Union[bool, WhatsAppSendResult]:
+    aceptados: List[str] = []
+    for chunk in _whatsapp_chunks(text):
+        resultado = await _post_whatsapp_message(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            payload={"messaging_product": "whatsapp", "recipient_type": "individual",
+                "to": to_number, "type": "text", "text": {"preview_url": True, "body": chunk}})
+        if resultado.estado != "aceptado":
+            if aceptados:
+                # Aunque este fragmento fuese rechazado, False autorizaría
+                # reenviar el texto entero y duplicar los que ya aceptó Meta.
+                resultado = replace(resultado, estado="desconocido", message_ids=tuple(aceptados),
+                    motivo="Texto aceptado parcialmente; no reenviar automáticamente")
+            return _whatsapp_result_for_caller(resultado, detailed)
+        aceptados.extend(resultado.message_ids)
+    resultado = replace(resultado, provider_message_id=aceptados[0], message_ids=tuple(aceptados))
+    return _whatsapp_result_for_caller(resultado, detailed)
 
 
 def _voice_twilio_configured() -> bool:
