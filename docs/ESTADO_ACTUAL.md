@@ -37,9 +37,9 @@ Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 
 - **Testigo:** Astra.
-- **Tarea:** validar candidato integrado: cancelación 9ede4f9, banco 44ac6de/f4ad515, QA e49f29d y recordatorios ff59b06 integrados en a83021c. Revisión local de cada pieza OK, pendiente suite integrada y revisión de Claude.
-- **Rama:** astra/gestion-confirmada, E:/Vantelia-astra-gestion, descendiente de 7ab7775. Se conserva intacto el candidato anterior en astra/whatsapp-recuperable para revisión.
-- **Siguiente:** una suite completa estable con C:/Users/pabli/.codex/vantelia-coordination/validar-gestion.py. Resultado gestion-suite.result.json, revisión exacta automática solo tras verde. Conservar este candidato limpio durante la ejecución y consultar resultado al terminar, no periódicamente. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Tarea:** suite integrada lanzada sobre 2235d25 limpio; mientras termina, diseñar y cerrar reclamación duradera de recordatorios por generación/aviso/canal. Sincronizar semántica de aceptación/rechazo/resultado incierto en el cliente Meta existente.
+- **Rama:** astra/entregas-recordatorios, E:/Vantelia-astra-recordatorios, hija de 2235d25. Conservar E:/Vantelia-astra-gestion y su rama astra/gestion-confirmada intactos durante la suite.
+- **Siguiente:** auxiliar implementa el registro tras contrastar diseño; otro audita solo la interfaz de resultados de Meta. Verificar una vez al completar gestion-suite.result.json en C:/Users/pabli/.codex/vantelia-coordination/. Se lanzó con validar-gestion.py (sesión 20917), revisión automática solo tras verde. No consultar progreso periódicamente ni repetir. Registro: docs/REGISTRO_CONSOLIDACION.md.
 - **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
 
 Resultado confirmado: C:/Users/pabli/.codex/vantelia-coordination/integrado-wa-suite.result.json
@@ -47,12 +47,12 @@ y su .log. Suite terminada, exit 0; no sigue ejecutándose ni debe repetirse.
 El seguimiento cada 30 minutos está actualizado para retomar el último relevo y
 anotar avances con hora. No implica actividad continua entre ejecuciones.
 
-La rama astra/recordatorios-fiables en E:/Vantelia-astra-recordatorios contiene
-ff59b06 ya integrado, no tiene trabajo pendiente sin guardar. Se ha reproducido
-concurrencia de recordatorios (xfail estricto), todavía sin arreglar. Siguiente
-bloque independiente: reclamación duradera por aviso/canal en una rama hija del
-candidato integrado, conservando este para la suite. No repetir envíos de resultado
-incierto ni introducir otra autoridad conversacional.
+ff59b06 de astra/recordatorios-fiables ya está integrado. Su worktree se reutiliza
+ahora en astra/entregas-recordatorios, sin modificar ni borrar aquella rama. Se ha
+reproducido concurrencia de recordatorios (xfail estricto), todavía sin arreglar.
+El nuevo bloque no debe repetir envíos de resultado incierto ni introducir otra
+autoridad conversacional. La generación debe cambiar al reprogramar, también si
+la cita vuelve a su horario inicial; una fila de cita existente no acredita envío.
 
 Validación dirigida nueva (selecciones solapadas): cancelación, último cierre 57
 verdes, con regresiones rojas de cambio de cita, resultado perdido, menú y salto
