@@ -159,7 +159,7 @@ def preparar_formulario_reserva(estado: Estado, token: str) -> bool:
     return True
 
 
-def preparar_confirmacion_reserva(estado: Estado, datos, *, formulario_token="", formulario_respuesta=""):
+def preparar_confirmacion_reserva(estado: Estado, datos, *, formulario_token="", formulario_respuesta="", terms=None):
     if not datos or any(not isinstance(k, str) or not isinstance(v, str) for k, v in datos.items()):
         raise ValueError("Los datos del resumen deben ser textos")
     if formulario_token:
@@ -170,10 +170,15 @@ def preparar_confirmacion_reserva(estado: Estado, datos, *, formulario_token="",
             raise ValueError("El formulario ya no puede preparar otra operación")
         if formulario.get("respuesta"):
             if (anterior and not estado.hecho and anterior["id"] == formulario.get("propuesta")
-                    and formulario["respuesta"] == formulario_respuesta and anterior["datos"] == datos):
+                    and formulario["respuesta"] == formulario_respuesta and anterior["datos"] == datos
+                    and anterior.get("terms") == terms):
                 return anterior["id"]
             raise ValueError("La respuesta del formulario ya fue consumida")
     propuesta = {"id": uuid4().hex, "creada": time.time(), "estado": "preparada", "datos": dict(datos)}
+    if terms is not None:
+        # Solo la preparación interna del núcleo aporta condiciones. El canal
+        # no obtiene este bloque de parámetros del formulario o del modelo.
+        propuesta["terms"] = terms
     estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
     if formulario_token:
         # Una sola publicación/CAS guarda consumo e identidad; no hay ventana

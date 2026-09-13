@@ -2318,16 +2318,22 @@ async def _reschedule_provider_booking(
     )
 
 
-def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> None:
-    service = agenda._get_service_row(record["cliente_id"], record.get("service_id", "")) or agenda._find_service_by_name(
+def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False, prepared=None) -> None:
+    terms = prepared["terms"] if prepared is not None else None
+    if terms is not None and not _valid_booking_creation_terms(terms):
+        raise HTTPException(status_code=500, detail="La preparación de la cita no es válida")
+    service = None if prepared is not None else (agenda._get_service_row(record["cliente_id"], record.get("service_id", "")) or agenda._find_service_by_name(
         record["cliente_id"], record.get("servicio", "")
-    )
+    ))
+    if terms is not None:
+        record.update(location_id=terms["location_id"], gap_json=terms["gap_json"],
+                      service_price_cents=terms["service_price_cents"])
     # skip_payment: usado por el sembrado de demo. Mantiene el payment_status que trae
     # el record (valor visual) y NO crea checkouts Stripe reales. Sin esto, un servicio
     # con payment_required dispararia create_booking_payment_checkout por cada cita demo
     # (bloquea el worker sincrono -> 504).
     if not skip_payment:
-        decision = resolve_payment_requirement(record["cliente_id"], service)
+        decision = prepared["payment_decision"] if prepared is not None else resolve_payment_requirement(record["cliente_id"], service)
         record["payment_status"] = decision["payment_status"]
         if decision["payment_required"]:
             record["status"] = "pending_payment"
@@ -2342,11 +2348,11 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
         except (IndexError, KeyError):
             record["gap_json"] = ""
     location_id = record.get("location_id", "")
-    if not location_id and record.get("employee_id"):
+    if terms is None and not location_id and record.get("employee_id"):
         employee_row = agenda._get_employee_row(record["employee_id"], cliente_id=record["cliente_id"])
         if employee_row is not None:
             location_id = employee_row["location_id"] or ""
-    if not location_id:
+    if terms is None and not location_id:
         location_id = agenda._default_location_id(record["cliente_id"])
     record["location_id"] = location_id
     # Precio efectivo segun el centro (override por centro si existe).
@@ -2358,7 +2364,7 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
     if not record.get("resource_id"):
         start_min = textnorm._time_to_min(record.get("booking_time", ""))
         if start_min is not None and location_id:
-            duration = agenda._service_duration_minutes(
+            duration = terms["duration_minutes"] if terms is not None else agenda._service_duration_minutes(
                 record["cliente_id"],
                 record.get("servicio", ""),
                 agenda._get_employee_row(record.get("employee_id", ""), cliente_id=record["cliente_id"])
@@ -2369,6 +2375,8 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
                 record["cliente_id"], location_id, record.get("booking_date", ""), start_min, start_min + duration
             )
     record.setdefault("resource_id", "")
+    record["creation_terms_json"] = (json.dumps({"terms": terms, "binding": _booking_creation_terms_binding(record)},
+        sort_keys=True, ensure_ascii=True) if terms is not None else "")
     with db._get_db_connection() as connection:
         if not record.get("booking_code"):
             record["booking_code"] = _unique_booking_code(connection, record["cliente_id"])
@@ -2382,9 +2390,9 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
                 confirmed_at, cancelled_at, rescheduled_at, rescheduled_from_booking_id,
                 confirmation_email_sent_at, reminder_24h_sent_at, reminder_2h_sent_at,
                 customer_email_status, customer_email_last_error, booking_code,
-                service_id, service_price_cents, payment_status, location_id, resource_id, source, gap_json, created_at
+                service_id, service_price_cents, payment_status, location_id, resource_id, source, gap_json, created_at, creation_terms_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -2427,6 +2435,7 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
                 # negocio los cambia luego, esta cita conserva los suyos.
                 record.get("gap_json", ""),
                 record["created_at"],
+                record["creation_terms_json"],
             ),
         )
         connection.commit()
@@ -3272,6 +3281,69 @@ def es_servicio_retirado(detalle: Any) -> bool:
     return SERVICIO_RETIRADO.lower() in str(detalle or "").lower()
 
 
+def _valid_booking_creation_terms(terms) -> bool:
+    if not isinstance(terms, dict) or type(terms.get("version")) is not int or terms["version"] != 1:
+        return False
+    textos = {"service_id", "employee_id", "location_id", "timezone", "start_at", "end_at", "gap_json"}
+    enteros = {"duration_minutes", "service_price_cents", "surcharge_pct", "deposit_display_cents"}
+    if set(terms) != textos | enteros | {"version", "deposit_required", "payment", "payment_decision"}:
+        return False
+    pago = terms.get("payment")
+    decision = terms.get("payment_decision")
+    if (not isinstance(decision, dict)
+            or set(decision) != {"payment_required", "payment_optional", "payment_status", "amount_cents"}
+            or type(decision["payment_required"]) is not bool
+            or type(decision["payment_optional"]) is not bool
+            or type(decision["amount_cents"]) is not int or decision["amount_cents"] < 0
+            or (decision["payment_required"], decision["payment_optional"], decision["payment_status"])
+               not in ((True, False, "pending"), (False, True, "optional"), (False, False, "not_required"))
+            or bool(decision["amount_cents"]) != (decision["payment_status"] != "not_required")):
+        return False
+    estructura = (all(isinstance(terms[k], str) for k in textos)
+            and all(type(terms[k]) is int and terms[k] >= 0 for k in enteros)
+            and terms["duration_minutes"] > 0 and type(terms["deposit_required"]) is bool
+            and isinstance(pago, dict)
+            and set(pago) == {"payment_mode", "payment_type", "currency", "price_cents", "deposit_amount_cents"}
+            and all(isinstance(pago[k], str) for k in ("payment_mode", "payment_type", "currency"))
+            and all(type(pago[k]) is int and pago[k] >= 0 for k in ("price_cents", "deposit_amount_cents")))
+    if not estructura or pago["price_cents"] != terms["service_price_cents"]:
+        return False
+    if decision["payment_status"] == "not_required":
+        return True  # Oferta offline: no depende de que Stripe esté conectado ahora.
+    modo = "payment_required" if decision["payment_required"] else "payment_optional"
+    return pago["payment_mode"] == modo and decision["amount_cents"] == _booking_policy_amount_cents(pago)
+
+
+
+def booking_creation_terms_match(expected, actual) -> bool:
+    # La capacidad de Stripe puede cambiar; la obligación ofrecida no cambia con ella.
+    return (_valid_booking_creation_terms(expected) and _valid_booking_creation_terms(actual)
+            and {k: v for k, v in expected.items() if k != "payment_decision"}
+            == {k: v for k, v in actual.items() if k != "payment_decision"})
+
+
+def _booking_creation_terms_binding(row):
+    datos = dict(row)
+    return {k: str(datos.get(k) or "") for k in (
+        "id", "cliente_id", "service_id", "employee_id", "location_id", "booking_date",
+        "booking_time", "start_at", "end_at", "timezone", "service_price_cents", "gap_json")}
+
+
+def _booking_stored_creation_terms(row):
+    raw = dict(row).get("creation_terms_json", "")
+    if not raw:
+        return None  # Solo las filas anteriores a esta versión usan el contrato legacy.
+    try:
+        sellado = json.loads(raw)
+        terms = sellado["terms"]
+        if (_valid_booking_creation_terms(terms)
+                and sellado["binding"] == _booking_creation_terms_binding(row)):
+            return terms
+    except (ValueError, TypeError, KeyError):
+        pass
+    raise HTTPException(status_code=409, detail="Los términos de esta cita necesitan una nueva revisión antes de preparar otro pago.")
+
+
 async def _prepare_booking_creation(
     cliente_id: str, *, employee_row: sqlite3.Row, servicio: str, telefono: str,
     booking_date: str, booking_time: str, source: str, fuera_de_horario: bool = False,
@@ -3284,9 +3356,8 @@ async def _prepare_booking_creation(
     service_row = agenda._find_service_by_name(cliente_id, servicio)
     service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
-    service_price = agenda._service_price_cents_resolved(
-        cliente_id, service_row, employee_row["location_id"] or ""
-    )
+    location_id = str(employee_row["location_id"] or agenda._default_location_id(cliente_id))
+    service_price = agenda._service_price_cents_resolved(cliente_id, service_row, location_id)
 
     # Entre lo que se ofrecio y el "si, quiero" el negocio ha podido retirar el
     # servicio desde el panel. La propuesta se revalida AQUI, que es donde se
@@ -3324,8 +3395,30 @@ async def _prepare_booking_creation(
             ),
         )
 
+    config = clients._get_client_config(cliente_id)
+    start_local, end_local = agenda._booking_start_end(
+        cliente_id, booking_date, booking_time, employee_id=employee_row["id"], duration_minutes=service_duration)
+    service = dict(service_row) if service_row is not None else {}
+    fianza = fianza_del_servicio(cliente_id, servicio, fila=service_row, precio_efectivo=service_price)
+    payment = {"payment_mode": str(service.get("payment_mode") or "payment_disabled"),
+               "payment_type": str(service.get("payment_type") or "full"),
+               "currency": str(service.get("currency") or "eur").lower(),
+               "price_cents": service_price,
+               "deposit_amount_cents": int(fianza.get("importe_cents") or service.get("deposit_amount_cents") or 0)}
+    decision = resolve_payment_requirement(cliente_id, payment)
+    terms = {"version": 1, "service_id": service_id, "employee_id": str(employee_row["id"]),
+             "location_id": location_id,
+             "timezone": str(employee_row["timezone"] or config["booking"]["timezone"]),
+             "start_at": timeutils._to_utc_iso(start_local), "end_at": timeutils._to_utc_iso(end_local),
+             "duration_minutes": service_duration, "service_price_cents": service_price,
+             "surcharge_pct": agenda.recargo_pct(employee_row), "gap_json": str(service.get("gap_json") or ""),
+             "deposit_display_cents": int(fianza.get("importe_cents") or 0),
+             "deposit_required": bool(fianza.get("obligatoria")), "payment": payment,
+             "payment_decision": {k: decision[k] for k in (
+                 "payment_required", "payment_optional", "payment_status", "amount_cents")}}
     return {"service_row": service_row, "service_duration": service_duration,
-            "service_id": service_id, "service_price": service_price}
+            "service_id": service_id, "service_price": service_price, "terms": terms,
+            "payment_decision": decision}
 
 
 async def _create_booking_core(
@@ -3349,6 +3442,7 @@ async def _create_booking_core(
     request: Optional[Request] = None,
     audit_extra: Optional[Dict[str, Any]] = None,
     operation_key: str = "",
+    expected_terms=None,
 ) -> sqlite3.Row:
     """Crea una cita: fuente UNICA para todos los canales (widget, WhatsApp, voz,
     portal manual). Resuelve servicio/duracion/precio, valida hueco, llama al
@@ -3367,7 +3461,7 @@ async def _create_booking_core(
         request_hash = booking_operations.booking_creation_fingerprint(
             employee_row=employee_row, nombre=nombre, email=email, telefono=telefono,
             servicio=servicio, booking_date=booking_date, booking_time=booking_time,
-            notas=notas, source=source, fuera_de_horario=fuera_de_horario)
+            notas=notas, source=source, fuera_de_horario=fuera_de_horario, expected_terms=expected_terms)
         recuperada = booking_operations.recover_creation_operation(cliente_id, operation_key, request_hash)
         if recuperada is not None:
             return recuperada
@@ -3376,6 +3470,14 @@ async def _create_booking_core(
         cliente_id, employee_row=employee_row, servicio=servicio, telefono=telefono,
         booking_date=booking_date, booking_time=booking_time, source=source,
         fuera_de_horario=fuera_de_horario)
+    if expected_terms is not None and not booking_creation_terms_match(expected_terms, preparada["terms"]):
+        raise HTTPException(status_code=409, detail={"code": "BOOKING_TERMS_CHANGED",
+            "message": "Las condiciones de la cita han cambiado. Necesitas revisar y aceptar un nuevo resumen."})
+    if expected_terms is not None:
+        # Solo después del cotejo comercial: mantener lo ofrecido, incluso si
+        # Stripe aparece o desaparece durante la conversación.
+        preparada["terms"]["payment_decision"] = dict(expected_terms["payment_decision"])
+        preparada["payment_decision"].update(expected_terms["payment_decision"])
     service_duration = preparada["service_duration"]
     service_id = preparada["service_id"]
     service_price = preparada["service_price"]
@@ -3389,11 +3491,7 @@ async def _create_booking_core(
     manage_token = _generate_manage_token()
     created_at = timeutils._utc_now_iso()
     provider = _get_booking_provider(config)
-    start_local, end_local = agenda._booking_start_end(
-        cliente_id, booking_date, booking_time,
-        employee_id=employee_row["id"], duration_minutes=service_duration,
-    )
-    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
+    booking_timezone = preparada["terms"]["timezone"]
 
     payload_source = webhook_source or source
     provider_payload = {
@@ -3451,8 +3549,8 @@ async def _create_booking_core(
         "provider_booking_url": provider_result.provider_booking_url,
         "manage_token": manage_token,
         "timezone": booking_timezone,
-        "start_at": timeutils._to_utc_iso(start_local),
-        "end_at": timeutils._to_utc_iso(end_local),
+        "start_at": preparada["terms"]["start_at"],
+        "end_at": preparada["terms"]["end_at"],
         "confirmed_at": created_at,
         "cancelled_at": "",
         **_booking_blank_tracking_fields(),
@@ -3475,7 +3573,7 @@ async def _create_booking_core(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
                 )
-            _store_booking(record)
+            _store_booking(record, prepared=preparada)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -5859,6 +5957,18 @@ async def _ai_send_payment_link(
     }
 
 
+def _booking_policy_amount_cents(service, booking=None) -> int:
+    """Importe único de la política; no consulta capacidad ni crea un pago."""
+    payment_type = str(service["payment_type"] or "full") if service else "full"
+    full_amount = int(
+        (booking["service_price_cents"] if booking else service["price_cents"]) or 0
+    ) if service else 0
+    deposit = int(service["deposit_amount_cents"] or 0) if service else 0
+    # preauth: retiene el deposito si esta configurado; si no, el importe completo.
+    amount = deposit if payment_type in ("deposit", "preauth") and deposit > 0 else full_amount
+    return amount
+
+
 def resolve_payment_requirement(
     cliente_id: str,
     service: Optional[sqlite3.Row],
@@ -5867,12 +5977,7 @@ def resolve_payment_requirement(
     mode = str(service["payment_mode"] or "payment_disabled") if service else "payment_disabled"
     payment_type = str(service["payment_type"] or "full") if service else "full"
     currency = str(service["currency"] or "eur").lower() if service else "eur"
-    full_amount = int(
-        (booking["service_price_cents"] if booking else service["price_cents"]) or 0
-    ) if service else 0
-    deposit = int(service["deposit_amount_cents"] or 0) if service else 0
-    # preauth: retiene el deposito si esta configurado; si no, el importe completo.
-    amount = deposit if payment_type in ("deposit", "preauth") and deposit > 0 else full_amount
+    amount = _booking_policy_amount_cents(service, booking)
     account = stripe_gateway._stripe_connected_account_row(cliente_id)
     stripe_active = bool(account and account["status"] == "active" and stripe_gateway._stripe_configured())
     available = stripe_active and amount > 0 and mode != "payment_disabled"
@@ -5888,7 +5993,7 @@ def resolve_payment_requirement(
     }
 
 
-def fianza_del_servicio(cliente_id: str, servicio: str) -> Dict[str, Any]:
+def fianza_del_servicio(cliente_id: str, servicio: str, *, fila=None, precio_efectivo=None) -> Dict[str, Any]:
     """¿Este servicio pide fianza para reservar? Cuanta, y como se paga.
 
     SEPARADO A PROPOSITO de `_service_payment_policy`: aquella responde "¿podemos
@@ -5904,7 +6009,7 @@ def fianza_del_servicio(cliente_id: str, servicio: str) -> Dict[str, Any]:
 
     Devuelve {} si ese servicio no la lleva.
     """
-    fila = agenda._find_service_by_name(cliente_id, servicio) if servicio else None
+    fila = fila if fila is not None else (agenda._find_service_by_name(cliente_id, servicio) if servicio else None)
     if fila is None:
         return {}
     try:
@@ -5922,7 +6027,7 @@ def fianza_del_servicio(cliente_id: str, servicio: str) -> Dict[str, Any]:
     # catalogo con servicios baratos -50 EUR de senyal para unas mechas de gorro de
     # 18-. Se recorta al precio y se avisa en el log para que el negocio lo corrija.
     try:
-        precio = int(fila["price_cents"] or 0)
+        precio = int((fila["price_cents"] if precio_efectivo is None else precio_efectivo) or 0)
     except Exception:  # noqa: BLE001
         precio = 0
     if 0 < precio < importe:
@@ -5938,14 +6043,15 @@ def fianza_del_servicio(cliente_id: str, servicio: str) -> Dict[str, Any]:
     }
 
 
-def aviso_de_fianza(cliente_id: str, servicio: str) -> str:
+def aviso_de_fianza(cliente_id: str, servicio: str, *, terms=None) -> str:
     """La linea que hay que ensenyarle ANTES de que confirme. Vacia si no lleva.
 
     El texto lo puede escribir el negocio (`booking.fianza_aviso`, con {importe}
     dentro). Si no lo escribe, se dice lo imprescindible y ya: que hay fianza,
     cuanto es, y que se descuenta del total.
     """
-    fianza = fianza_del_servicio(cliente_id, servicio)
+    fianza = ({"importe": textnorm._format_price_cents(terms["deposit_display_cents"])}
+              if terms and terms["deposit_display_cents"] else {}) if terms is not None else fianza_del_servicio(cliente_id, servicio)
     if not fianza:
         return ""
     try:
@@ -6008,9 +6114,10 @@ def payment_prompt_note(cliente_id: str, booking_row: sqlite3.Row, payment_row: 
     """
     if not payment_row:
         return ""
-    service = agenda._get_service_row(cliente_id, booking_row["service_id"]) or agenda._find_service_by_name(
+    terms = _booking_stored_creation_terms(booking_row)
+    service = terms["payment"] if terms is not None else (agenda._get_service_row(cliente_id, booking_row["service_id"]) or agenda._find_service_by_name(
         cliente_id, booking_row["servicio"]
-    )
+    ))
     linea = paystate.checkout_line(
         booking_row["servicio"] or "Reserva",
         int(payment_row["amount_cents"] or 0),
@@ -6050,15 +6157,18 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
     booking = _load_booking_or_404(booking_id)
     if booking["cliente_id"] != cliente_id:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
-    service = agenda._get_service_row(cliente_id, booking["service_id"]) or agenda._find_service_by_name(
-        cliente_id, booking["servicio"]
-    )
-    decision = resolve_payment_requirement(cliente_id, service, booking)
-    if not decision["payment_required"] and not decision["payment_optional"]:
-        raise HTTPException(status_code=409, detail="Esta reserva no tiene un pago Stripe disponible.")
     existing = _booking_payment_row(booking_id)
     if existing and existing["status"] == "paid":
         return existing["checkout_url"] or ""
+    terms = _booking_stored_creation_terms(booking)
+    if terms is not None and terms["payment_decision"]["payment_status"] == "not_required":
+        raise HTTPException(status_code=409, detail="Esta reserva se aceptó sin pago online. Revisa las condiciones antes de preparar un cobro.")
+    service = terms["payment"] if terms is not None else (agenda._get_service_row(cliente_id, booking["service_id"]) or agenda._find_service_by_name(
+        cliente_id, booking["servicio"]
+    ))
+    decision = resolve_payment_requirement(cliente_id, service, booking)
+    if not decision["payment_required"] and not decision["payment_optional"]:
+        raise HTTPException(status_code=409, detail="Esta reserva no tiene un pago Stripe disponible.")
     if existing and existing["checkout_url"]:
         return existing["checkout_url"]
     stripe_gateway._stripe_init()
@@ -6142,7 +6252,7 @@ def _booking_payment_after_store(booking_id: str, request: Optional[Request] = N
         return create_booking_payment_checkout(booking["cliente_id"], booking_id, request)
     except Exception as exc:  # noqa: BLE001
         settings.logger.warning("Pago opcional no disponible booking=%s: %s", booking_id, exc)
-        if booking["status"] == "pending_payment":
+        if booking["status"] == "pending_payment" and not dict(booking).get("creation_terms_json"):
             _update_booking_record(
                 booking_id,
                 status="confirmed",

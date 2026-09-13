@@ -1170,7 +1170,7 @@ async def _wa_send_availability_overview(
     )
 
 
-def _wa_duracion_del_servicio(cliente_id: str, flow: appstate.WAFlowState) -> str:
+def _wa_duracion_del_servicio(cliente_id: str, flow: appstate.WAFlowState, *, minutos=None) -> str:
     """Lo que va a durar la cita, con el MISMO resolutor que aparta el hueco.
 
     Si se calculara aparte, lo que lee el cliente y lo que se le guarda podrian
@@ -1180,25 +1180,27 @@ def _wa_duracion_del_servicio(cliente_id: str, flow: appstate.WAFlowState) -> st
     try:
         from backend import agenda
 
-        minutos = agenda._service_duration_minutes(
-            cliente_id, flow.servicio or "", flow.location_id or None)
+        if minutos is None:
+            minutos = agenda._service_duration_minutes(
+                cliente_id, flow.servicio or "", agenda._get_employee_row(flow.employee_id, cliente_id=cliente_id)
+                if flow.employee_id else None)
         return textnorm.duracion_humana(minutos)
     except Exception:  # noqa: BLE001 - la cita no se cae por una etiqueta
         return ""
 
 
-def _wa_linea_de_recargo(cliente_id: str, flow: appstate.WAFlowState) -> str:
+def _wa_linea_de_recargo(cliente_id: str, flow: appstate.WAFlowState, *, terms=None) -> str:
     """"Con X el servicio cuesta un N% mas", si es el caso. Vacio si no lo es."""
     if not flow.employee_id:
         return ""
     try:
         from backend import agenda
 
-        fila = agenda._get_employee_row(flow.employee_id, cliente_id=cliente_id)
-        pct = agenda.recargo_pct(fila)
+        fila = agenda._get_employee_row(flow.employee_id, cliente_id=cliente_id) if terms is None else None
+        pct = agenda.recargo_pct(fila) if terms is None else terms["surcharge_pct"]
         if not pct:
             return ""
-        nombre = str(fila["name"] or "").split()[0]
+        nombre = str((fila["name"] if terms is None else flow.employee_name) or "").split()[0]
         return "💛 Con %s, el servicio tiene un %d%% mas sobre la tarifa" % (nombre, pct)
     except Exception:  # noqa: BLE001 - el resumen nunca puede romperse por esto
         return ""
@@ -1510,14 +1512,14 @@ async def _wa_send_booking_summary(
                     if flow.employee_id else await agenda._resolve_public_booking_employee(
                         cliente_id, flow.fecha, flow.hora, servicio=flow.servicio,
                         location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id)))
-        await booking._prepare_booking_creation(
+        preparada = await booking._prepare_booking_creation(
             cliente_id, employee_row=empleado, servicio=flow.servicio, telefono=flow.from_number,
             booking_date=flow.fecha, booking_time=flow.hora, source="whatsapp")
         # Se acepta la profesional realmente consultada, con su centro y recargo.
         # El botón no autoriza una asignación distinta si ese hueco se ocupa.
         flow.employee_id = str(empleado["id"])
         flow.employee_name = str(empleado["name"])
-        flow.location_id = str(empleado["location_id"] or "")
+        flow.location_id = preparada["terms"]["location_id"]
     except HTTPException as exc:
         texto = "⚠️ %s" % exc.detail
         enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
@@ -1557,7 +1559,7 @@ async def _wa_send_booking_summary(
     # minutos que tres horas, y el cliente necesita saberlo para organizarse.
     # Va en la FICHA de la cita, no en la conversacion: soltar duraciones
     # charlando es otra cosa y sigue frenado.
-    duracion_cita = _wa_duracion_del_servicio(cliente_id, flow)
+    duracion_cita = _wa_duracion_del_servicio(cliente_id, flow, minutos=preparada["terms"]["duration_minutes"])
     if duracion_cita:
         lineas.append("⏱️ %s" % duracion_cita)
     lineas.append(f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}")
@@ -1565,7 +1567,7 @@ async def _wa_send_booking_summary(
     # firma. Fiarlo al modelo no basta: se le paso el aviso, contesto "claro, con
     # Alicia" y no dijo ni una palabra del 25 %. El cliente confirmaria un precio
     # que no sabe.
-    recargo = _wa_linea_de_recargo(cliente_id, flow)
+    recargo = _wa_linea_de_recargo(cliente_id, flow, terms=preparada["terms"])
     if recargo:
         lineas.append(recargo)
     lineas.append(f"📅 {fecha_humana}")
@@ -1578,7 +1580,7 @@ async def _wa_send_booking_summary(
     # que preguntar ella "¿tengo que dar alguna fianza?". La respuesta que recibio
     # entonces era perfecta -el negocio la tiene escrita-: el fallo era que nadie
     # se la ensenyaba antes.
-    fianza = booking.aviso_de_fianza(cliente_id, flow.servicio)
+    fianza = booking.aviso_de_fianza(cliente_id, flow.servicio, terms=preparada["terms"])
     if fianza:
         lineas.append("")
         lineas.append(fianza)
@@ -1589,7 +1591,7 @@ async def _wa_send_booking_summary(
     try:
         identidad = reserva.preparar_confirmacion_reserva(
             estado, _wa_datos_del_resumen(flow), formulario_token=formulario_token,
-            formulario_respuesta=formulario_respuesta)
+            formulario_respuesta=formulario_respuesta, terms=preparada["terms"])
     except ValueError:
         return False  # Otra respuesta/aceptación ganó durante la preparación.
     reserva.guardar(cliente_id, to_number, estado)
@@ -1798,9 +1800,10 @@ async def _wa_create_booking(
                     to_number=to_number, text="La solicitud cambió antes de ejecutarse. Revisa el último resumen.")
                 return False
             clave = reserva.vincular_operacion_confirmada(estado, propuesta["id"],
-                booking_operations.booking_creation_fingerprint(**solicitud))
+                booking_operations.booking_creation_fingerprint(**solicitud, expected_terms=propuesta.get("terms")))
             reserva.guardar(cliente_id, to_number, estado)
             operacion["operation_key"] = clave
+            operacion["expected_terms"] = propuesta.get("terms")
         try:
             stored_booking = await booking._create_booking_core(
                 cliente_id, **solicitud, **operacion, request=request,
@@ -1821,6 +1824,10 @@ async def _wa_create_booking(
                 # El núcleo rechazó antes de reclamar la operación; no hay ejecución que recuperar.
                 estado.confirmacion_reserva_json = ""
                 reserva.guardar(cliente_id, to_number, estado)
+                if isinstance(exc.detail, dict) and exc.detail.get("code") == "BOOKING_TERMS_CHANGED":
+                    await _wa_send_booking_summary(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                        to_number=to_number, flow=flow, request=request)
+                    return False
             if exc.status_code == 409:
                 # Los dos son 409, pero no se arreglan igual: el hueco ocupado se
                 # resuelve con otra hora y el servicio retirado NO. Ofrecerle horas
@@ -1872,6 +1879,9 @@ async def _wa_create_booking(
 
     fecha_humana = textnorm._format_date_es(textnorm._parse_date(flow.fecha).date())
     is_pending_payment = bool(stored_booking and stored_booking["status"] == "pending_payment")
+    terms_guardados = booking._booking_stored_creation_terms(stored_booking)
+    duracion_confirmada = _wa_duracion_del_servicio(cliente_id, flow,
+        minutos=terms_guardados["duration_minutes"] if terms_guardados else None)
     title = "🟡 *Reserva pendiente de pago*" if is_pending_payment else "✅ *Cita confirmada*"
     confirmacion = (
         f"{title}\n\n"
@@ -1879,8 +1889,7 @@ async def _wa_create_booking(
         + (f"📧 {flow.email}\n" if flow.email else "")
         +         f"📞 {flow.from_number}\n"
         f"🛍️ {flow.servicio or 'Servicio general'}\n"
-        + (f"⏱️ {_wa_duracion_del_servicio(cliente_id, flow)}\n"
-           if _wa_duracion_del_servicio(cliente_id, flow) else "")
+        + (f"⏱️ {duracion_confirmada}\n" if duracion_confirmada else "")
         +
         f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}\n"
         f"📅 {fecha_humana}\n"
@@ -1893,7 +1902,7 @@ async def _wa_create_booking(
     # esto la clienta se va con la cita cerrada y sin enterarse de que debe una
     # senyal. Si el negocio tiene escritas sus instrucciones de pago, van detras.
     if not is_pending_payment:
-        aviso_fianza = booking.aviso_de_fianza(cliente_id, flow.servicio)
+        aviso_fianza = booking.aviso_de_fianza(cliente_id, flow.servicio, terms=terms_guardados)
         if aviso_fianza:
             confirmacion += chr(10) + aviso_fianza + chr(10)
             como_pagar = booking.como_se_paga_la_fianza(cliente_id)
@@ -3970,6 +3979,21 @@ async def _handle_whatsapp_message(
                          "Necesito un resumen enviado y vigente antes de confirmar. Escribe agendar para retomarlo.")
                 await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
                     to_number=from_number, text=texto)
+                return
+            try:
+                empleado = agenda._resolve_employee_for_booking(cliente_id, flow.employee_id)
+                preparada = await booking._prepare_booking_creation(
+                    cliente_id, employee_row=empleado, servicio=flow.servicio, telefono=from_number,
+                    booking_date=flow.fecha, booking_time=flow.hora, source="whatsapp")
+            except HTTPException:
+                await _wa_send_booking_summary(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    to_number=from_number, flow=flow, request=request)
+                return
+            if not booking.booking_creation_terms_match(propuesta.get("terms"), preparada["terms"]):
+                # La oferta antigua (también una de otra versión) no acepta unas
+                # condiciones nuevas. El resumen recibe otra identidad.
+                await _wa_send_booking_summary(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    to_number=from_number, flow=flow, request=request)
                 return
             suya = _wa_cita_viva_distinta(cliente_id, from_number, flow)
             if suya and not flow.duplicado_avisado:

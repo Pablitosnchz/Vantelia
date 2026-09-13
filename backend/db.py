@@ -196,6 +196,8 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE bookings ADD COLUMN service_id TEXT NOT NULL DEFAULT ''")
         if "service_price_cents" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN service_price_cents INTEGER NOT NULL DEFAULT 0")
+        if "creation_terms_json" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN creation_terms_json TEXT NOT NULL DEFAULT ''")
         if "payment_status" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'not_required'")
         if "location_id" not in columns:

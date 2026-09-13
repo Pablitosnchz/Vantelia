@@ -18,14 +18,18 @@ def creation_request_fingerprint(datos):
 
 
 def booking_creation_fingerprint(*, employee_row, nombre, email, telefono, servicio,
-                                 booking_date, booking_time, notas, source, fuera_de_horario=False):
+                                 booking_date, booking_time, notas, source, fuera_de_horario=False,
+                                 expected_terms=None):
     """El núcleo y el canal identifican exactamente la misma solicitud ejecutable."""
-    return creation_request_fingerprint({
+    datos = {
         "employee_id": employee_row["id"], "nombre": nombre, "email": email,
         "telefono": telefono, "servicio": servicio, "fecha": booking_date,
         "hora": booking_time, "notas": notas, "source": source,
         "fuera_de_horario": fuera_de_horario,
-    })
+    }
+    if expected_terms is not None:
+        datos["terms"] = expected_terms
+    return creation_request_fingerprint(datos)
 
 
 def recover_creation_operation(cliente_id, operation_key, request_hash):
