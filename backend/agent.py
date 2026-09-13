@@ -4027,11 +4027,17 @@ async def responder(
                 except (ValueError, TypeError):
                     argumentos = {}
                 if llamada.function.name == "responder_propuesta":
+                    hora_dicha, hora_del_codigo = estado.hora, estado.hora_del_codigo
                     ok = booking.contestar_alternativa_de_precio(
                         cliente_id, estado, str(argumentos.get("propuesta_id") or ""),
                         str(argumentos.get("respuesta") or ""))
+                    if ok and str(argumentos.get("respuesta") or "") == "acepta":
+                        # Aceptar suelta la hora; la que dijo ella se recupera si le cabe.
+                        await booking.conservar_la_hora_dicha(
+                            cliente_id, estado, hora_dicha, del_codigo=hora_del_codigo)
                     reserva.guardar(cliente_id, clave_estado, estado)
                     resultado = {"ok": ok, "servicio": estado.servicio_exacto,
+                                 "fecha": estado.fecha, "hora": estado.hora,
                                  "estado_propuesta": (estado.propuesta_servicio.estado
                                                        if estado.propuesta_servicio else "inexistente"),
                                  "nota": "No se ha creado ninguna cita. Consulta disponibilidad antes de reservar."}
