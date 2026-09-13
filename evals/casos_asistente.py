@@ -123,6 +123,7 @@ CASOS = [
     },
     {
         "id": "no-negar-servicio-que-existe",
+        "solo_si": ["tiene_servicio:cejas"],
         "gravedad": "critico",
         "por_que": "Decir que no haceis algo que si haceis es perder una clienta.",
         "mensajes": ["me haceis las cejas?"],
@@ -136,7 +137,7 @@ CASOS = [
         "gravedad": "critico",
         "por_que": "Decirle que tiene cita cuando no la tiene es lo peor que puede pasar.",
         "mensajes": [
-            "quiero cita para un corte de señora",
+            "quiero cita para {un_servicio}",
             "el {dia_abierto_nombre} a las 17:00",
             "ya esta reservada no?",
         ],
@@ -154,6 +155,7 @@ CASOS = [
     },
     {
         "id": "no-inventar-duraciones",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "critico",
         "por_que": "Inventarse cuanto dura un servicio es igual de malo que el precio.",
         # Dos turnos a proposito: preguntar primero el largo es MEJOR que soltar
@@ -172,7 +174,7 @@ CASOS = [
         # NO se dan por mensaje ("es mas facil que no de precio de nada"), y con
         # eso puesto este caso pedia justo lo contrario que su dueña. Un banco de
         # casos no puede contradecir lo que el negocio ha decidido.
-        "solo_si": "precios_visibles",
+        "solo_si": ["precios_visibles", "tiene_servicio:corte"],
         "mensajes": ["cuanto vale un corte de señora?"],
         "debe": ["20"],
         "no_debe": [],
@@ -189,6 +191,7 @@ CASOS = [
     },
     {
         "id": "presupuesto-alisado-pide-foto",
+        "solo_si": ["tiene_servicio:alisado", "tiene_regla:pedir_foto"],
         "gravedad": "importante",
         "por_que": "Su norma: presupuesto de alisado = foto por detras.",
         "mensajes": ["me pasais presupuesto de un alisado?"],
@@ -197,6 +200,7 @@ CASOS = [
     },
     {
         "id": "cita-alisado-sin-foto",
+        "solo_si": ["tiene_servicio:alisado"],
         "gravedad": "importante",
         "por_que": "Si solo quiere cita, NO se le pide foto: solo el largo.",
         "mensajes": ["quiero coger cita para un alisado"],
@@ -205,6 +209,7 @@ CASOS = [
     },
     {
         "id": "extensiones-a-diagnostico",
+        "solo_si": ["tiene_servicio:extensiones"],
         "gravedad": "importante",
         "por_que": "No dan precio de extensiones sin ver a la clienta.",
         "mensajes": ["cuanto me costarian unas extensiones?"],
@@ -214,10 +219,11 @@ CASOS = [
     },
     {
         "id": "telefono-si-no-encaja-nada",
+        "solo_si": ["telefono_publicado"],
         "gravedad": "importante",
         "por_que": "Antes de perder la cita, que llamen.",
         "mensajes": [
-            "quiero cita para un corte de señora el {dia_abierto_nombre}",
+            "quiero cita para {un_servicio} el {dia_abierto_nombre}",
             "no me va bien ninguna de esas horas",
             "es que solo puedo por la noche",
         ],
@@ -244,6 +250,7 @@ CASOS = [
     },
     {
         "id": "que-servicios-hay",
+        "solo_si": ["tiene_servicio:corte", "tiene_servicio:alisado"],
         "gravedad": "importante",
         "por_que": "Tiene que contar lo que SI hay, no una frase generica.",
         "mensajes": ["que me podeis hacer en el pelo?"],
@@ -262,6 +269,7 @@ CASOS = [
     },
     {
         "id": "frase-partida",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "importante",
         "por_que": "Se manda media frase y se completa en el siguiente mensaje.",
         "mensajes": ["buenas queria una cita para hacerme unas mech", "*mechas perdon"],
@@ -272,12 +280,13 @@ CASOS = [
         "id": "duda-a-media-cita",
         "gravedad": "importante",
         "por_que": "Preguntar algo a media reserva no puede romper el hilo.",
-        "mensajes": ["quiero cita para un corte de señora", "oye y teneis parking?"],
+        "mensajes": ["quiero cita para {un_servicio}", "oye y teneis parking?"],
         "debe": [],
         "no_debe": ["no he reconocido"],
     },
     {
         "id": "cambiar-de-idea-no-es-cambiar-de-cita",
+        "solo_si": ["no_tiene_servicio:manicura", "tiene_servicio:corte"],
         "gravedad": "importante",
         "por_que": "'no espera, mejor un corte' le pedia un numero de reserva.",
         "mensajes": ["hola, me quiero hacer la manicura", "no espera, mejor un corte"],
@@ -286,6 +295,7 @@ CASOS = [
     },
     {
         "id": "servicio-que-no-existe",
+        "solo_si": ["no_tiene_servicio:manicura"],
         "gravedad": "importante",
         "por_que": "Ser honesta: lo que no se hace, no se hace.",
         # Lo que importa es que lo diga claro y no coja una cita de algo que no
@@ -314,7 +324,7 @@ CASOS = [
         "gravedad": "critico",
         "por_que": "Es a lo que viene el negocio: que la cita acabe en la agenda.",
         "mensajes": [
-            "hola quiero cita para un corte de señora",
+            "hola quiero cita para {un_servicio}",
             "el primer hueco que tengas",
             # Nombre y dos apellidos: es una clienta NUEVA por WhatsApp
             # (decision de Pablo, 11-sep-2026). Con uno solo, esta conversacion se
@@ -358,7 +368,7 @@ CASOS = [
         "id": "no-coge-cita-sin-que-lo-pidan",
         "gravedad": "critico",
         "por_que": "Preguntar un precio no es pedir hora.",
-        "mensajes": ["cuanto vale un corte de señora?"],
+        "mensajes": ["cuanto vale {un_servicio}?"],
         "agenda": "no_crea",
         "debe": [],
         "no_debe": [],
@@ -367,6 +377,7 @@ CASOS = [
     # ─── Como pidio el salon que hable ─────────────────────────────────────
     {
         "id": "sin-formulario-se-habla",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "importante",
         "por_que": "Pidio que la IA le guie hablando, no que le suelte un formulario.",
         "mensajes": ["quiero hacerme mechas"],
@@ -375,6 +386,7 @@ CASOS = [
     },
     {
         "id": "recomienda-ante-un-problema",
+        "solo_si": ["tiene_servicio:alisado"],
         "gravedad": "importante",
         "por_que": (
             "Con 186 servicios planos proponia un ALISADO a quien se le caia el "
@@ -408,13 +420,14 @@ CASOS = [
         # No se mide por vocabulario ("¿que dia te viene bien?" y "¿te va bien el
         # martes?" valen las dos), sino por lo unico objetivo: que no le suelte un
         # puñado de horas de un dia que ha elegido el.
-        "mensajes": ["hola, quiero pedir cita para un corte de señora"],
+        "mensajes": ["hola, quiero pedir cita para {un_servicio}"],
         "sin_horas": True,
         "debe": [],
         "no_debe": [],
     },
     {
         "id": "varios-servicios-no-reserva-uno-corto",
+        "solo_si": ["tiene_servicio:alisado", "tiene_servicio:elumen", "tiene_servicio:secado"],
         "horas_calendario": ["17:00"],
         "gravedad": "critico",
         "por_que": (
@@ -445,6 +458,7 @@ CASOS = [
     },
     {
         "id": "duracion-depende-del-largo",
+        "solo_si": ["tiene_servicio:acido lactico"],
         "gravedad": "importante",
         "por_que": (
             "Queja literal de la duenya: 'tendria que preguntar cual es tu largo "
@@ -467,7 +481,7 @@ CASOS = [
             "catalogo todo el rato. Sus palabras: 'que ponga que hagamos un "
             "diagnostico para un corte y un secador no tiene sentido'."
         ),
-        "mensajes": ["hola quiero un corte de señora", "que suele tardar?"],
+        "mensajes": ["hola quiero {un_servicio}", "que suele tardar?"],
         "debe": ["minuto"],
         "no_debe": ["valoracion", "valoración", "diagnostico", "diagnóstico"],
     },
@@ -478,6 +492,7 @@ CASOS = [
     # llegaba la frase fija "Quiero coger cita." en vez de lo que ella escribia.
     {
         "id": "no-quiero-diagnostico-quiero-cita",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "critico",
         "por_que": (
             "Lo dijo TRES veces -'no quiero cita para diagnostico, quiero cita para "
@@ -499,6 +514,7 @@ CASOS = [
     },
     {
         "id": "no-negar-el-servicio-por-como-se-llama-en-el-catalogo",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "critico",
         "por_que": (
             "'Carino, no tengo un servicio especifico llamado mechas' a un salon que "
@@ -514,6 +530,7 @@ CASOS = [
     },
     {
         "id": "no-enumerar-las-variantes-del-catalogo",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "importante",
         "por_que": (
             "Le solto la lista interna: 'Mechas media cabeza-extra largo, Mechas "
@@ -534,6 +551,7 @@ CASOS = [
     },
     {
         "id": "no-soltar-la-duracion-sin-que-la-pidan",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "importante",
         "por_que": (
             "'El servicio es Mechas o balayage largo y dura 440 minutos' cuando "
@@ -551,6 +569,7 @@ CASOS = [
     },
     {
         "id": "foto-anunciada-no-vuelve-a-preguntar-el-largo",
+        "solo_si": ["tiene_servicio:mechas"],
         "gravedad": "critico",
         "por_que": (
             "Bucle real: ella insistia en mandar una foto y el asistente repetia "

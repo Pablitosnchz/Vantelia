@@ -211,6 +211,35 @@ def _aplica_a_este_negocio(cliente_id: str, caso: dict) -> bool:
     condicion = caso.get("solo_si", "")
     if not condicion:
         return True
+    if isinstance(condicion, (list, tuple)):
+        # Todas a la vez: "presupuesto de alisado pide foto" necesita que haya alisado
+        # Y una regla de foto. Una sola que falte y el caso no aplica.
+        return all(_aplica_a_este_negocio(cliente_id, dict(caso, solo_si=c)) for c in condicion)
+    if condicion.startswith(("tiene_servicio:", "no_tiene_servicio:")):
+        # El caso nombra un servicio del salón piloto ("unas mechas", "las cejas"). En
+        # un negocio que no lo tiene, pedirlo no mide al asistente: mide el catálogo.
+        # Todas las palabras dentro del nombre de un mismo servicio activo.
+        from backend import booking, textnorm
+
+        # Nombre O categoria: los alisados del salon se llaman "Keratina premium..." y
+        # "Acido lactico bio premium..."; lo que dice "alisado" es su categoria.
+        palabras = textnorm._strip_accents(condicion.split(":", 1)[1].lower()).split()
+        nombres = [textnorm._strip_accents(("%s %s" % (s.get("nombre") or "", s.get("category") or "")).lower())
+                   for s in booking._public_services_for_booking(cliente_id)]
+        hay = any(all(p in nombre for p in palabras) for nombre in nombres)
+        return hay if condicion.startswith("tiene_servicio:") else not hay
+    if condicion.startswith("tiene_regla:"):
+        # Una politica del negocio (p. ej. pedir foto): sin esa regla, exigirla seria
+        # medir una decision que ese negocio no ha tomado.
+        from backend import rules
+
+        accion = condicion.split(":", 1)[1]
+        return any(r.get("accion") == accion for r in rules.listar(cliente_id, solo_activas=True))
+    if condicion == "telefono_publicado":
+        # El rescate "llamanos" solo existe si el negocio publica telefono.
+        from backend import clients
+
+        return bool(clients.call_us_line(cliente_id))
     if condicion == "precios_visibles":
         from backend import booking
 

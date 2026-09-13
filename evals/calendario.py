@@ -33,6 +33,16 @@ def resolver_mensajes(cliente_id, caso, codigo=None, *, hoy=None, consultar=None
     import asyncio
 
     mensajes = list(caso["mensajes"])
+    if any("{un_servicio}" in m for m in mensajes):
+        # El servicio sencillo de ESTE negocio (evals/negocios.py). Sin declarar, no se
+        # mide: pedirle a otro negocio el catálogo del salón da un fallo que no existe.
+        from evals import negocios
+
+        servicio = negocios.SERVICIO_DE_PRUEBA.get(cliente_id, "")
+        if not servicio:
+            raise CalendarioNoDisponible(
+                "El negocio no tiene servicio de prueba declarado en evals/negocios.py")
+        mensajes = [m.replace("{un_servicio}", servicio) for m in mensajes]
     if not any("{dia_" in m for m in mensajes):
         return ([m.replace("{codigo}", codigo) for m in mensajes]
                 if codigo is not None else mensajes), {}
