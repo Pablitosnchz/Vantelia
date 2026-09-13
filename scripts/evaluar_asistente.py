@@ -108,6 +108,13 @@ def _preparar_copia(origen: str, destino: str) -> None:
                 origen_db.backup(destino_db)
     os.environ["DB_PATH"] = str(destino_path)
     settings.DB_PATH = destino_path
+    # La copia sale de PRODUCCION, que va por detras del codigo que se mide: si el
+    # candidato crea una tabla, aqui no esta y el banco mide un error de esquema en
+    # vez del asistente (13-sep-2026: `conversation_states` dio 0 de 41 con "no
+    # such table"). Se migra igual que el arnes del humo, con la misma razon.
+    from evals import arnes
+
+    arnes._migrar_la_copia()
 
 
 def _comprobar_aislamiento(destino: str) -> None:

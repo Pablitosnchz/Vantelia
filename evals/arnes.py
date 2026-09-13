@@ -43,6 +43,26 @@ def preparar_copia(origen: str, destino: str) -> None:
     destino_db.close()
     os.environ["DB_PATH"] = destino
     settings.DB_PATH = pathlib.Path(destino)
+    _migrar_la_copia()
+
+
+def _migrar_la_copia() -> None:
+    """Pone la copia al dia con el esquema del codigo que se va a medir.
+
+    La copia sale de PRODUCCION, que va por detras del candidato: si el candidato
+    crea una tabla, la copia no la tiene y el instrumento mide un error de esquema
+    en vez de medir al asistente. Paso el 13-sep-2026 con `conversation_states`:
+    las 41 conversaciones del banco reventaron con "no such table" y el resultado
+    fue 0 de 41, que parecia un producto roto cuando lo roto era la medida.
+
+    En el servidor esto no ocurre porque `backend/main.py` migra al arrancar; aqui
+    nadie importa `main`, asi que se migra a mano. `_init_database` usa
+    CREATE TABLE IF NOT EXISTS y ALTER para las columnas nuevas: no toca los datos
+    que traiga la copia (comprobado: 769 citas antes y despues).
+    """
+    from backend import db
+
+    db._init_database()
 
 
 def comprobar_aislamiento(destino: str) -> None:
