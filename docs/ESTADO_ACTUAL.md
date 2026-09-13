@@ -45,10 +45,10 @@ página de sincronía lo enseña tal cual.
 Relevo anterior de Astra (histórico, sustituido por lo de arriba):
 
 - **Testigo:** Astra.
-- **Tarea:** suite exacta de formularios 2cb8a029 iniciada; en rama hija, términos efectivos aceptados y arnés que observe transporte/efectos sin anticipar autorización del producto.
-- **Rama:** astra/condiciones-confirmadas, E:/Vantelia-astra-condiciones, hija de 2cb8a029. E:/Vantelia-astra-formularios queda congelado mientras se mide; no editar ese árbol ni repetir pruebas allí.
-- **Siguiente:** gestion_implementacion prepara contrato versionado compartido entre resumen, núcleo, guardado y checkout; evidencia_real elimina dependencia de estado productivo en captura/acciones y demuestra compatibilidad de transporte e IDs anteriores sin HTTP. Astra contrasta diseños/diffs y mantiene relevo. Suite exacta 2cb8a029 iniciada a las 03:00:44.987 +02:00 (redondeado a ms), sesión 56124; formularios-suite.result.json y .log externos. Una lectura de metadata, sin sondeos de progreso. Formulario/arnés nuevos aún en diseño; no hay nuevos verdes. Registro: docs/REGISTRO_CONSOLIDACION.md.
-- **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid). Claude sin cuota hasta las 04:00 Europe/Madrid; calendario pendiente. Banco real Alicia/otro, recordatorios, reconciliación y resto de gestión no están aceptados. Sin push ni despliegue.
+- **Tarea:** términos efectivos y recuperación de checkout confirmados; arnés v2 guardado. Preparar el candidato integrado sin convertir dirigidos en aceptación global.
+- **Rama:** astra/condiciones-confirmadas, E:/Vantelia-astra-condiciones, hija de 2cb8a029. E:/Vantelia-astra-formularios conserva intacto el candidato medido; no editar ni repetir pruebas allí.
+- **Siguiente:** c9f19e6 corrige el único rojo del instrumento de 2cb8a029: el dirigido pasa con red bloqueada, pero falta una suite del hijo actual. 6c3ad4f selló las condiciones tras 112 passed (126,70 s) y revisión de código OK. 68c1fac reserva una clave Stripe antes de red y la reutiliza tras respuesta perdida: 23 condiciones y 2 regresiones previas verdes. Siguiente bloque: comprobar el conjunto integrado y, solo si el SHA queda estable, una suite exacta. Registro: docs/REGISTRO_CONSOLIDACION.md.
+- **Espera a:** revisión exacta de 7ab7775 solicitada automáticamente tras 2297 passed, 1 skipped (duración 18 min 55 s; fin 13-sep 01:04 Europe/Madrid), y revisión del siguiente SHA estable. Banco real Alicia/otro, recordatorios, reconciliación operativa y resto de gestión no están aceptados. Sin push ni despliegue.
 
 QA visual exacta de de3d6d0 terminada: **exit 0**, 02:36:26–02:37:51 Europe/Madrid,
 SHA y árbol limpios antes/después. Instrumento externo verifica 37 marcas de
@@ -76,33 +76,50 @@ Meta reales; los informes de otra versión no se comparan. El caso crítico del
 banco real todavía no acredita el efecto final en agenda; queda pendiente medir
 antes/después con la misma versión del instrumento.
 
-Límite de medida confirmado por lectura: CapturaEnvios.opciones depende de
-reserva.leer_confirmacion_reserva y filtra estado ofrecida/IDs del protocolo
-actual. Un botón realmente emitido pero ya obsoleto se detiene en el arnés,
-sin probar el rechazo del producto; una baseline sin esa API tampoco está
-soportada. La comparación histórica no queda demostrada solo por compartir
-versión del instrumento. Siguiente: transportar la acción explícita emitida y
-dejar al producto validar su autorización, comprobando después agenda/estado;
-conservar aislamiento de destinatario y no deducir clicks del texto.
+Ese límite de v1 se corrige en c9f19e6 (`botones-emitidos-v2`): captura transporte
+normalizado sin API de propuesta/prefijos; ID explícito antiguo emitido llega al
+producto, que debe rechazarlo. 28 controles verdes y dos positivos de agenda
+verdes tras estabilizar la firma de producto (dos fallos transitorios no causales).
+Consumidor banco: 16 verdes a las 03:16:27 tras dos rojos; incompatibilidad queda
+NO MEDIDO con actividad parcial e intentos válidos previos, sin reintento extra.
+Control aislado de builder/payload exactos 2235d25: un verde, sin API nueva ni
+HTTP. Demuestra solo esa frontera, no producto completo ni mejora con modelo.
 
 Cinco fixtures heredadas guardadas en 891a730 y revisadas OK: 38 passed a las 02:55:28, frente a siete
 rojos y un control previamente verde. Usan huecos reales del tenant y mantienen
 los validadores; el caso sin fianza exige además que exista resumen. No se
 repitieron dirigidos durante la revisión; la suite de formularios se lanzó
-después sobre 2cb8a029, todavía sin resultado consultado.
+después sobre 2cb8a029 y terminó con el fallo del instrumento indicado arriba.
 
-Siguiente riesgo identificado por lectura, aún sin reproducción ejecutada:
-la propuesta y la huella de creación no sellan duración/precio/fianza/política.
-Un cambio de catálogo entre resumen y botón puede conservar la identidad del
-resumen y ejecutar condiciones nuevas. Preparar regresión sintética y cotejar
-los términos efectivos en la preparación compartida antes de ejecutar; no
-añadir cálculos paralelos ni dar este caso preexistente por resuelto con el
-formulario. La revisión del formulario cierra disponibilidad y profesional
-resuelto: 66 dirigidos verdes en 92,44 s; cinco fixtures heredadas ya adaptadas
-y revisadas en 891a730. Suite exacta 2cb8a029 iniciada según el relevo superior;
-todavía sin resultado consultado, sin medición real.
+Términos cambiantes reproducidos y cierre revisado en 6c3ad4f: 112 dirigidos verdes en
+126,70 s. Preparado versionado compartido entre resumen/núcleo/guardado/checkout;
+precio efectivo por centro y fianza recortada según regla existente, sin nuevo
+recargo. Decisión online/offline ofrecida permanece fija aunque cambie Stripe;
+capacidad viva se consulta para ejecutar pago. Recuperación precede revalidación,
+importe/modo corruptos v1 y binding de cita modificado se rechazan antes de otro
+checkout. El cambio queda separado del candidato medido anterior.
+Límite pendiente: Stripe puede aceptar un checkout y perderse la respuesta o
+la persistencia local; aún no hay idempotencia/reconciliación de ese resultado.
+No repetirlo automáticamente ni convertir estos verdes en aceptación global.
 
-Última suite exacta de3d6d00e22e6f089055a1370c23fe9831205c8d terminada a las
+Recuperación de checkout en 68c1fac: `booking_payments` guarda una clave de
+idempotencia antes de la llamada a Stripe. Si Stripe acepta y se pierde el
+guardado local, el siguiente intento reutiliza la misma clave y recupera la
+misma sesión; la persistencia posterior compara esa clave. Una fila histórica
+sin clave ni URL queda en 409 para reconciliación manual, sin crear un cobro
+nuevo. 23 dirigidos de condiciones y dos regresiones de checkout/Bizum verdes;
+no se hizo llamada Stripe real. Pendiente: reconciliación operativa de esas
+filas antiguas o de respuestas que sigan siendo desconocidas tras el plazo del
+proveedor.
+
+Última suite exacta 2cb8a029 terminó a las **03:23:06.385 +02:00**, exit 1:
+**2442 passed, 1 skipped, 1 failed**. Único rojo:
+test_banco_sin_meta::test_instalar_captura_cierra_la_salida_de_payload.
+Coordinación comunicó resultado de formularios-suite.result.json/.log; c9f19e6
+elimina la delegación que causaba el rojo y el test aislado pasa con red externa
+bloqueada. Aún no hay suite exacta del hijo ni medición de mejora/modelo/Meta.
+
+Suite anterior de3d6d00e22e6f089055a1370c23fe9831205c8d terminada a las
 **02:52:00.149448 +02:00**, exit 1: **2401 passed, 1 skipped, 1 failed**, sin
 xfail. El único fallo exige incluir notice_deliveries en docs/ARQUITECTURA.md
 (test_mapa_del_codigo_no_miente.py:125). Coordinación verificó resultado/log;

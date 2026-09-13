@@ -5,15 +5,28 @@ Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
 
 ## Candidato nocturno integrado (13-sep)
 
-Situación vigente: de3d6d0 terminó suite exacta a las 02:52:00.149448 +02:00,
+Situación vigente: 2cb8a029 terminó suite exacta a las 03:23:06.385 +02:00,
+exit 1, 2442 passed, 1 skipped, 1 failed. Único rojo en
+test_banco_sin_meta::test_instalar_captura_cierra_la_salida_de_payload. El
+arnés v2 c9f19e6 elimina la delegación que lo causaba y el dirigido pasa con
+red bloqueada; falta medir una nueva suite exacta del hijo.
+En astra/condiciones-confirmadas, 6c3ad4f sella términos con 112 dirigidos
+verdes (126,70 s) y revisión de código OK. 68c1fac persiste una clave de
+idempotencia antes de crear checkout: tras respuesta Stripe perdida se reutiliza
+la misma sesión; formato histórico sin clave queda para reconciliación manual.
+23 dirigidos de condiciones y dos de checkout/Bizum verdes, sin Stripe real.
+Arnés v2: 28 controles, dos positivos de agenda posteriores a firma estable,
+16 del consumidor banco; compatibilidad solo builder/payload de 2235d25 probada
+aisladamente, no baseline completa ni medición de mejora con modelo real.
+
+Antecedente: de3d6d0 terminó suite exacta a las 02:52:00.149448 +02:00,
 exit 1, 2401 passed, 1 skipped, 1 failed, sin xfail. Único rojo: arquitectura
 omite notice_deliveries; c4d4f6a lo documenta con 5 dirigidos verdes, sin repetir
 suite congelada. No se pidió revisión formal. El hijo astra/formularios-confirmados
 incluye formulario 99fdaf1 (66 dirigidos), arnés 2533fe9 (23 dirigidos), UI 23139ca
 y mapa revisados. Cinco fixtures heredadas guardadas en 891a730 tienen 38 dirigidos
-y revisión OK. Runner externo preparado: congelar el SHA limpio del relevo y
-lanzar una única suite del hijo, todavía NO iniciada. Términos efectivos y
-medición del arnés se trabajan después en otra rama hija, sin tocar el candidato.
+y revisión OK. Ese hijo se midió como 2cb8a029 con el resultado indicado arriba;
+su árbol permanece intacto. El trabajo nuevo vive en condiciones-confirmadas.
 
 Código integrado en a83021c y medido con relevo en 2235d25: suite terminada el
 13-sep a las 02:15:01 Europe/Madrid, exit 1, 2347 passed, 1 skipped, 1 xfailed y
@@ -34,8 +47,8 @@ que siguen son antecedentes y no convierten esa suite en verde:
   31 dirigidos verdes, un xfail estricto de duplicación entre ejecutores pendiente.
 
 No se cierra fase 4: registro duradero y generación están en b5fa459, formulario
-nativo en 99fdaf1; faltan validación integrada del hijo, reconciliación y gestión
-conversacional/otros canales.
+nativo en 99fdaf1 y recuperación de checkout en 68c1fac; faltan validación
+integrada del hijo, reconciliación operativa y gestión conversacional/otros canales.
 La recuperación de cancelación sigue limitada al TTL y no hace atómico el proveedor
 con la BD. Fase 5 exige revisión de Claude del candidato exacto y banco real
 comparable de Alicia y otro negocio. La decisión foto/diagnóstico permanece aislada.

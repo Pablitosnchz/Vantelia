@@ -6,14 +6,18 @@ al plan y al registro horario; no completar casillas por inferencia.
 
 ## Referencias
 
-- Último candidato medido: de3d6d0, suite roja (2401 passed, 1 skipped, 1 failed,
-  sin xfail), fin 13-sep 02:52:00.149448 +02:00. Único fallo: arquitectura omite
-  notice_deliveries; c4d4f6a corrige el mapa con 5 dirigidos verdes. No se pidió revisión formal.
+- Último candidato medido: 2cb8a029, suite roja (2442 passed, 1 skipped, 1 failed),
+  fin 13-sep 03:23:06.385 +02:00. Único fallo:
+  test_banco_sin_meta::test_instalar_captura_cierra_la_salida_de_payload,
+  en contraste frente a c9f19e6. No se pidió revisión exacta nueva.
+- Antecedente de3d6d0: 2401 passed, 1 skipped, 1 failed documental; c4d4f6a
+  corrige arquitectura/mapa con 5 dirigidos, sin modificar la suite histórica.
 - Antecesor local: 7ab7775, 2297 passed y 1 skipped; revisión pendiente.
-- Hijo actual: astra/formularios-confirmados, formulario 99fdaf1 (66 dirigidos),
-  arnés 2533fe9 (23 dirigidos), UI 23139ca y mapa c4d4f6a revisados. Cinco fixtures
-  heredadas 891a730: 38 dirigidos y revisión OK. Runner externo de suite del hijo
-  preparado; congelar relevo limpio antes de lanzarlo. Suite todavía NO iniciada.
+- Hijo actual: astra/condiciones-confirmadas, arnés v2 c9f19e6 revisado; términos
+  en 6c3ad4f con 112 dirigidos verdes (126,70 s) y revisión OK. 68c1fac añade
+  recuperación de checkout con clave persistida; 23 dirigidos de condiciones y
+  dos regresiones checkout/Bizum verdes. Sin suite nueva del hijo. Base formulario99fdaf1, UI23139ca,
+  mapa c4d4f6a y fixtures891a730 medidos en 2cb8a029.
 - Referencia anterior con modelo real: pendiente de identificar SHA y artefactos.
 - Datos: solo copias saneadas autorizadas. No usar por defecto la BD del negocio.
 - Mantener separados los casos no aplicables y los que no se pudieron medir.
