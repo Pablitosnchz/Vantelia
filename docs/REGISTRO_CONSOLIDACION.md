@@ -676,3 +676,29 @@ a fin en todas.
   borran al acabar.
 - Siguiente: suite completa sobre 36b4d8d; medición con modelo real (crítico, banco Alicia, humo, portal,
   metareview); después, contar resultados a Pablo y proponer despliegue.
+
+## 2026-09-14 02:18–03:16 +0200 - test de concurrencia, medición de ed94be1 y manicura (Claude)
+
+- Suite completa sobre 36b4d8d: 2674 passed, 1 failed (`test_reserva_concurrente`, dos reprogramaciones al mismo
+  hueco). Leído: el test NO probaba nada (construía el cambio con `BookingReschedulePayload`, sin `nombre` ni
+  `servicio`, y sin `source`: los dos hilos acababan siempre en excepción) y fallaba al CREAR las citas iniciales
+  (409, traza línea 150) según el orden de la suite. ed94be1 lo rehace: mismo profesional, `BookingUpdatePayload`,
+  exige 200 + 409 y una cita en destino. Mutación comprobada: sin la re-comprobación con el lock falla por la
+  carrera (`[200, 'IntegrityError']`).
+- Medición de ed94be1 (copia nueva `snap5` de producción de las 02:17, `cfg5`, árbol limpio): suite 2675 passed,
+  1 skipped, 0 fallos; banco Alicia 43/43 al primer intento (`recomienda-ante-un-problema` ya contesta con el
+  texto de Alicia); crítico 6/6 al primer intento y 0 fechas ISO (antes 3 de 6); humo 5/5 con el pack de mechas
+  completo; portal y reinicios 6/6 al primer intento (regla apagada: ya no resume el diagnóstico retirado).
+- metareview sobre ed94be1: 14 OK y 2 fallos. `horario-escrito-manda` depende del día de la medición (un lunes no
+  dice «lunes»; ayer, domingo, pasaba en todas las versiones): instrumento. `servicio-que-no-existe`, 2 de 2: la
+  comprobación «nadie hace esa técnica» solo miraba la técnica y el extractor apuntó «manicura» como familia.
+  bec310f la mira también en la familia (test rojo sin el arreglo; 453 verdes).
+- Borradas las copias de BD de cada tirada; se conservan `snap5`, `cfg5` y los datos de metareview para volver a
+  medir bec310f, y se borran después.
+- Siguiente: metareview, humo y suite sobre bec310f; cerrar docs, limpiar y contar a Pablo.
+- Medición de bec310f (árbol limpio): metareview 15/16 al primer intento, `servicio-que-no-existe` ya dice que no hay manicura
+  (único fallo `horario-escrito-manda`, dependiente del día); humo 5/5 con el pack completo; suite 2678 passed,
+  1 skipped, 0 fallos. Borrados el snapshot `snap5`, su config, los datos de metareview y todas las copias de
+  medición: no queda ninguna copia con datos de clientas en la sesión.
+- Siguiente: contar a Pablo; despliegue de bec310f cuando él lo ordene. Los commits de esta noche NO se han subido a
+  GitHub (`main` sigue en lo desplegado, 5c1b5f4).

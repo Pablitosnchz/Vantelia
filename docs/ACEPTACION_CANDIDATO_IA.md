@@ -1,8 +1,65 @@
 # Evidencia de aceptación del candidato IA
 
-Estado: **candidato final 0bca1eb DESPLEGADO en producción el 14-sep a las 01:20 (VERSION.json 109b091) por orden de Pablo; regla de orientación de Alicia creada y verificada** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
+Estado: **producción en 0bca1eb (desplegado el 14-sep 01:20); candidato siguiente bec310f en `claude/candidato`, medido el 14-sep y pendiente de orden de despliegue de Pablo** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
+
+## Remate tras el despliegue: 14-sep-2026 (Claude)
+
+Producción sigue en 109b091 (código 0bca1eb). Rama `claude/candidato`, código **ed94be1**: siete
+cambios más, todos con test rojo sin el arreglo, medidos con modelo real sobre copia nueva de
+producción (`snap5`, 14-sep 02:17: 769 citas, 4 reglas de Alicia incluida la de orientación),
+config viva `cfg5`, solo la clave del modelo, árbol limpio y SHA estable.
+
+### Qué cambia
+
+| Commit | Arreglo | Caso medido que lo motivó |
+| --- | --- | --- |
+| 74e2894 | Pack con `preferir_packs` aunque el extractor pegue la talla a la técnica; fechas ISO en humano | Humo 13-sep: «Mechas medio» (75 min) en vez del pack de 360; «para el 2026-09-15» en 3 de 6 críticos |
+| 3f11dea | Freno de «cerrado» mira de qué día habla; cita de una oferta retirada no se coge | metareview (domingo cerrado); regla apagada tras ofrecer |
+| 4533dee | Ventana de reserva con el reloj de la app | Suite roja sola desde el 14-sep (calendario de medidas) |
+| f288ddf | «Qué me recomiendas» cuenta como duda | `recomienda-ante-un-problema`: alisado para la caída del pelo |
+| 36b4d8d | `dijo_que_hay_cita_sin_haberla` no niega una cita viva a su hora | Reprogramar 13-sep |
+| ed94be1 | Test de dos reprogramaciones simultáneas prueba la carrera de verdad | No probaba nada; rojo según el orden de la suite (traza del 14-sep: 409 al crear las citas iniciales, línea 150; mutación sin la re-comprobación: `[200, 'IntegrityError']`) |
+
+### Medición de ed94be1
+
+| Medición | Resultado |
+| --- | --- |
+| Suite completa | 2675 passed, 1 skipped, 0 fallos (24 min 38 s); el test de concurrencia corregido, verde dentro de la suite |
+| Banco Alicia (44) | 43/43 al 1.er intento, 0 reintentos, 0 fallos (1 no aplica); `recomienda-ante-un-problema` ya contesta con el texto de Alicia («sin ver tu cabello…») |
+| `dice-que-si-y-acaba-en-cita` ×6 | 6/6 al 1.er intento, mismo resumen en las 6; 0 respuestas con fecha ISO (antes del arreglo, 3 de 6) |
+| Humo (5) | 5/5; `elegir-una-opcion-resuelve` crea el Pack mechas o balayage medio (6 h, antes 75 min en una tirada); cancelada y movida leídas en la copia |
+| Cambios del portal y reinicios (6) | 6/6 al 1.er intento; regla apagada: tras «ya no está vigente» vuelve a preguntar la técnica, sin resumen del diagnóstico; reinicio a mitad: una cita viva a las 17:00 y sin negar la hora libre. Vacaciones: sigue diciendo «agenda completa» en vez de cerrado (pendiente de redacción) |
+| metareview conversacional | 14 al 1.er intento, 2 fallos (ver abajo) |
+
+### Arreglo posterior y medición de bec310f
+
+bec310f: lo que el negocio no hace se dice igual lo extraiga el modelo como técnica o como familia (manicura en metareview). Test rojo sin el arreglo; 453 verdes en búsqueda de servicios.
+
+| Medición | Resultado |
+| --- | --- |
+| metareview conversacional | 15/16 al 1.er intento; `servicio-que-no-existe` ya dice «no tenemos un servicio de manicura» (tool: «no hay ningún servicio de manicura», sin frenos); único fallo `horario-escrito-manda`, que depende del día de la medición |
+| Humo (5) | 5/5; corte creado, pack de mechas completo (6 h), cancelada y movida leídas en la copia |
+| Suite completa | 2678 passed, 1 skipped, 0 fallos (20 min 45 s) |
+
+### Preguntas abiertas y dependencias externas
+
+- `exigir_dos_apellidos` no está activo para Alicia en la config de producción (sí en el `config.json` del
+  repo desde 550aafe). Se mide igual que producción. Decide Pablo.
+- WhatsApp de Alicia sin conectar (sin cuenta ni plantilla en producción): los recordatorios por WhatsApp no
+  pueden salir hasta que conecte su número.
+
+### Fallos de metareview en ed94be1 (leídos en agent_turns)
+
+- `horario-escrito-manda` (importante): medido un LUNES a las 02:48. Primer borrador «hoy cerrados», el freno de
+  «cerrado» lo corrige (el lunes abre) y contesta «Hoy estamos abiertos de 09:00 a 18:00… mañana, martes 15». El
+  caso exige la palabra «lunes»: ayer (domingo) pasaba en todas las versiones, producción incluida, porque decía
+  «mañana, lunes». Depende del día en que se mide: pendiente del instrumento, no regresión.
+- `servicio-que-no-existe` (importante), 2 de 2 intentos: a «me quiero hacer la manicura» pregunta qué tipo de
+  manicura. `buscar_servicio` dio el genérico «no hay nada que encaje» (ayer: «no hay ningún servicio de manicura»
+  con parecidos). Depende de si el extractor pone «manicura» como técnica o como familia: la comprobación de
+  «nadie la hace» solo miraba la técnica. Ya estaba así en producción; arreglo en curso.
 
 ## Actualización 13-sep-2026, 17:55: dos revisiones, sus arreglos y medición del SHA final (Claude)
 
