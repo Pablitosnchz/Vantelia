@@ -2453,6 +2453,9 @@ def test_send_confirmation_validates_and_reports(client: TestClient, api_module,
         r = client.post(f"/auth/bookings/{bid_em}/send-confirmation", cookies=cookies)
         assert r.status_code == 200, r.text
         assert "email" in r.json()["mensaje"].lower()
+        # Reenviar aunque el último WhatsApp esté sin confirmar (el panel lo pregunta antes).
+        r = client.post(f"/auth/bookings/{bid_em}/send-confirmation", cookies=cookies, json={"force": True})
+        assert r.status_code == 200, r.text
         with sqlite3.connect(api_module.DB_PATH) as conn:
             n = conn.execute(
                 "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='confirmation_resent'", (bid_em,)

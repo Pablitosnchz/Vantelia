@@ -4232,6 +4232,7 @@ async def _send_booking_reminder_by_kind(
     respect_enabled: bool = True,
     raise_on_failure: bool = True,
     channel_override: Optional[Dict[str, bool]] = None,
+    detallar_whatsapp: bool = False,
 ) -> Dict[str, Any]:
     """Envia el aviso de la cita por los canales efectivos del tenant para ``kind``.
 
@@ -4350,7 +4351,7 @@ async def _send_booking_reminder_by_kind(
                 return
             try:
                 resultado = await _send_booking_whatsapp_reminder(
-                    booking_row, kind, request, **({"detailed": True} if sent_column else {}))
+                    booking_row, kind, request, **({"detailed": True} if (sent_column or detallar_whatsapp) else {}))
                 estado_resultado = getattr(resultado, "estado", "")
                 if estado_resultado:
                     delivery_outcomes["whatsapp"] = (
@@ -4463,6 +4464,8 @@ async def _send_booking_reminder_by_kind(
                 if notice_blocked:
                     break
 
+    # Canales cuyo resultado no se sabe (Meta no contestó): quien reenvía a mano lo necesita.
+    dudosos = [nombre for nombre, salida in delivery_outcomes.items() if salida[0] == "desconocido"]
     # Un canal omitido no rescata el fallo de otro: sin ninguna entrega hay que
     # dejar el aviso pendiente. Todos omitidos si es terminal (evita un bucle sin
     # destinatario), y una entrega aceptada conserva la marca para no duplicarla.
@@ -4481,7 +4484,7 @@ async def _send_booking_reminder_by_kind(
                 "failed": failed_channels,
             },
         )
-        return {"sent": sent_channels, "failed": failed_channels, "skipped": skipped_channels}
+        return {"sent": sent_channels, "failed": failed_channels, "skipped": skipped_channels, "dudosos": dudosos}
 
     # No se entrego por ningún canal: deja rastro y, segun el caller, lanza o devuelve.
     _record_booking_audit(
@@ -4495,14 +4498,42 @@ async def _send_booking_reminder_by_kind(
             "No se ha podido enviar el aviso por ningún canal: "
             + "; ".join(f"{name}: {err}" for name, err in failed_channels.items())
         )
-    return {"sent": [], "failed": failed_channels, "skipped": skipped_channels}
+    return {"sent": [], "failed": failed_channels, "skipped": skipped_channels, "dudosos": dudosos}
 
 
 _REMINDER_CHANNEL_LABELS = {"email": "email", "whatsapp": "WhatsApp", "sms": "SMS"}
 
 
+def _whatsapp_de_confirmacion_sin_confirmar(booking_row: sqlite3.Row) -> bool:
+    """¿El último WhatsApp de confirmación de esta cita se quedó sin respuesta de Meta?
+
+    Mira el reenvío manual más reciente (auditoría) y, si no lo hay, la confirmación
+    automática de la generación actual (`booking_notice_deliveries`). Un reenvío manual
+    posterior que sí entregó por WhatsApp lo deja atrás.
+    """
+    with db._get_db_connection() as conn:
+        ultimo = conn.execute(
+            "SELECT event_type, payload_json FROM booking_audit WHERE booking_id=? AND cliente_id=? "
+            "AND event_type IN ('confirmation_whatsapp_uncertain','confirmation_resent') "
+            "ORDER BY id DESC LIMIT 1",
+            (booking_row["id"], booking_row["cliente_id"])).fetchone()
+        if ultimo is not None:
+            if ultimo["event_type"] == "confirmation_whatsapp_uncertain":
+                return True
+            try:
+                if "whatsapp" in (json.loads(ultimo["payload_json"] or "{}").get("channels") or []):
+                    return False
+            except (TypeError, ValueError, AttributeError):
+                pass
+        return conn.execute(
+            "SELECT 1 FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? AND generation=? "
+            "AND kind='confirmed' AND channel='whatsapp' AND state IN ('desconocido','enviando')",
+            (booking_row["cliente_id"], booking_row["id"], booking_row["reminder_generation"]),
+        ).fetchone() is not None
+
+
 async def _resend_booking_confirmation(
-    booking_row: sqlite3.Row, request: Optional[Request] = None, *, by_user: str = ""
+    booking_row: sqlite3.Row, request: Optional[Request] = None, *, by_user: str = "", force: bool = False
 ) -> Dict[str, Any]:
     """Reenvio MANUAL de la confirmación de una cita (boton del panel).
 
@@ -4540,16 +4571,34 @@ async def _resend_booking_confirmation(
             status_code=409,
             detail="No hay datos de contacto válidos para los canales activos (email/teléfono).",
         )
+    if wants_wa and phone_wa and not force and _whatsapp_de_confirmacion_sin_confirmar(booking_row):
+        # Decisión de Pablo (14-sep-2026), «avisar y dejar reenviar»: sin esto el negocio
+        # veía un error, volvía a pulsar y la clienta podía recibir dos WhatsApp.
+        raise HTTPException(status_code=409, detail={
+            "code": "WHATSAPP_SIN_CONFIRMAR",
+            "message": ("El último WhatsApp de confirmación no está confirmado: puede que ya le haya "
+                        "llegado. Si lo reenvías, podría recibirlo dos veces."),
+        })
     result = await _send_booking_reminder_by_kind(
-        booking_row, "confirmed", request, respect_enabled=False, raise_on_failure=False
+        booking_row, "confirmed", request, respect_enabled=False, raise_on_failure=False,
+        detallar_whatsapp=True,
     )
+    whatsapp_dudoso = "whatsapp" in (result.get("dudosos") or [])
     if not result["sent"]:
+        if whatsapp_dudoso:
+            _record_booking_audit(booking_row["id"], cliente_id, "confirmation_whatsapp_uncertain", {"by": by_user})
+            raise HTTPException(status_code=409, detail=(
+                "No sabemos si el WhatsApp ha llegado: Meta no ha respondido. Puede que ya lo tenga; "
+                "si vuelves a enviarlo, podría recibirlo dos veces."))
         detail = "; ".join(f"{name}: {err}" for name, err in result["failed"].items())
         raise HTTPException(status_code=409, detail=detail or "No se pudo enviar la confirmación.")
     _record_booking_audit(
         booking_row["id"], cliente_id, "confirmation_resent",
         {"by": by_user, "channels": result["sent"]},
     )
+    if whatsapp_dudoso:
+        # Después del reenvío: es lo último que se sabe del WhatsApp de esta cita.
+        _record_booking_audit(booking_row["id"], cliente_id, "confirmation_whatsapp_uncertain", {"by": by_user})
     return result
 
 

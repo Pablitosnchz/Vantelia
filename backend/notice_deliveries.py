@@ -32,20 +32,25 @@ def current_notice_booking(cliente_id, booking_id, generation):
 
 
 def notice_claim_still_owned(cliente_id, booking_id, generation, kind, channel, owner_token):
-    """Justo antes de enviar: ¿la reclamación sigue siendo nuestra y la cita vigente?
+    """Justo antes de enviar: confirma que la reclamación sigue siendo nuestra y la RENUEVA.
 
     Un ejecutor parado más de la gracia pierde su turno en `claim_notice_delivery`
-    (revisión de Codex a 1458540): si al volver no lo comprueba, manda el aviso que
-    otro ya entregó por el canal siguiente.
+    (revisión de Codex a 1458540): si al volver no lo comprueba, manda el aviso que otro
+    ya entregó por el canal siguiente. Y comprobar sin renovar tampoco basta (segunda
+    revisión, 549a1e3): quien vuelve a los 29 min 55 s pasa la comprobación y, con su
+    envío aún en camino, otro le retira el turno segundos después. Al renovar
+    `updated_at` en el mismo UPDATE, la gracia cuenta desde aquí y el envío (timeout de
+    20 s) termina mucho antes de que nadie pueda retirárselo.
     """
-    with closing(db._get_db_connection()) as conn:
+    with closing(db._get_db_connection()) as conn, conn:
         return conn.execute(
-            "SELECT 1 FROM booking_notice_deliveries d JOIN bookings b ON b.cliente_id=d.cliente_id "
-            "AND b.id=d.booking_id AND b.reminder_generation=d.generation "
-            "AND b.status NOT IN ('cancelled','completed','no_show') "
-            "WHERE d.cliente_id=? AND d.booking_id=? AND d.generation=? AND d.kind=? AND d.channel=? "
-            "AND d.state='enviando' AND d.owner_token=?",
-            (cliente_id, booking_id, generation, kind, channel, owner_token)).fetchone() is not None
+            "UPDATE booking_notice_deliveries SET updated_at=? "
+            "WHERE cliente_id=? AND booking_id=? AND generation=? AND kind=? AND channel=? "
+            "AND state='enviando' AND owner_token=? AND EXISTS (SELECT 1 FROM bookings b "
+            "WHERE b.cliente_id=booking_notice_deliveries.cliente_id AND b.id=booking_notice_deliveries.booking_id "
+            "AND b.reminder_generation=booking_notice_deliveries.generation "
+            "AND b.status NOT IN ('cancelled','completed','no_show'))",
+            (timeutils._utc_now_iso(), cliente_id, booking_id, generation, kind, channel, owner_token)).rowcount == 1
 
 
 def notice_has_attempt(cliente_id, booking_id, generation, kind):

@@ -1736,6 +1736,7 @@ async def auth_booking_confirm_call(
 async def auth_booking_send_confirmation(
     booking_id: str,
     request: Request,
+    payload: Optional[BookingSendConfirmationPayload] = None,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingActionResponse:
     """Reenvia la confirmacion de la cita por los canales configurados (email/WhatsApp/SMS).
@@ -1746,10 +1747,13 @@ async def auth_booking_send_confirmation(
     if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
     security._require_portal_permission(user, "agenda.attendance")
-    result = await booking._resend_booking_confirmation(booking_row, request, by_user=user["id"])
+    result = await booking._resend_booking_confirmation(
+        booking_row, request, by_user=user["id"], force=bool(payload and payload.force))
+    mensaje = f"Confirmacion enviada por {booking._confirmation_channels_label(result['sent'])}."
+    if "whatsapp" in (result.get("dudosos") or []):
+        mensaje += " El WhatsApp no está confirmado: puede que también le llegue."
     return BookingActionResponse(
-        ok=True, booking_id=booking_id, estado=booking_row["status"],
-        mensaje=f"Confirmacion enviada por {booking._confirmation_channels_label(result['sent'])}.",
+        ok=True, booking_id=booking_id, estado=booking_row["status"], mensaje=mensaje,
     )
 
 

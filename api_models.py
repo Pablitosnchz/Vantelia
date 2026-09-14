@@ -177,6 +177,11 @@ class BookingDetailPublic(BaseModel):
     available_services: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class BookingSendConfirmationPayload(BaseModel):
+    # Reenviar aunque el último WhatsApp esté sin confirmar (el panel lo pregunta antes).
+    force: bool = False
+
+
 class BookingActionResponse(BaseModel):
     ok: bool
     booking_id: str

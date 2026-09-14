@@ -255,3 +255,68 @@ def test_un_ejecutor_que_vuelve_tarde_no_repite_el_aviso_ya_entregado(entorno, m
         hilo.join(timeout=20)
     assert not hilo.is_alive()
     assert enviados == ["email"], "el ejecutor antiguo mando tambien el WhatsApp: %r" % enviados
+
+
+def test_un_ejecutor_que_vuelve_justo_antes_de_caducar_renueva_su_turno(entorno, monkeypatch):
+    """Segunda revisión de Codex (549a1e3): comprobar el turno sin renovarlo no basta.
+
+    A vuelve a los 29 min 55 s: su turno sigue siendo válido y empieza a enviar. Seis
+    segundos después, con su WhatsApp aún en camino, B veía la reclamación pasada de la
+    gracia, se la retiraba y mandaba el email: la clienta recibía los dos.
+    """
+    from backend import messaging
+
+    b = entorno.booking
+    b._update_booking_record(entorno.booking_id, email="sintetica@example.invalid")
+    _canales(b, monkeypatch, ["whatsapp", "email"], {"email": True, "whatsapp": True, "sms": False})
+    enviados, errores = [], []
+    dentro, seguir = threading.Event(), threading.Event()
+    ejecutor_a = {}
+
+    def entregable(*a):
+        if threading.current_thread() is ejecutor_a.get("hilo"):
+            dentro.set()
+            seguir.wait(timeout=20)
+        return True, ""
+
+    def ejecutor_b():
+        try:
+            asyncio.run(b._run_booking_reminders())
+        except Exception as exc:  # noqa: BLE001
+            errores.append(exc)
+
+    async def whatsapp(*a, **k):
+        enviados.append("whatsapp")
+        # Su petición sigue viva (timeout de 20 s) y pasan seis segundos: entra B.
+        _adelantar_reloj(monkeypatch, 0.1)
+        hilo_b = threading.Thread(target=ejecutor_b, daemon=True)
+        hilo_b.start()
+        hilo_b.join(timeout=20)
+        return messaging.WhatsAppSendResult("aceptado", provider_message_id="wamid.al_limite")
+
+    def email(*a):
+        enviados.append("email")
+
+    monkeypatch.setattr(b, "_whatsapp_deliverable_for_booking", entregable)
+    monkeypatch.setattr(b, "_send_booking_whatsapp_reminder", whatsapp)
+    monkeypatch.setattr(b, "_send_booking_email", email)
+    fila = b._get_booking_row_by_id(entorno.booking_id)
+
+    def correr_a():
+        try:
+            asyncio.run(b._send_booking_reminder_by_kind(fila, "reminder_24h", sent_column="reminder_24h_sent_at"))
+        except Exception as exc:  # noqa: BLE001
+            errores.append(exc)
+
+    hilo = threading.Thread(target=correr_a, daemon=True)
+    ejecutor_a["hilo"] = hilo
+    hilo.start()
+    try:
+        assert dentro.wait(timeout=20), "A no llego a reclamar WhatsApp"
+        _envejecer(entorno.booking_id, "whatsapp", 29 + 55 / 60)
+    finally:
+        seguir.set()
+        hilo.join(timeout=40)
+    assert not hilo.is_alive()
+    assert enviados == ["whatsapp"], "B retiro el turno a un envio en curso y mando el email: %r" % enviados
+    assert _sellado(entorno), "la aceptacion de A se perdio al retirarle el turno"

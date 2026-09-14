@@ -4368,6 +4368,32 @@ function trackAppEvent(event, metadata) {
   }).catch(() => {});
 }
 
+// Reenviar la confirmación de una cita. Si el último WhatsApp quedó sin respuesta de Meta,
+// el servidor lo avisa (WHATSAPP_SIN_CONFIRMAR) y se pregunta antes de reenviar: decisión de
+// Pablo del 14-sep-2026, para que la clienta no reciba dos por un error mal entendido.
+async function sendBookingConfirmation(bid, btn){
+  if (btn) btn.disabled = true;
+  try {
+    let r;
+    try {
+      r = await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' });
+    } catch(e){
+      if (e.detail?.code !== 'WHATSAPP_SIN_CONFIRMAR') throw e;
+      const ok = await confirmDialog({
+        title: 'WhatsApp sin confirmar',
+        bodyHtml: `<p>${escapeHtml(e.detail.message || '')}</p>`,
+        confirmLabel: 'Reenviar igualmente',
+      });
+      if (!ok) return;
+      r = await api(`/auth/bookings/${bid}/send-confirmation`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ force: true }),
+      });
+    }
+    toast(r.mensaje || 'Confirmación enviada.', 'success');
+  } catch(e){ toast(e.message, 'error'); }
+  finally { if (btn) btn.disabled = false; }
+}
+
 function toast(msg, type) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -9302,13 +9328,7 @@ function cdRenderDetail(b){
           } catch(e){ toast(e.message, 'error'); }
           return;
         }
-        if (action === 'sendconfirm'){
-          try {
-            await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' });
-            toast('Confirmación enviada.', 'success');
-          } catch(e){ toast(e.message, 'error'); }
-          return;
-        }
+        if (action === 'sendconfirm'){ await sendBookingConfirmation(bid); return; }
         if (action === 'vercliente'){ await openClienteFromBooking(b); return; }
         if (action === 'reviewreq'){
           const okR = await confirmDialog({
@@ -9681,12 +9701,7 @@ function openManageBookingModal(b){
         catch { toast('No se pudo copiar. Enlace: ' + b.manage_url, 'error'); }
         return;
       }
-      if (action === 'sendconfirm'){
-        btn.disabled = true;
-        try { const r = await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' }); toast(r.mensaje || 'Confirmacion enviada.', 'success'); }
-        catch(e){ toast(e.message, 'error'); } finally { btn.disabled = false; }
-        return;
-      }
+      if (action === 'sendconfirm'){ await sendBookingConfirmation(bid, btn); return; }
       if (action === 'confirmcall'){
         const ok = await confirmDialog({ title: 'Llamar para confirmar', bodyHtml: `<p>La IA llamara a <b>${escapeHtml(clientName)}</b> para confirmar la cita. Tiene coste por llamada.</p>`, confirmLabel: 'Llamar ahora' });
         if (!ok) return;
@@ -9880,12 +9895,7 @@ function openManageBookingModalLegacy(b){
         catch { toast('No se pudo copiar. Enlace: ' + b.manage_url, 'error'); }
         return;
       }
-      if (action === 'sendconfirm'){
-        btn.disabled = true;
-        try { const r = await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' }); toast(r.mensaje || 'Confirmación enviada.', 'success'); }
-        catch(e){ toast(e.message, 'error'); } finally { btn.disabled = false; }
-        return;
-      }
+      if (action === 'sendconfirm'){ await sendBookingConfirmation(bid, btn); return; }
       if (action === 'confirmcall'){
         const ok = await confirmDialog({ title: 'Llamar para confirmar', bodyHtml: `<p>La IA llamará a <b>${escapeHtml(b.nombre || 'el cliente')}</b> para confirmar la cita. Tiene coste por llamada.</p>`, confirmLabel: 'Llamar ahora' });
         if (!ok) return;
