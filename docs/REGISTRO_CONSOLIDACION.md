@@ -1099,3 +1099,8 @@ a fin en todas.
 - 20:55: borradas las copias con datos de clientas del scratchpad (snap7 con su WAL, cfg7, cfg7_metareview, meta_rag,
   banco_n y las copias de cada tirada ya borradas antes). Quedan solo los informes JSON y los logs.
 - Siguiente: suite completa de e230991 y veredicto de Astra; cerrar fase 5 y plan.
+- 21:0x: integrado en `claude/cierre-plan` (E:/Vantelia) sin fusión: e230991 + docs del cierre (792bbeb). Pablo: Astra sin
+  créditos hasta las 22:19. Decisión (AskUserQuestion): «Esperar a Astra». A las 22:20 se le vuelve a pasar e230991; con
+  OK se pide a Pablo el despliegue (y solo cuando Alicia termine de probar) y se cierra el plan. Producción sigue en
+  125725f, con los dos fallos de cb87be4 y el de e11ac35: a Alicia solo le afectarían al suscribirse, y no ha conectado
+  WhatsApp ni se ha suscrito.
