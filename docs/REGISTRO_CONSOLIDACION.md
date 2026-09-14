@@ -1141,3 +1141,19 @@ a fin en todas.
   para extensiones); sin política se suma como antes; ya no dice «otro día»; con un dato pendiente la guía no lleva
   «EXACTAMENTE» y la pregunta de duración sigue viva. Tests rojos antes (frase «otro día», sin política se suma,
   pregunta pendiente); 63 de duración verdes. Suite completa de cd9993d en curso; revisión pedida a Astra.
+- Respuestas de Alicia (vía Pablo, 23:0x): «La cita para diagnóstico 15 minutos también» y «si la clienta pregunta
+  cuánto duran las extensiones depende del sistema con la que se lo pongamos pero normal es el mantenimiento cada 8/10
+  semanas y cambio de cabello cada 12/18 meses». No contesta si es el mismo día u otro. Con la decisión previa de Pablo
+  («Te paso las preguntas»: con sus respuestas se ajustan Q&A y catálogo desde el panel) se prepara el cambio de sus
+  datos.
+- 22:47, producción (mismo camino que el panel: `auth_update_service` y `app_qa_create`), copia previa
+  `/srv/vantelia-backups/pre-alicia-extensiones-20260914-204721.db` e `info-pre-alicia-extensiones-20260914-204721.txt`:
+  «Diagnostico y presupuesto para extensiones» 25 → 15 min (0 citas futuras con ese servicio) con `olvidar_tenant`; Q&A
+  nueva `qa_a590924b97c690f97dc2` «¿Cuánto duran las extensiones?» con su respuesta (mantenimiento cada 8-10 semanas,
+  cambio de cabello cada 12-18 meses, diagnóstico de 15 min gratis) y etiquetas específicas; `info.txt` regenerado.
+  Comprobado con `rag._match_qa_answer`: «cuánto duran / cuánto aguantan las extensiones» → la nueva; su pregunta de
+  presupuesto, «cuánto cuestan las extensiones» y «quiero extensiones» → la de siempre. Nada enviado a nadie.
+- Veredicto de Astra sobre cd9993d (buzón, 22:45): sus dos hallazgos anteriores, OK. CAMBIOS por dos casos nuevos
+  reproducidos: (1) con varias familias pedidas elige la primera valoración del catálogo que case con cualquiera de
+  ellas, no con la de la política (diagnóstico de corte en vez del de extensiones); (2) si la propia valoración está
+  pendiente de elegir, no separa y la guía pide «dale el total sumado». Suite de cd9993d parada.

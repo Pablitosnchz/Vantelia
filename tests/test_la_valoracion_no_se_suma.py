@@ -120,6 +120,47 @@ def test_con_un_tratamiento_pendiente_la_pregunta_sigue_viva(salon, monkeypatch)
     assert siguiente, "en el turno siguiente se olvido de que preguntaba cuanto tarda"
 
 
+def test_con_varias_familias_la_valoracion_es_la_de_la_politica(salon, monkeypatch):
+    """Revisión de Astra a cd9993d: con «diagnóstico, corte y extensiones» y política solo para extensiones,
+    cogía el diagnóstico de corte por salir antes en el catálogo."""
+    from backend import agent, db, timeutils
+
+    _politica(monkeypatch, ["extensiones"])
+    ahora = timeutils._utc_now().isoformat()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category, duration_minutes, price_cents,"
+            " description, is_active, sort_order, created_at, updated_at) VALUES"
+            " ('demo','dur_val_diag_corte','Diagnostico y presupuesto para cortes','Cortes',10,0,'',1,0,?,?)",
+            (ahora, ahora))
+        conexion.commit()
+    dicho = "diagnostico y presupuesto, corte de señora y extensiones adhesivas, cuanto tarda?"
+    guia = agent._cuanto_duran_juntos(salon, dicho, mensaje=dicho)
+    assert "para extensiones" in guia.lower(), guia
+    assert "para cortes" not in guia.lower(), "eligio la valoracion de otra familia: %s" % guia
+
+
+def test_si_falta_elegir_la_valoracion_tampoco_se_suma(salon, monkeypatch):
+    """Revisión de Astra a cd9993d: con la valoración por elegir, la guía pedía «dale el total sumado»."""
+    from backend import agent, booking, catalog_pick
+
+    _politica(monkeypatch, ["extensiones"])
+    elegir, pregunta_para = catalog_pick.elegir, catalog_pick.pregunta_para
+
+    def sin_valoracion(cliente_id, datos, location_id=""):
+        if booking.es_servicio_de_valoracion(str(datos.get("familia") or "")):
+            return types.SimpleNamespace(servicio="", pendiente="valoracion")
+        return elegir(cliente_id, datos, location_id)
+
+    monkeypatch.setattr(catalog_pick, "elegir", sin_valoracion)
+    monkeypatch.setattr(catalog_pick, "pregunta_para",
+                        lambda e: "¿que diagnostico quieres?" if getattr(e, "pendiente", "") else pregunta_para(e))
+    dicho = "diagnostico y presupuesto y extensiones adhesivas, cuanto tarda?"
+    guia = agent._cuanto_duran_juntos(salon, dicho, mensaje=dicho)
+    assert "sumado" not in guia.lower() and "total" not in guia.lower().replace("no le des un total", ""), guia
+    assert "aparte" in guia.lower(), guia
+
+
 def test_lo_que_va_junto_se_sigue_sumando(salon, monkeypatch):
     """Control: corte y secado en el mismo mensaje siguen siendo una sola cita."""
     from backend import agent

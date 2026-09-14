@@ -1549,40 +1549,47 @@ def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "",
     obligatorias = booking.valoracion_obligatoria(cliente_id)
     valoraciones = [(n, m) for n, m in resueltos if booking.es_servicio_de_valoracion(n)]
     tratamientos = [(n, m) for n, m in resueltos if not booking.es_servicio_de_valoracion(n)]
-    exige = bool(obligatorias) and (
-        any(booking._exige_valoracion(n, obligatorias) for n, _m in tratamientos)
-        or any(o in textnorm._strip_accents(str(f).lower()) for f, _p in pendientes for o in obligatorias))
-    if valoraciones and exige:
-        valoracion = valoraciones[0]
-        de_que = [textnorm._strip_accents(str(f).lower()) for f in familias
-                  if f and not booking.es_servicio_de_valoracion(str(f))]
+    valoracion_por_elegir = [(f, p) for f, p in pendientes if booking.es_servicio_de_valoracion(str(f))]
+    tratamiento_por_elegir = [(f, p) for f, p in pendientes if not booking.es_servicio_de_valoracion(str(f))]
+    # Las familias de la politica que tocan a LO QUE HA PEDIDO: la valoracion es la de esas, no la
+    # primera del catalogo que case con cualquier familia pedida (revision de Astra a cd9993d).
+    aplicables = [o for o in obligatorias
+                  if any(o in textnorm._strip_accents(n.lower()) for n, _m in tratamientos)
+                  or any(o in textnorm._strip_accents(str(f).lower()) for f, _p in tratamiento_por_elegir)]
+    if aplicables and (valoraciones or valoracion_por_elegir):
+        valoracion = None
         for servicio in booking._public_services_for_booking(cliente_id, location_id=location_id):
             nombre_val = str(servicio.get("nombre") or "") if isinstance(servicio, dict) else ""
             plano = textnorm._strip_accents(nombre_val.lower())
             if (nombre_val and booking.es_servicio_de_valoracion(nombre_val)
-                    and any(familia in plano for familia in de_que)):
+                    and any(o in plano for o in aplicables)):
                 minutos_val = _duracion_del_catalogo(cliente_id, nombre_val)
                 if minutos_val:
                     valoracion = (textnorm.nombre_de_servicio_publico(nombre_val), minutos_val)
                     break
+        if valoracion is None and valoraciones:
+            valoracion = valoraciones[0]
+        # «EXACTAMENTE» solo cuando no falta nada: `_recordar` da la pregunta por contestada con
+        # esa palabra y la de duracion tiene que seguir viva mientras falte un dato.
+        completo = valoracion is not None and not tratamiento_por_elegir
         tratamiento = ""
-        if tratamientos and not pendientes:
-            tratamiento = " El tratamiento son EXACTAMENTE %d minutos (%s)." % (
-                sum(m for _n, m in tratamientos), ", ".join("%s %d min" % t for t in tratamientos))
-        elif tratamientos:
-            # Sin «EXACTAMENTE»: falta un dato y la pregunta de duracion tiene que seguir viva
-            # (`_recordar` la da por contestada con esa palabra; revision de Astra).
-            tratamiento = " Del tratamiento, lo que ya sale del catalogo son %d minutos (%s)." % (
-                sum(m for _n, m in tratamientos), ", ".join("%s %d min" % t for t in tratamientos))
+        if tratamientos:
+            tratamiento = (" El tratamiento son %s%d minutos (%s)." % (
+                "EXACTAMENTE " if completo else "", sum(m for _n, m in tratamientos),
+                ", ".join("%s %d min" % t for t in tratamientos)))
         falta = ""
-        if pendientes:
+        if tratamiento_por_elegir:
             falta = " Para el tratamiento " + "; ".join(
-                "de %s tienes que preguntarle: %s" % (fam, pregunta) for fam, pregunta in pendientes) + "."
-        return (
-            "TE HA PREGUNTADO CUANTO TARDA. %s es la cita de valoracion que este negocio pide ANTES de "
-            "ese tratamiento (%d minutos): va aparte y NO se suma.%s%s Dile cada cifra por separado y NO "
-            "le des un total." % (valoracion[0], valoracion[1], tratamiento, falta)
-        )
+                "de %s tienes que preguntarle: %s" % (fam, pregunta) for fam, pregunta in tratamiento_por_elegir) + "."
+        if valoracion is not None:
+            cabeza = ("%s es la cita de valoracion que este negocio pide ANTES de ese tratamiento (%d minutos): "
+                      "va aparte y NO se suma." % valoracion)
+        else:
+            cabeza = ("Este negocio pide una cita de valoracion ANTES de ese tratamiento: va aparte y NO se suma. "
+                      "De la valoracion tienes que preguntarle: %s."
+                      % "; ".join(pregunta for _f, pregunta in valoracion_por_elegir))
+        return ("TE HA PREGUNTADO CUANTO TARDA. " + cabeza + tratamiento + falta
+                + " Dile cada cifra por separado y NO le des un total.")
 
     detalle = ", ".join("%s %d min" % (n, m) for n, m in resueltos)
     total = sum(m for _n, m in resueltos)
