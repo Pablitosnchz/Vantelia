@@ -7881,18 +7881,81 @@ def test_app_billing_checkout_prueba_sin_empezar_empieza_al_suscribirse(client: 
     assert int((antes + timedelta(days=10)).timestamp()) - 5 <= fin <= int((api_module._utc_now() + timedelta(days=10)).timestamp()) + 5
 
 
-@pytest.mark.parametrize("caso", ["sin_prueba", "vencida", "menos_de_48h"])
+@pytest.mark.parametrize("caso", ["sin_prueba", "vencida"])
 def test_app_billing_checkout_sin_prueba_vigente_cobra_como_siempre(client: TestClient, api_module, monkeypatch, caso):
-    """Control: sin prueba, vencida o con menos de 48 h (Stripe no lo admite) no cambia nada."""
+    """Control: sin prueba o con la prueba ya vencida no cambia nada."""
     ahora = api_module._utc_now()
     prueba = {
         "sin_prueba": None,
         "vencida": {"dias": 10, "hasta": _iso_z(ahora - timedelta(days=1))},
-        "menos_de_48h": {"dias": 10, "hasta": _iso_z(ahora + timedelta(hours=12))},
     }[caso]
     sent = _checkout_con_prueba(client, api_module, monkeypatch, "Bot SinPrueba " + caso, prueba)
-    assert "trial_end" not in (sent.get("subscription_data") or {})
+    datos = sent.get("subscription_data") or {}
+    assert "trial_end" not in datos and "trial_period_days" not in datos
     assert sent["payment_method_collection"] == "if_required"
+
+
+@pytest.mark.parametrize("horas,dias", [(12, 1), (36, 2)])
+def test_app_billing_checkout_con_menos_de_48h_de_prueba_no_cobra_antes(
+        client: TestClient, api_module, monkeypatch, horas, dias):
+    """Revisión de Astra a cb87be4: conecta el 14 y se suscribe el 23, con 24 h gratis por delante.
+    Stripe no admite `trial_end` a menos de 48 h y el checkout lo omitía: cobraba al momento, antes del
+    fin prometido. Con días de prueba redondeados hacia arriba nunca se cobra antes (como mucho, horas
+    después)."""
+    ahora = api_module._utc_now()
+    sent = _checkout_con_prueba(client, api_module, monkeypatch, "Bot Prueba48 %d" % horas,
+                                {"dias": 10, "hasta": _iso_z(ahora + timedelta(hours=horas))})
+    datos = sent.get("subscription_data") or {}
+    assert "trial_end" not in datos, sent
+    assert datos.get("trial_period_days") == dias, sent
+    assert sent["payment_method_collection"] == "always"
+
+
+def test_suscribirse_antes_de_conectar_fija_el_fin_que_cobra_stripe(client: TestClient, api_module, monkeypatch):
+    """Revisión de Astra a cb87be4: se suscribe el 14 (Stripe no cobra hasta el 24) sin guardar `hasta`,
+    y al conectar WhatsApp el 17 se fijaba el 27: dos fechas. El checkout lleva el fin en sus metadatos,
+    el webhook lo guarda al completarse y conectar después ya no lo mueve."""
+    from backend import appstate, clients, timeutils, wa_onboarding
+    from backend.routers import portal_app
+
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot PruebaAntes")
+    monkeypatch.setattr(api_module, "stripe", _FakeStripe)
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_real")
+    monkeypatch.setattr(api_module, "STRIPE_WEBHOOK_SECRET", "whsec_test_dummy")
+    cliente_id = client.get("/onboarding/state", cookies=cookies).json()["cliente_id"]
+    owner_id = api_module.db_get_client_owner(cliente_id)
+    appstate.CONFIG_CLIENTES[cliente_id]["prueba"] = {"dias": 10}
+    api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = "price_test_pro_monthly"
+    _FakeStripeSessionApi.last_create_payload = None
+    try:
+        resp = client.post("/auth/app/billing/checkout", json={"plan": "pro", "billing_period": "monthly"},
+                           cookies=cookies)
+        assert resp.status_code == 200, resp.text
+        sent = _FakeStripeSessionApi.last_create_payload or {}
+        fin_stripe = sent["subscription_data"]["trial_end"]
+        assert "hasta" not in appstate.CONFIG_CLIENTES[cliente_id]["prueba"], "abrir el checkout no la empieza"
+
+        payload = {"type": "checkout.session.completed", "data": {"object": {
+            "id": "cs_test_prueba_antes", "customer": "cus_prueba_antes", "subscription": "sub_prueba_antes",
+            "client_reference_id": f"self_serve:{owner_id}", "metadata": dict(sent["metadata"])}}}
+        r = client.post("/webhooks/stripe", headers={"stripe-signature": "t=1,v1=test"}, json=payload)
+        assert r.status_code == 200, r.text
+        hasta = timeutils._from_utc_iso(appstate.CONFIG_CLIENTES[cliente_id]["prueba"].get("hasta") or "")
+        assert hasta is not None and int(hasta.timestamp()) == fin_stripe, appstate.CONFIG_CLIENTES[cliente_id]["prueba"]
+
+        async def alta(*a, **k):
+            return {"phone_number_id": "PN_PRUEBA_ANTES_" + cliente_id, "mode": "coexistence"}
+
+        reloj = timeutils._utc_now
+        monkeypatch.setattr(wa_onboarding, "complete_signup", alta)
+        monkeypatch.setattr(clients, "_plan_feature", lambda *a: True)
+        monkeypatch.setattr(timeutils, "_utc_now", lambda: reloj() + timedelta(days=3))
+        asyncio.run(portal_app._completar_alta_whatsapp(cliente_id, code="despues"))
+        despues = timeutils._from_utc_iso(appstate.CONFIG_CLIENTES[cliente_id]["prueba"]["hasta"])
+        assert int(despues.timestamp()) == fin_stripe, "conectar despues movio el fin que cobra Stripe"
+    finally:
+        api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = ""
+        appstate.CONFIG_CLIENTES.get(cliente_id, {}).pop("prueba", None)
 
 
 def test_conectar_whatsapp_empieza_la_prueba_una_sola_vez(client: TestClient, api_module, monkeypatch):

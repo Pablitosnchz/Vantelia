@@ -2691,15 +2691,18 @@ async def app_billing_checkout(
         },
         **customer_kwargs,
     }
-    fin_prueba = billing.fin_de_prueba(user["cliente_id"] or "")
+    ahora_checkout = timeutils._utc_now()
+    fin_prueba = billing.fin_de_prueba(user["cliente_id"] or "", ahora_checkout)
     if fin_prueba is not None:
         # Días gratis del negocio (config `prueba`): se pide ya el IBAN o la tarjeta y Stripe no
         # cobra hasta el fin. Con "if_required" no los pediría, porque hoy no hay nada que cobrar.
         session_kwargs["payment_method_collection"] = "always"
         session_kwargs["subscription_data"] = {
-            "trial_end": int(fin_prueba.timestamp()),
+            **billing.terminos_de_prueba_para_stripe(fin_prueba, ahora_checkout),
             "metadata": {"source": "self_serve", "cliente_id": user["cliente_id"] or "", "plan": plan["slug"]},
         }
+        # El webhook guarda este fin al completarse el pago: conectar WhatsApp después no lo mueve.
+        session_kwargs["metadata"]["prueba_hasta"] = billing.iso_de_fin_de_prueba(fin_prueba)
     coupon_id = (data.coupon or "").strip()
     if coupon_id:
         # Direct coupon injection (server-side). Stripe rejects invalid coupons with 400.

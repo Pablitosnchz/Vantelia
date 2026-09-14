@@ -467,3 +467,49 @@ def test_volver_a_pedir_cancelar_pasado_el_margen_no_se_bloquea(gestion, monkeyp
     g["recibir"]("Cancelar R-123456", "menu_cancelar_cita")
     assert len(g["botones"]) == ofertas + 1, "sigue bloqueada por la aceptacion antigua"
     assert not any("pendiente" in t for t in g["textos"][-1:])
+
+
+def _al_soltar_la_aceptacion(monkeypatch, veces):
+    """`reserva.guardar` choca (otro turno tocó el estado) solo al soltar la aceptación antigua."""
+    from backend import conversation_state, reserva
+    real, choques = reserva.guardar, []
+    def guardar(cliente_id, telefono, estado, *a, **kw):
+        if not estado.confirmacion_reserva_json and len(choques) < veces:
+            choques.append(1)
+            raise conversation_state.ConversationStateConflict("otro turno")
+        return real(cliente_id, telefono, estado, *a, **kw)
+    monkeypatch.setattr(reserva, "guardar", guardar)
+    return choques
+
+
+def test_conflicto_al_recuperar_la_cancelacion_contesta(gestion, monkeypatch):
+    """Revisión de Astra a e11ac35: pasado el margen, si al soltar la aceptación antigua otro turno había
+    tocado el estado (`ConversationStateConflict`), se volvía sin decir nada: ni aviso ni oferta."""
+    from backend import booking_operations
+    g = gestion
+    boton = _cancelacion_sin_resultado(g, monkeypatch)
+    intentos = list(g["canceladas"])
+    monkeypatch.setattr(booking_operations, "_booking_has_webhook", lambda *a: False)
+    _pasan_minutos(monkeypatch, 16)
+    ofertas, textos = len(g["botones"]), len(g["textos"])
+    choques = _al_soltar_la_aceptacion(monkeypatch, veces=9)
+    g["recibir"](iid=boton)
+    assert choques, "el choque no llego a producirse"
+    assert g["canceladas"] == intentos, "no se cancela sola"
+    assert len(g["botones"]) == ofertas, "no se ofrece sobre un estado que no se pudo guardar"
+    assert len(g["textos"]) == textos + 1, "se quedo sin respuesta"
+    assert "cancel" in g["textos"][-1].lower(), g["textos"][-1]
+
+
+def test_conflicto_puntual_al_recuperar_la_cancelacion_reintenta_y_ofrece(gestion, monkeypatch):
+    from backend import booking_operations
+    g = gestion
+    boton = _cancelacion_sin_resultado(g, monkeypatch)
+    monkeypatch.setattr(booking_operations, "_booking_has_webhook", lambda *a: False)
+    _pasan_minutos(monkeypatch, 16)
+    ofertas = len(g["botones"])
+    choques = _al_soltar_la_aceptacion(monkeypatch, veces=1)
+    g["recibir"](iid=boton)
+    assert choques == [1]
+    assert len(g["botones"]) == ofertas + 1, "tras recargar una vez debia volver a ensenar la cita"
+    assert "no lleg" in g["textos"][-1].lower(), g["textos"][-1]

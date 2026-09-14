@@ -3029,12 +3029,24 @@ async def _wa_responder_cancelacion(*, cliente_id, phone_number_id, from_number,
         elif propuesta["estado"] == "aceptada" and _wa_cancelacion_sin_resultado_caducada(cliente_id, propuesta):
             # La cita sigue en pie pasado el margen: la cancelación no llegó a hacerse. Se le
             # vuelve a enseñar para que confirme, en vez de dejarla en «contacta con el negocio».
-            estado.confirmacion_reserva_json = ""
-            estado.intencion = ""
-            try:
-                reserva.guardar(cliente_id, from_number, estado)
-            except conversation_state.ConversationStateConflict:
-                return
+            # Si otro turno tocó el estado, se recarga una vez: si la aceptación ya no es esta, ese
+            # turno contesta; si sigue chocando, se le dice (revisión de Astra a e11ac35: volvía mudo).
+            for intento in range(2):
+                estado = reserva.cargar(cliente_id, from_number)
+                actual = reserva.leer_confirmacion_reserva(estado, incluir_hecha=True)
+                if not actual or actual["id"] != propuesta["id"] or actual["estado"] != "aceptada":
+                    return
+                estado.confirmacion_reserva_json = ""
+                estado.intencion = ""
+                try:
+                    reserva.guardar(cliente_id, from_number, estado)
+                    break
+                except conversation_state.ConversationStateConflict:
+                    if intento:
+                        await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                            from_number=from_number, request=request,
+                            texto="Tu solicitud cambió mientras la revisaba. Vuelve a pedir la cancelación y te envío la cita actualizada.")
+                        return
             await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
                 from_number=from_number, request=request,
                 texto="La cancelación anterior no llegó a completarse y tu cita sigue en pie. Te la envío de nuevo por si quieres cancelarla.")

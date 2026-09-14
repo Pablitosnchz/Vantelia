@@ -330,6 +330,9 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                         current_period_start=timeutils._utc_now().isoformat(),
                     )
                     settings.logger.info("Self-serve subscription activada user=%s plan=%s", user_id, plan)
+                    prueba_hasta = str((data_object.get("metadata") or {}).get("prueba_hasta") or "")
+                    if prueba_hasta and cid:
+                        billing.fijar_fin_de_prueba(str(cid), prueba_hasta)
                 else:
                     settings.logger.warning(
                         "Self-serve checkout completed sin user_id/plan validos: user=%s plan=%s",

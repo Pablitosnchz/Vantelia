@@ -107,7 +107,8 @@ def fin_de_prueba(cliente_id: str, ahora: Optional[datetime] = None) -> Optional
     """Hasta cuándo no se le cobra el plan a este negocio, o None si no tiene prueba vigente.
 
     Sin fecha de fin (aún no ha conectado WhatsApp) la prueba cuenta desde que se suscribe: nunca
-    se cobra antes de los días acordados. Con menos de 48 h por delante se cobra como siempre.
+    se cobra antes de los días acordados. Con menos de 48 h por delante también cuenta: antes se
+    cobraba al momento (revisión de Astra a cb87be4); ver `terminos_de_prueba_para_stripe`.
     """
     ahora = ahora or timeutils._utc_now()
     try:
@@ -119,7 +120,43 @@ def fin_de_prueba(cliente_id: str, ahora: Optional[datetime] = None) -> Optional
         return None
     if fin.tzinfo is None:
         fin = fin.replace(tzinfo=timezone.utc)
-    return fin if fin - ahora >= _MARGEN_MINIMO_PRUEBA else None
+    return fin if fin > ahora else None
+
+
+def terminos_de_prueba_para_stripe(fin: datetime, ahora: datetime) -> Dict[str, int]:
+    """Cómo decirle a Stripe que no cobre antes de `fin`.
+
+    Stripe no admite `trial_end` a menos de 48 h: entonces días de prueba enteros redondeados
+    hacia arriba, que como mucho cobran unas horas DESPUÉS del fin prometido, nunca antes.
+    """
+    if fin - ahora >= _MARGEN_MINIMO_PRUEBA:
+        return {"trial_end": int(fin.timestamp())}
+    dias = int(-(-(fin - ahora).total_seconds() // 86400))
+    return {"trial_period_days": max(1, dias)}
+
+
+def iso_de_fin_de_prueba(fin: datetime) -> str:
+    return fin.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def fijar_fin_de_prueba(cliente_id: str, hasta_iso: str) -> bool:
+    """Guarda en `prueba.hasta` el fin que Stripe va a respetar, al completarse la suscripción.
+
+    Revisión de Astra a cb87be4: suscribirse antes de conectar WhatsApp no guardaba el fin, y
+    conectar después fijaba otro (Stripe el 24, la config el 27). Manda la fecha de Stripe, que es
+    la que cobra; conectar después ya no la mueve (`prueba_empezada` no toca un fin puesto).
+    """
+    if not cliente_id or timeutils._from_utc_iso(str(hasta_iso or "")) is None:
+        return False
+    with appstate.state_lock:
+        configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = configs.get(cliente_id)
+        if not cfg or not isinstance(cfg.get("prueba"), dict):
+            return False
+        cfg["prueba"] = dict(cfg["prueba"], hasta=str(hasta_iso))
+        clients._update_runtime_configs(configs)
+    clients._persist_configs_to_disk(configs)
+    return True
 
 
 def _count_conversations_this_month(cliente_id: str) -> int:
