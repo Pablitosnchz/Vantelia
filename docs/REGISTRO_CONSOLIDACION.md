@@ -737,7 +737,7 @@ a fin en todas.
 - 11:03, 5a965e7 de Astra: 51 verdes con mi repro del conflicto. Nuevo repro rojo: con el resumen enviado hace
   20 min, un doble toque mientras se crea la cita recibe «La solicitud anterior no llegó a registrarse» y un
   resumen nuevo, además de «Cita confirmada» (1 cita). 04fc97f mide el margen desde la aceptación
-  (`operacion.vinculada`): test rojo sin el arreglo, 74 dirigidos verdes. Suite completa de 04fc97f: en marcha.
+  (`operacion.vinculada`): test rojo sin el arreglo, 74 dirigidos verdes. Suite completa de 04fc97f: 2687 passed, 1 skipped (23:06).
 - Plugin `codex-plugin-cc` instalado a petición de Pablo (ámbito local; en VS Code se llama a su script). La
   revisión adversarial de los avisos NO se hizo: `gpt-6-astra` no se admite con cuenta ChatGPT, y con
   `gpt-5.6-terra` la cuenta llegó al límite hasta el 14-oct a las 10:26 (Astra ya iba al 94 % a las 11:06). El

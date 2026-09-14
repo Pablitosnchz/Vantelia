@@ -495,8 +495,8 @@ protejan un caso vivo.
   revisión: CAMBIOS, el margen contaba desde la creación del resumen y un doble toque tardío
   le decía «no llegó a registrarse» mientras se creaba su cita (repro). `04fc97f` (Claude;
   Astra sin cuota) lo cuenta desde la aceptación. Rama `claude/reconciliar-pendientes`:
-  falta su suite completa, integrarla en el candidato y la revisión de Astra cuando tenga
-  cuota. Con `WEBHOOK_DEFAULT` puesto en el servidor no se libera nada (no comprobado en
+  suite completa 2687 passed, 1 skipped; falta integrarla en el candidato y la revisión de
+  Astra de `04fc97f`. Con `WEBHOOK_DEFAULT` puesto en el servidor no se libera nada (no comprobado en
   producción).
 - Sigue abierto en esta fase: cancelación/reprogramación, formularios, voz y widget sin
   confirmación persistida.
