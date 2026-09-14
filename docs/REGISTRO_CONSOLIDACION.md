@@ -719,3 +719,29 @@ a fin en todas.
 - Siguiente: vigilar las conversaciones reales de Alicia en cuanto lo use; fase 4 del plan con el inventario de
   frenos; pendientes menores (vacaciones dice «agenda completa»; `horario-escrito-manda` depende del día);
   WhatsApp de Alicia sin conectar (bloquea recordatorios).
+
+## 2026-09-14 10:37–11:30 +0200 - Fase 3, avisos sin bloqueo y revisión de la reconciliación (Claude)
+
+- Ramas: `claude/candidato` 68a8c68 (Fase 3) y 1458540 (avisos); `claude/reconciliar-pendientes` 04fc97f,
+  hija de 1c70f0a de Astra. Nada subido ni desplegado.
+- 10:37, 68a8c68: la API rechaza reglas sin intenciones, con intención desconocida o sin texto en una acción que
+  contesta; el listado del portal trae `avisos` por regla (tapada, empate de prioridad, familia fuera del catálogo,
+  ofrecer cita sin valoración). Tests `tests/test_avisos_de_reglas.py`.
+- Avisos, decisión de Pablo («Reintentar sin duplicar WhatsApp»): 1458540. Tests nuevos: 5 rojos antes del arreglo
+  y 2 controles de 29 min que pasan antes y después; suites de avisos 52 verdes; suite completa sobre el árbol con
+  68a8c68 y el arreglo: 2702 passed, 1 skipped (25:27).
+- 10:43, 5c88bc7 de Astra (liberar operaciones internas perdidas). Revisión a las 10:56: 48 dirigidos verdes en el
+  SHA exacto; mutación: con `booking_operations.py` del padre fallan sus 3 tests nuevos. Repro rojo: si falla el
+  guardado del estado tras liberar, la clienta queda sin respuesta y después atrapada en «Aún no puedo verificar».
+  Veredicto CAMBIOS, en el buzón.
+- 11:03, 5a965e7 de Astra: 51 verdes con mi repro del conflicto. Nuevo repro rojo: con el resumen enviado hace
+  20 min, un doble toque mientras se crea la cita recibe «La solicitud anterior no llegó a registrarse» y un
+  resumen nuevo, además de «Cita confirmada» (1 cita). 04fc97f mide el margen desde la aceptación
+  (`operacion.vinculada`): test rojo sin el arreglo, 74 dirigidos verdes. Suite completa de 04fc97f: en marcha.
+- Plugin `codex-plugin-cc` instalado a petición de Pablo (ámbito local; en VS Code se llama a su script). La
+  revisión adversarial de los avisos NO se hizo: `gpt-6-astra` no se admite con cuenta ChatGPT, y con
+  `gpt-5.6-terra` la cuenta llegó al límite hasta el 14-oct a las 10:26 (Astra ya iba al 94 % a las 11:06). El
+  «No material findings» de ese intento no es una revisión. `.claude/settings.local.json` (trackeado) queda
+  modificado sin commit con `enabledPlugins`, pendiente de Pablo.
+- Siguiente: suite de 04fc97f, integrarla en el candidato y fase 4 (cancelación/reprogramación, formularios, voz,
+  widget con confirmación persistida).

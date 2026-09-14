@@ -429,6 +429,18 @@ resultado desconocido por canal. No acredita entrega de Meta ni ausencia global
 de duplicación. Logs `recordatorios-falso-enviado-rojo.log` y `-verde.log` en la
 carpeta externa de coordinación.
 
+Actualización 14-sep-2026 (Claude, `1458540` en `claude/candidato`): la reclamación
+duradera por canal (`notice_deliveries`) dejaba un aviso bloqueado PARA SIEMPRE en dos
+casos: un fallo de email o SMS se guardaba como «desconocido» (el adaptador no distingue
+rechazo de respuesta perdida) y un WhatsApp dudoso impedía también el respaldo por email.
+Decisión de Pablo, «reintentar sin duplicar WhatsApp»: el fallo de email/SMS queda
+«rechazado», se reintenta en la siguiente vuelta y pasa al siguiente canal; un WhatsApp
+dudoso o un «enviando» colgado no se repiten por su canal, pero pasados 30 min sale el
+siguiente. Riesgo aceptado: rara vez un email repetido. Evidencia: 5 regresiones rojas
+antes del arreglo y 2 controles de frontera (29 min), suites de avisos 52 verdes, suite
+completa 2702 passed y 1 skipped. Sigue sin medir con Meta real: WhatsApp de Alicia sin
+conectar.
+
 ## QA corregida de gestión: 13-sep, 01:27 Europe/Madrid
 
 Una nueva ejecución justificada tras corregir la fecha del instrumento termina

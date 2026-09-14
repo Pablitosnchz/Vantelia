@@ -394,6 +394,17 @@ Aceptación: crear, editar, desactivar y borrar reglas desde Q&A cambia el próx
 comportamiento pertinente; indicar configuración inválida/conflictiva; dos tenants
 con reglas opuestas no se contaminan. Horarios y catálogo siguen en sus secciones.
 
+Avance 14-sep-2026 (Claude, `68a8c68`, «indicar configuración inválida/conflictiva»):
+la API rechaza con 400 lo que hace imposible una regla (sin intenciones, que casaría
+con cualquier mensaje; intención que no existe; acción que contesta sin texto). Antes
+solo lo pedía el formulario. Y el listado del portal trae `avisos` por regla, que el
+editor pinta debajo de cada una: tapada por otra de más prioridad que cubre los mismos
+casos, misma prioridad con casos que se pisan, familia que no está en el catálogo (una
+técnica que aparece en el nombre de un servicio no avisa), texto vacío y «ofrecer cita»
+sin servicio de valoración. Tests: `tests/test_avisos_de_reglas.py`, 17 casos. Falta de
+la puerta: comprobar con dos negocios que reglas opuestas no se contaminan (no medido
+con modelo real).
+
 ## Fase 4 — consolidación de canales y retirada de duplicados
 
 Siguiente candidato: astra/confirmacion-reserva, hija de 530ae40. El resumen de
@@ -465,6 +476,30 @@ Frenos en falso detectados con modelo real el 13-sep y ya arreglados: `ofrecio_u
 `dijo_cerrado_estando_abierto`, `dijo_que_hay_cita_sin_haberla`. Siguiente paso de la fase 4: medir la tasa de
 cada freno en conversaciones reales de Alicia (`agent_turns.frenos_json`) y retirar o mover al núcleo los que no
 protejan un caso vivo.
+
+### Entregas de avisos y operaciones perdidas (fase 4, 14-sep-2026)
+
+- **Avisos** (`1458540`, `claude/candidato`): la reclamación por canal dejaba un aviso
+  bloqueado para siempre ante un fallo de email o SMS (se guardaba «desconocido») y un
+  WhatsApp dudoso impedía también el respaldo. Decisión de Pablo: el fallo de email/SMS
+  queda «rechazado», se reintenta en la siguiente vuelta y pasa al siguiente canal; un
+  WhatsApp dudoso o un envío colgado nunca se repiten por su canal, pero pasados 30 min
+  (`notice_deliveries.GRACIA_AVISO_DUDOSO_MIN`) sale el siguiente. Riesgo aceptado: rara vez
+  un email repetido. Suite completa 2702 passed, 1 skipped. Sin medir con Meta real.
+- **Operaciones de creación perdidas**: `OPERATION_PENDING` no se reconciliaba nunca y la
+  clienta quedaba atrapada en «Aún no puedo verificar… contacta con el negocio». Encargo a
+  Astra: `5c88bc7` libera tras 15 min una operación interna sin cita y sin webhook (auditada
+  en `booking_operation_audit` sin datos de la clienta) y WhatsApp pide una confirmación
+  nueva. Revisión de Claude: CAMBIOS, atasco reproducido si falla el guardado del estado tras
+  liberar. `5a965e7` lo corrige y reabre también una clave ausente pasado el margen. Segunda
+  revisión: CAMBIOS, el margen contaba desde la creación del resumen y un doble toque tardío
+  le decía «no llegó a registrarse» mientras se creaba su cita (repro). `04fc97f` (Claude;
+  Astra sin cuota) lo cuenta desde la aceptación. Rama `claude/reconciliar-pendientes`:
+  falta su suite completa, integrarla en el candidato y la revisión de Astra cuando tenga
+  cuota. Con `WEBHOOK_DEFAULT` puesto en el servidor no se libera nada (no comprobado en
+  producción).
+- Sigue abierto en esta fase: cancelación/reprogramación, formularios, voz y widget sin
+  confirmación persistida.
 
 ## Fase 5 — aceptación del candidato
 
