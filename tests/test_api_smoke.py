@@ -5087,7 +5087,10 @@ def test_chat_disponibilidad_dia_sin_slots_suggests_next_day(client: TestClient,
 
     assert response.status_code == 200
     text = response.json()["respuesta"]
-    assert "no queda disponibilidad" in text.lower() or "agenda completa" in text.lower()
+    # El bloqueo 09-10 cubre toda la jornada del negocio de prueba: es cierre,
+    # no ocupación por citas. Sigue debiendo proponer el siguiente día disponible.
+    assert "cerrados" in text.lower()
+    assert "agenda completa" not in text.lower()
     assert "siguiente dia" in text.lower()
     assert "17:00" not in text
     assert "\\n" not in text

@@ -12,6 +12,16 @@ def test_rag_vacaciones_no_son_agenda_completa(api_module, bloqueo):
     assert resultado['status'] == 'closed'
 
 
+def test_contexto_chat_informa_cierre_y_motivo(api_module, bloqueo):
+    from backend import rag
+    fecha = _next_weekday(4)
+    bloqueo(fecha, '00:00', '23:59')
+    contexto = asyncio.run(rag._build_availability_context('demo', date.fromisoformat(fecha)))
+    assert 'cerrada' in contexto
+    assert 'Vacaciones' in contexto
+    assert 'completa' not in contexto
+
+
 def test_picker_no_ofrece_fecha_cerrada(api_module, monkeypatch):
     from backend import agenda, whatsapp, messaging, clients
     enviados = []

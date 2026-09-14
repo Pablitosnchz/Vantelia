@@ -1032,4 +1032,11 @@ a fin en todas.
 - calidad._dijo_que_cerramos ya llama a voice._dia_cerrado: sin cambio necesario. El resumen de proximos dias sigue mostrando cero huecos; no afirma que sea agenda completa y no es un selector.
 - Pendiente: dirigidos y suite del candidato, revision de Claude. Sin push, produccion ni despliegue.
 - Dirigidos terminados: 19 passed en 25,35 s; se lanza suite completa del commit estable antes de solicitar revision.
->>>>>>> 0bf5a65 (fix(agenda): comparte el cierre por vacaciones con RAG y selector)
+
+## 2026-09-14 19:41 Europe/Madrid — revisión de cierre-canales (Astra)
+
+- Rebase solicitado sobre 6671362, conservando los registros de Claude de 120ee46 y 6671362. c07202d queda como 0bf5a65.
+- Suite original c07202d: 2766 passed, 1 skipped, 1 failed en 1384,33 s. El único fallo esperaba agenda completa para un bloqueo 09-10 que cubre toda la jornada 09-10 del fixture. Se exige ahora cerrado, conservando la comprobación de siguiente día disponible; no se debilita a aceptar ambos resultados.
+- Hallazgo de Claude reproducido: test_contexto_chat_informa_cierre_y_motivo rojo (34,40 s), recibía agenda completa con vacaciones 00-23:59. _build_availability_context consulta ahora motivo_de_cierre_del_dia y comunica cerrado y motivo, igual que el snapshot.
+- Sin modelo real, push ni despliegue. Siguiente: dirigidos, suite del nuevo SHA estable y revisión exacta; no repetir la suite de c07202d.
+- Dirigidos finales: 21 passed, 7 warnings en 32,13 s (tres ficheros de cierres/horario y el caso de API que falló). Se congela candidato para suite completa; solicitud de revisión condicionada a exit 0 y SHA sin cambios.

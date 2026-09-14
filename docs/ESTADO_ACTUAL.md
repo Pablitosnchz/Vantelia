@@ -504,4 +504,4 @@ por medidas.
 
 ### Encargo Astra 14-sep 19:15: vacaciones en canales
 
-Rama astra/cierre-canales desde 45f3d11 en worktree propio. RAG y selector de fechas consultan el cierre compartido; dos regresiones rojas verificadas. En validacion; espera a suite y revision. No desplegado.
+Rama astra/cierre-canales en E:/Vantelia-astra-cierre-canales, rebasada sobre 6671362. RAG, contexto de chat y selector de fechas consultan el cierre compartido; tres regresiones rojas verificadas. Suite original c07202d: 2766 passed, 1 skipped, un fallo por expectativa antigua de completo en un cierre total; expectativa corregida conservando siguiente día. Testigo: Astra. Siguiente: dirigidos y suite del candidato actualizado; espera a revisión exacta de Claude tras verde. No desplegado.

@@ -797,6 +797,13 @@ async def _build_availability_context(cliente_id: str, target_date: date) -> Opt
         return None
 
     fecha_humana = textnorm._format_date_es(target_date)
+    cierre = agenda.motivo_de_cierre_del_dia(cliente_id, fecha_iso, config)
+    if cierre is not None:
+        motivo = f" ({cierre})" if cierre else ""
+        return (
+            f"DATOS_EN_TIEMPO_REAL_DISPONIBILIDAD: el {fecha_humana} ({fecha_iso}) "
+            f"la agenda está cerrada{motivo}. Sugiere otra fecha próxima sin inventar horarios."
+        )
     if not all_slots:
         return (
             f"DATOS_EN_TIEMPO_REAL_DISPONIBILIDAD: el {fecha_humana} ({fecha_iso}) la agenda esta cerrada "
