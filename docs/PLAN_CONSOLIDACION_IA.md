@@ -366,6 +366,14 @@ el otro tenant conserva los suyos. Revalidar antes de ejecutar si una propuesta
 se hizo antes de unas vacaciones o de desactivar el servicio. Pruebas negativas
 sin acceso cruzado. Conservar permisos y política del mostrador.
 
+**Cerrada (14-sep-2026, Claude).** Las cachés de `intents` comprueban una huella SHA-256 del contenido que
+consumen, leída de la BD que comparten los procesos (`intents.py`, `olvidar_tenant`;
+`tests/test_cambios_del_panel_se_ven_al_momento.py`). Con modelo real, `scripts/medir_portal_y_reinicio.py`
+(vacaciones después de ofrecer el día, hora bloqueada y servicio retirado con el resumen delante, regla apagada
+después de ofrecer, reinicio a mitad de reserva y con el resumen delante): 6/6 y 0 no medidos en c8aaad8 y en 5c927dd,
+sobre copias de producción. Unas vacaciones de día entero son un día cerrado en el agente, la voz, el chat y el
+selector de WhatsApp (ef0d0dc, 45f3d11, 1cdb3f9, 5c927dd).
+
 ## Fase 2 — propuestas y aceptación como estado
 
 Responsable: Astra; Claude aporta auditoría y revisión del recorrido actual.
@@ -380,6 +388,13 @@ vuelve a pedir técnica del alisado; rechazar conserva la negativa; cambiar de
 servicio abandona la propuesta anterior; no se crea nada sin confirmación.
 Probar también una pregunta informativa o un «sí» ambiguo que NO acepta una cita.
 No añadir listas de frases de salida como nueva autoridad.
+
+**Cerrada (14-sep-2026, Claude).** La propuesta de servicio y la confirmación de reserva viven en el estado persistido
+de la conversación (`reserva`), con identidad y versión; el botón o el «sí» solo aceptan la propuesta vigente
+(`tests/test_propuesta_de_servicio.py`, `tests/test_agente_propuestas.py`, `tests/test_estado_de_la_reserva.py`,
+`tests/test_estado_entre_procesos.py`). Con modelo real sobre copias de producción: el caso crítico
+`dice-que-si-y-acaba-en-cita` (no sabe qué alisado quiere → diagnóstico a su nombre) 6/6 al primer intento en ed94be1,
+c8aaad8 y 5c927dd, antes 0/6.
 
 ## Fase 3 — políticas visibles y aisladas en Q&A
 
@@ -517,6 +532,24 @@ protejan un caso vivo.
 - Sigue abierto en esta fase: reprogramar desde el agente (Pablo decidió no tocarlo por ahora),
   voz y widget sin confirmación persistida (esperan a un cliente que los use) y retirar frenos
   del agente con conversaciones reales.
+
+**Cerrada con excepciones (decisión de Pablo del 14-sep-2026, «Cerrar con excepciones»).** Hecho en los canales que usa
+Alicia: crear, cancelar y reprogramar por el flujo guiado de WhatsApp exigen aceptar la propuesta concreta, con
+identidad y estado persistidos; las operaciones de creación y de cancelación sin resultado se recuperan pasado el margen
+sin repetir la acción ni dejar a nadie sin respuesta (e230991: conflicto al recuperar la cancelación); los avisos no se
+bloquean ni se duplican; el cobro de la prueba gratis no empieza antes del fin prometido y Stripe y la config guardan la
+misma fecha (e230991); unas vacaciones de día entero son un día cerrado en todos los canales. Revisiones cruzadas de
+Astra y de Codex con reproducción en cada entrega.
+
+Quedan FUERA del plan, como seguimiento con su dueño y su disparador:
+
+| Pendiente | Por qué no se cierra ahora | Se retoma cuando |
+| --- | --- | --- |
+| Reprogramar desde el agente conversacional con propuesta aceptada | Decisión de Pablo: no tocar la conversación de Alicia | Pablo lo pida |
+| Voz y widget con confirmación persistida | Ningún cliente los usa | Un cliente active voz o widget con reservas |
+| Retirar o mover frenos del agente | Sin conversaciones reales con las que medir su tasa (`agent_turns.frenos_json`) | Alicia lleve unos días usándolo |
+| WhatsApp y recordatorios con Meta real | El número de Alicia sigue sin conectar | Alicia conecte su WhatsApp |
+| `horario-escrito-manda` en metareview | Contesta el horario de hoy, no el de la semana (fallo real, 15/16) | Se toque el agente de metareview |
 
 ## Fase 5 — aceptación del candidato
 

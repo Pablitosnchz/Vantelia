@@ -4,6 +4,29 @@ Estado: **c8aaad8 DESPLEGADO en producción el 14-sep a las 16:38 (VERSION.json 
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
 
+## Candidato de cierre del plan: 5c927dd / e230991, medición del 14-sep-2026, 20:17–20:54 (Claude)
+
+Sobre lo desplegado (125725f): cierre por vacaciones en chat, RAG y selector de WhatsApp (Astra, revisado por Claude:
+1cdb3f9 y 5c927dd) y, en e230991, los arreglos de la revisión de Astra a lo que ya estaba en producción (fechas y cobro
+de la prueba gratis; conflicto al recuperar una cancelación). Copia de producción snap7 (14-sep 20:14, solo lectura,
+770 citas, las 4 reglas de Alicia), config cfg7, solo la clave del modelo, código limpio (sucio=0 en backend, evals y
+scripts). Copias borradas al acabar.
+
+| Instrumento | Candidato | Referencia c8aaad8 |
+| --- | --- | --- |
+| Banco de Alicia (5c927dd) | 43/43 al primer intento; 0 tras reintento, 0 fallos, 0 no medidos, 1 no aplica | 43/43 |
+| Crítico `dice-que-si-y-acaba-en-cita` ×6 (5c927dd) | 6/6 al primer intento; 0 tras reintento, 0 no medidos | 6/6 |
+| Humo (5c927dd y e230991) | 5/5 y 5/5 | 5/5 |
+| Portal y reinicios (5c927dd) | 6/6; 0 fallos, 0 no medidos | 6/6 |
+| Metareview, segundo negocio (5c927dd) | 15/16 al primer intento; 1 reintento fallido, 0 no medidos, 28 no aplican | 15/16 |
+
+El fallo de metareview es `horario-escrito-manda` con el criterio que ya no depende del día (`horario_semanal`):
+contesta «Hoy estamos abiertos de 09:00 a 18:00, pero lamentablemente no tenemos disponibilidad para citas», sin el
+horario de la semana. Fallo real de ese asistente, fuera del plan (tabla de la fase 4). Límites: una tirada por
+instrumento salvo el crítico; no mide WhatsApp real con Meta ni recordatorios (número de Alicia sin conectar). e230991
+solo cambia checkout, webhook de Stripe y la recuperación de una cancelación: medido con humo; su evidencia principal
+son las pruebas rojas antes del arreglo. Pendiente al escribir esto: suite completa de e230991 y revisión de Astra.
+
 ## Candidato c8aaad8: medición del 14-sep-2026, 15:40–16:24 (Claude)
 
 Candidato sobre lo desplegado (bec310f): Fase 3 (avisos del editor de reglas), avisos que no

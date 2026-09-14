@@ -1040,3 +1040,62 @@ a fin en todas.
 - Hallazgo de Claude reproducido: test_contexto_chat_informa_cierre_y_motivo rojo (34,40 s), recibía agenda completa con vacaciones 00-23:59. _build_availability_context consulta ahora motivo_de_cierre_del_dia y comunica cerrado y motivo, igual que el snapshot.
 - Sin modelo real, push ni despliegue. Siguiente: dirigidos, suite del nuevo SHA estable y revisión exacta; no repetir la suite de c07202d.
 - Dirigidos finales: 21 passed, 7 warnings en 32,13 s (tres ficheros de cierres/horario y el caso de API que falló). Se congela candidato para suite completa; solicitud de revisión condicionada a exit 0 y SHA sin cambios.
+
+## 2026-09-14 20:00–20:25 +0200 - candidato de cierre del plan: integración y medición final (Claude)
+
+- Pregunta de Pablo: «igual acabar y dejar cerrado todo el plan de arquitectura». Decisión (AskUserQuestion): «Cerrar con
+  excepciones»: integrar lo último de Astra, medición final con modelo real de Alicia y del segundo negocio, revisión,
+  despliegue con su orden y plan cerrado; lo que depende de Alicia/Meta o de clientes con voz/widget queda como
+  seguimiento documentado.
+- Revisión de 36e9094 (Astra): OK. `_build_availability_context` dice «cerrada (motivo)» con vacaciones de día entero; el
+  test de API que esperaba «agenda completa» con un bloqueo que cubre toda la jornada del fixture pasa a exigir
+  «cerrados» y sigue exigiendo el siguiente día disponible. Encargo a Astra: revisiones pendientes de 04fc97f, cb87be4 y
+  e11ac35.
+- Rama `claude/cierre-plan` desde `main` 5adfd48: cherry-pick de 0bf5a65 → 1cdb3f9 y 36e9094 → 5c927dd, conflictos solo
+  en este registro (se conservan las entradas de los dos; una marca de conflicto que se coló en 1cdb3f9 se quita en
+  5c927dd; ninguna queda en docs, backend ni tests). Dirigidos sobre 5c927dd: 26 passed.
+- Copia nueva de producción en solo lectura (20:14): `snap7.db` (backup dentro del contenedor; 770 citas, 4 reglas de
+  Alicia con la de orientación), `cfg7.json` (28 negocios; Alicia con `exigir_dos_apellidos`), `meta_rag` (info.txt e
+  índice de metareview) y `cfg7_metareview_conversacional` (solo cambia `booking.estilo`). /tmp del servidor y del
+  contenedor sin copias (queda solo `snap-private-tmp` del sistema).
+- 20:2x, sobre 5c927dd con snap7/cfg7, en paralelo: suite completa, banco de Alicia (banco_n), crítico ×6 (critico_n1–6),
+  humo (humo_n), portal y reinicios (portal8) y metareview (banco_meta_n). Referencia c8aaad8: banco 43/43, crítico 6/6,
+  humo 5/5, portal 6/6, metareview 15/16 (con el criterio antiguo de `horario-escrito-manda`).
+- Siguiente: resultados, borrado de copias y actualización del plan.
+
+## 2026-09-14 20:17–20:40 +0200 - revisión de Astra de lo desplegado, arreglos y primeros resultados (Claude)
+
+- Astra (buzón, 20:17), solo lectura con las funciones exactas de cada SHA: 04fc97f OK; cb87be4 CAMBIOS (dos
+  importantes); e11ac35 CAMBIOS (uno importante). Los tres están en producción desde e5c784f.
+  1. cb87be4: suscribirse antes de conectar WhatsApp no guardaba el fin; conectar 3 días después fijaba otro (Stripe 24,
+     config 27).
+  2. cb87be4: con menos de 48 h de prueba por delante el checkout omitía `trial_end` y Stripe cobraba al momento, antes del
+     fin prometido; el test `menos_de_48h` consagraba esa omisión.
+  3. e11ac35: pasado el margen, un `ConversationStateConflict` al soltar la aceptación antigua dejaba a la clienta sin
+     respuesta ni oferta.
+- Arreglos en `claude/cierre-fixes` (copia E:/vp-cierre, hija de 5c927dd; E:/Vantelia no se toca mientras se mide),
+  commit e230991: el checkout lleva `prueba_hasta` en sus metadatos y el webhook lo guarda
+  (`billing.fijar_fin_de_prueba`); con menos de 48 h, `trial_period_days` redondeado hacia arriba
+  (`billing.terminos_de_prueba_para_stripe`: nunca antes del fin, como mucho horas después); la recuperación de la
+  cancelación recarga y reintenta una vez, calla solo si otro turno ya cambió la aceptación y si vuelve a chocar se lo dice.
+  Rojos antes del arreglo: 12 h y 36 h, la secuencia suscribirse→webhook→conectar, conflicto permanente y puntual. Tras
+  el arreglo: 9 de facturación y 38 de cancelación verdes; pyflakes sin avisos nuevos. Revisión de e230991 pedida a Astra.
+  Suite de 5c927dd parada (el candidato pasa a e230991); suite completa de e230991 en curso.
+- Resultados sobre 5c927dd con snap7/cfg7: humo (humo_n, 20:17–20:27) 5/5; portal y reinicios (portal8, 20:17–20:28)
+  6/6, 0 fallos, 0 no medidos; metareview (banco_meta_n, 20:17–20:22) 15/16, 0 no medidos, 28 no aplican. Único fallo
+  `horario-escrito-manda` las dos veces con el criterio nuevo: «Hoy estamos abiertos de 09:00 a 18:00, pero
+  lamentablemente no tenemos disponibilidad para citas.» No da el horario de la semana: fallo real del asistente de
+  metareview, ya no del día de la medición. Referencia c8aaad8: 15/16 con el mismo caso.
+- Humo sobre e230991 (humo_final) en curso, por tocar WhatsApp. Banco de Alicia y crítico ×6 sobre 5c927dd en curso.
+- Crítico `dice-que-si-y-acaba-en-cita` ×6 sobre 5c927dd (critico_n1–6, 20:17–20:40): 6/6 al primer intento, 0 tras
+  reintento, 0 no medidos. Referencia c8aaad8: 6/6.
+- 20:37: Pablo avisa de que Alicia va a probar el chatbot de WhatsApp. Su número sigue SIN_CONECTAR; el código de demo
+  `YDCP9E` → `alicia_rincon_estilistas` está activo hasta el 13-oct. Vigilante en solo lectura de sus mensajes y turnos
+  del agente. Sin desplegar mientras prueba.
+- Humo sobre e230991 (humo_final, 20:33–20:41, código de E:/vp-cierre, snap7/cfg7, sucio=0): 5/5, los cinco caminos
+  llegan hasta el final (incluidos cancelar y reprogramar por WhatsApp, los flujos que toca el arreglo).
+- Banco de Alicia sobre 5c927dd (banco_n, 20:17–20:54): 43/43 al primer intento, 0 tras reintento, 0 fallos, 0 no
+  medidos, 1 no aplica (`precio-cerrado-si-se-dice`: no da precios por mensaje). Referencia c8aaad8: 43/43.
+- 20:55: borradas las copias con datos de clientas del scratchpad (snap7 con su WAL, cfg7, cfg7_metareview, meta_rag,
+  banco_n y las copias de cada tirada ya borradas antes). Quedan solo los informes JSON y los logs.
+- Siguiente: suite completa de e230991 y veredicto de Astra; cerrar fase 5 y plan.
