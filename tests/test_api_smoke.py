@@ -2468,6 +2468,44 @@ def test_send_confirmation_validates_and_reports(client: TestClient, api_module,
             conn.commit()
 
 
+def test_send_confirmation_whatsapp_dudoso_pregunta_y_force_reenvia(client: TestClient, api_module, monkeypatch):
+    """Por HTTP: WhatsApp dudoso -> se explica; el siguiente POST sin cuerpo avisa
+    (WHATSAPP_SIN_CONFIRMAR) sin reenviar; con {"force": true} reenvía. Decisión de
+    Pablo del 14-sep-2026 («avisar y dejar reenviar»)."""
+    from backend import messaging
+    cookies = _portal_admin_cookies(api_module)
+    bid = "scwa_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid, start=api_module._utc_now() + timedelta(days=1, hours=5),
+                            email="")
+    monkeypatch.setattr("backend.agenda._effective_followup_channels",
+                        lambda *a: {"confirmed": {"email": False, "whatsapp": True, "sms": False}})
+    monkeypatch.setattr("backend.booking._whatsapp_deliverable_for_booking", lambda *a: (True, ""))
+    envios = []
+
+    async def whatsapp(*a, **k):
+        envios.append(1)
+        estado = "desconocido" if len(envios) == 1 else "aceptado"
+        if not k.get("detailed"):
+            return estado == "aceptado"
+        return messaging.WhatsAppSendResult(estado, provider_message_id="wamid.http" if estado == "aceptado" else "")
+
+    monkeypatch.setattr("backend.booking._send_booking_whatsapp_reminder", whatsapp)
+    try:
+        r = client.post(f"/auth/bookings/{bid}/send-confirmation", cookies=cookies)
+        assert r.status_code == 409 and "puede que" in str(r.json()["detail"]).lower(), r.text
+        r = client.post(f"/auth/bookings/{bid}/send-confirmation", cookies=cookies)
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "WHATSAPP_SIN_CONFIRMAR", r.text
+        assert len(envios) == 1, "sin force no se vuelve a mandar"
+        r = client.post(f"/auth/bookings/{bid}/send-confirmation", cookies=cookies, json={"force": True})
+        assert r.status_code == 200, r.text
+        assert len(envios) == 2
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (bid,))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (bid,))
+            conn.commit()
+
+
 def test_follow_up_ladder_end_to_end(client: TestClient, api_module, monkeypatch):
     """Escalera de Seguimiento de punta a punta en una pasada, sin envios reales:
     recordatorio 24h, recordatorio 2h y llamada de confirmacion (proveedor simulado)."""
