@@ -1694,17 +1694,46 @@ async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) 
                 + rag._call_us_line(cliente_id))
 
 
+async def _wa_reabrir_creacion_liberada(*, cliente_id, phone_number_id, to_number, propuesta, request):
+    """Una operación interna perdida necesita un resumen nuevo, nunca una repetición."""
+    from backend import reserva, conversation_state
+    estado = reserva.cargar(cliente_id, to_number)
+    actual = reserva.leer_confirmacion_reserva(estado)
+    if not actual or actual["id"] != propuesta["id"]:
+        return
+    estado.confirmacion_reserva_json = ""
+    try:
+        reserva.guardar(cliente_id, to_number, estado)
+    except conversation_state.ConversationStateConflict:
+        return
+    texto = "La solicitud anterior no llegó a registrarse. Te envío un nuevo resumen para que lo confirmes."
+    enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, text=texto)
+    if enviado:
+        _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                      respuesta=texto, intent="booking_recovery_released")
+    flow = _wa_get_flow(cliente_id, to_number)
+    await _wa_send_booking_summary(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, flow=flow, request=request)
+
+
 async def _wa_recuperar_creacion_confirmada(*, cliente_id, phone_number_id, to_number, propuesta, request):
     """Solo consulta la operación aceptada. Nunca vuelve a ejecutar ni a cobrar."""
     from backend import booking_operations, reserva, conversation_state
     operacion = propuesta.get("operacion")
     fila = None
+    liberada = False
     if isinstance(operacion, dict):
         try:
             fila = booking_operations.recover_creation_operation(
                 cliente_id, operacion.get("clave"), operacion.get("huella"))
-        except HTTPException:
+        except HTTPException as exc:
+            liberada = isinstance(exc.detail, dict) and exc.detail.get("code") == "OPERATION_RELEASED"
             pass  # Ausente, en curso o corrupta: no acreditar éxito ni autorizar otra cita.
+    if liberada:
+        await _wa_reabrir_creacion_liberada(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, propuesta=propuesta, request=request)
+        return
     if fila is None:
         texto = "Aún no puedo verificar el resultado de esa solicitud. No crearé otra cita; contacta con el negocio para comprobarla."
     else:
@@ -1820,6 +1849,11 @@ async def _wa_create_booking(
                 cliente_id, **solicitud, **operacion, request=request,
                 audit_extra={"channel": "whatsapp"}, send_confirmation=False)
         except HTTPException as exc:
+            if (isinstance(exc.detail, dict) and exc.detail.get("code") == "OPERATION_RELEASED"):
+                await _wa_reabrir_creacion_liberada(cliente_id=cliente_id,
+                    phone_number_id=phone_number_id, to_number=to_number,
+                    propuesta=reserva.leer_confirmacion_reserva(estado), request=request)
+                return False
             if operacion:
                 vinculada = reserva.leer_confirmacion_reserva(estado)["operacion"]
                 try:

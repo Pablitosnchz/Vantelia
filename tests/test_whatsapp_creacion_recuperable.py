@@ -106,6 +106,30 @@ def test_resultado_desconocido_no_ofrece_otro_hueco_ni_repite(canal, monkeypatch
     assert not any("disponible" in t.lower() for t in textos)
 
 
+def test_resultado_perdido_antiguo_sin_webhook_pide_confirmar_de_nuevo(canal, monkeypatch):
+    from backend import appstate, booking, db, reserva, timeutils
+    from datetime import timedelta
+    numero, responder, citas, textos, proveedores = canal
+    async def timeout(*a, **k):
+        raise httpx.ReadTimeout("resultado desconocido")
+    monkeypatch.setattr(booking, "_create_provider_booking", timeout)
+    responder()
+    propuesta = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    assert propuesta and propuesta.get("operacion")
+    with db._get_db_connection() as conn:
+        conn.execute("UPDATE booking_operations SET created_at=? WHERE cliente_id='demo' AND operation_key=?",
+                     ((timeutils._utc_now() - timedelta(minutes=16)).replace(tzinfo=None).isoformat() + "Z",
+                      propuesta["operacion"]["clave"]))
+        conn.commit()
+    monkeypatch.setattr(appstate, "whatsapp_flows", {})
+    textos.clear()
+    responder()
+    actual = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    assert not citas() and not proveedores
+    assert actual and actual["estado"] == "ofrecida" and not actual.get("operacion")
+    assert any("no lleg" in texto.lower() and "registr" in texto.lower() for texto in textos)
+
+
 def test_confirmacion_no_entregada_se_recupera_sin_repetir_creacion(canal, monkeypatch):
     from backend import appstate, messaging, reserva
     numero, responder, citas, textos, proveedores = canal

@@ -719,3 +719,10 @@ a fin en todas.
 - Siguiente: vigilar las conversaciones reales de Alicia en cuanto lo use; fase 4 del plan con el inventario de
   frenos; pendientes menores (vacaciones dice «agenda completa»; `horario-escrito-manda` depende del día);
   WhatsApp de Alicia sin conectar (bloquea recordatorios).
+
+## 2026-09-14 10:41 +0200 - recuperación de creación sin resultado (Astra)
+
+- Rama `astra/reconciliar-pendientes`, base `main` `f4da10e`. Una operación de creación interna sin fila de cita deja de bloquearse indefinidamente solo si tiene al menos 15 minutos y no hay `webhook_url`, `webhook_env` resuelto ni `WEBHOOK_DEFAULT`. Con webhook, reciente o de otro tenant queda pendiente como antes.
+- La liberación se registra en `booking_operation_audit` sin datos personales. WhatsApp no ejecuta de nuevo: informa de que no se registró y publica otro resumen, que exige una confirmación nueva.
+- Evidencia: 19 pruebas dirigidas verdes en 32,16 s (`test_operacion_creacion_recuperable.py`, `test_whatsapp_creacion_recuperable.py`), incluidas operación antigua, webhook URL/env, reciente, aislamiento tenant y reinicio del flujo. La prueba de liberación falla de forma causal con `OPERATION_PENDING` al desactivar temporalmente la condición. La regresión de liberación falló al desactivar temporalmente la condición, antes de restaurarla.
+- Siguiente: commit pequeño y revisión de Claude; no despliegue.
