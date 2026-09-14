@@ -4315,10 +4315,24 @@ async def _send_booking_reminder_by_kind(
         )
         return {"sent": [], "failed": {}, "skipped": {"all": "no_channels"}}
 
-    async def _send_unclaimed_channel(channel_name: str) -> None:
+    # Canales cuyo turno se perdió antes de enviar (otro ejecutor se hizo cargo).
+    perdidos: set = set()
+
+    def _sigue_siendo_nuestro(channel_name: str, antes_de_enviar) -> bool:
+        if antes_de_enviar is None or antes_de_enviar():
+            return True
+        failed_channels[channel_name] = "Otro envío se hizo cargo de este aviso."
+        perdidos.add(channel_name)
+        return False
+
+    async def _send_unclaimed_channel(channel_name: str, antes_de_enviar=None) -> None:
+        # `antes_de_enviar`: la comprobación de la reclamación, lo más cerca posible del
+        # transporte. Lo que queda abierto es la propia llamada, acotada por su timeout.
         if channel_name == "email":
             if not (booking_row["email"] or "").strip():
                 skipped_channels["email"] = "La cita no tiene email."
+                return
+            if not _sigue_siendo_nuestro(channel_name, antes_de_enviar):
                 return
             try:
                 _send_booking_email(booking_row, kind, request)
@@ -4331,6 +4345,8 @@ async def _send_booking_reminder_by_kind(
             entregable, motivo = _whatsapp_deliverable_for_booking(booking_row)
             if not entregable:
                 skipped_channels["whatsapp"] = motivo
+                return
+            if not _sigue_siendo_nuestro(channel_name, antes_de_enviar):
                 return
             try:
                 resultado = await _send_booking_whatsapp_reminder(
@@ -4359,6 +4375,8 @@ async def _send_booking_reminder_by_kind(
         if channel_name == "sms":
             if not availability.get("sms", {}).get("available"):
                 skipped_channels["sms"] = str(availability.get("sms", {}).get("reason", "No disponible."))
+                return
+            if not _sigue_siendo_nuestro(channel_name, antes_de_enviar):
                 return
             try:
                 if await _send_booking_sms_reminder(booking_row, kind, request):
@@ -4395,7 +4413,13 @@ async def _send_booking_reminder_by_kind(
             notice_blocked = True
             failed_channels[channel_name] = "La cita cambio antes del envio"
             return
-        await _send_unclaimed_channel(channel_name)
+        await _send_unclaimed_channel(channel_name, lambda: notice_deliveries.notice_claim_still_owned(
+            *identidad, claim["owner_token"]))
+        if channel_name in perdidos:
+            # Sin turno no se escribe el resultado (el CAS fallaría) ni se sigue: el
+            # ejecutor que lo retiró es quien atiende el aviso.
+            notice_blocked = True
+            return
         if channel_name in delivery_outcomes:
             estado, provider_id, motivo, provider_ids, template_name = delivery_outcomes[channel_name]
         elif channel_name in sent_channels:
@@ -4533,17 +4557,39 @@ def _confirmation_channels_label(channels: List[str]) -> str:
     return ", ".join(_REMINDER_CHANNEL_LABELS.get(c, c) for c in channels)
 
 
-def _booking_due_for_reminder(row: sqlite3.Row, now_utc: datetime, hours_before: int) -> bool:
+def _booking_due_for_reminder(row: sqlite3.Row, now_utc: datetime, hours_before: int,
+                             *, prorroga_minutes: int = 0) -> bool:
     start_at = timeutils._from_utc_iso(row["start_at"])
     if not start_at or row["status"] != "confirmed":
         return False
     lower_bound = now_utc + timedelta(hours=hours_before)
     # Banda tolerante a una pasada perdida del worker: cubre >= 2 intervalos para
     # que un run retrasado no salte el recordatorio. No se ensancha hacia abajo
-    # (mantiene el anclaje ~24h, asi el texto "manana" sigue siendo correcto).
+    # (mantiene el anclaje ~24h, asi el texto "manana" sigue siendo correcto),
+    # salvo la prorroga de un aviso ya empezado (_reminder_due_or_pending).
     grace_minutes = max(45, settings.REMINDER_RUN_INTERVAL_MINUTES * 2)
     upper_bound = lower_bound + timedelta(minutes=grace_minutes)
-    return lower_bound <= start_at <= upper_bound
+    return lower_bound - timedelta(minutes=prorroga_minutes) <= start_at <= upper_bound
+
+
+def _reminder_due_or_pending(row: sqlite3.Row, now_utc: datetime, kind: str, hours_before: int) -> bool:
+    """En su banda, o ya empezado y esperando la gracia de un envío dudoso.
+
+    Decisión de Pablo (14-sep-2026): un WhatsApp dudoso sale por el canal siguiente
+    pasados 30 min. Con una banda de 45 min, a quien se le intentó ya dentro de ella la
+    cita salía de la banda antes de acabar la gracia y el respaldo no llegaba nunca
+    (revisión de Codex a 1458540). Solo se prorroga un aviso con intento registrado: uno
+    que nunca salió no se manda tarde. Con la prórroga el de 24 h puede salir hasta
+    22 h 45 min antes: «mañana» solo sería falso para citas desde las 22:45.
+    """
+    if _booking_due_for_reminder(row, now_utc, hours_before):
+        return True
+    from backend import notice_deliveries
+
+    prorroga = notice_deliveries.GRACIA_AVISO_DUDOSO_MIN + max(45, settings.REMINDER_RUN_INTERVAL_MINUTES * 2)
+    return (_booking_due_for_reminder(row, now_utc, hours_before, prorroga_minutes=prorroga)
+            and notice_deliveries.notice_has_attempt(
+                row["cliente_id"], row["id"], row["reminder_generation"], kind))
 
 
 def _bookings_due_for_reminders(now_utc: datetime, *, limit: int = 5000) -> List[sqlite3.Row]:
@@ -5482,7 +5528,8 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
         row = fresca
         fu = _follow_up_config(row["cliente_id"])
         try:
-            if not row["reminder_24h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_24H_HOURS):
+            if not row["reminder_24h_sent_at"] and _reminder_due_or_pending(
+                    row, now_utc, "reminder_24h", settings.REMINDER_24H_HOURS):
                 await _send_booking_reminder_by_kind(
                     row,
                     "reminder_24h",
@@ -5490,7 +5537,8 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
                     sent_column="reminder_24h_sent_at",
                 )
                 sent_24h += 1
-            elif not row["reminder_2h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_2H_HOURS):
+            elif not row["reminder_2h_sent_at"] and _reminder_due_or_pending(
+                    row, now_utc, "reminder_2h", settings.REMINDER_2H_HOURS):
                 # Escalera: no molestar con el 2h a quien ya confirmo (opt-in).
                 if fu["suppress_2h_if_confirmed"] and _booking_confirmed_by_customer(row["id"]):
                     _mark_booking_email_result(

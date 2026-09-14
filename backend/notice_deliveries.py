@@ -31,6 +31,32 @@ def current_notice_booking(cliente_id, booking_id, generation):
             (cliente_id, booking_id, generation)).fetchone()
 
 
+def notice_claim_still_owned(cliente_id, booking_id, generation, kind, channel, owner_token):
+    """Justo antes de enviar: ¿la reclamación sigue siendo nuestra y la cita vigente?
+
+    Un ejecutor parado más de la gracia pierde su turno en `claim_notice_delivery`
+    (revisión de Codex a 1458540): si al volver no lo comprueba, manda el aviso que
+    otro ya entregó por el canal siguiente.
+    """
+    with closing(db._get_db_connection()) as conn:
+        return conn.execute(
+            "SELECT 1 FROM booking_notice_deliveries d JOIN bookings b ON b.cliente_id=d.cliente_id "
+            "AND b.id=d.booking_id AND b.reminder_generation=d.generation "
+            "AND b.status NOT IN ('cancelled','completed','no_show') "
+            "WHERE d.cliente_id=? AND d.booking_id=? AND d.generation=? AND d.kind=? AND d.channel=? "
+            "AND d.state='enviando' AND d.owner_token=?",
+            (cliente_id, booking_id, generation, kind, channel, owner_token)).fetchone() is not None
+
+
+def notice_has_attempt(cliente_id, booking_id, generation, kind):
+    """¿Se empezó ya este aviso por algún canal? Solo así se prorroga su banda."""
+    with closing(db._get_db_connection()) as conn:
+        return conn.execute(
+            "SELECT 1 FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? "
+            "AND generation=? AND kind=? LIMIT 1",
+            (cliente_id, booking_id, generation, kind)).fetchone() is not None
+
+
 def claim_notice_delivery(cliente_id, booking_id, generation, kind, channel, *, single_delivery=False):
     identidad = (cliente_id, booking_id, generation, kind)
     with closing(db._get_db_connection()) as conn, conn:
@@ -40,9 +66,21 @@ def claim_notice_delivery(cliente_id, booking_id, generation, kind, channel, *, 
             "AND status NOT IN ('cancelled','completed','no_show')", identidad[:3]).fetchone()
         if not vigente:
             return {"estado": "obsoleto"}
-        filas = conn.execute(
-            "SELECT * FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? "
-            "AND generation=? AND kind=?", identidad).fetchall()
+        consulta = ("SELECT * FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? "
+                    "AND generation=? AND kind=?")
+        filas = conn.execute(consulta, identidad).fetchall()
+        # Un «enviando» pasado de la gracia es un ejecutor perdido: se le retira el
+        # turno en esta misma transacción, antes de dejar salir el respaldo, para que
+        # si vuelve no pueda enviar ni terminar. La fecha no se toca: la gracia ya corrió.
+        caducadas = [fila for fila in filas if fila["state"] == "enviando" and _dudoso_vencido(fila)]
+        for fila in caducadas:
+            conn.execute(
+                "UPDATE booking_notice_deliveries SET state='desconocido',owner_token='',reason='ejecutor_perdido' "
+                "WHERE cliente_id=? AND booking_id=? AND generation=? AND kind=? AND channel=? "
+                "AND state='enviando' AND owner_token=?",
+                identidad + (fila["channel"], fila["owner_token"]))
+        if caducadas:
+            filas = conn.execute(consulta, identidad).fetchall()
         propia = next((fila for fila in filas if fila["channel"] == channel), None)
         aceptada = next((fila for fila in filas if fila["state"] == "aceptado"
                          and (single_delivery or fila["channel"] == channel)), None)
