@@ -2419,7 +2419,11 @@ def _booking_start_end(
 def _validate_booking_window(cliente_id: str, selected_day: datetime) -> None:
     config = clients._get_client_config(cliente_id)
     timezone_name = config["booking"]["timezone"]
-    today = datetime.now(ZoneInfo(timezone_name)).date()
+    # El MISMO reloj que el resto de la agenda (`timeutils._utc_now`). Con
+    # `datetime.now` a secas, una prueba con el reloj fijado elegia un dia libre segun
+    # su reloj y esta validacion lo rechazaba como pasado segun el real: la suite
+    # empezo a fallar sola el 14-sep-2026, en cuanto el dia fijado quedo atras.
+    today = timeutils._utc_now().astimezone(ZoneInfo(timezone_name)).date()
 
     if selected_day.date() < today:
         raise HTTPException(status_code=400, detail="No se permiten reservas en fechas pasadas.")
