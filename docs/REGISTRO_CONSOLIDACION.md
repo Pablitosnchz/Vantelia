@@ -961,3 +961,27 @@ a fin en todas.
   profesionales, no desactiva a nadie. Decisión de Pablo (AskUserQuestion): Pro tal cual, con sus 6.
 - Siguiente: cuando Alicia conecte, comprobar su cuenta de WhatsApp, `prueba.hasta`, la plantilla del recordatorio y
   un mensaje de prueba de ida y vuelta.
+
+## 2026-09-14 18:30–18:50 +0200 - vacaciones como día cerrado y medidor de reglas en el repo (Claude)
+
+- Encargo de Pablo (AskUserQuestion): «Arreglar el texto de vacaciones, Guardar el medidor de reglas». Rama
+  `claude/vacaciones-y-medidor` desde `main` c858d58; commit ef0d0dc. Sin desplegar.
+- Causa de «agenda completa» con vacaciones: `voice._dia_cerrado` solo miraba el horario semanal. Con un bloqueo general
+  00:00–23:59 (lo que guarda Horario «sin horas»), `consultar_disponibilidad` pedía decir «completo» y el freno
+  `dijo_cerrado_estando_abierto` corregía un «cerrados por vacaciones» cierto. `agenda.motivo_de_cierre_del_dia`: el día
+  cierra si todos los que trabajan tienen su horario entero bloqueado (general o propio). Bloqueo parcial o las
+  vacaciones de una sola profesional no cierran. El flujo guiado de WhatsApp ya decía «bloqueada, motivo: …»: sin tocar.
+- `horario-escrito-manda`: exige nombrar dos días de la semana distintos (`debe_varios`); con «lunes» pasaba los
+  domingos y suspendía los lunes. No medido con modelo tras el cambio: puede suspender también en metareview si solo
+  contesta «hoy… mañana…», que no es el horario de la semana.
+- Pruebas: 11 nuevas (`test_vacaciones_son_dia_cerrado.py`, `test_horario_no_depende_del_dia.py`), 10 rojas antes del
+  arreglo (la de una sola profesional se añadió después; su segunda comprobación depende del arreglo). Suites
+  relacionadas (banco, calendario, cerrado, agente de citas, voz, horario, booking_exhaustive): 253 passed. Mapa del
+  código: 5 passed. Suite completa: en curso.
+- `scripts/medir_reglas_opuestas.py` (desde el scratchpad): primera ejecución desde el repo 21/21 (18:43). Al leerla:
+  `settings` hace load_dotenv y repone las credenciales que el script borraba. Ahora las vacía (lista de
+  `tests/conftest.py` + Stripe y webhook), bloquea SMTP/IMAP y aborta si queda alguna viva. Otra vez 21/21 (18:46),
+  carpeta temporal borrada. En los logs de la primera ejecución no hay ningún envío y los dos negocios sintéticos no
+  tenían destinatario.
+- Revisión pedida a Astra sobre ef0d0dc (18:49). Alicia: SIN_CONECTAR a las 18:43.
+- Siguiente: resultado de la suite y veredicto de Astra; desplegar solo con orden de Pablo.
