@@ -237,6 +237,12 @@ una cita, aislamiento por tenant, reclamación con dos conexiones, actor perdido
 cancelación antes del envío y protección de la generación nueva durante I/O.
 Comprueba también respaldo entre canales y recuperación de aceptación sin repetir.
 
+`test_avisos_reintento_sin_duplicar.py` fija la decisión de Pablo del 14-sep-2026:
+un fallo de email o SMS se reintenta en la siguiente vuelta y pasa al siguiente
+canal; un WhatsApp dudoso o un envío colgado no se repiten por su canal, pero pasados
+30 minutos (`notice_deliveries.GRACIA_AVISO_DUDOSO_MIN`) sale el siguiente. Frontera
+29/31 min; dentro del plazo sigue bloqueando el respaldo.
+
 `test_recordatorios_meta_ledger.py` recorre el builder real hasta un transporte
 simulado, guarda IDs y resultado, y verifica aceptación/auditoría en una misma
 transacción. Caída tras commit conserva el tope, sin reenvío ni evento duplicado;

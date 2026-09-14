@@ -1,9 +1,26 @@
 """Reclamaciones de avisos: perder al ejecutor no autoriza repetir una salida."""
 from contextlib import closing
+from datetime import timedelta, timezone
 import json
 import uuid
 
 from backend import db, timeutils
+
+
+# Decision de Pablo (14-sep-2026), «reintentar sin duplicar WhatsApp»: una salida
+# dudosa (el proveedor no contesto, o el ejecutor se cayo con el envio a medias)
+# nunca se repite por su canal, pero pasado este plazo deja salir el siguiente.
+# Antes bloqueaba el aviso para siempre y la clienta se quedaba sin el.
+GRACIA_AVISO_DUDOSO_MIN = 30
+
+
+def _dudoso_vencido(fila):
+    cuando = timeutils._from_utc_iso(fila["updated_at"])
+    if cuando is None:
+        return False  # sin fecha legible se sigue esperando: nunca duplica
+    if cuando.tzinfo is None:
+        cuando = cuando.replace(tzinfo=timezone.utc)
+    return timeutils._utc_now() - cuando >= timedelta(minutes=GRACIA_AVISO_DUDOSO_MIN)
 
 
 def current_notice_booking(cliente_id, booking_id, generation):
@@ -32,10 +49,15 @@ def claim_notice_delivery(cliente_id, booking_id, generation, kind, channel, *, 
         if aceptada:
             return {"estado": "aceptado", "canal": aceptada["channel"],
                     "provider_message_id": aceptada["provider_message_id"]}
-        # Una salida incierta bloquea tambien el respaldo por otro canal.
-        bloqueada = next((fila for fila in filas if fila["state"] in ("enviando", "desconocido")), None)
+        if propia and propia["state"] in ("enviando", "desconocido"):
+            # Por el mismo canal no se repite nunca; `vencido` solo deja seguir con
+            # el siguiente. Un «enviando» viejo es un ejecutor caido: dudoso.
+            return {"estado": propia["state"], "canal": channel, "vencido": _dudoso_vencido(propia)}
+        # Una salida incierta reciente bloquea tambien el respaldo por otro canal.
+        bloqueada = next((fila for fila in filas if fila["state"] in ("enviando", "desconocido")
+                          and not _dudoso_vencido(fila)), None)
         if bloqueada:
-            return {"estado": bloqueada["state"], "canal": bloqueada["channel"]}
+            return {"estado": bloqueada["state"], "canal": bloqueada["channel"], "vencido": False}
         if propia and propia["state"] == "omitido":
             return {"estado": "omitido", "motivo": propia["reason"]}
         token = uuid.uuid4().hex

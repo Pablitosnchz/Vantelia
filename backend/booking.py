@@ -4381,6 +4381,11 @@ async def _send_booking_reminder_by_kind(
         if claim["estado"] == "omitido":
             skipped_channels[channel_name] = claim.get("motivo") or "No emitido"
             return
+        if claim.get("vencido"):
+            # Dudoso por este canal hace mas de media hora: no se repite, pero ya no
+            # impide el siguiente (notice_deliveries.GRACIA_AVISO_DUDOSO_MIN).
+            failed_channels[channel_name] = "Aviso sin confirmar por este canal; se prueba el siguiente."
+            return
         if claim["estado"] != "reclamado":
             notice_blocked = True
             failed_channels[channel_name] = "Aviso pendiente de verificar o cita modificada"
@@ -4397,6 +4402,13 @@ async def _send_booking_reminder_by_kind(
             estado, provider_id, motivo, provider_ids, template_name = "aceptado", "", "", (), ""
         elif channel_name in skipped_channels:
             estado, provider_id, motivo, provider_ids, template_name = "omitido", "", "canal_no_disponible", (), ""
+        elif channel_name in failed_channels and channel_name in ("email", "sms"):
+            # Un fallo de email o SMS se reintenta en la siguiente vuelta y deja pasar
+            # al siguiente canal; como «desconocido» bloqueaba el aviso para siempre.
+            # Riesgo aceptado por Pablo (14-sep-2026): rara vez, un email repetido si
+            # el servidor lo entrego y se perdio la respuesta. El motivo va fijo: el
+            # error del servidor puede llevar la direccion de la clienta.
+            estado, provider_id, motivo, provider_ids, template_name = "rechazado", "", "fallo_del_canal", (), ""
         else:
             # Los adaptadores legacy no distinguen rechazo de respuesta perdida.
             estado, provider_id, motivo, provider_ids, template_name = "desconocido", "", "resultado_no_verificado", (), ""
