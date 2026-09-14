@@ -441,6 +441,19 @@ antes del arreglo y 2 controles de frontera (29 min), suites de avisos 52 verdes
 completa 2702 passed y 1 skipped. Sigue sin medir con Meta real: WhatsApp de Alicia sin
 conectar.
 
+Revisión adversarial de Codex a `1458540` (14-sep, 12:00): dos fallos altos, confirmados con
+test rojo y corregidos en `549a1e3`. (1) La banda del recordatorio (45 min) se acababa antes de
+la gracia de 30 min y el respaldo no salía nunca; un aviso ya empezado conserva la banda 75 min
+más. (2) Un ejecutor parado más de la gracia mandaba el WhatsApp después del email del
+respaldo; ahora pierde su turno y se comprueba justo antes de enviar. Suite completa de
+`549a1e3`: 2713 passed, 1 skipped. Una segunda revisión encontró la carrera al límite de la
+gracia y el reenvío manual sin protección, corregidos en `0b12b3c`: el turno se renueva al
+enviar y, por decisión de Pablo, el panel avisa y pregunta antes de reenviar un WhatsApp dudoso.
+Suite de `0b12b3c`: 2719 passed, 1 skipped. Una tercera revisión vio que el aviso no saltaba tras
+la confirmación de pago ni si en medio se reenviaba solo por email: corregido en `3e05b96`.
+Suite de `3e05b96`: 2722 passed, 1 skipped. La última ronda (decisión de Pablo) vio que una
+entrega anterior tapaba un WhatsApp automático dudoso posterior: corregido en `e44886b`.
+
 ## QA corregida de gestión: 13-sep, 01:27 Europe/Madrid
 
 Una nueva ejecución justificada tras corregir la fecha del instrumento termina

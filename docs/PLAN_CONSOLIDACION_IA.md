@@ -485,7 +485,13 @@ protejan un caso vivo.
   queda «rechazado», se reintenta en la siguiente vuelta y pasa al siguiente canal; un
   WhatsApp dudoso o un envío colgado nunca se repiten por su canal, pero pasados 30 min
   (`notice_deliveries.GRACIA_AVISO_DUDOSO_MIN`) sale el siguiente. Riesgo aceptado: rara vez
-  un email repetido. Suite completa 2702 passed, 1 skipped. Sin medir con Meta real.
+  un email repetido. La revisión adversarial de Codex encontró dos fallos altos (el respaldo
+  no salía porque la cita dejaba la banda del recordatorio; un ejecutor perdido conservaba su
+  turno y duplicaba), corregidos en `549a1e3` con test rojo previo. Una segunda revisión encontró
+  la carrera al límite de la gracia y el reenvío manual sin protección: `0b12b3c` renueva el turno
+  al enviar y, por decisión de Pablo, el panel avisa y pregunta antes de reenviar un WhatsApp
+  dudoso; `3e05b96` extiende ese aviso a la confirmación que sale al pagar y a un reenvío solo
+  por email en medio. Sin medir con Meta real.
 - **Operaciones de creación perdidas**: `OPERATION_PENDING` no se reconciliaba nunca y la
   clienta quedaba atrapada en «Aún no puedo verificar… contacta con el negocio». Encargo a
   Astra: `5c88bc7` libera tras 15 min una operación interna sin cita y sin webhook (auditada
@@ -495,11 +501,15 @@ protejan un caso vivo.
   revisión: CAMBIOS, el margen contaba desde la creación del resumen y un doble toque tardío
   le decía «no llegó a registrarse» mientras se creaba su cita (repro). `04fc97f` (Claude;
   Astra sin cuota) lo cuenta desde la aceptación. Rama `claude/reconciliar-pendientes`:
-  suite completa 2687 passed, 1 skipped; falta integrarla en el candidato y la revisión de
-  Astra de `04fc97f`. Con `WEBHOOK_DEFAULT` puesto en el servidor no se libera nada (no comprobado en
+  suite completa 2687 passed, 1 skipped; integrada en el candidato (`d14285d`); falta la
+  revisión de Astra de `04fc97f`. Con `WEBHOOK_DEFAULT` puesto en el servidor no se libera nada (no comprobado en
   producción).
-- Sigue abierto en esta fase: cancelación/reprogramación, formularios, voz y widget sin
-  confirmación persistida.
+- Reprogramar por el flujo guiado de WhatsApp exige ya aceptar el cambio concreto (`e44886b`),
+  igual que la cancelación: resumen «Ahora / Nueva» con identidad, cita revalidada contra el
+  resumen, hueco comprobado antes de ofrecer y resultado perdido que deja volver a pulsar.
+  Decisión de Pablo: solo el flujo de listas; el agente conversacional no cambia.
+- Sigue abierto en esta fase: reprogramar desde el agente, formularios, voz y widget sin
+  confirmación persistida, y la cancelación con resultado desconocido sin reconciliar.
 
 ## Fase 5 — aceptación del candidato
 

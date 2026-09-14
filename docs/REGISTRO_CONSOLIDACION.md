@@ -758,3 +758,75 @@ a fin en todas.
   modificado sin commit con `enabledPlugins`, pendiente de Pablo.
 - Siguiente: suite de 04fc97f, integrarla en el candidato y fase 4 (cancelación/reprogramación, formularios, voz,
   widget con confirmación persistida).
+
+## 2026-09-14 11:30–12:06 +0200 - reconciliación integrada y revisión de Codex a los avisos (Claude)
+
+- `claude/candidato`: d14285d fusiona `claude/reconciliar-pendientes` (5c88bc7, aab1e1a, 5a965e7 y 1c70f0a de Astra,
+  04fc97f de Claude); suite de la rama 2687 passed, 1 skipped; choques solo en ESTADO y REGISTRO. 549a1e3 corrige
+  los avisos tras la revisión de Codex. Nada subido ni desplegado.
+- Codex: Pablo entró con otra cuenta (login cambiado a las 11:40). El runtime compartido del plugin conservaba el
+  token anterior («access token could not be refreshed…»); reiniciado con su hook de fin de sesión. La revisión
+  adversarial de 1458540 terminó con `needs-attention` y dos hallazgos altos.
+- Hallazgo 1, confirmado con test rojo: la banda del recordatorio dura 45 min y, pasados los 30 de gracia, la cita ya
+  ha salido de ella: el respaldo no se envía nunca. Mi test lo tapaba envejeciendo la fila en vez de adelantar el
+  reloj. Arreglo: un aviso con intento registrado conserva la banda 75 min más (`_reminder_due_or_pending`); sin
+  intento previo no sale tarde (control verde).
+- Hallazgo 2, confirmado con test rojo (`['email', 'whatsapp']`): un ejecutor parado más de la gracia conservaba su
+  turno y mandaba el WhatsApp después del email del respaldo. Arreglo: la reclamación retira el turno caducado en su
+  transacción y cada envío lo comprueba justo antes del transporte (`notice_claim_still_owned`). Queda abierta solo
+  la propia llamada (timeout de 20 s).
+- Evidencia de 549a1e3: 3 rojos antes del arreglo y 57 dirigidos verdes después. Suite completa y segunda revisión
+  de Codex: en marcha.
+- Nota de producto: con la prórroga, el recordatorio de 24 h puede salir hasta 22 h 45 min antes y su asunto dice
+  «mañana», que solo sería falso para citas desde las 22:45.
+- Siguiente: resultados de la suite y de la revisión; fase 4 (cancelación/reprogramación, formularios, voz y widget
+  con confirmación persistida).
+
+## 2026-09-14 12:06–12:35 +0200 - segunda revisión de Codex a los avisos y reenvío manual (Claude)
+
+- Suite completa de 549a1e3: 2713 passed, 1 skipped (23:50).
+- Segunda revisión adversarial de Codex (base 1458540): `needs-attention`, dos hallazgos altos.
+  1. Carrera al límite de la gracia: un ejecutor que vuelve a los 29 min 55 s pasa la comprobación sin renovar su
+     turno y otro se lo retira segundos después, con su WhatsApp aún en camino. Test rojo (`['whatsapp', 'email']`).
+     Arreglo en 0b12b3c: `notice_claim_still_owned` renueva `updated_at` en el mismo UPDATE.
+  2. El reenvío manual («Enviar confirmación» del panel) no pasa por el registro de entregas: con WhatsApp dudoso
+     daba un error genérico y un segundo clic podía duplicar. Ya pasaba antes de hoy. Preguntado a Pablo, eligió
+     «Avisar y dejar reenviar». 0b12b3c: el dudoso se explica; el siguiente reenvío responde 409
+     `WHATSAPP_SIN_CONFIRMAR` y el panel pregunta antes de reenviar con `force`, también si la confirmación
+     automática quedó dudosa. 4 rojos antes del arreglo y el control de rechazo verde.
+- Evidencia de 0b12b3c: 61 dirigidos verdes. El test del panel contaba también la definición de la función: se
+  corrigió el test, no el código. Suite completa y tercera revisión de Codex: en marcha.
+- Pablo pidió que se le pregunte siempre que haga falta una decisión suya; queda en memoria.
+- Siguiente: resultados de la suite y de la revisión; fase 4.
+
+## 2026-09-14 12:36–13:00 +0200 - tercera revisión de Codex: el aviso del reenvío en el núcleo (Claude)
+
+- Tercera revisión adversarial de Codex (base 549a1e3, sobre 0b12b3c): la renovación del turno, el POST sin cuerpo
+  y el botón del panel pasan; dos hallazgos altos en cuándo avisa el reenvío manual:
+  1. Un reenvío solo por email tapaba el WhatsApp dudoso anterior (se miraba el último evento sin fijarse en el
+     canal) y el siguiente reenvío por WhatsApp salía sin preguntar. Test rojo: «DID NOT RAISE».
+  2. La confirmación que sale al pagar la señal (y la de un cambio de cita sin mover la hora) no pasa por el
+     registro de entregas ni dejaba rastro del WhatsApp dudoso: el reenvío posterior no avisaba. Test rojo.
+- Arreglo 3e05b96: el núcleo pide el resultado detallado de WhatsApp en toda confirmación y, sin registro de
+  entregas, apunta `confirmation_whatsapp_uncertain`; el aviso busca el último evento que diga algo del WhatsApp
+  (dudoso, o entrega con WhatsApp en `confirmation_resent`/`booking_email_sent`). Test HTTP nuevo: sin cuerpo
+  avisa, con `force` reenvía.
+- Pablo decidió (AskUserQuestion) una ronda más de revisión tras este arreglo y pasar después a la fase 4.
+
+## 2026-09-14 13:00–13:29 +0200 - última ronda de Codex y reprogramar guiado con aceptación (Claude)
+
+- Suite de 3e05b96: 2722 passed, 1 skipped (22:01).
+- Última revisión adversarial de Codex (base 0b12b3c; Pablo había decidido una ronda más y después la fase 4): un
+  hallazgo alto, regresión de 3e05b96. Una entrega anterior (una edición de la cita) tapaba un WhatsApp automático
+  dudoso posterior (la confirmación de voz): el reenvío manual no avisaba; con 0b12b3c sí. Test rojo. Arreglo en
+  e44886b: el aviso compara la hora del dudoso del registro de entregas con la de la última entrega por WhatsApp de
+  la auditoría (si empatan, avisa). Control verde. No se abre otra ronda.
+- Fase 4, preguntado a Pablo: «Solo el flujo de listas». e44886b: `_wa_ofrecer_reprogramacion` y
+  `_wa_responder_reprogramacion`, con `_prepare_booking_reschedule`, `_reschedule_slot_is_free`, y `expected_snapshot`
+  y `resultado_desconocido` en `_reschedule_booking_by_code`. 12 tests rojos antes del arreglo; el del reinicio
+  pasaba sin arreglo y se endureció. Dos tests antiguos (`test_whatsapp_reschedule_booking_by_code`,
+  `test_whatsapp_reschedule_success_speaks_human_date`) adaptados al resumen y al botón, sin quitar lo que
+  comprobaban. El agente conversacional de Alicia no cambia.
+- Evidencia de e44886b: 89 y 51 dirigidos verdes. Suite completa: en marcha.
+- Siguiente: la suite; lo que queda de la fase 4 (reprogramar desde el agente, formularios, voz, widget y la
+  cancelación con resultado desconocido sin reconciliar).
