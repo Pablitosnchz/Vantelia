@@ -130,6 +130,61 @@ def test_resultado_perdido_antiguo_sin_webhook_pide_confirmar_de_nuevo(canal, mo
     assert any("no lleg" in texto.lower() and "registr" in texto.lower() for texto in textos)
 
 
+def test_conflicto_al_liberar_recarga_y_vuelve_a_pedir_confirmacion(canal, monkeypatch):
+    from backend import appstate, booking, reserva, timeutils, whatsapp
+    from backend.conversation_state import ConversationStateConflict
+    from datetime import timedelta
+    numero, responder, citas, textos, proveedores = canal
+    async def timeout(*a, **k):
+        raise httpx.ReadTimeout("resultado desconocido")
+    monkeypatch.setattr(booking, "_create_provider_booking", timeout)
+    responder()
+    propuesta = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    assert propuesta and propuesta.get("operacion")
+    ahora = timeutils._utc_now()
+    monkeypatch.setattr(timeutils, "_utc_now", lambda: ahora + timedelta(minutes=16))
+    original = reserva.guardar
+    llamadas = []
+    def conflicto_una_vez(*args, **kwargs):
+        if not llamadas:
+            llamadas.append(1)
+            raise ConversationStateConflict("otro turno")
+        return original(*args, **kwargs)
+    monkeypatch.setattr(reserva, "guardar", conflicto_una_vez)
+    monkeypatch.setattr(appstate, "whatsapp_flows", {})
+    textos.clear()
+    responder()
+    actual = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    assert llamadas and not citas() and not proveedores
+    assert actual and actual["estado"] == "ofrecida" and not actual.get("operacion")
+    assert any("no lleg" in texto.lower() for texto in textos)
+
+
+def test_operacion_ausente_antigua_reabre_pero_reciente_sigue_pendiente(canal, monkeypatch):
+    from backend import appstate, booking, db, reserva, whatsapp
+    numero, responder, citas, textos, proveedores = canal
+    async def timeout(*a, **k):
+        raise httpx.ReadTimeout("resultado desconocido")
+    monkeypatch.setattr(booking, "_create_provider_booking", timeout)
+    responder()
+    propuesta = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    with db._get_db_connection() as conn:
+        conn.execute("DELETE FROM booking_operations WHERE cliente_id='demo' AND operation_key=?",
+                     (propuesta["operacion"]["clave"],))
+        conn.commit()
+    monkeypatch.setattr(appstate, "whatsapp_flows", {})
+    textos.clear()
+    responder()
+    assert not citas() and not proveedores
+    assert any("verificar" in texto.lower() for texto in textos)
+    monkeypatch.setattr(whatsapp.time, "time", lambda: propuesta["creada"] + 16 * 60)
+    textos.clear()
+    responder()
+    actual = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    assert actual and actual["estado"] == "ofrecida" and not actual.get("operacion")
+    assert any("no lleg" in texto.lower() for texto in textos)
+
+
 def test_confirmacion_no_entregada_se_recupera_sin_repetir_creacion(canal, monkeypatch):
     from backend import appstate, messaging, reserva
     numero, responder, citas, textos, proveedores = canal
