@@ -933,3 +933,18 @@ a fin en todas.
   aparecía. Pablo dijo que ya estaba habilitado y la segunda consulta la da **activa**, con SEPA disponible en la
   configuración que usa el checkout de suscripciones.
 - Siguiente: orden de despliegue de e11ac35 y `prueba` de Alicia en producción; confirmar el IVA del texto.
+
+## 2026-09-14 17:35–17:50 +0200 - despliegue de e5c784f y prueba de 10 días para Alicia (Claude)
+
+- Orden de Pablo (AskUserQuestion): «Desplegar, config de Alicia y subir»; los 129 € llevan el IVA incluido.
+- Config de producción: copia previa `/srv/vantelia-backups/config-pre-prueba-alicia-20260914-154104.json`;
+  `prueba: {"dias": 10}` en Alicia; los otros 27 negocios, idénticos (comprobado por huella); la exigencia de dos
+  apellidos sigue activa.
+- `deploy.ps1 -SkipLocalChecks`, 17:41:04–17:43:53, exit 0: foto previa `pre-deploy-20260914-154140.db`, acceso
+  público OK, humo en el servidor 5/5. VERSION.json e5c784f, `sucio: false`.
+- Verificación: /health 200. En la app viva, Alicia tiene la prueba y `fin_de_prueba` da 10 días (24-sep si se
+  suscribiera ahora; al conectar WhatsApp se fija desde ese día); un negocio sin prueba devuelve None. Caso crítico
+  dentro del contenedor sobre una copia: OK al primer intento; copia borrada, contenedor y servidor limpios.
+- GitHub: `main` avanzado sin fusión hasta el commit de docs de este despliegue.
+- Siguiente: Pablo le manda a Alicia el texto (WhatsApp, tarjeta en Meta, suscripción Pro con 10 días gratis y Stripe
+  opcional). Del plan queda lo que depende de conversaciones reales y de clientes que usen voz o widget.
