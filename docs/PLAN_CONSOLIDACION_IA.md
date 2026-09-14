@@ -562,3 +562,19 @@ Separar dependencias externas (Meta, conexión del número, datos que confirma A
 No declarar versión final ni desplegar por iniciativa propia. Guardar en
 `ESTADO_ACTUAL.md` fase, rama, evidencia, siguiente paso y responsable. No consultar
 repetidamente procesos en curso ni ampliar una fase antes de cerrar sus pruebas.
+
+### Aceptación del candidato de cierre (14-sep-2026, Claude)
+
+Candidato: `claude/cierre-plan` 363e715 (código idéntico a bef4193 en `claude/cierre-fixes`). Evidencia completa en
+`ACEPTACION_CANDIDATO_IA.md` y `REGISTRO_CONSOLIDACION.md`:
+
+- Suite completa de bef4193: 2773 passed, 1 skipped, 0 fallos. Cada arreglo con su prueba roja antes.
+- Modelo real sobre copia de producción (snap7, borrada al acabar), resultados separados: banco de Alicia 43/43 al primer
+  intento (0 tras reintento, 0 no medidos, 1 no aplica); crítico ×6 6/6 al primer intento; humo 5/5 (5c927dd y
+  e230991); portal y reinicios 6/6; segundo negocio (metareview) 15/16, fallo real `horario-escrito-manda` (fuera del
+  plan).
+- Revisión: Claude revisó las entregas de Astra (1cdb3f9, 5c927dd); Astra revisó las de Claude hasta 45f3d11 y
+  04fc97f/cb87be4/e11ac35. PENDIENTE: veredicto de Astra sobre e230991 y bef4193 (pedido a las 22:21).
+- Dependencias externas separadas: WhatsApp real con Meta y recordatorios (número de Alicia sin conectar).
+
+Estado: **pendiente del veredicto de Astra** para marcar el plan como cerrado con excepciones.

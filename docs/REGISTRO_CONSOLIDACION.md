@@ -1112,3 +1112,5 @@ a fin en todas.
   e230991 parada al 62 % para medir el SHA final; suite completa de bef4193 en curso.
 - Suite completa de bef4193 (E:/vp-cierre, 21:07–21:45): 2773 passed, 1 skipped, 0 fallos. Mismo código que 363e715 en
   `claude/cierre-plan`. Falta la revisión de Astra (22:19).
+- 22:21: encargo a Astra de revisar 5c927dd..bef4193 (e230991 y bef4193) con los casos límite a buscar. Borrador de la
+  aceptación de la fase 5 en PLAN_CONSOLIDACION_IA, marcado pendiente de su veredicto. Alicia: sin mensajes todavía.
