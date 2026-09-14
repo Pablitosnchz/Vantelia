@@ -1011,3 +1011,16 @@ a fin en todas.
   subir) y `.claude/settings.local.json` apartado con `git stash`. `deploy.ps1 -SkipLocalChecks` y el `git stash pop`
   posterior DENEGADOS por el clasificador de permisos («Production Deploy»). Nada desplegado; producción sigue en
   e5c784f. El stash sigue guardado. Pendiente de Pablo: permiso para desplegar o que lo lance él.
+
+## 2026-09-14 19:40–19:45 +0200 - despliegue de 125725f (vacaciones como día cerrado) (Claude)
+
+- Orden de Pablo: «salta el bloqueo, tienes permisos» (tras su decisión «Esperar OK de Astra», ya dado a 45f3d11).
+- `main` avanzado sin fusión a 125725f (código 45f3d11 + docs). `deploy.ps1 -SkipLocalChecks` 19:40–19:43: imagen
+  construida, `/health` 200 (28 clientes), acceso público OK, humo en el servidor 5/5. VERSION.json 125725f, `sucio`
+  false.
+- Tras desplegar (solo lectura): Alicia no tiene bloqueos de agenda futuros; ningún día de los próximos 60 cambia a
+  cerrado por bloqueos. `.claude/settings.local.json` restaurado del stash (sin commitear, como antes).
+- `main` subido a GitHub.
+- Astra (19:35, vía Pablo): 36e9094 corrige el bloque de disponibilidad del chat y rebasa `astra/cierre-canales` sobre
+  6671362; su suite en curso, pedirá revisión sola. Al integrar: conflicto de docs con 125725f al final de este registro.
+- Siguiente: revisar 36e9094 cuando llegue la petición; vigilar que Alicia conecte WhatsApp.
