@@ -1110,3 +1110,5 @@ a fin en todas.
   (`claude/cierre-fixes`; 363e715 en `claude/cierre-plan`, mismo código): holgura de 10 min, por debajo días de prueba
   redondeados hacia arriba. Test rojo antes (48 h y 5 min recibía `trial_end`); 10 de facturación verdes después. Suite de
   e230991 parada al 62 % para medir el SHA final; suite completa de bef4193 en curso.
+- Suite completa de bef4193 (E:/vp-cierre, 21:07–21:45): 2773 passed, 1 skipped, 0 fallos. Mismo código que 363e715 en
+  `claude/cierre-plan`. Falta la revisión de Astra (22:19).
