@@ -2089,6 +2089,10 @@ def _voice_other_day_question(alternatives: str = "") -> str:
     return alternatives or " Probamos otra fecha?"
 
 
+def _voice_motivo_de_cierre(motivo: str) -> str:
+    return f" ({motivo})" if motivo else ""
+
+
 def _voice_no_availability_message(
     cliente_id: str,
     fecha: str,
@@ -2102,6 +2106,10 @@ def _voice_no_availability_message(
     label = _voice_say_date(fecha, tz)
     if _voice_day_is_closed(cliente_id, fecha, servicio=servicio, location_id=location_id):
         return f"Para {label} estamos cerrados."
+    # Vacaciones o festivo de dia entero: cerrado, no "sin hueco".
+    motivo_cierre = agenda.motivo_de_cierre_del_dia(cliente_id, fecha, appstate.CONFIG_CLIENTES.get(cliente_id))
+    if motivo_cierre is not None:
+        return f"Para {label} estamos cerrados{_voice_motivo_de_cierre(motivo_cierre)}."
     block_reasons = _voice_short_reasons(agenda._agenda_block_reasons_for_day(cliente_id, fecha))
     if block_reasons:
         return f"Para {label} no tenemos hueco: la agenda esta bloqueada por {block_reasons}."
@@ -2129,6 +2137,9 @@ def _voice_specific_time_availability_message(
         return "Si, a esa hora hay hueco. Para dejarla reservada necesito tu nombre completo y telefono."
     if _voice_day_is_closed(cliente_id, fecha, servicio=servicio, location_id=location_id):
         return "Ese dia estamos cerrados. Probamos otra fecha?"
+    motivo_cierre = agenda.motivo_de_cierre_del_dia(cliente_id, fecha, appstate.CONFIG_CLIENTES.get(cliente_id))
+    if motivo_cierre is not None:
+        return f"Ese dia estamos cerrados{_voice_motivo_de_cierre(motivo_cierre)}. Probamos otra fecha?"
     block_reasons = _voice_short_reasons(_voice_block_reasons_for_time(cliente_id, fecha, hora))
     alternatives = _voice_availability_alternatives(available_slots, exclude=hora)
     if block_reasons:
@@ -2206,6 +2217,9 @@ async def _voice_check_availability(
             "huecos": slots[:20],
             "hay_huecos": bool(slots),
             "hora_disponible": requested_time in available,
+            # Tambien aqui: sin la clave, el agente contaba el dia como abierto y
+            # frenaba el «cerrados por vacaciones» que era verdad.
+            "dia_cerrado": _dia_cerrado(cliente_id, fecha, config),
             "motivo": voice_message,
             "mensaje_voz": voice_message,
             **date_meta,
@@ -2294,7 +2308,11 @@ def _rango_de_huecos(slots: List[str]) -> str:
 
 
 def _dia_cerrado(cliente_id: str, fecha: str, config: Optional[Dict[str, Any]] = None) -> bool:
-    """¿Ese dia el negocio NO abre? (distinto de "abre pero no le queda hueco")."""
+    """¿Ese dia el negocio NO abre? (distinto de "abre pero no le queda hueco").
+
+    Cierra el horario semanal o un bloqueo que deja el dia sin nadie trabajando
+    (vacaciones, festivo: `agenda.motivo_de_cierre_del_dia`).
+    """
     try:
         from backend import agenda, clients
 
@@ -2302,7 +2320,9 @@ def _dia_cerrado(cliente_id: str, fecha: str, config: Optional[Dict[str, Any]] =
         cfg = config if config is not None else clients._get_client_config(cliente_id)
         for fila in agenda._weekly_schedule_matrix(cliente_id, cfg) or []:
             if isinstance(fila, dict) and int(fila.get("weekday", -1)) == dia.weekday():
-                return bool(fila.get("closed"))
+                if fila.get("closed"):
+                    return True
+                return agenda.motivo_de_cierre_del_dia(cliente_id, fecha, cfg) is not None
     except Exception:  # noqa: BLE001
         return False
     return False

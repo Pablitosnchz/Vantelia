@@ -1137,7 +1137,10 @@ def test_voice_specific_time_outside_hours_answers_directly(api_module):
 
 
 def test_voice_specific_time_blocked_mentions_block_reason(api_module):
-    """Si la agenda esta bloqueada por vacaciones, voz lo dice directamente."""
+    """Si la agenda esta bloqueada a esa hora, voz dice el motivo directamente.
+
+    Bloqueo PARCIAL: el de dia entero es un dia cerrado (test_vacaciones_son_dia_cerrado).
+    """
     fecha = _next_weekday(4)
     block_id = f"blk_voice_{uuid.uuid4().hex}"
     try:
@@ -1146,7 +1149,7 @@ def test_voice_specific_time_blocked_mentions_block_reason(api_module):
                 """
                 INSERT INTO agenda_blocks
                 (id, cliente_id, employee_id, block_date, start_time, end_time, reason, created_at)
-                VALUES (?, 'demo', '', ?, '09:00', '18:00', 'Vacaciones', ?)
+                VALUES (?, 'demo', '', ?, '09:00', '12:00', 'Vacaciones', ?)
                 """,
                 (block_id, fecha, api_module._utc_now_iso()),
             )

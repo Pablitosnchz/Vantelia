@@ -256,6 +256,16 @@ mueve la cita hasta aceptar el cambio concreto (botones con identidad, cita camb
 el portal, hueco ocupado, reinicio, doble pulsación y resultado perdido). El agente
 conversacional no cambia (decisión de Pablo del 14-sep-2026).
 
+`test_vacaciones_son_dia_cerrado.py`: un bloqueo que deja sin horario a todos los que
+trabajan ese día (vacaciones de día entero desde Horario) es un día CERRADO para
+`voice._dia_cerrado`, `consultar_disponibilidad` y el freno `dijo_cerrado_estando_abierto`
+(`agenda.motivo_de_cierre_del_dia`). Antes el asistente decía «ese día lo tengo completo».
+Un bloqueo parcial, o las vacaciones de una sola profesional mientras otra trabaja, no cierran.
+
+`test_horario_no_depende_del_dia.py`: el caso del banco `horario-escrito-manda` exige nombrar
+al menos dos días de la semana distintos (`debe_varios`). Con «lunes» a secas pasaba los
+domingos y suspendía los lunes sin que ninguna respuesta diera el horario de la semana.
+
 `test_recordatorios_meta_ledger.py` recorre el builder real hasta un transporte
 simulado, guarda IDs y resultado, y verifica aceptación/auditoría en una misma
 transacción. Caída tras commit conserva el tope, sin reenvío ni evento duplicado;

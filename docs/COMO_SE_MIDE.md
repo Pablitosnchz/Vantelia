@@ -71,6 +71,20 @@ existe- la tirada entera se da por mala.
 No basta con exportar `DB_PATH`: `settings.DB_PATH` se fija al importar. Ignorarlo
 costo siete citas de prueba en la agenda de un cliente real.
 
+Un caso mide PALABRAS con `debe` (alguna), `debe_varios` (al menos N distintas, palabra
+entera) y `no_debe`. Cuidado con lo que depende del calendario: `horario-escrito-manda`
+exigia «lunes» y aprobaba los domingos («mañana, lunes») y suspendia los lunes; ahora
+pide dos dias de la semana distintos (`tests/test_horario_no_depende_del_dia.py`).
+
+Dos medidores con modelo real para puertas concretas del plan de consolidacion:
+
+- `scripts/medir_portal_y_reinicio.py`: el negocio cambia horario, vacaciones, un servicio
+  o una regla a mitad de conversacion, y reinicios con una reserva a medias.
+- `scripts/medir_reglas_opuestas.py`: dos negocios sinteticos con reglas OPUESTAS para la
+  misma pregunta, intercaladas; se edita la de uno y se borra la del otro. Entorno aislado
+  en una carpeta temporal que se borra, sin datos de clientas; solo lee la clave del modelo
+  del `.env`. Centimos. Primera medicion (14-sep-2026): 21/21.
+
 ## 4. El simulador: el porcentaje
 
 ```powershell

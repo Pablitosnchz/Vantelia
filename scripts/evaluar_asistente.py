@@ -376,6 +376,12 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
                        != ((previa or {}).get("booking_date"), (previa or {}).get("booking_time"))]
             if not movidas:
                 return False, respuestas, "la cita no se ha movido de sitio"
+    motivo = _falta_en_respuestas(caso, respuestas)
+    return not motivo, respuestas, motivo
+
+
+def _falta_en_respuestas(caso, respuestas) -> str:
+    """Lo que el caso exige a las PALABRAS: "" si cumple, o el motivo del fallo."""
     # Se mira la ULTIMA respuesta y el conjunto: hay casos donde lo importante
     # esta en el cierre y otros donde vale que aparezca en cualquier momento.
     todo = _norm(" ".join(respuestas))
@@ -387,11 +393,22 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     if caso.get("sin_horas"):
         horas = set(re.findall(r"\d{1,2}[:.]\d{2}", " ".join(respuestas)))
         if len(horas) >= 2:
-            return False, respuestas, "ofrece horas (%s) sin saber que dia quiere" % sorted(horas)[:4]
+            return "ofrece horas (%s) sin saber que dia quiere" % sorted(horas)[:4]
 
     debe = caso.get("debe") or []
     if debe and not any(_norm(p) in todo for p in debe):
-        return False, respuestas, "no dice nada de %s" % debe
+        return "no dice nada de %s" % debe
+
+    # Varias DISTINTAS, palabra entera (admite plural): dar el horario de la semana
+    # es nombrar dias de la semana, y con «lunes» a secas el resultado dependia del
+    # dia en que se medía («mañana, lunes» el domingo; «mañana, martes» el lunes).
+    varios = caso.get("debe_varios") or {}
+    if varios:
+        dichas = {_norm(p) for p in varios.get("de") or []
+                  if re.search(r"\b%ss?\b" % re.escape(_norm(p)), todo)}
+        minimo = int(varios.get("minimo") or 1)
+        if len(dichas) < minimo:
+            return "nombra %d de %s y hacen falta %d" % (len(dichas), varios.get("de"), minimo)
 
     # Donde no puede aparecer lo prohibido. Por defecto en ninguna respuesta, pero
     # hay casos en los que decirlo AL PRINCIPIO es lo correcto y el fallo esta en
@@ -402,8 +419,8 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     for prohibido in caso.get("no_debe") or []:
         objetivo = ultimo if donde == "ultima" else todo
         if _norm(prohibido) in objetivo:
-            return False, respuestas, "no deberia decir %r" % prohibido
-    return True, respuestas, ""
+            return "no deberia decir %r" % prohibido
+    return ""
 
 
 class PrecondicionNoDisponible(ValueError):

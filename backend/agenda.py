@@ -3599,6 +3599,75 @@ def _agenda_block_reasons_for_day(cliente_id: str, fecha: str) -> List[str]:
     return reasons
 
 
+def _tramo_cubierto(inicio: Optional[int], fin: Optional[int], filas: List[sqlite3.Row]) -> bool:
+    if inicio is None or fin is None:
+        return False
+    tramos = []
+    for fila in filas:
+        desde, hasta = textnorm._time_to_min(fila["start_time"]), textnorm._time_to_min(fila["end_time"])
+        if desde is not None and hasta is not None:
+            tramos.append((desde, hasta))
+    cursor = inicio
+    for desde, hasta in sorted(tramos):
+        if desde > cursor:
+            break
+        cursor = max(cursor, hasta)
+    return cursor >= fin
+
+
+def motivo_de_cierre_del_dia(
+    cliente_id: str, fecha: str, config: Optional[Dict[str, Any]] = None
+) -> Optional[str]:
+    """¿Los bloqueos de agenda dejan ese dia sin nadie trabajando? (vacaciones, festivo)
+
+    Devuelve el motivo escrito ("" si no hay) cuando TODOS los que trabajan ese dia
+    tienen su horario entero bloqueado -por un bloqueo general o por el suyo-, y None
+    si alguien abre. Los dias que ya cierra el horario semanal no son cosa de esta
+    funcion (`_weekly_schedule_matrix`).
+
+    Paso de verdad (13-sep-2026): unas vacaciones de dia entero puestas en Horario y el
+    asistente decia que ese dia lo tenia «completo», porque para el horario semanal
+    el dia abria. Vigilado por tests/test_vacaciones_son_dia_cerrado.py.
+    """
+    try:
+        dia = textnorm._parse_date(fecha).date()
+        filas = _list_agenda_blocks(cliente_id, date_from=dia.isoformat(), date_to=dia.isoformat())
+        if not filas:
+            return None
+        cfg = config if config is not None else clients._get_client_config(cliente_id)
+        booking_cfg = (cfg or {}).get("booking") or {}
+        if not booking_cfg.get("enabled", True):
+            return None
+        empleados = _list_public_employee_rows(cliente_id, include_inactive=False)
+        if empleados:
+            turnos = [(str(fila["id"]), textnorm._weekday_hours(_employee_schedule_from_row(fila), dia.weekday()))
+                      for fila in empleados]
+        else:
+            base = {
+                "day_start": booking_cfg.get("day_start", "09:00"),
+                "day_end": booking_cfg.get("day_end", "18:00"),
+                "closed_weekdays": booking_cfg.get("closed_weekdays") or [],
+                "weekly_hours": booking_cfg.get("weekly_hours") or {},
+            }
+            turnos = [("", textnorm._weekday_hours(base, dia.weekday()))]
+        turnos = [(empleado, ventana) for empleado, ventana in turnos if ventana is not None]
+        if not turnos:
+            return None
+        motivos: List[str] = []
+        for empleado, (inicio, fin) in turnos:
+            suyas = [fila for fila in filas if (fila["employee_id"] or "") in ("", empleado)]
+            if not _tramo_cubierto(textnorm._time_to_min(inicio), textnorm._time_to_min(fin), suyas):
+                return None
+            for fila in suyas:
+                motivo = textnorm._sanitize_text(fila["reason"] or "")
+                if motivo and motivo not in motivos:
+                    motivos.append(motivo)
+        return motivos[0] if motivos else ""
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("No se pudo saber si %s cierra el %s: %s", cliente_id, fecha, exc)
+        return None
+
+
 
 
 
