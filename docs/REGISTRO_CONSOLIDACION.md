@@ -1114,3 +1114,19 @@ a fin en todas.
   `claude/cierre-plan`. Falta la revisión de Astra (22:19).
 - 22:21: encargo a Astra de revisar 5c927dd..bef4193 (e230991 y bef4193) con los casos límite a buscar. Borrador de la
   aceptación de la fase 5 en PLAN_CONSOLIDACION_IA, marcado pendiente de su veredicto. Alicia: sin mensajes todavía.
+
+## 2026-09-14 22:25–22:40 +0200 - prueba por WhatsApp sobre el negocio de Alicia (Claude)
+
+- Prueba por el número de demo (código YDCP9E) a las 22:25 (hora Madrid). La hizo Pablo, no Alicia (lo aclara él a las
+  22:40; el primer resumen decía Alicia). Leído en producción en solo lectura
+  (`chat_messages`, `agent_turns`, `kb_qa`, `services`, `business_rules`):
+  1. «cuánto duran las extensiones?» → `qa_exact`: su Q&A «Quiero ponerme extensiones, ¿me aconsejáis y me dais
+     presupuesto?» (etiqueta «extensiones»). No contesta a la duración. Su texto dice «cita de diagnóstico de 15 minutos»;
+     su catálogo tiene «Diagnostico y presupuesto para extensiones» de 25 min (y «Diagnostico y presupuesto», 15 min).
+  2. «Diagnostico y presupuesto» → agente, 2 vueltas, 5,6 s, freno `pide_la_valoracion`; pide día.
+  3. «quiero saber cuánto duran» → agente, 6 vueltas, 15,6 s, frenos `pide_la_valoracion`, `precio_que_no_se_da`,
+     `fianza_que_no_le_toca_decir`: «Las extensiones adhesivas tardan 45 minutos, y el diagnóstico y presupuesto son 15
+     minutos. En total, serían 60 minutos.» Suma dos citas distintas como si fueran una.
+- Decisiones de Pablo (AskUserQuestion): pasarle preguntas a Alicia sobre sus datos (15 o 25 min; si «cuánto duran» es
+  el tiempo de ponerlas o lo que aguantan puestas); arreglar ya en rama la suma de la valoración con el servicio que
+  valora, sin desplegar mientras prueba. Rama `claude/duracion-extensiones` desde b3601a6.

@@ -1539,6 +1539,41 @@ def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "",
     if not resueltos and not pendientes:
         return ""
 
+    # La cita de valoracion es OTRA cita, antes y otro dia: no se suma al tratamiento que
+    # valora. Paso de verdad (14-sep-2026, negocio de Alicia): «cuanto duran las
+    # extensiones» + «Diagnostico y presupuesto» -> «en total, 60 minutos», y ademas con el
+    # diagnostico generico (15) teniendo el catalogo uno para extensiones (25).
+    from backend import booking
+
+    valoraciones = [(n, m) for n, m in resueltos if booking.es_servicio_de_valoracion(n)]
+    tratamientos = [(n, m) for n, m in resueltos if not booking.es_servicio_de_valoracion(n)]
+    if valoraciones and (tratamientos or pendientes):
+        valoracion = valoraciones[0]
+        de_que = [textnorm._strip_accents(str(f).lower()) for f in familias
+                  if f and not booking.es_servicio_de_valoracion(str(f))]
+        for servicio in booking._public_services_for_booking(cliente_id, location_id=location_id):
+            nombre_val = str(servicio.get("nombre") or "") if isinstance(servicio, dict) else ""
+            plano = textnorm._strip_accents(nombre_val.lower())
+            if (nombre_val and booking.es_servicio_de_valoracion(nombre_val)
+                    and any(familia in plano for familia in de_que)):
+                minutos_val = _duracion_del_catalogo(cliente_id, nombre_val)
+                if minutos_val:
+                    valoracion = (textnorm.nombre_de_servicio_publico(nombre_val), minutos_val)
+                    break
+        tratamiento = ""
+        if tratamientos:
+            tratamiento = " El tratamiento son EXACTAMENTE %d minutos (%s)." % (
+                sum(m for _n, m in tratamientos), ", ".join("%s %d min" % t for t in tratamientos))
+        falta = ""
+        if pendientes:
+            falta = " Para el tratamiento " + "; ".join(
+                "de %s tienes que preguntarle: %s" % (fam, pregunta) for fam, pregunta in pendientes) + "."
+        return (
+            "TE HA PREGUNTADO CUANTO TARDA. %s es una cita de valoracion APARTE (%d minutos), que se "
+            "hace antes y otro dia: NO la sumes al tratamiento.%s%s Dile cada cifra por separado y NO "
+            "le des un total." % (valoracion[0], valoracion[1], tratamiento, falta)
+        )
+
     detalle = ", ".join("%s %d min" % (n, m) for n, m in resueltos)
     total = sum(m for _n, m in resueltos)
 
