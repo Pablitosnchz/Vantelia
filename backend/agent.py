@@ -2231,6 +2231,22 @@ def _tool_buscar_servicio(
     # minutos a quien pedia el bio premium. Se dice que eso no se hace y se le
     # ensenyan los parecidos -que no es lo mismo que negarle un servicio real-.
     tecnica_dicha = catalog_pick._tecnica_sin_talla(datos.get("tecnica"))
+    # Lo mismo si lo ha apuntado como FAMILIA. Medido el 14-sep-2026 (metareview, 2 de
+    # 2 intentos): a «me quiero hacer la manicura» el extractor dio familia
+    # «manicura» y tecnica vacia; la tool contesto el generico «no hay nada que
+    # encaje» y el modelo pregunto «¿que tipo de manicura te gustaria?», como si se
+    # hiciera. El dia anterior, con «manicura» como tecnica, decia que no se hace.
+    # Solo si esa familia no es del negocio y ningun servicio la lleva.
+    familia_dicha = catalog_pick._norm(str(datos.get("familia") or ""))
+    if (not tecnica_dicha and familia_dicha and not eleccion.servicio
+            and eleccion.falta in ("", "nada")):
+        try:
+            del_negocio = {catalog_pick._norm(f) for f in intents.familias_del_tenant(cliente_id)}
+        except Exception:  # noqa: BLE001 - sin catalogo no se decide nada
+            del_negocio = {familia_dicha}
+        if familia_dicha not in del_negocio and not _alguien_la_hace(
+                cliente_id, familia_dicha, location_id=location_id):
+            tecnica_dicha = familia_dicha
     if tecnica_dicha and len(tecnica_dicha) >= 8 and not _alguien_la_hace(
             cliente_id, tecnica_dicha, location_id=location_id):
         return {
