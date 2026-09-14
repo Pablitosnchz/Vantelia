@@ -1378,12 +1378,17 @@ async def _reschedule_booking_by_code(
     email: str = "",
     source: str,
     request: Optional[Request] = None,
+    expected_snapshot=None,
 ) -> Dict[str, Any]:
     row, error = await _lookup_and_verify_booking_by_code(
         cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email
     )
     if error:
         return error
+    if (expected_snapshot is not None
+            and _booking_cancellation_snapshot(row) != _booking_cancellation_snapshot(expected_snapshot)):
+        return {"ok": False, "cita_cambiada": True,
+                "error": "La cita ha cambiado desde el resumen. Pide de nuevo el cambio para revisar sus datos."}
     payload = _booking_update_payload_from_reschedule(
         row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora))
     )
@@ -1406,7 +1411,8 @@ async def _reschedule_booking_by_code(
         }
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[%s] reprogramacion por codigo fallo (%s): %s", source, cliente_id, exc)
-        return {"ok": False, "error": "No se pudo reprogramar la cita."}
+        # Pudo guardarse antes de fallar: quien la ofreció comprueba la cita antes de repetir.
+        return {"ok": False, "resultado_desconocido": True, "error": "No se pudo reprogramar la cita."}
     return {
         "ok": True,
         "codigo_reserva": row["booking_code"] or "",
@@ -1414,6 +1420,45 @@ async def _reschedule_booking_by_code(
         "hora": textnorm._sanitize_text(hora),
         "mensaje": response.mensaje or "Cita reprogramada correctamente.",
     }
+
+
+def _booking_reschedule_snapshot(row, fecha: str, hora: str) -> Dict[str, str]:
+    """La cita que un cambio propone mover y el día y la hora a los que la mueve."""
+    datos = _booking_cancellation_snapshot(row)
+    datos.update(nueva_fecha=str(fecha or ""), nueva_hora=str(hora or ""))
+    return datos
+
+
+async def _prepare_booking_reschedule(
+    cliente_id: str, codigo_reserva: str, *, trusted_phone: str = "",
+    telefono: str = "", email: str = "", expected_snapshot=None,
+):
+    """Consulta compartida antes de ofrecer o de ejecutar un cambio de cita.
+
+    Igual que `_prepare_booking_cancellation`: una oferta aceptada exige que la cita siga
+    siendo la que se enseñó en el resumen.
+    """
+    row, error = await _lookup_and_verify_booking_by_code(
+        cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email)
+    if error:
+        return row, error
+    if (expected_snapshot is not None
+            and _booking_cancellation_snapshot(row) != _booking_cancellation_snapshot(expected_snapshot)):
+        return row, {"ok": False, "cita_cambiada": True,
+            "error": "La cita ha cambiado desde el resumen. Pide de nuevo el cambio para revisar sus datos."}
+    if row["status"] in ("cancelled", "completed", "no_show"):
+        return row, {"ok": False, "error": "Esa cita ya no se puede cambiar."}
+    return row, None
+
+
+async def _reschedule_slot_is_free(cliente_id: str, row, fecha: str, hora: str) -> bool:
+    """¿Se puede ofrecer mover la cita a ese día y hora? No ofrecer lo que luego no se guardará."""
+    try:
+        return await agenda._booking_slot_available_for_reschedule(
+            cliente_id, fecha, hora, employee_id=row["employee_id"] or "",
+            exclude_booking_id=row["id"], duration_minutes=_minutos_que_ocupa_ahora(row) or None)
+    except Exception:  # noqa: BLE001 - ante la duda no se ofrece
+        return False
 
 
 # El cliente se echa atras de la gestion que habia pedido. Va SIN tildes: se
@@ -4515,16 +4560,19 @@ def _whatsapp_de_confirmacion_sin_confirmar(booking_row: sqlite3.Row) -> bool:
     Busca en la auditoría el último evento que diga algo del WhatsApp de la confirmación:
     un dudoso (lo apunta el núcleo al enviar sin registro de entregas: pago, cambio de
     cita, reenvío a mano) o una entrega que sí salió por WhatsApp. Un envío solo por email
-    no dice nada del WhatsApp y no lo tapa (tercera revisión de Codex, 14-sep-2026). Sin
-    eventos, decide la confirmación automática de la generación actual
-    (`booking_notice_deliveries`).
+    no dice nada del WhatsApp y no lo tapa (tercera revisión de Codex, 14-sep-2026). La
+    confirmación automática de la generación actual (`booking_notice_deliveries`) cuenta por
+    su hora: una entrega ANTERIOR a su resultado dudoso no lo deja atrás (cuarta revisión:
+    la voz esperaba a Meta, una edición entregaba otra y después la de voz quedaba dudosa).
+    Si empatan en el mismo segundo, se avisa: preguntar de más es barato.
     """
     with db._get_db_connection() as conn:
         eventos = conn.execute(
-            "SELECT event_type, payload_json FROM booking_audit WHERE booking_id=? AND cliente_id=? "
+            "SELECT event_type, payload_json, created_at FROM booking_audit WHERE booking_id=? AND cliente_id=? "
             "AND event_type IN ('confirmation_whatsapp_uncertain','confirmation_resent','booking_email_sent') "
             "ORDER BY id DESC LIMIT 50",
             (booking_row["id"], booking_row["cliente_id"])).fetchall()
+        entregado_en = ""
         for evento in eventos:
             if evento["event_type"] == "confirmation_whatsapp_uncertain":
                 return True
@@ -4537,12 +4585,17 @@ def _whatsapp_de_confirmacion_sin_confirmar(booking_row: sqlite3.Row) -> bool:
             if evento["event_type"] == "booking_email_sent" and datos.get("kind") != "confirmed":
                 continue
             if "whatsapp" in (datos.get("channels") or []):
-                return False
-        return conn.execute(
-            "SELECT 1 FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? AND generation=? "
-            "AND kind='confirmed' AND channel='whatsapp' AND state IN ('desconocido','enviando')",
+                entregado_en = str(evento["created_at"] or "")
+                break
+        dudosa = conn.execute(
+            "SELECT updated_at FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? AND generation=? "
+            "AND kind='confirmed' AND channel='whatsapp' AND state IN ('desconocido','enviando') "
+            "ORDER BY updated_at DESC LIMIT 1",
             (booking_row["cliente_id"], booking_row["id"], booking_row["reminder_generation"]),
-        ).fetchone() is not None
+        ).fetchone()
+        if dudosa is None:
+            return False
+        return not entregado_en or str(dudosa["updated_at"] or "") >= entregado_en
 
 
 async def _resend_booking_confirmation(

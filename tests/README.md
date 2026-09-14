@@ -241,7 +241,20 @@ Comprueba también respaldo entre canales y recuperación de aceptación sin rep
 un fallo de email o SMS se reintenta en la siguiente vuelta y pasa al siguiente
 canal; un WhatsApp dudoso o un envío colgado no se repiten por su canal, pero pasados
 30 minutos (`notice_deliveries.GRACIA_AVISO_DUDOSO_MIN`) sale el siguiente. Frontera
-29/31 min; dentro del plazo sigue bloqueando el respaldo.
+29/31 min; dentro del plazo sigue bloqueando el respaldo. Tras la revisión de Codex
+avanza el reloj de verdad (la banda del recordatorio), un ejecutor que vuelve tarde o
+justo al límite no duplica, y sin intento previo no hay aviso tardío.
+
+`test_reenvio_confirmacion_whatsapp_dudoso.py`: el botón «Enviar confirmación» del
+panel con un WhatsApp dudoso (decisión de Pablo, «avisar y dejar reenviar»). El dudoso
+se explica, el siguiente reenvío responde `WHATSAPP_SIN_CONFIRMAR` y solo reenvía con
+`force`; también tras la confirmación de pago, con un reenvío solo por email en medio o
+con una confirmación automática dudosa posterior a otra entrega.
+
+`test_reprogramacion_whatsapp_confirmada.py`: fase 4, el flujo guiado de WhatsApp no
+mueve la cita hasta aceptar el cambio concreto (botones con identidad, cita cambiada desde
+el portal, hueco ocupado, reinicio, doble pulsación y resultado perdido). El agente
+conversacional no cambia (decisión de Pablo del 14-sep-2026).
 
 `test_recordatorios_meta_ledger.py` recorre el builder real hasta un transporte
 simulado, guarda IDs y resultado, y verifica aceptación/auditoría en una misma

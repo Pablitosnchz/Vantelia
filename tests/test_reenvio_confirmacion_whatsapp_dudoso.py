@@ -147,3 +147,48 @@ def test_la_confirmacion_dudosa_tras_pagar_tambien_avisa(entorno, monkeypatch):
     assert isinstance(exc.value.detail, dict) and exc.value.detail.get("code") == "WHATSAPP_SIN_CONFIRMAR", (
         "el reenvio no sabe que el WhatsApp de tras pagar quedo dudoso: %r" % exc.value.detail)
     assert enviados == ["desconocido"]
+
+
+def _dudoso_automatico(b, booking_id, minutos_atras=0):
+    """Confirmación automática (con registro de entregas) que termina dudosa."""
+    from datetime import timedelta
+
+    from backend import db, notice_deliveries, timeutils
+
+    fila = b._get_booking_row_by_id(booking_id)
+    identidad = ("demo", booking_id, fila["reminder_generation"], "confirmed", "whatsapp")
+    reclamado = notice_deliveries.claim_notice_delivery(*identidad)
+    notice_deliveries.finish_notice_delivery(*identidad, reclamado["owner_token"], "desconocido")
+    if minutos_atras:
+        hace = (timeutils._utc_now() - timedelta(minutes=minutos_atras)).replace(tzinfo=None)
+        with db._get_db_connection() as conn:
+            conn.execute("UPDATE booking_notice_deliveries SET updated_at=? WHERE booking_id=? AND kind='confirmed'",
+                         (hace.isoformat(timespec="seconds") + "Z", booking_id))
+            conn.commit()
+
+
+def test_una_entrega_anterior_no_tapa_un_dudoso_automatico_posterior(entorno, monkeypatch):
+    """Cuarta revisión de Codex (3e05b96): la voz espera a Meta, una edición entrega otra
+    confirmación y después la de voz termina dudosa. El aviso miraba la auditoría antes que
+    el registro de entregas y no avisaba."""
+    b, enviados = _preparar(entorno, monkeypatch, ["aceptado"])
+    asyncio.run(b._send_booking_reminder_by_kind(
+        b._get_booking_row_by_id(entorno.booking_id), "confirmed", raise_on_failure=False))
+    assert enviados == ["aceptado"]
+    _dudoso_automatico(b, entorno.booking_id)
+
+    with pytest.raises(HTTPException) as exc:
+        _reenviar(b, entorno.booking_id)
+    assert isinstance(exc.value.detail, dict) and exc.value.detail.get("code") == "WHATSAPP_SIN_CONFIRMAR", (
+        "una entrega anterior tapo el WhatsApp dudoso posterior: %r" % exc.value.detail)
+    assert enviados == ["aceptado"]
+
+
+def test_una_entrega_posterior_si_deja_atras_el_dudoso_automatico(entorno, monkeypatch):
+    """Control: si después del dudoso sí llegó un WhatsApp, reenviar no pregunta."""
+    b, enviados = _preparar(entorno, monkeypatch, ["aceptado"])
+    _dudoso_automatico(b, entorno.booking_id, minutos_atras=10)
+    asyncio.run(b._send_booking_reminder_by_kind(
+        b._get_booking_row_by_id(entorno.booking_id), "confirmed", raise_on_failure=False))
+    _reenviar(b, entorno.booking_id)
+    assert enviados == ["aceptado", "aceptado"]

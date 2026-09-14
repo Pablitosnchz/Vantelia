@@ -936,8 +936,20 @@ def test_whatsapp_reschedule_booking_by_code(api_module, monkeypatch):
             employee_id="", employee_name="", manage_url="", provider_booking_url="",
         )
 
+    botones: list[dict] = []
+
+    async def _fake_buttons(**kw):
+        botones.append(kw)
+        return True
+
+    async def _hueco_libre(*_a, **_kw):
+        return True
+
+    from backend import booking as _booking
     monkeypatch.setattr(api_module, "_send_whatsapp_text", _fake_send)
+    monkeypatch.setattr(api_module, "_send_whatsapp_buttons", _fake_buttons)
     monkeypatch.setattr(api_module, "_update_booking_details", _fake_update)
+    monkeypatch.setattr(_booking, "_reschedule_slot_is_free", _hueco_libre)
 
     record = {
         "id": f"bk_wa_resched_{uuid.uuid4().hex[:8]}",
@@ -968,13 +980,26 @@ def test_whatsapp_reschedule_booking_by_code(api_module, monkeypatch):
             interactive_id="",
             request=None,
         ))
+        # Fase 4 (14-sep-2026): primero se ofrece el cambio; solo su botón lo ejecuta.
+        assert not reschedule_calls, "No debe mover la cita antes de aceptar el cambio"
+        assert botones and botones[-1]["buttons"][0][0].startswith("resched_yes:")
+        _run_async(api_module._handle_whatsapp_message(
+            cliente_id="demo",
+            phone_number_id="WA_NUM_ID",
+            from_number="34600222333",
+            incoming_text="Sí, cambiar cita",
+            interactive_id=botones[-1]["buttons"][0][0],
+            request=None,
+        ))
         assert reschedule_calls, "Debe haberse llamado a _update_booking_details"
         assert reschedule_calls[0]["hora"] == "11:00"
         assert reschedule_calls[0]["source"] == "whatsapp"
         assert any(any(w in m.lower() for w in ("reprogramad", "actualizad", "cambiad", "listo"))
                    for m in wa_responses), f"Respuesta WA inesperada: {wa_responses}"
     finally:
+        from backend import reserva as _reserva
         api_module._wa_clear_flow("demo", "34600222333")
+        _reserva.olvidar("demo", "34600222333")
         with api_module._get_db_connection() as conn:
             conn.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
             conn.commit()

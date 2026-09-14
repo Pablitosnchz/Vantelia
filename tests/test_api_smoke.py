@@ -4149,8 +4149,20 @@ def test_whatsapp_reschedule_success_speaks_human_date(api_module, monkeypatch: 
         sent_messages.append(text)
         return True
 
+    botones = []
+
+    async def _capture_buttons(**kw):
+        botones.append(kw)
+        return True
+
+    async def _hueco_libre(*_a, **_kw):
+        return True
+
+    from backend import booking as _booking
     monkeypatch.setattr(api_module, "_update_booking_details", _fake_update)
     monkeypatch.setattr(api_module, "_send_whatsapp_text", _capture_whatsapp_text)
+    monkeypatch.setattr(api_module, "_send_whatsapp_buttons", _capture_buttons)
+    monkeypatch.setattr(_booking, "_reschedule_slot_is_free", _hueco_libre)
     try:
         api_module._store_booking(record)
         code = record["booking_code"]
@@ -4164,11 +4176,25 @@ def test_whatsapp_reschedule_success_speaks_human_date(api_module, monkeypatch: 
                 request=None,
             )
         )
+        # Fase 4 (14-sep-2026): primero el resumen del cambio, también en humano; el botón lo ejecuta.
+        assert botones and "15 de junio" in botones[-1]["body"] and "2026-06-15" not in botones[-1]["body"]
+        asyncio.run(
+            api_module._handle_whatsapp_message(
+                cliente_id="demo",
+                phone_number_id="1234567890",
+                from_number="34611222333",
+                incoming_text="Sí, cambiar cita",
+                interactive_id=botones[-1]["buttons"][0][0],
+                request=None,
+            )
+        )
         joined = " ".join(sent_messages)
         assert "15 de junio" in joined
         assert "2026-06-15" not in joined
     finally:
+        from backend import reserva as _reserva
         api_module._wa_clear_flow("demo", "34611222333")
+        _reserva.olvidar("demo", "34611222333")
         with api_module._get_db_connection() as conn:
             conn.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
             conn.commit()

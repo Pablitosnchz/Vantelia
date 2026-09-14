@@ -3042,6 +3042,174 @@ async def _wa_responder_cancelacion(*, cliente_id, phone_number_id, from_number,
         from_number=from_number, request=request, texto=texto)
 
 
+async def _wa_texto_reprogramacion(*, cliente_id, phone_number_id, from_number, texto, request):
+    enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id,
+        phone_number_id=phone_number_id, to_number=from_number, text=texto)
+    if enviado:
+        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+            respuesta=texto, intent="gestion_reprogramacion")
+    return enviado
+
+
+async def _wa_ofrecer_reprogramacion(*, cliente_id, phone_number_id, from_number, flow, request,
+                                     telefono="", email=""):
+    """Enseña el cambio y espera a que lo acepte: no mueve la cita.
+
+    Fase 4, decisión de Pablo del 14-sep-2026 («solo el flujo de listas»). Antes, en cuanto
+    tenía día y hora, el flujo guiado movía la cita. Como la cancelación
+    (`_wa_ofrecer_cancelacion`): el núcleo verifica la cita y el hueco, y el resumen queda
+    guardado con identidad para que solo su botón autorice el cambio.
+    """
+    from backend import reserva, conversation_state
+    codigo, fecha, hora = flow.booking_code, flow.fecha, flow.hora
+    estado = reserva.cargar(cliente_id, from_number)
+    anterior = reserva.leer_confirmacion_reserva(estado)
+    if anterior and anterior["estado"] == "aceptada":
+        await _wa_texto_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="Hay una operación aceptada cuyo resultado está pendiente. Comprueba primero esa gestión antes de iniciar otro cambio.")
+        return
+    fila, error = await booking._prepare_booking_reschedule(cliente_id, codigo,
+        trusted_phone=from_number, telefono=telefono, email=email)
+    if error:
+        if error.get("needs_verification"):
+            flow.flow = "manage_reschedule_verify"
+            await _wa_texto_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, request=request,
+                texto="Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita.")
+            return
+        _wa_clear_flow(cliente_id, from_number)
+        await _wa_texto_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto=str(error.get("error") or "No se pudo consultar la cita."))
+        return
+    if not await booking._reschedule_slot_is_free(cliente_id, fila, fecha, hora):
+        _wa_clear_flow(cliente_id, from_number)
+        ocupado = {"ok": False, "error": "Ese hueco no está disponible.",
+                   "booking_id": fila["id"], "employee_id": fila["employee_id"] or ""}
+        await _wa_texto_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="⚠️ " + await booking._reschedule_failure_text(cliente_id, ocupado, fecha, hora))
+        return
+    reserva.empezar_otra_gestion(estado)
+    datos = booking._booking_reschedule_snapshot(fila, fecha, hora)
+    datos.update(accion="reprogramar", from_number=from_number, telefono=telefono or "", email=email or "")
+    estado.intencion, estado.codigo = "reprogramar", datos["booking_code"]
+    identidad = reserva.preparar_confirmacion_reserva(estado, datos)
+    try:
+        reserva.guardar(cliente_id, from_number, estado)
+    except conversation_state.ConversationStateConflict:
+        return
+    lineas = ["¿Cambiamos tu cita?", "", "🔖 *%s*" % datos["booking_code"]]
+    if datos["servicio"]:
+        lineas.append(datos["servicio"])
+    lineas.append("📅 Ahora: %s a las %s" % (_wa_fecha_humana(datos["booking_date"]), datos["booking_time"]))
+    lineas.append("➡️ Nueva: %s a las %s" % (_wa_fecha_humana(datos["nueva_fecha"]), datos["nueva_hora"]))
+    if datos["employee_name"]:
+        lineas.append("Con " + datos["employee_name"])
+    cuerpo = "\n".join(lineas)
+    enviado = await messaging._send_whatsapp_buttons(cliente_id=cliente_id,
+        phone_number_id=phone_number_id, to_number=from_number, header="Cambiar cita", body=cuerpo,
+        buttons=[("resched_yes:" + identidad, "Sí, cambiar cita"),
+                 ("resched_no:" + identidad, "Mantener cita")])
+    flow.flow = "manage_reschedule_confirm"
+    if not enviado:
+        return
+    if reserva.avanzar_confirmacion_reserva(estado, identidad, "ofrecida"):
+        try:
+            reserva.guardar(cliente_id, from_number, estado)
+        except conversation_state.ConversationStateConflict:
+            return
+    _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+        respuesta=cuerpo + "\n[Sí, cambiar cita] [Mantener cita]", intent="oferta_reprogramacion")
+
+
+async def _wa_responder_reprogramacion(*, cliente_id, phone_number_id, from_number, iid, request):
+    """La aceptación referencia el cambio guardado; nunca toma código, día u hora del flow.
+
+    Mover no rompe nada que no se pueda volver a mover: si la cita ya está en el día y la
+    hora aceptados se contesta que está hecho sin repetir, y un resultado perdido deja volver
+    a pulsar en vez de mandar a la clienta a llamar al negocio.
+    """
+    from backend import reserva, conversation_state
+    estado = reserva.cargar(cliente_id, from_number)
+    propuesta = reserva.leer_confirmacion_reserva(estado, incluir_hecha=True)
+    accion, _, identidad = iid.partition(":")
+    datos = propuesta["datos"] if propuesta else {}
+    texto = "Esa solicitud ya no está vigente. Vuelve a pedir el cambio para revisar la cita."
+    claves = set(booking._booking_reschedule_snapshot(datos, "", "")) | {
+        "accion", "from_number", "telefono", "email"}
+    valida = (accion in ("resched_yes", "resched_no") and propuesta and propuesta["id"] == identidad
+              and propuesta["estado"] in ("ofrecida", "aceptada")
+              and estado.intencion == "reprogramar" and estado.codigo == datos.get("booking_code")
+              and datos.get("accion") == "reprogramar" and datos.get("from_number") == from_number
+              and set(datos) == claves)
+    if valida and accion == "resched_no" and propuesta["estado"] == "ofrecida":
+        estado.confirmacion_reserva_json = ""
+        estado.intencion = ""
+        try:
+            reserva.guardar(cliente_id, from_number, estado)
+        except conversation_state.ConversationStateConflict:
+            return
+        appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+        texto = "No he cambiado la cita."
+    elif valida and accion == "resched_yes":
+        nueva_fecha, nueva_hora = datos["nueva_fecha"], datos["nueva_hora"]
+        resultado = None
+        fila, error = await booking._lookup_and_verify_booking_by_code(cliente_id, datos["booking_code"],
+            trusted_phone=from_number, telefono=datos["telefono"], email=datos["email"])
+        if (not error and fila is not None and str(fila["id"]) == datos["id"]
+                and fila["booking_date"] == nueva_fecha and fila["booking_time"] == nueva_hora):
+            resultado = {"ok": True}  # ya está donde aceptó: no se repite
+        else:
+            snapshot = booking._booking_cancellation_snapshot(datos)
+            fila, error = await booking._prepare_booking_reschedule(cliente_id, datos["booking_code"],
+                trusted_phone=from_number, telefono=datos["telefono"], email=datos["email"],
+                expected_snapshot=snapshot)
+            if error:
+                texto = str(error.get("error") or "No se pudo verificar la cita.")
+            else:
+                if propuesta["estado"] == "ofrecida":
+                    if not reserva.avanzar_confirmacion_reserva(estado, identidad, "aceptada"):
+                        return
+                    try:
+                        reserva.guardar(cliente_id, from_number, estado)
+                    except conversation_state.ConversationStateConflict:
+                        return
+                try:
+                    resultado = await booking._reschedule_booking_by_code(cliente_id, datos["booking_code"],
+                        nueva_fecha, nueva_hora, trusted_phone=from_number, telefono=datos["telefono"],
+                        email=datos["email"], source="whatsapp", request=request, expected_snapshot=snapshot)
+                except Exception:  # noqa: BLE001 - no se sabe si se guardó
+                    settings.logger.exception("[whatsapp] resultado de reprogramación desconocido")
+                    resultado = {"ok": False, "resultado_desconocido": True}
+        if resultado is not None:
+            actual = reserva.cargar(cliente_id, from_number)
+            vigente = reserva.leer_confirmacion_reserva(actual, incluir_hecha=True)
+            if vigente and vigente["id"] == identidad:
+                if resultado.get("ok"):
+                    actual.hecho = True
+                elif not resultado.get("resultado_desconocido"):
+                    actual.confirmacion_reserva_json = ""
+                try:
+                    reserva.guardar(cliente_id, from_number, actual)
+                except conversation_state.ConversationStateConflict:
+                    pass
+            if resultado.get("ok"):
+                appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+                texto = ("✅ Listo, he cambiado la cita %s al %s a las %s. El número de reserva sigue siendo el mismo."
+                         % (datos["booking_code"], _wa_fecha_humana(nueva_fecha), nueva_hora))
+            elif resultado.get("resultado_desconocido"):
+                texto = ("No he podido confirmar si la cita se ha cambiado. Vuelve a pulsar «Sí, cambiar cita» "
+                         "en unos minutos: si ya está cambiada te lo diré sin moverla otra vez.")
+            elif resultado.get("cita_cambiada"):
+                texto = str(resultado.get("error") or "La cita ha cambiado desde el resumen.")
+            else:
+                texto = "⚠️ " + await booking._reschedule_failure_text(cliente_id, resultado, nueva_fecha, nueva_hora)
+    await _wa_texto_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        from_number=from_number, request=request, texto=texto)
+
+
 async def _wa_handle_reminder_reply(
     *,
     cliente_id: str,
@@ -3155,6 +3323,11 @@ async def _handle_whatsapp_message(
 
     if iid.startswith(("cancel_yes", "cancel_no")):
         await _wa_responder_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, iid=iid, request=request)
+        return
+
+    if iid.startswith(("resched_yes", "resched_no")):
+        await _wa_responder_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
             from_number=from_number, iid=iid, request=request)
         return
 
@@ -3478,35 +3651,9 @@ async def _handle_whatsapp_message(
                 text=f"Indica la nueva hora para la cita {flow.booking_code}.",
             )
             return
-        flow.flow = "manage_reschedule_verify"
-        result = await booking._reschedule_booking_by_code(
-            cliente_id,
-            flow.booking_code,
-            flow.fecha,
-            flow.hora,
-            trusted_phone=from_number,
-            telefono=flow.verify_phone,
-            email=flow.verify_email,
-            source="whatsapp",
-            request=request,
-        )
-        if result.get("ok"):
-            _wa_clear_flow(cliente_id, from_number)
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El número de reserva sigue siendo el mismo.",
-            )
-            return
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=(
-                "Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita."
-                if result.get("needs_verification")
-                else f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}"
-            ),
-        )
-        if not result.get("needs_verification"):
-            _wa_clear_flow(cliente_id, from_number)
+        await _wa_ofrecer_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, flow=flow, request=request,
+            telefono=flow.verify_phone, email=flow.verify_email)
         return
 
     if trigger_agendar and booking_enabled:
@@ -3615,34 +3762,8 @@ async def _handle_whatsapp_message(
             )
             return
         flow.hora = hora
-        result = await booking._reschedule_booking_by_code(
-            cliente_id,
-            flow.booking_code,
-            flow.fecha,
-            flow.hora,
-            trusted_phone=from_number,
-            source="whatsapp",
-            request=request,
-        )
-        if result.get("ok"):
-            _wa_clear_flow(cliente_id, from_number)
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El número de reserva sigue siendo el mismo.",
-            )
-            return
-        if result.get("needs_verification"):
-            flow.flow = "manage_reschedule_verify"
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita.",
-            )
-            return
-        _wa_clear_flow(cliente_id, from_number)
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}",
-        )
+        await _wa_ofrecer_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, flow=flow, request=request)
         return
 
     if flow.flow == "manage_reschedule_verify":
@@ -3654,30 +3775,14 @@ async def _handle_whatsapp_message(
                 text="Envíame el teléfono o el email usado en la reserva para poder verificarla.",
             )
             return
-        result = await booking._reschedule_booking_by_code(
-            cliente_id,
-            flow.booking_code,
-            flow.fecha,
-            flow.hora,
-            trusted_phone=from_number,
-            telefono=phone,
-            email=email,
-            source="whatsapp",
-            request=request,
-        )
-        if result.get("ok"):
-            _wa_clear_flow(cliente_id, from_number)
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El número de reserva sigue siendo el mismo.",
-            )
-            return
-        await messaging._send_whatsapp_text(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}",
-        )
-        if not result.get("needs_verification"):
-            _wa_clear_flow(cliente_id, from_number)
+        await _wa_ofrecer_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, flow=flow, request=request, telefono=phone, email=email)
+        return
+
+    if flow.flow == "manage_reschedule_confirm":
+        await _wa_texto_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            from_number=from_number, request=request,
+            texto="Usa los botones del último resumen para cambiar o mantener esa cita. Puedes escribir menú para salir.")
         return
 
     # FLUJO BOOKING - Centro (solo multi-centro con numero generico)
