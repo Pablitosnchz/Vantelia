@@ -985,3 +985,21 @@ a fin en todas.
   tenían destinatario.
 - Revisión pedida a Astra sobre ef0d0dc (18:49). Alicia: SIN_CONECTAR a las 18:43.
 - Siguiente: resultado de la suite y veredicto de Astra; desplegar solo con orden de Pablo.
+
+## 2026-09-14 18:50–19:15 +0200 - revisión de Astra sobre ef0d0dc y arreglos (Claude)
+
+- Suite completa sobre el árbol de ef0d0dc (18:50–19:08): 2759 passed, 1 skipped, 0 fallos.
+- Astra (buzón): CAMBIOS, dos hallazgos reproducidos extrayendo las funciones del SHA, sin modelo ni producción.
+  1. Descansos: jornada 09–18 con pausa 13–14 y bloqueos 09–13 y 14–18 seguía «abierto». 45f3d11 cuenta los descansos
+     del negocio y de cada profesional como no laborables. Test nuevo; quitando las pausas del cálculo falla
+     («solo le queda el descanso») y el fichero se restauró.
+  2. `debe_varios` no equivalía a dar el horario: «todos los días» y «excepto los domingos» suspendían y «hoy lunes…
+     mañana martes» aprobaba. 45f3d11 lo sustituye por `horario_semanal` (dos días de la semana, la semana entera o la
+     excepción; no cuentan los días pegados a hoy/mañana). Sus tres casos son tests. No comprueba que el horario dicho
+     sea el del negocio. Sin medir con modelo.
+- Pruebas: dirigidas y banco 79 passed; suites relacionadas 259 passed (una tirada anterior se descartó porque arrancó
+  mientras la comprobación causal tenía `agenda.py` modificado).
+- Pablo: «puedes delegar cosas a astra». Encargo a Astra (19:15): revisar 45f3d11 y, en su rama desde 45f3d11, la misma
+  clase de fallo en `rag._availability_snapshot_for_day`, el selector de días del WhatsApp guiado y `calidad.py`.
+- Alicia: SIN_CONECTAR a las 19:09.
+- Siguiente: suite completa de 45f3d11, veredicto de Astra; desplegar solo con orden de Pablo.
