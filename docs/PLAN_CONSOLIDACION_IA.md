@@ -422,6 +422,50 @@ falsos, dobles citas ni historias de mensajes no enviados. Horarios, duraciones 
 ocupación coinciden entre oferta y escritura. Revisar recordatorios existentes
 con Claude, incluyendo aceptación del proveedor y prevención de duplicados.
 
+### Inventario de frenos del agente (fase 4, 14-sep-2026)
+
+Cada freno de `backend/agent.py` (`traza.freno`, visible en `agent_turns.frenos_json`)
+con el caso que protege y dónde debería vivir su decisión cuando se consolide. «Estado»
+= lo decide `reserva.Estado`/propuesta; «núcleo» = una tool o `booking` lo impide al
+escribir; «salida» = comprueba lo que va a leer la clienta contra un hecho (agenda,
+catálogo, política). Un freno de salida que ya tiene su hecho en el núcleo es candidato a
+retirarse cuando el núcleo lo cubra en todos los canales; ninguno se retira sin su caso
+medido.
+
+| Freno | Protege | Hecho que consulta | Dueño final | Revisado hoy |
+| --- | --- | --- | --- | --- |
+| `pide_la_valoracion` | Aceptar la valoración ofrecida sin repreguntar técnica | propuesta del estado | estado | — |
+| `afirmo_sin_mirar_la_agenda` | «El jueves estamos cerrados» sin consultar | consulta de agenda en el turno | salida | — |
+| `ofrecio_una_hora_que_no_tiene` | Ofrecer una hora inexistente | huecos + agenda real del día | salida → núcleo | 3167313: muestra ≠ todo lo libre |
+| `lo_anuncio_sin_hacerlo` | «Un momento, lo miro» sin mirar | consulta en el turno | salida | — |
+| `dijo_cerrado_estando_abierto` | Decir cerrado un día que abre sin hueco | horario del día referido | salida | 3f11dea: mira de qué día habla |
+| `precio_que_no_se_da` | Dar precios que el negocio oculta | política del negocio | política | — |
+| `duracion_que_no_pidio` | Soltar duraciones no preguntadas | lo que ha preguntado | salida | — |
+| `le_repitio_su_muletilla` | Repetirle su frase como si fuera servicio | catálogo | salida | — |
+| `vendio_sobre_una_queja` | Vender otro tratamiento ante una queja | intención queja | política | — |
+| `insistio_tras_dejarlo` | Seguir pidiendo datos cuando lo deja | lo que ha dicho | estado | — |
+| `eligio_por_ella` | Recomendar técnica cuando el negocio dice que no | Q&A escrita del negocio | política | f288ddf: «qué me recomiendas» |
+| `fianza_que_no_le_toca_decir` | Cifras de fianza de valoración | política del servicio | política | — |
+| `nego_lo_que_no_sabe` | «No tenemos promociones» sin saberlo | Q&A del negocio | salida | — |
+| `se_repetia` | Repetir la misma respuesta | historial | salida | — |
+| `dijo_que_hay_cita_sin_haberla` | Afirmar una cita confirmada que no existe | agenda (citas vivas) | salida → núcleo | 36b4d8d: su cita viva no se niega |
+| `hora_que_no_es_la_suya` | Confirmarle otra hora que la de su cita | agenda (citas vivas) | salida | — |
+| `dijo_haberlo_hecho_sin_hacerlo` | «Acabo de reservar/cancelar» sin tool | mutación en el turno | salida | — |
+| `daba_por_viva_una_cita_cancelada` | Dar por viva una cita anulada | estado `cancelada` | estado | — |
+| `daba_la_cita_por_hecha` | «Te he reservado» sin cita | estado + mutación | salida | — |
+| `cita_de_una_oferta_retirada` | Cita del servicio de una oferta retirada | propuesta `invalidada` | estado | 3f11dea (nuevo) |
+| `dia_de_la_hora_elegida` | Hora del código en otro día | estado `hora_del_codigo` | estado | — |
+| `cancelar_sin_pedirlo` | Cancelar sin petición | lo que escribió + pregunta de anular | núcleo | 2a794c2, 0bca1eb |
+| `cita_duplicada` | Coger dos citas seguidas | citas creadas en el turno | núcleo | — |
+| `cita_sin_pedirla` | Crear cita a quien solo preguntaba | intención + lo que escribió | estado | — |
+| `se_acabaron_las_vueltas` | Quedarse sin respuesta | contador de vueltas | técnico | — |
+| `revento` | Fallo del proveedor del modelo silencioso | excepción del cliente OpenAI | técnico | — |
+
+Frenos en falso detectados con modelo real el 13-sep y ya arreglados: `ofrecio_una_hora_que_no_tiene`,
+`dijo_cerrado_estando_abierto`, `dijo_que_hay_cita_sin_haberla`. Siguiente paso de la fase 4: medir la tasa de
+cada freno en conversaciones reales de Alicia (`agent_turns.frenos_json`) y retirar o mover al núcleo los que no
+protejan un caso vivo.
+
 ## Fase 5 — aceptación del candidato
 
 Pruebas dirigidas por fase, regresiones rojas sin arreglo, suite completa sobre

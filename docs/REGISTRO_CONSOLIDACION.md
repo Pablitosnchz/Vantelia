@@ -644,3 +644,35 @@ a fin en todas.
   local del 3-sep y las copias viejas de `storage/mediciones` (27-ago y 10-sep), con permiso de Pablo.
 - Astra sin créditos hasta el 13-oct.
 - Siguiente: vigilar las conversaciones reales de Alicia desde el despliegue (frenos, citas creadas); hacer determinista la elección del pack con `preferir_packs` (mechas en 75 min en vez de 360); que una oferta retirada desde el portal no vuelva a ofrecerse y una copia por intento en el medidor; fechas siempre en humano; recomendación ante caída del pelo; frenos en falso; plantilla de recordatorio de Meta; integrar en `main` y subirlo..
+
+## 2026-09-14 01:30–02:18 +0200 - remate tras el despliegue: seis arreglos más (Claude)
+
+- Orden de Pablo (14-sep): subir `main` a GitHub (hecho: 5b7be4d..5c1b5f4) y seguir rematando lo
+  pendiente y el plan de arquitectura; todavía no se instala en el negocio.
+- Arreglos, todos con test rojo sin el arreglo y controles:
+  - 74e2894 **pack con `preferir_packs`**: con `tecnica: "mechas medio"` extraída por el modelo se elegía
+    «Mechas medio» (75 min) en vez del pack de 360 (humo del 13-sep, mismo turno con resultado distinto).
+    Reproducido en test; la talla se quita de la técnica antes de filtrar. Y **fechas ISO** de la respuesta
+    («2026-09-15») salen en humano, sin tocar enlaces ni códigos.
+  - 3f11dea **freno `dijo_cerrado_estando_abierto`** mira de qué día habla (metareview, domingo: «hoy estamos
+    cerrados» era verdad). **Oferta retirada**: `crear_cita` del servicio de una propuesta invalidada se
+    rechaza si ella no lo pide por su nombre (escenario de regla apagada del 13-sep).
+  - 4533dee **reloj de la ventana de reserva**: `_validate_booking_window` usaba `datetime.now` y rechazaba como
+    pasada la fecha elegida con el reloj de la prueba; `test_calendario_de_las_medidas[12]` empezó a fallar
+    solo el 14-sep y el despliegue corre la suite.
+  - f288ddf **«qué me recomiendas»** cuenta como duda al elegir: se aplica lo que el negocio tiene escrito
+    (caso `recomienda-ante-un-problema`: a la caída del pelo se le proponía un alisado).
+  - 36b4d8d **freno `dijo_que_hay_cita_sin_haberla`** no niega una cita viva de su teléfono a esa hora
+    (reprogramar del 13-sep).
+- Inventario de los 26 frenos del agente en la fase 4 del plan (caso, hecho que consultan, dueño final).
+- `test_reserva_concurrente` (dos reprogramaciones al mismo hueco) falló una vez bajo carga en una tanda de 60
+  ficheros y pasó 4/4 a solas con y sin el cambio: sensible a la carga, anotado.
+- Pregunta abierta para Pablo: en la config de PRODUCCIÓN Alicia no tiene `exigir_dos_apellidos` (el
+  `config.json` del repo sí, desde 550aafe); se mide y funciona como producción. No se cambia sin su orden.
+- Recordatorios por WhatsApp de Alicia, mirado en el snapshot de producción: `whatsapp.enabled` en false, sin cuenta en
+  `client_whatsapp_accounts` y sin plantilla en `wa_templates`. La plantilla `vantelia_recordatorio_cita` no
+  se puede dar de alta hasta que su número esté conectado: dependencia externa (Alicia + Meta), no de código.
+- Snapshot nuevo de producción (769 citas, 4 reglas de Alicia) y config traídos en solo lectura para medir; se
+  borran al acabar.
+- Siguiente: suite completa sobre 36b4d8d; medición con modelo real (crítico, banco Alicia, humo, portal,
+  metareview); después, contar resultados a Pablo y proponer despliegue.
