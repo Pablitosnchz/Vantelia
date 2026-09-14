@@ -15,6 +15,7 @@ presentan a la vez y alguien se queda sin su cita.
 """
 from __future__ import annotations
 
+import asyncio
 import threading
 from datetime import date, timedelta
 
@@ -131,42 +132,60 @@ def test_dos_reprogramaciones_al_mismo_hueco_solo_dejan_una(client: TestClient):
     """Reprogramar tiene la MISMA estructura de riesgo: comprobar, llamar al
     proveedor, guardar.
 
-    HONESTIDAD SOBRE ESTE TEST: la carrera NO se ha conseguido reproducir aqui
-    (pasa con y sin la proteccion, incluso ensanchando la ventana a proposito).
-    La proteccion se ha puesto igual, por simetria con la de crear —que si se
-    reprodujo— porque es barata y el patron es identico. Este test fija el
-    comportamiento deseado; no demuestra que hubiera un fallo.
-    """
-    primera = client.post("/agendar", json={
-        "cliente_id": "demo", "nombre": "Gema", "email": "gema@ejemplo.com",
-        "telefono": "600111222", "fecha": _dia_util(7), "hora": "15:00",
-        "servicio": "Consulta", "notas": "",
-    }, headers=ORIGEN)
-    segunda = client.post("/agendar", json={
-        "cliente_id": "demo", "nombre": "Hilda", "email": "hilda@ejemplo.com",
-        "telefono": "600333444", "fecha": _dia_util(7), "hora": "15:30",
-        "servicio": "Consulta", "notas": "",
-    }, headers=ORIGEN)
-    assert primera.status_code == 200 and segunda.status_code == 200
+    HASTA EL 14-sep-2026 ESTE TEST NO PROBABA NADA. Construia el cambio con
+    `BookingReschedulePayload`, que no tiene `nombre` ni `servicio` (Pydantic 2 los
+    descarta), y llamaba a `_update_booking_details` sin el `source` obligatorio: los
+    dos hilos acababan SIEMPRE en excepcion, `count(200) <= 1` se cumplia solo, y por
+    eso "pasaba con y sin la proteccion". Ademas las dos citas se creaban a horas
+    fijas de un dia fijo y con profesional asignado al azar: en la suite completa,
+    con huecos ocupados por otros tests, la creacion fallaba (rojo que dependia del
+    orden) o caian en profesionales distintos y ya no competian por nada.
 
-    from backend import booking
+    Ahora las dos citas son del MISMO profesional, en un dia en que las dos caben,
+    se mueven con el payload de verdad, y se exige que gane una y la otra reciba el
+    409 limpio. Sin la re-comprobacion con el lock, este test falla.
+    """
+    from backend import agenda, booking
+
+    def _crear(nombre, telefono, dia, hora):
+        # Sin `employee_id`: la agenda general no se puede elegir desde el formulario
+        # (400), asi que se comprueba DESPUES que las dos hayan caido en la misma.
+        return client.post("/agendar", json={
+            "cliente_id": "demo", "nombre": nombre, "email": "%s@ejemplo.com" % nombre.lower(),
+            "telefono": telefono, "fecha": dia, "hora": hora, "servicio": "Consulta", "notas": "",
+        }, headers=ORIGEN)
+
+    destino = "16:30"   # las dos intentan moverse ahi a la vez
+    creadas = None
+    for desplazamiento in range(7, 30):
+        dia = _dia_util(desplazamiento)
+        primera = _crear("Gema", "600111222", dia, "15:00")
+        if primera.status_code != 200:
+            continue
+        empleado = primera.json()["employee_id"]
+        segunda = _crear("Hilda", "600333444", dia, "15:30")
+        if (segunda.status_code == 200 and segunda.json()["employee_id"] == empleado
+                and asyncio.run(agenda._booking_slot_available(
+                    "demo", dia, destino, duration_minutes=30, employee_id=empleado))):
+            creadas = (primera, segunda, dia, empleado)
+            break
+    assert creadas, "no se ha encontrado un dia con los tres huecos libres para el mismo profesional"
+    primera, segunda, dia, empleado = creadas
+    assert segunda.json()["employee_id"] == empleado
 
     tokens = [r.json()["manage_url"].rstrip("/").rsplit("/", 1)[-1] for r in (primera, segunda)]
-    destino = "16:30"  # libre: las dos intentan moverse ahi a la vez
     resultados = [None, None]
 
     def mover(indice):
-        import asyncio
-
-        from api_models import BookingReschedulePayload
+        from api_models import BookingUpdatePayload
 
         fila = booking._get_booking_row_by_token(tokens[indice])
-        datos = BookingReschedulePayload(
+        datos = BookingUpdatePayload(
             nombre=fila["nombre"], email=fila["email"], telefono=fila["telefono"],
-            servicio=fila["servicio"], fecha=_dia_util(7), hora=destino, notas="",
+            servicio=fila["servicio"], employee_id=empleado, fecha=dia, hora=destino, notas="",
         )
         try:
-            asyncio.run(booking._update_booking_details(fila, datos, None))
+            asyncio.run(booking._update_booking_details(fila, datos, None, source="test"))
             resultados[indice] = 200
         except Exception as exc:  # noqa: BLE001
             resultados[indice] = getattr(exc, "status_code", type(exc).__name__)
@@ -177,4 +196,12 @@ def test_dos_reprogramaciones_al_mismo_hueco_solo_dejan_una(client: TestClient):
     for hilo in hilos:
         hilo.join(timeout=60)
 
-    assert resultados.count(200) <= 1, "dos citas movidas al mismo hueco: %r" % (resultados,)
+    assert sorted(resultados, key=str) == [200, 409], (
+        "tienen que competir de verdad: gana una y la otra recibe 409, no %r" % (resultados,))
+    from backend import db
+
+    with db._get_db_connection() as conexion:
+        en_destino = conexion.execute(
+            "SELECT COUNT(*) FROM bookings WHERE cliente_id='demo' AND employee_id=? AND booking_date=?"
+            " AND booking_time=? AND status NOT IN ('cancelled')", (empleado, dia, destino)).fetchone()[0]
+    assert en_destino == 1, "dos citas del mismo profesional en el mismo hueco: %d" % en_destino
