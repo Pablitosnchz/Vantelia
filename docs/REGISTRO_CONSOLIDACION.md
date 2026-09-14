@@ -1195,3 +1195,14 @@ a fin en todas.
   PLAN_CONSOLIDACION_IA.
 - Producción sigue en 125725f. Siguiente: orden de Pablo para desplegar b6226bd y subir `main`.
 - Orden de Pablo (AskUserQuestion, 23:33): «Desplegar y subir main».
+
+## 2026-09-14 23:33–23:36 +0200 - despliegue de 629fabf (cierre del plan) (Claude)
+
+- `main` avanzado sin fusión a 629fabf (código b6226bd + docs del cierre). `.claude/settings.local.json` apartado con
+  stash y restaurado después (sin commitear, como antes).
+- `deploy.ps1 -SkipLocalChecks`: imagen construida, `/health` 200 (28 clientes), acceso público OK, humo en el servidor
+  5/5. VERSION.json 629fabf, `sucio` false.
+- Tras desplegar (solo lectura): diagnóstico de extensiones de Alicia en 15 min; «cuánto duran las extensiones?» →
+  su Q&A nueva; «cuánto cuestan las extensiones» → la de presupuesto.
+- `main` subido a GitHub (5adfd48..629fabf).
+- Siguiente: seguimiento fuera del plan (tabla de la fase 4); vigilar el uso real de Alicia cuando conecte su WhatsApp.
