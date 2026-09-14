@@ -7834,6 +7834,95 @@ def test_app_billing_checkout_creates_stripe_session(client: TestClient, api_mod
         api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = ""
 
 
+def _iso_z(momento):
+    return momento.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _checkout_con_prueba(client, api_module, monkeypatch, nombre, prueba):
+    """Checkout del plan Pro de un negocio con (o sin) la sección `prueba` en su config."""
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name=nombre)
+    monkeypatch.setattr(api_module, "stripe", _FakeStripe)
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_real")
+    cliente_id = client.get("/onboarding/state", cookies=cookies).json()["cliente_id"]
+    from backend import appstate
+    if prueba is not None:
+        appstate.CONFIG_CLIENTES[cliente_id]["prueba"] = dict(prueba)
+    api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = "price_test_pro_monthly"
+    _FakeStripeSessionApi.last_create_payload = None
+    try:
+        resp = client.post("/auth/app/billing/checkout", json={"plan": "pro", "billing_period": "monthly"},
+                           cookies=cookies)
+        assert resp.status_code == 200, resp.text
+        return _FakeStripeSessionApi.last_create_payload or {}
+    finally:
+        api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = ""
+        appstate.CONFIG_CLIENTES.get(cliente_id, {}).pop("prueba", None)
+
+
+def test_app_billing_checkout_con_prueba_no_cobra_hasta_su_fin(client: TestClient, api_module, monkeypatch):
+    """Decisión de Pablo del 14-sep-2026 (Alicia): días gratis del plan desde que conecta su
+    WhatsApp. Se suscribe metiendo ya el IBAN o la tarjeta y Stripe no cobra hasta el fin."""
+    hasta = api_module._utc_now().replace(microsecond=0) + timedelta(days=9)
+    sent = _checkout_con_prueba(client, api_module, monkeypatch, "Bot Prueba", {"dias": 10, "hasta": _iso_z(hasta)})
+    assert sent.get("subscription_data", {}).get("trial_end") == int(hasta.timestamp()), sent
+    assert sent["payment_method_collection"] == "always", "sin cobro inicial Stripe no pediria el IBAN ni la tarjeta"
+    assert sent["subscription_data"]["metadata"]["plan"] == "pro"
+
+
+def test_app_billing_checkout_prueba_sin_empezar_empieza_al_suscribirse(client: TestClient, api_module, monkeypatch):
+    """Si se suscribe antes de conectar WhatsApp, la prueba cuenta desde ahí: nunca se cobra antes."""
+    antes = api_module._utc_now()
+    sent = _checkout_con_prueba(client, api_module, monkeypatch, "Bot PruebaNueva", {"dias": 10})
+    fin = (sent.get("subscription_data") or {}).get("trial_end")
+    assert fin is not None, sent
+    assert int((antes + timedelta(days=10)).timestamp()) - 5 <= fin <= int((api_module._utc_now() + timedelta(days=10)).timestamp()) + 5
+
+
+@pytest.mark.parametrize("caso", ["sin_prueba", "vencida", "menos_de_48h"])
+def test_app_billing_checkout_sin_prueba_vigente_cobra_como_siempre(client: TestClient, api_module, monkeypatch, caso):
+    """Control: sin prueba, vencida o con menos de 48 h (Stripe no lo admite) no cambia nada."""
+    ahora = api_module._utc_now()
+    prueba = {
+        "sin_prueba": None,
+        "vencida": {"dias": 10, "hasta": _iso_z(ahora - timedelta(days=1))},
+        "menos_de_48h": {"dias": 10, "hasta": _iso_z(ahora + timedelta(hours=12))},
+    }[caso]
+    sent = _checkout_con_prueba(client, api_module, monkeypatch, "Bot SinPrueba " + caso, prueba)
+    assert "trial_end" not in (sent.get("subscription_data") or {})
+    assert sent["payment_method_collection"] == "if_required"
+
+
+def test_conectar_whatsapp_empieza_la_prueba_una_sola_vez(client: TestClient, api_module, monkeypatch):
+    """Los días gratis empiezan al conectar WhatsApp (decisión de Pablo, 14-sep-2026); reconectar no los alarga."""
+    from backend import appstate, clients, timeutils, wa_onboarding
+    from backend.routers import portal_app
+
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot PruebaWA")
+    cliente_id = client.get("/onboarding/state", cookies=cookies).json()["cliente_id"]
+
+    async def alta(*a, **k):
+        return {"phone_number_id": "PN_PRUEBA_" + cliente_id, "mode": "coexistence"}
+
+    monkeypatch.setattr(wa_onboarding, "complete_signup", alta)
+    monkeypatch.setattr(clients, "_plan_feature", lambda *a: True)
+    try:
+        asyncio.run(portal_app._completar_alta_whatsapp(cliente_id, code="sin-prueba"))
+        assert "prueba" not in appstate.CONFIG_CLIENTES[cliente_id], "a quien no tiene prueba no se le crea"
+
+        appstate.CONFIG_CLIENTES[cliente_id]["prueba"] = {"dias": 10}
+        antes = api_module._utc_now()
+        asyncio.run(portal_app._completar_alta_whatsapp(cliente_id, code="primera"))
+        primero = appstate.CONFIG_CLIENTES[cliente_id]["prueba"].get("hasta")
+        fin = timeutils._from_utc_iso(primero or "")
+        assert fin is not None, appstate.CONFIG_CLIENTES[cliente_id]["prueba"]
+        assert antes + timedelta(days=10) - timedelta(seconds=5) <= fin <= api_module._utc_now() + timedelta(days=10)
+
+        asyncio.run(portal_app._completar_alta_whatsapp(cliente_id, code="reconecta"))
+        assert appstate.CONFIG_CLIENTES[cliente_id]["prueba"]["hasta"] == primero, "reconectar alargo la prueba"
+    finally:
+        appstate.CONFIG_CLIENTES.get(cliente_id, {}).pop("prueba", None)
+
+
 def test_stripe_webhook_activates_self_serve_subscription(client: TestClient, api_module, monkeypatch):
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot WebhookSS")
     monkeypatch.setattr(api_module, "stripe", _FakeStripe)

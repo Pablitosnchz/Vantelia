@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import copy
 from fastapi import HTTPException, Request
@@ -81,6 +81,45 @@ def _require_active_subscription(cliente_id: str) -> None:
     sub = clients._client_subscription(cliente_id)
     if sub.get("status") in {"canceled", "past_due", "unpaid", "incomplete_expired"}:
         raise HTTPException(status_code=402, detail="La suscripcion de este cliente no esta activa.")
+
+
+# Periodo de prueba del plan por negocio: config `prueba` = {"dias": N, "hasta": ISO}. Decisión
+# de Pablo del 14-sep-2026 para Alicia: 10 días gratis desde que conecta su WhatsApp; se suscribe
+# metiendo ya el IBAN o la tarjeta y Stripe no cobra hasta que acaban. Sin la sección nada cambia.
+# Stripe exige que el fin de la prueba quede al menos 48 h en el futuro.
+_MARGEN_MINIMO_PRUEBA = timedelta(hours=48)
+
+
+def prueba_empezada(prueba: Any, ahora: datetime) -> Dict[str, Any]:
+    """La sección `prueba` con su fin fijado desde `ahora`. Si ya tenía fin, no se alarga."""
+    seccion = dict(prueba) if isinstance(prueba, dict) else {}
+    try:
+        dias = int(seccion.get("dias") or 0)
+    except (TypeError, ValueError):
+        dias = 0
+    if dias > 0 and not str(seccion.get("hasta") or "").strip():
+        fin = (ahora + timedelta(days=dias)).astimezone(timezone.utc).replace(microsecond=0)
+        seccion["hasta"] = fin.isoformat().replace("+00:00", "Z")
+    return seccion
+
+
+def fin_de_prueba(cliente_id: str, ahora: Optional[datetime] = None) -> Optional[datetime]:
+    """Hasta cuándo no se le cobra el plan a este negocio, o None si no tiene prueba vigente.
+
+    Sin fecha de fin (aún no ha conectado WhatsApp) la prueba cuenta desde que se suscribe: nunca
+    se cobra antes de los días acordados. Con menos de 48 h por delante se cobra como siempre.
+    """
+    ahora = ahora or timeutils._utc_now()
+    try:
+        prueba = clients._get_client_config(cliente_id).get("prueba")
+    except Exception:  # noqa: BLE001 - sin config no hay prueba
+        return None
+    fin = timeutils._from_utc_iso(str(prueba_empezada(prueba, ahora).get("hasta") or ""))
+    if fin is None:
+        return None
+    if fin.tzinfo is None:
+        fin = fin.replace(tzinfo=timezone.utc)
+    return fin if fin - ahora >= _MARGEN_MINIMO_PRUEBA else None
 
 
 def _count_conversations_this_month(cliente_id: str) -> int:
