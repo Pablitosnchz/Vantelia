@@ -493,3 +493,11 @@ orden, con TODO el fichero de demos después, da 23 verdes. Solo se modifica el
 instrumento; no se toca outreach ni se rebajan las comprobaciones. Suite completa
 es la siguiente puerta, seguida de revisión exacta; las métricas reales no se dan
 por medidas.
+
+### Relevo vigente — 14-sep-2026 14:12 Europe/Madrid
+
+- Testigo: Astra, por orden de Pablo mientras Claude no tiene créditos.
+- Rama: astra/aceptacion-e44886b, descendiente de 61a3081, código e44886b.
+- Suite de e44886b terminada: 2737 passed, 1 skipped, exit 0 (1429,37 s), verificada en bcssa0kh5.output. No repetir.
+- En ejecución: crítico con modelo real sobre copia local temporal; informe en TEMP/astra-e448-critico.json. No acredita todavía equivalencia de datos con producción ni aceptación global.
+- Siguiente: cerrar medición comparable y propuesta de despliegue. Ningún push ni despliegue autorizado en este relevo.

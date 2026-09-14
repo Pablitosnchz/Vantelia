@@ -830,3 +830,10 @@ a fin en todas.
 - Evidencia de e44886b: 89 y 51 dirigidos verdes. Suite completa: en marcha.
 - Siguiente: la suite; lo que queda de la fase 4 (reprogramar desde el agente, formularios, voz, widget y la
   cancelación con resultado desconocido sin reconciliar).
+
+## 2026-09-14 14:12 Europe/Madrid — Astra retoma el candidato
+
+- Pablo entrega el mando mientras Claude no tiene cuota. Rama propia `astra/aceptacion-e44886b`, descendiente de `61a3081`; código `e44886b`. Se conserva el cambio ajeno en `.claude/settings.local.json`.
+- Verificado el resultado final del proceso bcssa0kh5: **2737 passed, 1 skipped**, exit 0, 1429,37 s. No se repite esta suite. El resultado 2722 pertenece al padre 3e05b96.
+- Iniciada medición real acotada del crítico sobre copia local temporal (astra-e448-critico.db), informe astra-e448-critico.json en TEMP. Las llamadas al modelo responden 200. Pendiente resultado; la copia local no acredita equivalencia con el snapshot de producción usado por Claude.
+- Siguiente: resultado del crítico, comprobar condiciones del banco y medir segundo negocio; solo después proponer despliegue. Sin push ni despliegue.
