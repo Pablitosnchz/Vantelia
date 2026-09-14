@@ -1557,18 +1557,24 @@ def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "",
                   if any(o in textnorm._strip_accents(n.lower()) for n, _m in tratamientos)
                   or any(o in textnorm._strip_accents(str(f).lower()) for f, _p in tratamiento_por_elegir)]
     if aplicables and (valoraciones or valoracion_por_elegir):
-        valoracion = None
-        for servicio in booking._public_services_for_booking(cliente_id, location_id=location_id):
-            nombre_val = str(servicio.get("nombre") or "") if isinstance(servicio, dict) else ""
-            plano = textnorm._strip_accents(nombre_val.lower())
-            if (nombre_val and booking.es_servicio_de_valoracion(nombre_val)
-                    and any(o in plano for o in aplicables)):
-                minutos_val = _duracion_del_catalogo(cliente_id, nombre_val)
-                if minutos_val:
-                    valoracion = (textnorm.nombre_de_servicio_publico(nombre_val), minutos_val)
-                    break
-        if valoracion is None and valoraciones:
-            valoracion = valoraciones[0]
+        # Si ya ha elegido una valoracion de esa familia, es esa; si no, la del catalogo solo cuando
+        # hay UNA; con varias se le pregunta cual (revision de Astra a 15237a0: se elegia por orden).
+        valoracion = next(((n, m) for n, m in valoraciones
+                           if any(o in textnorm._strip_accents(n.lower()) for o in aplicables)), None)
+        candidatas = []
+        if valoracion is None:
+            for servicio in booking._public_services_for_booking(cliente_id, location_id=location_id):
+                nombre_val = str(servicio.get("nombre") or "") if isinstance(servicio, dict) else ""
+                plano = textnorm._strip_accents(nombre_val.lower())
+                if (nombre_val and booking.es_servicio_de_valoracion(nombre_val)
+                        and any(o in plano for o in aplicables)):
+                    minutos_val = _duracion_del_catalogo(cliente_id, nombre_val)
+                    if minutos_val:
+                        candidatas.append((textnorm.nombre_de_servicio_publico(nombre_val), minutos_val))
+            if len(candidatas) == 1:
+                valoracion = candidatas[0]
+            elif not candidatas and valoraciones:
+                valoracion = valoraciones[0]
         # «EXACTAMENTE» solo cuando no falta nada: `_recordar` da la pregunta por contestada con
         # esa palabra y la de duracion tiene que seguir viva mientras falte un dato.
         completo = valoracion is not None and not tratamiento_por_elegir
@@ -1585,9 +1591,11 @@ def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "",
             cabeza = ("%s es la cita de valoracion que este negocio pide ANTES de ese tratamiento (%d minutos): "
                       "va aparte y NO se suma." % valoracion)
         else:
+            opciones = ("cual de estas quiere, " + " o ".join("%s (%d minutos)" % c for c in candidatas)
+                        if len(candidatas) > 1
+                        else "; ".join(pregunta for _f, pregunta in valoracion_por_elegir))
             cabeza = ("Este negocio pide una cita de valoracion ANTES de ese tratamiento: va aparte y NO se suma. "
-                      "De la valoracion tienes que preguntarle: %s."
-                      % "; ".join(pregunta for _f, pregunta in valoracion_por_elegir))
+                      "De la valoracion tienes que preguntarle: %s." % opciones)
         return ("TE HA PREGUNTADO CUANTO TARDA. " + cabeza + tratamiento + falta
                 + " Dile cada cifra por separado y NO le des un total.")
 

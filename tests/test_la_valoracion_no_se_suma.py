@@ -161,6 +161,62 @@ def test_si_falta_elegir_la_valoracion_tampoco_se_suma(salon, monkeypatch):
     assert "aparte" in guia.lower(), guia
 
 
+def _otra_valoracion_de_extensiones():
+    from backend import db, timeutils
+
+    ahora = timeutils._utc_now().isoformat()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category, duration_minutes, price_cents,"
+            " description, is_active, sort_order, created_at, updated_at) VALUES ('demo','dur_val_diag_ext_mant',"
+            "'Diagnostico y presupuesto para extensiones mantenimiento','Extensiones',10,0,'',1,0,?,?)",
+            (ahora, ahora))
+        conexion.commit()
+
+
+def test_la_valoracion_ya_elegida_de_esa_familia_se_respeta(salon, monkeypatch):
+    """Revisión de Astra a 15237a0: con dos valoraciones de extensiones (25 y mantenimiento 10) y la de
+    mantenimiento ya elegida, la guía la cambiaba por la primera del catálogo."""
+    from backend import agent, booking, catalog_pick
+
+    _politica(monkeypatch, ["extensiones"])
+    _otra_valoracion_de_extensiones()
+    elegir = catalog_pick.elegir
+
+    def la_de_mantenimiento(cliente_id, datos, location_id=""):
+        if booking.es_servicio_de_valoracion(str(datos.get("familia") or "")):
+            return types.SimpleNamespace(servicio="Diagnostico y presupuesto para extensiones mantenimiento")
+        return elegir(cliente_id, datos, location_id)
+
+    monkeypatch.setattr(catalog_pick, "elegir", la_de_mantenimiento)
+    dicho = "diagnostico de mantenimiento y extensiones adhesivas, cuanto tarda?"
+    guia = agent._cuanto_duran_juntos(salon, dicho, mensaje=dicho)
+    assert "mantenimiento" in guia.lower() and "10 minutos" in guia, guia
+    assert "25 minutos" not in guia, "cambio la valoracion elegida por otra: %s" % guia
+
+
+def test_varias_valoraciones_de_esa_familia_sin_elegir_pregunta_cual(salon, monkeypatch):
+    """Revisión de Astra a 15237a0: si hay varias y no ha elegido, se pregunta; no se coge la primera."""
+    from backend import agent, booking, catalog_pick
+
+    _politica(monkeypatch, ["extensiones"])
+    _otra_valoracion_de_extensiones()
+    elegir, pregunta_para = catalog_pick.elegir, catalog_pick.pregunta_para
+
+    def sin_valoracion(cliente_id, datos, location_id=""):
+        if booking.es_servicio_de_valoracion(str(datos.get("familia") or "")):
+            return types.SimpleNamespace(servicio="", pendiente="valoracion")
+        return elegir(cliente_id, datos, location_id)
+
+    monkeypatch.setattr(catalog_pick, "elegir", sin_valoracion)
+    monkeypatch.setattr(catalog_pick, "pregunta_para",
+                        lambda e: "¿que diagnostico quieres?" if getattr(e, "pendiente", "") else pregunta_para(e))
+    dicho = "diagnostico y presupuesto y extensiones adhesivas, cuanto tarda?"
+    guia = agent._cuanto_duran_juntos(salon, dicho, mensaje=dicho)
+    assert "es la cita de valoracion" not in guia, "eligio una por orden: %s" % guia
+    assert "preguntarle" in guia.lower() and "aparte" in guia.lower(), guia
+
+
 def test_lo_que_va_junto_se_sigue_sumando(salon, monkeypatch):
     """Control: corte y secado en el mismo mensaje siguen siendo una sola cita."""
     from backend import agent

@@ -1157,3 +1157,8 @@ a fin en todas.
   reproducidos: (1) con varias familias pedidas elige la primera valoración del catálogo que case con cualquiera de
   ellas, no con la de la política (diagnóstico de corte en vez del de extensiones); (2) si la propia valoración está
   pendiente de elegir, no separa y la guía pide «dale el total sumado». Suite de cd9993d parada.
+- 15237a0: valoración buscada por las familias de la política que tocan a lo pedido; también se separa si la valoración
+  está por elegir; «EXACTAMENTE» solo sin nada pendiente. Tests rojos antes; 65 de duración verdes.
+- Veredicto de Astra sobre 15237a0 (buzón, 22:54): controles de cd9993d OK. CAMBIOS, uno reproducido: con dos
+  valoraciones de la misma familia (inicial 25 y mantenimiento 10) sustituye la ya elegida por la primera del catálogo;
+  si sigue ambigua hay que preguntar, no elegir por orden. Suite de 15237a0 parada.
