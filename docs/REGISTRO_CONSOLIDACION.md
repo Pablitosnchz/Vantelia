@@ -702,3 +702,20 @@ a fin en todas.
   medición: no queda ninguna copia con datos de clientas en la sesión.
 - Siguiente: contar a Pablo; despliegue de bec310f cuando él lo ordene. Los commits de esta noche NO se han subido a
   GitHub (`main` sigue en lo desplegado, 5c1b5f4).
+
+## 2026-09-14 05:15–07:24 +0200 - despliegue de bec310f y dos apellidos para Alicia (Claude)
+
+- Orden de Pablo (14-sep): «adelante» al despliegue de bec310f, a subir los commits a GitHub y a activar la
+  exigencia de dos apellidos para Alicia en producción.
+- Antes: producción en 109b091 (código 0bca1eb), `/health` 200. Local en 2360b1c (código bec310f), árbol limpio,
+  `py_compile` OK; suite completa ya verde sobre bec310f (2678 passed, 1 skipped); lo posterior es solo docs.
+- `exigir_dos_apellidos: true` para `alicia_rincon_estilistas` en `/srv/vantelia/config.json`, con copia previa
+  `/srv/vantelia-backups/config-pre-dos-apellidos-20260914-051931.json`; los otros 27 negocios, idénticos (huella
+  comprobada). Coincide con la decisión de Pablo del 11-sep y con el `config.json` del repo (550aafe); se puede
+  desactivar desde Q&A del portal.
+- Despliegue: `deploy.ps1 -SkipLocalChecks` 07:19:48–07:22:42, exit 0. Foto previa `pre-deploy-20260914-052015.db`, imagen anterior `vantelia:prev`, `/health` 200, humo en el servidor 5/5. VERSION.json 2360b1c sin árbol sucio.
+- Verificación tras desplegar: `exige_dos_apellidos(alicia)` True en el fichero y en la app viva; regla «Alisado: no sabe cual -> diagnostico» presente; `dice-que-si-y-acaba-en-cita` dentro del contenedor sobre una copia en /tmp: OK al primer intento, ya pide «tu nombre y tus dos apellidos» y acaba en el resumen del diagnóstico a nombre de Ana Ruiz Perez (copia e informe borrados, `/tmp` limpio).
+- GitHub: `main` avanzado sin fusión a 2360b1c y subido (5c1b5f4..2360b1c), sin ficheros sensibles.
+- Siguiente: vigilar las conversaciones reales de Alicia en cuanto lo use; fase 4 del plan con el inventario de
+  frenos; pendientes menores (vacaciones dice «agenda completa»; `horario-escrito-manda` depende del día);
+  WhatsApp de Alicia sin conectar (bloquea recordatorios).

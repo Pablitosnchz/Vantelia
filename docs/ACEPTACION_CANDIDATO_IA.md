@@ -1,6 +1,6 @@
 # Evidencia de aceptación del candidato IA
 
-Estado: **producción en 0bca1eb (desplegado el 14-sep 01:20); candidato siguiente bec310f en `claude/candidato`, medido el 14-sep y pendiente de orden de despliegue de Pablo** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
+Estado: **bec310f DESPLEGADO en producción el 14-sep a las 07:22 (VERSION.json 2360b1c) por orden de Pablo, con dos apellidos activos para Alicia** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
 
