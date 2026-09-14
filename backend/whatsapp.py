@@ -1731,12 +1731,18 @@ async def _wa_reabrir_creacion_liberada(*, cliente_id, phone_number_id, to_numbe
 
 
 def _wa_confirmacion_aceptada_es_antigua(propuesta):
-    """No liberar una clave ausente mientras otro turno aún puede reclamarla."""
+    """No liberar una clave ausente mientras otro turno aún puede reclamarla.
+
+    El margen cuenta desde la ACEPTACIÓN (cuando se vinculó la operación), no desde que se
+    creó el resumen. Con el resumen enviado hace 20 minutos, un doble toque en «Confirmar»
+    llegaba mientras el primero creaba la cita y le decía que no se había registrado
+    (revisión de Claude a 5a965e7, 14-sep-2026). Sin hora de aceptación no se reabre.
+    """
     try:
-        creada = float(propuesta.get("creada"))
+        vinculada = float((propuesta.get("operacion") or {}).get("vinculada"))
     except (AttributeError, TypeError, ValueError):
         return False
-    return time.time() - creada >= 15 * 60
+    return time.time() - vinculada >= 15 * 60
 
 
 async def _wa_recuperar_creacion_confirmada(*, cliente_id, phone_number_id, to_number, propuesta, request):

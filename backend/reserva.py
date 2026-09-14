@@ -211,7 +211,9 @@ def vincular_operacion_confirmada(estado: Estado, identidad: str, huella: str) -
             or propuesta.get("operacion") or not isinstance(huella, str) or len(huella) != 64):
         raise ValueError("La confirmación no admite una nueva ejecución")
     clave = "wa:" + identidad
-    propuesta["operacion"] = {"clave": clave, "huella": huella}
+    # `vinculada`: cuándo aceptó. El margen para reabrir una operación ausente cuenta
+    # desde aquí, no desde que se creó el resumen (whatsapp._wa_confirmacion_aceptada_es_antigua).
+    propuesta["operacion"] = {"clave": clave, "huella": huella, "vinculada": time.time()}
     estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
     return clave
 

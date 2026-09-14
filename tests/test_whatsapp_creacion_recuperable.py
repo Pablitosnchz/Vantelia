@@ -185,6 +185,39 @@ def test_operacion_ausente_antigua_reabre_pero_reciente_sigue_pendiente(canal, m
     assert any("no lleg" in texto.lower() for texto in textos)
 
 
+def test_doble_toque_con_el_resumen_antiguo_no_niega_la_cita_que_se_esta_creando(canal, monkeypatch):
+    """Revisión de Claude a 5a965e7 (14-sep-2026): el margen contaba desde que se creó el resumen.
+
+    Con el resumen enviado hace 20 minutos, un segundo «Confirmar» que llega mientras el
+    primero crea la cita (antes de reclamar la operación) reabría: la clienta recibía «La
+    solicitud anterior no llegó a registrarse» y un resumen nuevo, además de «Cita
+    confirmada». El margen cuenta desde la aceptación.
+    """
+    import threading
+    from backend import booking_operations, reserva, whatsapp
+    numero, responder, citas, textos, proveedores = canal
+    propuesta = reserva.leer_confirmacion_reserva(reserva.cargar("demo", numero))
+    reloj = whatsapp.time.time
+    monkeypatch.setattr(whatsapp.time, "time", lambda: max(reloj(), propuesta["creada"] + 20 * 60))
+    reclamar = booking_operations.claim_creation_operation
+    segundo = []
+    def reclamar_con_segundo_toque(*args, **kwargs):
+        if not segundo:
+            hilo = threading.Thread(target=responder, daemon=True)
+            segundo.append(hilo)
+            hilo.start()
+            hilo.join(timeout=20)
+        return reclamar(*args, **kwargs)
+    monkeypatch.setattr(booking_operations, "claim_creation_operation", reclamar_con_segundo_toque)
+    textos.clear()
+    responder()
+    assert segundo and not segundo[0].is_alive(), "el segundo toque no llego a procesarse"
+    assert len(citas()) == 1
+    assert any("cita confirmada" in t.lower() for t in textos)
+    assert not any("no lleg" in t.lower() for t in textos), (
+        "niega la cita que se esta creando y le manda otro resumen: %r" % textos)
+
+
 def test_confirmacion_no_entregada_se_recupera_sin_repetir_creacion(canal, monkeypatch):
     from backend import appstate, messaging, reserva
     numero, responder, citas, textos, proveedores = canal
