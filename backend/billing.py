@@ -123,13 +123,17 @@ def fin_de_prueba(cliente_id: str, ahora: Optional[datetime] = None) -> Optional
     return fin if fin > ahora else None
 
 
+# El fin se calcula aquí y Stripe lo comprueba al recibir la sesión: con 48 h justas llegaría por debajo.
+_HOLGURA_TRIAL_END = timedelta(minutes=10)
+
+
 def terminos_de_prueba_para_stripe(fin: datetime, ahora: datetime) -> Dict[str, int]:
     """Cómo decirle a Stripe que no cobre antes de `fin`.
 
     Stripe no admite `trial_end` a menos de 48 h: entonces días de prueba enteros redondeados
     hacia arriba, que como mucho cobran unas horas DESPUÉS del fin prometido, nunca antes.
     """
-    if fin - ahora >= _MARGEN_MINIMO_PRUEBA:
+    if fin - ahora >= _MARGEN_MINIMO_PRUEBA + _HOLGURA_TRIAL_END:
         return {"trial_end": int(fin.timestamp())}
     dias = int(-(-(fin - ahora).total_seconds() // 86400))
     return {"trial_period_days": max(1, dias)}

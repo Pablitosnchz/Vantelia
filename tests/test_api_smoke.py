@@ -7895,7 +7895,7 @@ def test_app_billing_checkout_sin_prueba_vigente_cobra_como_siempre(client: Test
     assert sent["payment_method_collection"] == "if_required"
 
 
-@pytest.mark.parametrize("horas,dias", [(12, 1), (36, 2)])
+@pytest.mark.parametrize("horas,dias", [(12, 1), (36, 2), (48 + 1 / 12, 3)])
 def test_app_billing_checkout_con_menos_de_48h_de_prueba_no_cobra_antes(
         client: TestClient, api_module, monkeypatch, horas, dias):
     """Revisión de Astra a cb87be4: conecta el 14 y se suscribe el 23, con 24 h gratis por delante.
