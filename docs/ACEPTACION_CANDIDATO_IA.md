@@ -25,7 +25,9 @@ contesta «Hoy estamos abiertos de 09:00 a 18:00, pero lamentablemente no tenemo
 horario de la semana. Fallo real de ese asistente, fuera del plan (tabla de la fase 4). Límites: una tirada por
 instrumento salvo el crítico; no mide WhatsApp real con Meta ni recordatorios (número de Alicia sin conectar). e230991
 solo cambia checkout, webhook de Stripe y la recuperación de una cancelación: medido con humo; su evidencia principal
-son las pruebas rojas antes del arreglo. Pendiente al escribir esto: suite completa de e230991 y revisión de Astra.
+son las pruebas rojas antes del arreglo. bef4193 (363e715 en `claude/cierre-plan`) añade solo una holgura de 10 min
+antes de mandar `trial_end` a Stripe, también con test rojo previo. Pendiente al escribir esto: suite completa de
+bef4193 y revisión de Astra (sin créditos hasta las 22:19).
 
 ## Candidato c8aaad8: medición del 14-sep-2026, 15:40–16:24 (Claude)
 

@@ -1104,3 +1104,9 @@ a fin en todas.
   OK se pide a Pablo el despliegue (y solo cuando Alicia termine de probar) y se cierra el plan. Producción sigue en
   125725f, con los dos fallos de cb87be4 y el de e11ac35: a Alicia solo le afectarían al suscribirse, y no ha conectado
   WhatsApp ni se ha suscrito.
+- 21:1x, revisión propia de e230991 mientras Astra no tiene créditos: fechas, webhook duplicado (sobrescribe con el mismo
+  valor), checkout abandonado (se guarda el fin de la sesión que se completa) y prueba sin sección, bien. Hallazgo: con 48 h
+  justas de prueba, el `trial_end` calculado llega a Stripe por debajo de su mínimo y rechaza la sesión. bef4193
+  (`claude/cierre-fixes`; 363e715 en `claude/cierre-plan`, mismo código): holgura de 10 min, por debajo días de prueba
+  redondeados hacia arriba. Test rojo antes (48 h y 5 min recibía `trial_end`); 10 de facturación verdes después. Suite de
+  e230991 parada al 62 % para medir el SHA final; suite completa de bef4193 en curso.
