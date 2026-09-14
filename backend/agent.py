@@ -994,6 +994,9 @@ def _lo_que_el_negocio_tiene_escrito(cliente_id: str, mensaje: str, config=None)
 _DUDA_AL_ELEGIR = re.compile(
     r"\b(no (lo )?se\b|ni idea|no estoy segur[oa]|no sabria|no (lo )?tengo claro|"
     r"no me aclaro|no se cual|cual me recomiendas|cual me recomendais|"
+    # «¿Qué me recomiendas?» es la misma duda (banco del 13-sep-2026: a «se me cae
+    # mucho el pelo, que me recomiendas?» se le proponia un alisado).
+    r"que me recomiendas|que me recomendais|que me recomendarias|que me aconsejais|"
     r"que me aconsejas|lo que (tu |vosotras )?veais?|lo que (tu )?veas|"
     r"decide tu|elige tu|elegid vosotras)\b")
 
