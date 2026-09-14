@@ -3762,8 +3762,11 @@ async def _handle_whatsapp_message(
             )
             return
         flow.hora = hora
+        # El contacto que dio en el primer mensaje sigue valiendo aunque el día y la hora
+        # llegaran después (revisión de Astra a e44886b): no se le pide verificar otra vez.
         await _wa_ofrecer_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
-            from_number=from_number, flow=flow, request=request)
+            from_number=from_number, flow=flow, request=request,
+            telefono=flow.verify_phone, email=flow.verify_email)
         return
 
     if flow.flow == "manage_reschedule_verify":

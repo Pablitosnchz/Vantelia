@@ -218,3 +218,16 @@ def test_verificacion_antes_de_ofrecer(cambio):
     assert c["botones"] and c["botones"][-1]["buttons"][0][0].startswith("resched_yes:")
     c["recibir"](iid=c["botones"][-1]["buttons"][0][0])
     assert c["movidas"] == [("R-123456", "2099-09-20", "12:00")]
+
+
+def test_el_contacto_del_primer_mensaje_verifica_aunque_falten_dia_y_hora(cambio):
+    """Revisión de Astra a e44886b: el email del primer mensaje no llegaba a la oferta si
+    el día y la hora venían después, y se le pedía verificar otra vez."""
+    c = cambio
+    c["filas"]["R-123456"].update(telefono="34900000000", email="qa@example.invalid")
+    c["recibir"]("Quiero cambiar mi cita R-123456, mi email es qa@example.invalid", "menu_cambiar_cita")
+    c["recibir"]("2099-09-20")
+    c["recibir"]("12:00")
+    assert not any("verificar" in t.lower() for t in c["textos"]), c["textos"]
+    assert c["botones"] and c["botones"][-1]["buttons"][0][0].startswith("resched_yes:")
+    assert c["movidas"] == []
