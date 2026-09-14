@@ -200,6 +200,9 @@ def avanzar_confirmacion_reserva(estado: Estado, identidad: str, siguiente: str)
     if not propuesta or propuesta["id"] != identidad or propuesta["estado"] != anterior:
         return False
     propuesta["estado"] = siguiente
+    if siguiente == "aceptada":
+        # Cuándo aceptó: recuperar una gestión que se quedó sin resultado cuenta el margen desde aquí.
+        propuesta["aceptada_en"] = time.time()
     estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
     return True
 

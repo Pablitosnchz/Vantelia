@@ -2913,13 +2913,32 @@ async def _wa_texto_cancelacion(*, cliente_id, phone_number_id, from_number, tex
     return enviado
 
 
+def _wa_cancelacion_sin_resultado_caducada(cliente_id, propuesta):
+    """¿Una cancelación aceptada sin resultado puede volver a ofrecerse?
+
+    Mismo criterio que la creación (`booking_operations`): pasados 15 min desde la aceptación
+    y sin webhook que pueda terminarla tarde. Antes del margen otro proceso podría estar
+    ejecutándola. Nunca cancela: solo deja volver a enseñar la cita para que la confirme.
+    """
+    from backend import booking_operations
+    if not propuesta or (propuesta.get("datos") or {}).get("accion") != "cancelar":
+        return False
+    try:
+        aceptada_en = float(propuesta.get("aceptada_en"))
+    except (TypeError, ValueError):
+        return False
+    return (time.time() - aceptada_en >= 15 * 60
+            and not booking_operations._booking_has_webhook(cliente_id))
+
+
 async def _wa_ofrecer_cancelacion(*, cliente_id, phone_number_id, from_number, codigo,
                                 request, telefono="", email=""):
     """Consulta y verifica en el núcleo; el canal solo ofrece la cita que recibió."""
     from backend import reserva, conversation_state
     estado = reserva.cargar(cliente_id, from_number)
     anterior = reserva.leer_confirmacion_reserva(estado)
-    if anterior and anterior["estado"] == "aceptada":
+    if (anterior and anterior["estado"] == "aceptada"
+            and not _wa_cancelacion_sin_resultado_caducada(cliente_id, anterior)):
         await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
             from_number=from_number, request=request,
             texto="Hay una operación aceptada cuyo resultado está pendiente. Comprueba primero esa gestión antes de iniciar otra cancelación.")
@@ -3004,6 +3023,22 @@ async def _wa_responder_cancelacion(*, cliente_id, phone_number_id, from_number,
                 resultado = error
             else:
                 texto = str(error.get("error") or "No se pudo verificar la cita.")
+        elif propuesta["estado"] == "aceptada" and _wa_cancelacion_sin_resultado_caducada(cliente_id, propuesta):
+            # La cita sigue en pie pasado el margen: la cancelación no llegó a hacerse. Se le
+            # vuelve a enseñar para que confirme, en vez de dejarla en «contacta con el negocio».
+            estado.confirmacion_reserva_json = ""
+            estado.intencion = ""
+            try:
+                reserva.guardar(cliente_id, from_number, estado)
+            except conversation_state.ConversationStateConflict:
+                return
+            await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, request=request,
+                texto="La cancelación anterior no llegó a completarse y tu cita sigue en pie. Te la envío de nuevo por si quieres cancelarla.")
+            await _wa_ofrecer_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, codigo=datos["booking_code"], request=request,
+                telefono=datos["telefono"], email=datos["email"])
+            return
         elif propuesta["estado"] == "aceptada":
             # Un reinicio pudo ocurrir tras ejecutar y antes de enviar. Consultar
             # el resultado real evita repetir la llamada al proveedor.
@@ -3360,7 +3395,10 @@ async def _handle_whatsapp_message(
     from backend import reserva
     pendiente = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, from_number))
     if (pendiente and pendiente["estado"] == "aceptada"
-            and pendiente["datos"].get("accion") == "cancelar"):
+            and pendiente["datos"].get("accion") == "cancelar"
+            # Pasado el margen sin resultado se deja pasar: al pedirla otra vez se
+            # comprueba la cita y se vuelve a ofrecer (o se dice que ya estaba cancelada).
+            and not _wa_cancelacion_sin_resultado_caducada(cliente_id, pendiente)):
         # Frontera común antes de cualquier desvío por modo o agente. Menú
         # y atención humana pueden salir sin borrar la operación pendiente.
         await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,

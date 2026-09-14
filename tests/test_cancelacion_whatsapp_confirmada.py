@@ -52,7 +52,8 @@ def gestion(api_module, monkeypatch):
         recibir("Cancelar " + code, "menu_cancelar_cita")
         return botones[-1]["buttons"][0][0] if botones else "cancel_yes"
     yield dict(numero=numero, filas=filas, botones=botones, textos=textos,
-        registros=registros, canceladas=canceladas, recibir=recibir, ofrecer=ofrecer, nucleo=nucleo)
+        registros=registros, canceladas=canceladas, recibir=recibir, ofrecer=ofrecer, nucleo=nucleo,
+        nucleo_stub=cancelar)
     whatsapp._wa_clear_flow("demo", numero)
 
 
@@ -396,3 +397,73 @@ def test_saludo_tras_humano_solo_llega_al_agente_con_operacion_terminada(gestion
     if not hecha:
         assert "pendiente" in g["textos"][-1]
         assert reserva.leer_confirmacion_reserva(reserva.cargar("demo", g["numero"]))["estado"] == "aceptada"
+
+
+def _cancelacion_sin_resultado(g, monkeypatch):
+    """Acepta la cancelación y el núcleo no sabe si se hizo: la cita sigue en pie."""
+    from backend import booking
+    boton = g["ofrecer"]()
+    async def incierta(*args, **kw):
+        g["canceladas"].append(args[1])
+        return {"ok": False, "resultado_desconocido": True}
+    monkeypatch.setattr(booking, "_cancel_booking_by_code", incierta)
+    g["recibir"](iid=boton)
+    assert g["filas"]["R-123456"]["status"] == "confirmed"
+    return boton
+
+
+def _pasan_minutos(monkeypatch, minutos):
+    from backend import whatsapp
+    reloj = whatsapp.time.time
+    ahora = reloj()
+    monkeypatch.setattr(whatsapp.time, "time", lambda: ahora + minutos * 60)
+
+
+def test_cancelacion_sin_resultado_se_vuelve_a_ofrecer_pasado_el_margen(gestion, monkeypatch):
+    """Fase 4, 14-sep-2026: el mismo atasco que tenía la creación. Pasados 15 min sin webhook la
+    cita sigue en pie y la clienta se quedaba en «contacta con el negocio». Se le vuelve a enseñar
+    la cita para que confirme; nunca se cancela sola."""
+    from backend import booking, booking_operations
+    g = gestion
+    boton = _cancelacion_sin_resultado(g, monkeypatch)
+    intentos = list(g["canceladas"])
+    monkeypatch.setattr(booking_operations, "_booking_has_webhook", lambda *a: False)
+    ofertas = len(g["botones"])
+    _pasan_minutos(monkeypatch, 16)
+    g["recibir"](iid=boton)
+    assert g["canceladas"] == intentos, "no se cancela sola: vuelve a pedir confirmacion"
+    assert len(g["botones"]) == ofertas + 1, "no volvio a ensenar la cita"
+    nuevo = g["botones"][-1]["buttons"][0][0]
+    assert nuevo.startswith("cancel_yes:") and nuevo != boton
+    aviso = g["textos"][-1].lower()
+    assert "no lleg" in aviso and "contacta con el negocio" not in aviso, g["textos"][-1]
+    monkeypatch.setattr(booking, "_cancel_booking_by_code", g["nucleo_stub"])
+    g["recibir"](iid=nuevo)
+    assert g["filas"]["R-123456"]["status"] == "cancelled"
+
+
+@pytest.mark.parametrize("minutos,webhook", [(10, False), (16, True)])
+def test_cancelacion_sin_resultado_reciente_o_con_webhook_sigue_pendiente(gestion, monkeypatch, minutos, webhook):
+    """Controles: antes del margen otro proceso podría estar terminándola; con webhook el resultado
+    puede llegar tarde. En los dos casos no se vuelve a ofrecer."""
+    from backend import booking_operations
+    g = gestion
+    boton = _cancelacion_sin_resultado(g, monkeypatch)
+    monkeypatch.setattr(booking_operations, "_booking_has_webhook", lambda *a: webhook)
+    ofertas = len(g["botones"])
+    _pasan_minutos(monkeypatch, minutos)
+    g["recibir"](iid=boton)
+    assert len(g["botones"]) == ofertas
+    assert any("contacta con el negocio" in t.lower() for t in g["textos"][-1:])
+
+
+def test_volver_a_pedir_cancelar_pasado_el_margen_no_se_bloquea(gestion, monkeypatch):
+    from backend import booking_operations
+    g = gestion
+    _cancelacion_sin_resultado(g, monkeypatch)
+    monkeypatch.setattr(booking_operations, "_booking_has_webhook", lambda *a: False)
+    ofertas = len(g["botones"])
+    _pasan_minutos(monkeypatch, 16)
+    g["recibir"]("Cancelar R-123456", "menu_cancelar_cita")
+    assert len(g["botones"]) == ofertas + 1, "sigue bloqueada por la aceptacion antigua"
+    assert not any("pendiente" in t for t in g["textos"][-1:])
