@@ -4,6 +4,27 @@ Estado: **c8aaad8 DESPLEGADO en producción el 14-sep a las 16:38 (VERSION.json 
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
 
+## Candidato final del cierre: b6226bd, medición del 14-sep-2026, 23:02–23:28 (Claude)
+
+Sobre el candidato de abajo (e230991 + bef4193, OK de Astra) añade el arreglo de la prueba por WhatsApp de Pablo sobre el
+negocio de Alicia: la cita de valoración que el negocio exige (`booking.valoracion_obligatoria`) no se suma al
+tratamiento al preguntar cuánto dura (7fbf190, cd9993d, 15237a0, b6226bd; cuatro rondas de revisión de Astra con casos
+reproducidos, OK final acumulado hasta b6226bd). Copia nueva de producción snap8 (23:00, solo lectura, ya con el
+diagnóstico de extensiones en 15 min y la Q&A de cuánto duran que Alicia confirmó), config cfg8, código limpio (sucio=0).
+Copias borradas al acabar.
+
+| Instrumento (b6226bd) | Resultado | Candidato anterior (5c927dd) |
+| --- | --- | --- |
+| Banco de Alicia | 43/43 al primer intento; 0 tras reintento, 0 fallos, 0 no medidos, 1 no aplica | 43/43 |
+| Crítico `dice-que-si-y-acaba-en-cita` ×6 | 6/6 al primer intento; 0 tras reintento, 0 no medidos | 6/6 |
+| Humo | 5/5 | 5/5 |
+| Portal y reinicios | 6/6; 0 fallos, 0 no medidos | 6/6 |
+| Metareview, segundo negocio | 15/16 al primer intento; 1 reintento fallido (`horario-escrito-manda`), 0 no medidos, 28 no aplican | 15/16 |
+
+Suite completa de b6226bd: 2782 passed, 1 skipped, 0 fallos. Límites: una tirada por instrumento salvo el crítico; sin
+WhatsApp real con Meta ni recordatorios reales (número de Alicia sin conectar); el fallo de metareview es real y queda
+fuera del plan.
+
 ## Candidato de cierre del plan: 5c927dd / e230991, medición del 14-sep-2026, 20:17–20:54 (Claude)
 
 Sobre lo desplegado (125725f): cierre por vacaciones en chat, RAG y selector de WhatsApp (Astra, revisado por Claude:

@@ -1,7 +1,8 @@
 # Plan de consolidación: portal, políticas y conversación
 
 Encargo de Pablo, 12-sep-2026. Astra coordina; Claude revisa y mide el modelo.
-Contrato obligatorio: `NORMAS_AGENTE_IA.md`. No está completado este plan.
+Contrato obligatorio: `NORMAS_AGENTE_IA.md`. **Cerrado con excepciones el 14-sep-2026** (decisión de Pablo): aceptación
+del candidato final b6226bd en «Fase 5» y lo que queda fuera en la tabla de la «Fase 4». Lo que sigue es historial.
 
 ## Candidato nocturno integrado (13-sep)
 
@@ -565,16 +566,18 @@ repetidamente procesos en curso ni ampliar una fase antes de cerrar sus pruebas.
 
 ### Aceptación del candidato de cierre (14-sep-2026, Claude)
 
-Candidato: `claude/cierre-plan` 363e715 (código idéntico a bef4193 en `claude/cierre-fixes`). Evidencia completa en
+Candidato final: **b6226bd** (`claude/duracion-extensiones`, hija de `claude/cierre-plan`). Evidencia completa en
 `ACEPTACION_CANDIDATO_IA.md` y `REGISTRO_CONSOLIDACION.md`:
 
-- Suite completa de bef4193: 2773 passed, 1 skipped, 0 fallos. Cada arreglo con su prueba roja antes.
-- Modelo real sobre copia de producción (snap7, borrada al acabar), resultados separados: banco de Alicia 43/43 al primer
-  intento (0 tras reintento, 0 no medidos, 1 no aplica); crítico ×6 6/6 al primer intento; humo 5/5 (5c927dd y
-  e230991); portal y reinicios 6/6; segundo negocio (metareview) 15/16, fallo real `horario-escrito-manda` (fuera del
-  plan).
-- Revisión: Claude revisó las entregas de Astra (1cdb3f9, 5c927dd); Astra revisó las de Claude hasta 45f3d11 y
-  04fc97f/cb87be4/e11ac35. PENDIENTE: veredicto de Astra sobre e230991 y bef4193 (pedido a las 22:21).
+- Suite completa de b6226bd: 2782 passed, 1 skipped, 0 fallos (22:59–23:30). Cada arreglo con su prueba roja antes.
+- Modelo real sobre copia de producción (snap8, 23:00, borrada al acabar), resultados separados: banco de Alicia 43/43 al
+  primer intento (0 tras reintento, 0 fallos, 0 no medidos, 1 no aplica); crítico ×6 6/6 al primer intento; humo 5/5;
+  portal y reinicios 6/6; segundo negocio (metareview) 15/16 al primer intento, fallo real `horario-escrito-manda` (fuera
+  del plan). Misma medición sobre 5c927dd (snap7): mismos resultados.
+- Revisión cruzada: Claude revisó las entregas de Astra (1cdb3f9, 5c927dd); Astra revisó las de Claude hasta 45f3d11,
+  04fc97f/cb87be4/e11ac35 y, con OK final acumulado, e230991, bef4193 y 7fbf190..b6226bd (cuatro rondas con casos
+  reproducidos).
 - Dependencias externas separadas: WhatsApp real con Meta y recordatorios (número de Alicia sin conectar).
 
-Estado: **pendiente del veredicto de Astra** para marcar el plan como cerrado con excepciones.
+Estado: **plan CERRADO con excepciones el 14-sep-2026 a las 23:32** (decisión de Pablo «Cerrar con excepciones»). Lo que
+queda fuera está en la tabla de la fase 4. Desplegar b6226bd, solo con orden de Pablo.

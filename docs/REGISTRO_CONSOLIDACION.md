@@ -1162,3 +1162,36 @@ a fin en todas.
 - Veredicto de Astra sobre 15237a0 (buzón, 22:54): controles de cd9993d OK. CAMBIOS, uno reproducido: con dos
   valoraciones de la misma familia (inicial 25 y mantenimiento 10) sustituye la ya elegida por la primera del catálogo;
   si sigue ambigua hay que preguntar, no elegir por orden. Suite de 15237a0 parada.
+- b6226bd: se respeta la valoración ya elegida de la familia de la política; del catálogo solo si hay una; con varias se
+  pregunta cuál, sin total. Tests rojos antes; 67 de duración verdes.
+- Veredicto de Astra (buzón, 23:00): **OK** acumulado hasta b6226bd, sin hallazgos nuevos: 9 dirigidos y controles
+  propios (orden del catálogo, varias opciones, sin candidatas, pendiente, sin política, familias que no se contaminan);
+  el diff bef4193..b6226bd no toca facturación ni WhatsApp, así que mantiene su OK a e230991+bef4193. Advierte que no
+  sustituye la suite final ni la medición con modelo real. Suite completa de b6226bd en curso; se repite la medición con
+  copia nueva de producción porque el agente cambió desde 5c927dd.
+- 23:00, copia nueva de producción snap8 (solo lectura; 770 citas, 4 reglas de Alicia, ya con el diagnóstico de
+  extensiones en 15 min y la Q&A de cuánto duran), cfg8, meta_rag y cfg8_metareview_conversacional. Sobre b6226bd, en
+  paralelo con la suite: banco de Alicia (banco_o), crítico ×6 (critico_o1–6), humo (humo_o), portal y reinicios
+  (portal9) y metareview (banco_meta_o).
+- Metareview sobre b6226bd (banco_meta_o, 23:02–23:06): 15/16 al primer intento, 1 reintento fallido, 0 no medidos, 28
+  no aplican. Único fallo, el ya conocido `horario-escrito-manda` («Hoy estamos abiertos de 09:00 a 18:00…», sin el
+  horario de la semana). Igual que 5c927dd.
+- Humo sobre b6226bd (humo_o, 23:02–23:11): 5/5, los cinco caminos llegan hasta el final. Copia borrada.
+- Portal y reinicios sobre b6226bd (portal9, 23:02–23:12): 6/6, 0 fallos, 0 no medidos. Copias borradas.
+- Crítico `dice-que-si-y-acaba-en-cita` ×6 sobre b6226bd (critico_o1–6, 23:02–23:21): 6/6 al primer intento, 0 tras
+  reintento, 0 no medidos. Copias borradas.
+- Banco de Alicia sobre b6226bd (banco_o, 23:02–23:28): 43/43 al primer intento, 0 tras reintento, 0 fallos, 0 no
+  medidos, 1 no aplica (`precio-cerrado-si-se-dice`).
+- 23:28: borradas todas las copias con datos de clientas del scratchpad (snap8 con su WAL, cfg8, cfg8_metareview,
+  meta_rag, banco_o y las de cada tirada). Quedan solo informes JSON y logs.
+- Suite completa de b6226bd (22:59–23:30): 2782 passed, 1 skipped, 0 fallos. Copia de trabajo E:/vp-cierre eliminada
+  (su rama `claude/cierre-fixes` ya está en `claude/cierre-plan`).
+
+## 2026-09-14 23:32 +0200 - plan de consolidación cerrado con excepciones (Claude)
+
+- Candidato final b6226bd (`claude/duracion-extensiones`): OK de Astra acumulado, suite 2782 passed, modelo real sobre
+  copia de producción: Alicia 43/43 y crítico 6/6 al primer intento, humo 5/5, portal y reinicios 6/6, metareview 15/16
+  (fallo real conocido, fuera del plan). Fases 0–5 cerradas; excepciones con su disparador en la tabla de la fase 4 de
+  PLAN_CONSOLIDACION_IA.
+- Producción sigue en 125725f. Siguiente: orden de Pablo para desplegar b6226bd y subir `main`.
+- Orden de Pablo (AskUserQuestion, 23:33): «Desplegar y subir main».
