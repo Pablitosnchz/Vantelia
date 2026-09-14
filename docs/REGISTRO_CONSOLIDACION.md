@@ -1006,3 +1006,8 @@ a fin en todas.
 - Decisión de Pablo (AskUserQuestion, 19:32): «Esperar OK de Astra». Con OK se despliega con `deploy.ps1` y se sube
   main; con CAMBIOS se arregla antes. Alicia: SIN_CONECTAR a las 19:31.
 - Siguiente: veredicto de Astra sobre 45f3d11.
+- 19:5x: Astra (vía Pablo): «45f3d11: OK para los dos hallazgos anteriores»; encargo en c07202d
+  (`astra/cierre-canales`), su suite en curso. Preparado el despliegue: `main` local avanzado sin fusión a 6671362 (sin
+  subir) y `.claude/settings.local.json` apartado con `git stash`. `deploy.ps1 -SkipLocalChecks` y el `git stash pop`
+  posterior DENEGADOS por el clasificador de permisos («Production Deploy»). Nada desplegado; producción sigue en
+  e5c784f. El stash sigue guardado. Pendiente de Pablo: permiso para desplegar o que lo lance él.
