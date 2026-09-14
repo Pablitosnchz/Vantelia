@@ -894,6 +894,9 @@ async def _wa_send_date_picker(
         if candidate.weekday() in closed:
             continue
 
+        if agenda.motivo_de_cierre_del_dia(cliente_id, candidate.isoformat(), config) is not None:
+            continue
+
         try:
             if employee_id:
                 _, available = await agenda._employee_slot_sets_for_day(

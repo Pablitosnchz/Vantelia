@@ -869,7 +869,11 @@ async def _availability_snapshot_for_day(
         for item in (matrix or [])
     )
 
-    if not all_sorted:
+    cierre = agenda.motivo_de_cierre_del_dia(cliente_id, fecha_iso, client_config)
+    if cierre is not None:
+        status_text = "closed"
+        reason = cierre or "ese dia no abrimos"
+    elif not all_sorted:
         if day_is_closed:
             status_text = "closed"
             reason = "ese dia no abrimos"

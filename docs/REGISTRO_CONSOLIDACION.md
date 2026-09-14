@@ -1024,3 +1024,12 @@ a fin en todas.
 - Astra (19:35, vía Pablo): 36e9094 corrige el bloque de disponibilidad del chat y rebasa `astra/cierre-canales` sobre
   6671362; su suite en curso, pedirá revisión sola. Al integrar: conflicto de docs con 125725f al final de este registro.
 - Siguiente: revisar 36e9094 cuando llegue la petición; vigilar que Alicia conecte WhatsApp.
+
+## 2026-09-14 19:15 Europe/Madrid — cierre por vacaciones en otros canales (Astra)
+
+- Base 45f3d11, rama astra/cierre-canales, worktree E:/Vantelia-astra-cierre-canales. Revision de los dos hallazgos anteriores: OK; horario_semanal no demuestra exactitud respecto a configuracion.
+- Dos regresiones rojas antes del cambio (39,70 s): RAG no clasifica vacaciones como closed y el picker ofrece fechas cerradas. Ambos delegan ahora en agenda.motivo_de_cierre_del_dia.
+- calidad._dijo_que_cerramos ya llama a voice._dia_cerrado: sin cambio necesario. El resumen de proximos dias sigue mostrando cero huecos; no afirma que sea agenda completa y no es un selector.
+- Pendiente: dirigidos y suite del candidato, revision de Claude. Sin push, produccion ni despliegue.
+- Dirigidos terminados: 19 passed en 25,35 s; se lanza suite completa del commit estable antes de solicitar revision.
+>>>>>>> 0bf5a65 (fix(agenda): comparte el cierre por vacaciones con RAG y selector)

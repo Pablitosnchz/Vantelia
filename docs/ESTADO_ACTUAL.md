@@ -501,3 +501,7 @@ por medidas.
 - Suite de e44886b terminada: 2737 passed, 1 skipped, exit 0 (1429,37 s), verificada en bcssa0kh5.output. No repetir.
 - En ejecución: crítico con modelo real sobre copia local temporal; informe en TEMP/astra-e448-critico.json. No acredita todavía equivalencia de datos con producción ni aceptación global.
 - Siguiente: cerrar medición comparable y propuesta de despliegue. Ningún push ni despliegue autorizado en este relevo.
+
+### Encargo Astra 14-sep 19:15: vacaciones en canales
+
+Rama astra/cierre-canales desde 45f3d11 en worktree propio. RAG y selector de fechas consultan el cierre compartido; dos regresiones rojas verificadas. En validacion; espera a suite y revision. No desplegado.
