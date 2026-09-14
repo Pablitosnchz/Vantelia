@@ -1137,3 +1137,7 @@ a fin en todas.
   la política del negocio (otro negocio con Diagnóstico 15 + Corte 20 dejaría de sumar); (2) con un tratamiento
   pendiente de largo, la guía lleva «EXACTAMENTE» y `_recordar` da la pregunta por contestada: el turno siguiente pierde la
   duración (con el padre de 7fbf190 se conserva). Suite de 7fbf190 parada.
+- cd9993d: la valoración solo va aparte si `booking.valoracion_obligatoria` la exige para ese tratamiento (Alicia la tiene
+  para extensiones); sin política se suma como antes; ya no dice «otro día»; con un dato pendiente la guía no lleva
+  «EXACTAMENTE» y la pregunta de duración sigue viva. Tests rojos antes (frase «otro día», sin política se suma,
+  pregunta pendiente); 63 de duración verdes. Suite completa de cd9993d en curso; revisión pedida a Astra.
