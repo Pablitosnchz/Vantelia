@@ -1130,3 +1130,10 @@ a fin en todas.
 - Decisiones de Pablo (AskUserQuestion): pasarle preguntas a Alicia sobre sus datos (15 o 25 min; si «cuánto duran» es
   el tiempo de ponerlas o lo que aguantan puestas); arreglar ya en rama la suma de la valoración con el servicio que
   valora, sin desplegar mientras prueba. Rama `claude/duracion-extensiones` desde b3601a6.
+- 7fbf190: `_cuanto_duran_juntos` separa la valoración del tratamiento y usa la del tratamiento si el catálogo la tiene.
+  Test rojo antes con la guía exacta de producción («EXACTAMENTE 60 minutos en total»); 61 de duración verdes.
+- Veredicto de Astra (buzón, 22:37): 5c927dd..bef4193 **OK** (11 dirigidos y seis fronteras). 7fbf190 **CAMBIOS**, dos
+  importantes reproducidos con las funciones exactas: (1) impone «antes y otro día» por el nombre del servicio, sin mirar
+  la política del negocio (otro negocio con Diagnóstico 15 + Corte 20 dejaría de sumar); (2) con un tratamiento
+  pendiente de largo, la guía lleva «EXACTAMENTE» y `_recordar` da la pregunta por contestada: el turno siguiente pierde la
+  duración (con el padre de 7fbf190 se conserva). Suite de 7fbf190 parada.
