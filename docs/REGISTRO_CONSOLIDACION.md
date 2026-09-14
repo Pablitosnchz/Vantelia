@@ -948,3 +948,16 @@ a fin en todas.
 - GitHub: `main` avanzado sin fusión hasta el commit de docs de este despliegue.
 - Siguiente: Pablo le manda a Alicia el texto (WhatsApp, tarjeta en Meta, suscripción Pro con 10 días gratis y Stripe
   opcional). Del plan queda lo que depende de conversaciones reales y de clientes que usen voz o widget.
+
+## 2026-09-14 17:50–18:09 +0200 - comprobación antes de avisar a Alicia (Claude)
+
+- Solo lectura en producción. Botón de conectar WhatsApp disponible y plan con WhatsApp. `whatsapp.enabled` en false
+  y sin número: se fijan al conectar. `message_template_channels` con WhatsApp en todos los avisos y
+  `delivery_priority` whatsapp→email→sms: mientras no conecte o no esté aprobada la plantilla, sale por email.
+- Voz y SMS no usados. Usuario propietario activo (último acceso 9-sep). Secretos de los webhooks de Stripe y Connect
+  configurados, y el webhook ya registró 2 suscripciones reales (última, 31-ago). 38 citas en 30 días; 0 documentos
+  extra.
+- Pro frente a Business: tiene 6 profesionales activos y Pro permite 3. El límite solo impide crear o reactivar
+  profesionales, no desactiva a nadie. Decisión de Pablo (AskUserQuestion): Pro tal cual, con sus 6.
+- Siguiente: cuando Alicia conecte, comprobar su cuenta de WhatsApp, `prueba.hasta`, la plantilla del recordatorio y
+  un mensaje de prueba de ida y vuelta.
