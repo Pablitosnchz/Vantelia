@@ -720,6 +720,19 @@ a fin en todas.
   frenos; pendientes menores (vacaciones dice «agenda completa»; `horario-escrito-manda` depende del día);
   WhatsApp de Alicia sin conectar (bloquea recordatorios).
 
+## 2026-09-14 10:41 +0200 - recuperación de creación sin resultado (Astra)
+
+- Rama `astra/reconciliar-pendientes`, base `main` `f4da10e`. Una operación de creación interna sin fila de cita deja de bloquearse indefinidamente solo si tiene al menos 15 minutos y no hay `webhook_url`, `webhook_env` resuelto ni `WEBHOOK_DEFAULT`. Con webhook, reciente o de otro tenant queda pendiente como antes.
+- La liberación se registra en `booking_operation_audit` sin datos personales. WhatsApp no ejecuta de nuevo: informa de que no se registró y publica otro resumen, que exige una confirmación nueva.
+- Evidencia: 19 pruebas dirigidas verdes en 32,16 s (`test_operacion_creacion_recuperable.py`, `test_whatsapp_creacion_recuperable.py`), incluidas operación antigua, webhook URL/env, reciente, aislamiento tenant y reinicio del flujo. La prueba de liberación falla de forma causal con `OPERATION_PENDING` al desactivar temporalmente la condición. La regresión de liberación falló al desactivar temporalmente la condición, antes de restaurarla.
+- Siguiente: commit pequeño y revisión de Claude; no despliegue.
+
+## 2026-09-14 11:02 +0200 - cierre de carrera al liberar una creación (Astra)
+
+- La revisión de `5c88bc7` reprodujo que una `ConversationStateConflict` tras borrar la operación dejaba la propuesta aceptada apuntando a una clave ya liberada. `_wa_reabrir_creacion_liberada` recarga y reintenta el CAS una vez, sin sobrescribir una propuesta distinta; si sigue en conflicto responde en vez de silenciar el turno.
+- También cubre una caída entre guardar la clave en conversación y reclamarla: solo una propuesta aceptada de 15 minutos o más, con operación ausente, vuelve a publicar resumen. Antes del margen sigue `OPERATION_PENDING`, para no competir con otro worker que aún podría crear la cita.
+- Evidencia: 21 dirigidas verdes en 45,18 s. Regresiones nuevas cubren conflicto y ausencia reciente/antigua; la de conflicto falla al retirar el reintento. Siguiente: commit y segunda revisión de Claude; sin despliegue.
+
 ## 2026-09-14 10:37–11:30 +0200 - Fase 3, avisos sin bloqueo y revisión de la reconciliación (Claude)
 
 - Ramas: `claude/candidato` 68a8c68 (Fase 3) y 1458540 (avisos); `claude/reconciliar-pendientes` 04fc97f,

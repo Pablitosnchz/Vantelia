@@ -1694,17 +1694,81 @@ async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) 
                 + rag._call_us_line(cliente_id))
 
 
+async def _wa_reabrir_creacion_liberada(*, cliente_id, phone_number_id, to_number, propuesta, request):
+    """Una operación interna perdida necesita un resumen nuevo, nunca una repetición."""
+    from backend import reserva, conversation_state
+    # La operación ya se liberó en SQLite. Si otro turno ganó al limpiar el
+    # estado, recargar una vez evita dejar la aceptación antigua apuntando a una
+    # clave que ya no existe. Nunca sobrescribimos una propuesta distinta.
+    for intento in range(2):
+        estado = reserva.cargar(cliente_id, to_number)
+        actual = reserva.leer_confirmacion_reserva(estado)
+        if not actual or actual["id"] != propuesta["id"]:
+            return
+        estado.confirmacion_reserva_json = ""
+        try:
+            reserva.guardar(cliente_id, to_number, estado)
+            break
+        except conversation_state.ConversationStateConflict:
+            if intento:
+                texto = "La solicitud cambió mientras la revisaba. Escríbeme y te envío el resumen actualizado."
+                enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id,
+                    phone_number_id=phone_number_id, to_number=to_number, text=texto)
+                if enviado:
+                    _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                                  respuesta=texto, intent="booking_recovery_conflict")
+                return
+            continue
+    texto = "La solicitud anterior no llegó a registrarse. Te envío un nuevo resumen para que lo confirmes."
+    enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, text=texto)
+    if enviado:
+        _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                      respuesta=texto, intent="booking_recovery_released")
+    flow = _wa_get_flow(cliente_id, to_number)
+    await _wa_send_booking_summary(cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, flow=flow, request=request)
+
+
+def _wa_confirmacion_aceptada_es_antigua(propuesta):
+    """No liberar una clave ausente mientras otro turno aún puede reclamarla.
+
+    El margen cuenta desde la ACEPTACIÓN (cuando se vinculó la operación), no desde que se
+    creó el resumen. Con el resumen enviado hace 20 minutos, un doble toque en «Confirmar»
+    llegaba mientras el primero creaba la cita y le decía que no se había registrado
+    (revisión de Claude a 5a965e7, 14-sep-2026). Sin hora de aceptación no se reabre.
+    """
+    try:
+        vinculada = float((propuesta.get("operacion") or {}).get("vinculada"))
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return time.time() - vinculada >= 15 * 60
+
+
 async def _wa_recuperar_creacion_confirmada(*, cliente_id, phone_number_id, to_number, propuesta, request):
     """Solo consulta la operación aceptada. Nunca vuelve a ejecutar ni a cobrar."""
     from backend import booking_operations, reserva, conversation_state
     operacion = propuesta.get("operacion")
     fila = None
+    liberada = False
     if isinstance(operacion, dict):
         try:
             fila = booking_operations.recover_creation_operation(
                 cliente_id, operacion.get("clave"), operacion.get("huella"))
-        except HTTPException:
+        except HTTPException as exc:
+            liberada = isinstance(exc.detail, dict) and exc.detail.get("code") == "OPERATION_RELEASED"
             pass  # Ausente, en curso o corrupta: no acreditar éxito ni autorizar otra cita.
+    if liberada:
+        await _wa_reabrir_creacion_liberada(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, propuesta=propuesta, request=request)
+        return
+    if fila is None and isinstance(operacion, dict) and _wa_confirmacion_aceptada_es_antigua(propuesta):
+        # También cubre una caída entre guardar la identidad en conversación y
+        # reclamarla en booking_operations. Sin el margen, otro worker podría
+        # seguir a punto de crear la cita; con él solo se pide otra aceptación.
+        await _wa_reabrir_creacion_liberada(cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, propuesta=propuesta, request=request)
+        return
     if fila is None:
         texto = "Aún no puedo verificar el resultado de esa solicitud. No crearé otra cita; contacta con el negocio para comprobarla."
     else:
@@ -1820,6 +1884,11 @@ async def _wa_create_booking(
                 cliente_id, **solicitud, **operacion, request=request,
                 audit_extra={"channel": "whatsapp"}, send_confirmation=False)
         except HTTPException as exc:
+            if (isinstance(exc.detail, dict) and exc.detail.get("code") == "OPERATION_RELEASED"):
+                await _wa_reabrir_creacion_liberada(cliente_id=cliente_id,
+                    phone_number_id=phone_number_id, to_number=to_number,
+                    propuesta=propuesta, request=request)
+                return False
             if operacion:
                 vinculada = reserva.leer_confirmacion_reserva(estado)["operacion"]
                 try:

@@ -10,7 +10,7 @@ Que tabla guarda que:
 | Dominio | Tablas |
 | --- | --- |
 | Clientes y acceso | `clientes`, `users`, `auth_sessions`, `password_reset_tokens`, `user_permission_overrides`, `admin_impersonations`, `system_settings` |
-| Agenda | `bookings`, `booking_audit`, `employees`, `agenda_blocks`, `locations`, `resources` |
+| Agenda | `bookings`, `booking_audit`, `booking_operations`, `booking_operation_audit`, `employees`, `agenda_blocks`, `locations`, `resources` |
 | Catalogo | `services`, `service_location_overrides`, `service_payment_policies` |
 | Conversaciones | `chat_sessions`, `chat_messages`, `chat_takeovers`, `live_chat_sessions`, `whatsapp_inbound_messages`, `voice_calls` |
 | Cerebro | `kb_documents`, `kb_qa`, `keyword_rules` |
@@ -65,6 +65,18 @@ def _init_database() -> None:
                 booking_id TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (cliente_id, operation_key)
+            )"""
+        )
+        # Una operación de creación puede quedarse sin resultado local tras una
+        # caída. Su liberación se audita sin inventar una cita ni guardar datos de
+        # la clienta: no tiene booking_id porque precisamente no llegó a existir.
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS booking_operation_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                operation_key TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )"""
         )
         connection.execute(
