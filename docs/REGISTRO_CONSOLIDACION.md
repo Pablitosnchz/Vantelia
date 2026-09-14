@@ -837,3 +837,41 @@ a fin en todas.
 - Verificado el resultado final del proceso bcssa0kh5: **2737 passed, 1 skipped**, exit 0, 1429,37 s. No se repite esta suite. El resultado 2722 pertenece al padre 3e05b96.
 - Iniciada medición real acotada del crítico sobre copia local temporal (astra-e448-critico.db), informe astra-e448-critico.json en TEMP. Las llamadas al modelo responden 200. Pendiente resultado; la copia local no acredita equivalencia con el snapshot de producción usado por Claude.
 - Siguiente: resultado del crítico, comprobar condiciones del banco y medir segundo negocio; solo después proponer despliegue. Sin push ni despliegue.
+
+## 2026-09-14 14:10–15:45 +0200 - relevo de Astra y medición del candidato c8aaad8 (Claude)
+
+- 14:10 Astra tomó el relevo mientras Claude no tenía cuota: rama `astra/aceptacion-e44886b` desde 61a3081 en E:/Vantelia
+  y commit de docs cd1843d. Verificó la suite de e44886b (2737 passed, 1 skipped), que terminó antes de su cambio de
+  rama. Midió el caso crítico sobre copia y config LOCALES: 2 de 2 fallos («no dice nada de ['Resumen de tu cita',
+  'Confirmamos']»). Leído por Claude: esa copia local no tiene la regla de orientación de Alicia `rule_eD_NnlJc1lQ`,
+  que solo existe en producción, así que el fallo es del instrumento, no del código. Su copia (db, shm y wal) se ha
+  borrado; su informe JSON sigue en TEMP. Astra está sin créditos hasta las 16:49.
+- Revisión de Astra a e44886b: sin autorización indebida. Menor: el contacto del primer mensaje no llegaba a la oferta
+  si el día y la hora venían después. Claude retoma en la misma rama: c8aaad8 (test rojo antes del arreglo; 14
+  dirigidos verdes).
+- Decisión de Pablo (AskUserQuestion): medir y proponer despliegue. Copia nueva de producción en solo lectura, antes de
+  las 15:40: `snap6.db` (backup dentro del contenedor, /tmp del servidor limpio), `cfg6.json`, datos RAG de metareview
+  (`meta_rag`) y `cfg6_metareview_conversacional` (solo cambia `booking.estilo`). snap6 tiene las 4 reglas de Alicia,
+  incluida la de orientación.
+- 15:40, mediciones sobre c8aaad8 (sucio=0): banco de Alicia (banco_m), humo (humo_m), portal y reinicios (portal7),
+  metareview (banco_meta_m) y crítico ×6 (critico_m1–6), con la suite completa en paralelo. Referencia: banco 43/43 y
+  crítico 6/6 al primer intento (ed94be1); humo 5/5 y metareview 15/16 (bec310f); portal 6/6.
+- Siguiente: resultados, comparación, borrado de copias y propuesta de despliegue a Pablo.
+
+## 2026-09-14 15:40–16:24 +0200 - medición del candidato c8aaad8 con modelo real (Claude)
+
+- Todo sobre c8aaad8, con la copia snap6 (producción, solo lectura), la config cfg6 y el código limpio: el lanzador
+  mira `backend`, `evals` y `scripts`. El informe marca el árbol sucio por `.claude/settings.local.json` y el
+  registro.
+- Banco de Alicia (banco_m, 15:40–16:24): 43/43 al primer intento, 0 fallos, 1 no aplica. Referencia ed94be1: 43/43.
+- Crítico `dice-que-si-y-acaba-en-cita` ×6 (critico_m1–6, 15:40–16:11): 6/6 al primer intento, ninguno tras
+  reintento. Referencia: 6/6. El 0/2 de Astra venía de su copia local sin la regla de orientación.
+- Humo (humo_m, 15:40–15:50): 5/5, los cinco caminos llegan hasta el final. Referencia bec310f: 5/5.
+- Portal y reinicios (portal7, 15:40–15:52): 6/6, 0 fallos, 0 sin medir. Referencia: 6/6.
+- Metareview (banco_meta_m, 15:40–15:45): 15/16 al primer intento. Único fallo `horario-escrito-manda` («no dice
+  nada de ['lunes']», 2 de 2), que depende del día de la medición (hoy es lunes). Referencia bec310f: 15/16 con el
+  mismo fallo.
+- Copias borradas: snap6, cfg6, cfg6_metareview, meta_rag, las copias de portal y las de cada tirada. En el scratchpad
+  no queda ninguna copia con datos de clientas; se conservan los informes JSON. El /tmp del servidor quedó limpio.
+- Suite completa de c8aaad8: en marcha (en paralelo con las mediciones).
+- Siguiente: resultado de la suite y pedir a Pablo el despliegue.

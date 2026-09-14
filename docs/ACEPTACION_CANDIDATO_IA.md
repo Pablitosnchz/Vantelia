@@ -4,6 +4,26 @@ Estado: **bec310f DESPLEGADO en producción el 14-sep a las 07:22 (VERSION.json 
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
 
+## Candidato c8aaad8: medición del 14-sep-2026, 15:40–16:24 (Claude)
+
+Candidato sobre lo desplegado (bec310f): Fase 3 (avisos del editor de reglas), avisos que no
+se quedan bloqueados (tras cuatro rondas de revisión adversarial de Codex), reconciliación de
+operaciones de creación perdidas (Astra, más 04fc97f), reenvío manual que avisa ante un
+WhatsApp dudoso y reprogramar guiado por WhatsApp con aceptación. Medido con modelo real
+sobre copia de producción (snap6, solo lectura, borrada al acabar) y código limpio.
+
+| Instrumento | c8aaad8 | Referencia |
+| --- | --- | --- |
+| Banco de Alicia | 43/43 al primer intento, 0 fallos, 1 no aplica | 43/43 (ed94be1) |
+| Crítico `dice-que-si-y-acaba-en-cita` | 6/6 al primer intento | 6/6 (ed94be1) |
+| Humo | 5/5 | 5/5 (bec310f) |
+| Portal y reinicios | 6/6, 0 sin medir | 6/6 (ed94be1) |
+| Metareview (segundo negocio) | 15/16; fallo `horario-escrito-manda`, depende del día | 15/16 (bec310f), mismo fallo |
+
+Sin reintentos en ninguna tirada de Alicia. No medido: WhatsApp real con Meta y recordatorios
+reales (el WhatsApp de Alicia sigue sin conectar), y la revisión de Astra de 04fc97f.
+Suite completa de c8aaad8: pendiente al escribir esto.
+
 ## Remate tras el despliegue: 14-sep-2026 (Claude)
 
 Producción sigue en 109b091 (código 0bca1eb). Rama `claude/candidato`, código **ed94be1**: siete
