@@ -1,6 +1,6 @@
 # Evidencia de aceptación del candidato IA
 
-Estado: **bec310f DESPLEGADO en producción el 14-sep a las 07:22 (VERSION.json 2360b1c) por orden de Pablo, con dos apellidos activos para Alicia** (sección siguiente). Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
+Estado: **c8aaad8 DESPLEGADO en producción el 14-sep a las 16:38 (VERSION.json 14e5a5d) por orden de Pablo** (sección siguiente); antes, bec310f a las 07:22, con dos apellidos activos para Alicia. Lo anterior se conserva como historial. Un resultado local verde no acredita mejora con el modelo
 ni funcionamiento de Meta en un número conectado. Mantener este informe junto
 al plan y al registro horario; no completar casillas por inferencia.
 
@@ -23,6 +23,8 @@ sobre copia de producción (snap6, solo lectura, borrada al acabar) y código li
 Sin reintentos en ninguna tirada de Alicia. No medido: WhatsApp real con Meta y recordatorios
 reales (el WhatsApp de Alicia sigue sin conectar), y la revisión de Astra de 04fc97f.
 Suite completa de c8aaad8: 2738 passed, 1 skipped, 0 fallos (15:40–16:29).
+Desplegado por orden de Pablo (16:33–16:38, exit 0, VERSION.json 14e5a5d sin cambios sin commit):
+humo en el servidor 5/5 y el crítico dentro del contenedor OK al primer intento.
 
 ## Remate tras el despliegue: 14-sep-2026 (Claude)
 

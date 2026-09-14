@@ -875,3 +875,20 @@ a fin en todas.
   no queda ninguna copia con datos de clientas; se conservan los informes JSON. El /tmp del servidor quedó limpio.
 - Suite completa de c8aaad8 (15:40–16:29, en paralelo con las mediciones): 2738 passed, 1 skipped, 0 fallos.
 - Siguiente: resultado de la suite y pedir a Pablo el despliegue.
+
+## 2026-09-14 16:30–16:45 +0200 - despliegue de c8aaad8 (Claude)
+
+- Orden de Pablo (AskUserQuestion, 16:30): «Desplegar y subir».
+- Antes: producción en 2360b1c (código bec310f), /health 200, contenedor arriba desde hacía 9 h. Local en 14e5a5d
+  (código c8aaad8 y docs) en `astra/aceptacion-e44886b`. Suite completa de c8aaad8 verde (2738 passed, 1 skipped) y
+  medición con modelo real igual que lo desplegado. `.claude/settings.local.json` (plugin de Codex, sin commit) se
+  apartó con `git stash` mientras se empaquetaba y se recuperó después.
+- `deploy.ps1 -SkipLocalChecks`, 16:33:59–16:38:14, exit 0: foto previa `pre-deploy-20260914-143501.db`, imagen
+  anterior `vantelia:prev`, /health ok, acceso público OK y humo en el servidor 5/5. VERSION.json 14e5a5d, `sucio: false`.
+- Verificación: /health público 200. Caso crítico `dice-que-si-y-acaba-en-cita` dentro del contenedor sobre una copia
+  en /tmp: OK al primer intento, pide los dos apellidos y acaba en el resumen del diagnóstico (martes 15 a las 15:00).
+  Copia e informe borrados; contenedor y servidor limpios.
+- GitHub: `main` avanzado sin fusión desde f4da10e hasta el commit de docs de este despliegue.
+- Siguiente, propuesto a Pablo: medir con modelo real reglas opuestas en dos negocios (cierra la fase 3) y reconciliar
+  las cancelaciones con resultado desconocido; voz y widget cuando un cliente los use; vigilar las conversaciones
+  reales de Alicia. El WhatsApp de Alicia sigue sin conectar.
