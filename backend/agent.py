@@ -2855,6 +2855,30 @@ def _afirma_que_hay_cita_confirmada(texto: str) -> bool:
     return not any(negacion in contexto for negacion in _NIEGA)
 
 
+def _la_cita_que_afirma_existe(cliente_id: str, telefono: str, texto: str) -> bool:
+    """¿La cita que da por confirmada es una que ella TIENE, a esa hora?
+
+    Medido el 13-sep-2026 (reprogramar con modelo real): movida la cita en un turno
+    anterior, «tu cita esta confirmada para el martes 22 a las 17:45» -verdad- hacia
+    saltar `dijo_que_hay_cita_sin_haberla`, que solo miraba si en ESTE turno se habia
+    tocado o consultado la agenda. Se mira la agenda: cita viva de su telefono y, si la
+    frase dice horas, que sean las suyas. Ante la duda (sin telefono, sin cita, otra
+    hora) devuelve False y se frena como siempre.
+    """
+    from backend import booking
+
+    if not telefono:
+        return False
+    citas = booking.citas_vivas_del_telefono(cliente_id, telefono)
+    if not citas:
+        return False
+    horas = {"%02d:%s" % (int(h), m) for h, m in _UNA_HORA.findall(texto or "")}
+    if not horas:
+        return True
+    suyas = {str(cita["booking_time"] or "")[:5] for cita in citas}
+    return horas <= suyas
+
+
 def _dice_que_acaba_de_hacerlo(texto: str) -> bool:
     """¿Afirma haber tocado la agenda ahora mismo?"""
     plano = catalog_pick._norm(texto or "")
@@ -4111,6 +4135,7 @@ async def responder(
                     continue
                 if (_afirma_que_hay_cita_confirmada(texto_final)
                         and not mutada and not mirada_la_cita
+                        and not _la_cita_que_afirma_existe(cliente_id, telefono, texto_final)
                         and vuelta + 1 < MAX_VUELTAS):
                     traza.freno("dijo_que_hay_cita_sin_haberla")
                     mensajes.append({
