@@ -892,3 +892,44 @@ a fin en todas.
 - Siguiente, propuesto a Pablo: medir con modelo real reglas opuestas en dos negocios (cierra la fase 3) y reconciliar
   las cancelaciones con resultado desconocido; voz y widget cuando un cliente los use; vigilar las conversaciones
   reales de Alicia. El WhatsApp de Alicia sigue sin conectar.
+
+## 2026-09-14 16:45–17:05 +0200 - días gratis del plan para Alicia y fase 3 cerrada (Claude)
+
+- Decisiones de Pablo (AskUserQuestion): cerrar lo que dependa de nosotros y darle a Alicia el texto para conectar
+  WhatsApp y Stripe; plan **Pro, 129 €/mes**; cobro por **Stripe con SEPA y tarjeta**; **10 días gratis desde que
+  conecte su WhatsApp**.
+- Producción, solo lectura: Stripe y Connect configurados, precios de los tres planes configurados, botón de conectar
+  WhatsApp disponible para Alicia; Alicia en Business «activa» puesto a mano, sin cliente de Stripe; Connect y WhatsApp
+  sin conectar. El checkout de suscripción no admitía días de prueba.
+- cb87be4: config por negocio `prueba` = {"dias": N, "hasta": ISO}; `_completar_alta_whatsapp` fija `hasta` al conectar
+  (reconectar no la alarga); el checkout manda `subscription_data.trial_end` y pide el método de pago. Sin fecha, la
+  prueba cuenta desde la suscripción; con menos de 48 h por delante (Stripe no lo admite) se cobra como siempre. El
+  webhook ya guarda `trialing` y conserva el plan; si luego el cobro falla, la suscripción queda impagada y el
+  asistente se para como hasta ahora. 3 tests rojos antes del arreglo, controles verdes, 17 dirigidos y
+  `test_wa_embedded_signup.py` (16) verdes. Suite completa: en marcha.
+- Fase 3, puerta de dos negocios con reglas opuestas, medida con modelo real (`medir_reglas_opuestas.py` en el
+  scratchpad, entorno aislado borrado al acabar): 21/21, 0 fallos (opuestas intercaladas, regla editada, regla
+  borrada sin heredar la ajena). Fase 3 cerrada.
+- Pendiente de Pablo antes de mandarle a Alicia el paso de la suscripción: activar el adeudo SEPA en Stripe, orden de
+  desplegar cb87be4 y de poner `prueba: {"dias": 10}` en la config de Alicia en producción, y confirmar si los 129 €
+  llevan IVA.
+- Siguiente: la suite; reconciliar las cancelaciones con resultado desconocido.
+
+## 2026-09-14 17:05–17:35 +0200 - cancelaciones recuperables y SEPA en Stripe (Claude)
+
+- Suite completa de cb87be4 (días gratis): 2743 passed, 1 skipped, 1 fallo cuyo nombre no se guardó (salida recortada).
+  Coincidió con otros procesos de medición y de tests. No se reprodujo en la suite siguiente, que incluye ese código.
+  Se deja apuntado como no reproducido.
+- e11ac35, fase 4: una cancelación aceptada cuyo resultado se perdía dejaba a la clienta en «contacta con el negocio»
+  con la cita en pie. Ahora se guarda `aceptada_en`; pasados 15 minutos y sin webhook (el mismo criterio que la
+  creación), si la cita sigue en pie se le vuelve a enseñar para que confirme, sin cancelar sola. La frontera común ya
+  no bloquea volver a pedir la cancelación. Antes del margen o con webhook sigue pendiente. 2 rojos antes del arreglo
+  con sus controles verdes; un test corregido que miraba también el aviso anterior; 88 dirigidos verdes.
+- Suite completa de e11ac35 (con `-rf` y la salida guardada): 2748 passed, 1 skipped, 0 fallos.
+- Stripe, con autorización de Pablo (AskUserQuestion «Mira la cuenta y activa SEPA»): cuenta «Vantelia»
+  `acct_1TRvakJqlPNuHbxQ` (vanteliadigital@gmail.com, ES, EUR, modo real), consultada desde el contenedor sin mostrar
+  la clave. Preferencia de adeudo SEPA activada por la API en la configuración por defecto de la plataforma
+  (`pmc_1TRvbF…`); las configuraciones de apps no se tocaron. Al principio la función `sepa_debit_payments` no
+  aparecía. Pablo dijo que ya estaba habilitado y la segunda consulta la da **activa**, con SEPA disponible en la
+  configuración que usa el checkout de suscripciones.
+- Siguiente: orden de despliegue de e11ac35 y `prueba` de Alicia en producción; confirmar el IVA del texto.

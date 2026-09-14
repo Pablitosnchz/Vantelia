@@ -401,9 +401,12 @@ solo lo pedía el formulario. Y el listado del portal trae `avisos` por regla, q
 editor pinta debajo de cada una: tapada por otra de más prioridad que cubre los mismos
 casos, misma prioridad con casos que se pisan, familia que no está en el catálogo (una
 técnica que aparece en el nombre de un servicio no avisa), texto vacío y «ofrecer cita»
-sin servicio de valoración. Tests: `tests/test_avisos_de_reglas.py`, 17 casos. Falta de
-la puerta: comprobar con dos negocios que reglas opuestas no se contaminan (no medido
-con modelo real).
+sin servicio de valoración. Tests: `tests/test_avisos_de_reglas.py`, 17 casos. Puerta
+«dos tenants con reglas opuestas no se contaminan» medida con modelo real el 14-sep-2026:
+dos negocios sintéticos en entorno aislado, A contesta él mismo y B pasa a una persona,
+preguntas de precio intercaladas, luego la regla de A editada y la de B borrada: 21/21, 0
+fallos. La clasificación se cachea por negocio y la regla se relee en cada consulta.
+**Fase 3 cerrada.**
 
 ## Fase 4 — consolidación de canales y retirada de duplicados
 
@@ -508,8 +511,12 @@ protejan un caso vivo.
   igual que la cancelación: resumen «Ahora / Nueva» con identidad, cita revalidada contra el
   resumen, hueco comprobado antes de ofrecer y resultado perdido que deja volver a pulsar.
   Decisión de Pablo: solo el flujo de listas; el agente conversacional no cambia.
-- Sigue abierto en esta fase: reprogramar desde el agente, formularios, voz y widget sin
-  confirmación persistida, y la cancelación con resultado desconocido sin reconciliar.
+- Cancelación con resultado desconocido (`e11ac35`): pasados 15 min desde la aceptación y sin
+  webhook, si la cita sigue en pie se le vuelve a enseñar para que confirme; nunca se cancela
+  sola, y antes del margen o con webhook sigue pendiente. Mismo criterio que la creación.
+- Sigue abierto en esta fase: reprogramar desde el agente (Pablo decidió no tocarlo por ahora),
+  voz y widget sin confirmación persistida (esperan a un cliente que los use) y retirar frenos
+  del agente con conversaciones reales.
 
 ## Fase 5 — aceptación del candidato
 
