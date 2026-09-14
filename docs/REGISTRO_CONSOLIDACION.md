@@ -1002,4 +1002,7 @@ a fin en todas.
 - Pablo: «puedes delegar cosas a astra». Encargo a Astra (19:15): revisar 45f3d11 y, en su rama desde 45f3d11, la misma
   clase de fallo en `rag._availability_snapshot_for_day`, el selector de días del WhatsApp guiado y `calidad.py`.
 - Alicia: SIN_CONECTAR a las 19:09.
-- Siguiente: suite completa de 45f3d11, veredicto de Astra; desplegar solo con orden de Pablo.
+- Suite completa de 45f3d11 (19:16–19:34): 2765 passed, 1 skipped, 0 fallos.
+- Decisión de Pablo (AskUserQuestion, 19:32): «Esperar OK de Astra». Con OK se despliega con `deploy.ps1` y se sube
+  main; con CAMBIOS se arregla antes. Alicia: SIN_CONECTAR a las 19:31.
+- Siguiente: veredicto de Astra sobre 45f3d11.
