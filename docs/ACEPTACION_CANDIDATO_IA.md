@@ -22,7 +22,7 @@ sobre copia de producción (snap6, solo lectura, borrada al acabar) y código li
 
 Sin reintentos en ninguna tirada de Alicia. No medido: WhatsApp real con Meta y recordatorios
 reales (el WhatsApp de Alicia sigue sin conectar), y la revisión de Astra de 04fc97f.
-Suite completa de c8aaad8: pendiente al escribir esto.
+Suite completa de c8aaad8: 2738 passed, 1 skipped, 0 fallos (15:40–16:29).
 
 ## Remate tras el despliegue: 14-sep-2026 (Claude)
 

@@ -873,5 +873,5 @@ a fin en todas.
   mismo fallo.
 - Copias borradas: snap6, cfg6, cfg6_metareview, meta_rag, las copias de portal y las de cada tirada. En el scratchpad
   no queda ninguna copia con datos de clientas; se conservan los informes JSON. El /tmp del servidor quedó limpio.
-- Suite completa de c8aaad8: en marcha (en paralelo con las mediciones).
+- Suite completa de c8aaad8 (15:40–16:29, en paralelo con las mediciones): 2738 passed, 1 skipped, 0 fallos.
 - Siguiente: resultado de la suite y pedir a Pablo el despliegue.
