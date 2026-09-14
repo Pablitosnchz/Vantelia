@@ -160,6 +160,140 @@ def match(cliente_id: str, intencion: Dict[str, Any]) -> Optional[Dict[str, Any]
     return None
 
 
+# Las acciones que CONTESTAN a la clienta: sin texto le llegaria un mensaje vacio.
+_CONTESTAN = ("responder", "formulario", "ofrecer_cita", "pedir_foto", "pasar_a_humano")
+
+
+def errores_al_guardar(intenciones: List[str], accion: str, texto: str) -> str:
+    """Lo que hace IMPOSIBLE que una regla funcione. Cadena vacia si se puede guardar.
+
+    El formulario del portal ya pedia intenciones y texto, pero la API no: una regla
+    sin intenciones casa con CUALQUIER mensaje, y una sin texto contesta en blanco.
+    """
+    from backend import intents
+
+    marcadas = [_norm(i) for i in (intenciones or []) if str(i).strip()]
+    if not marcadas:
+        return "Marca al menos qué te piden para que salte la regla."
+    desconocidas = [i for i in marcadas if i not in intents.INTENCIONES]
+    if desconocidas:
+        return "«%s» no es un tipo de petición que el asistente reconozca." % ", ".join(desconocidas)
+    if accion in _CONTESTAN and not str(texto or "").strip():
+        return "Escribe el texto que debe responder la regla."
+    return ""
+
+
+def _casan_familias(a: str, b: str) -> bool:
+    """Igual que `match`: una familia casa con otra si una contiene a la otra."""
+    return bool(a) and bool(b) and (a in b or b in a)
+
+
+def _cubre(antes: Dict[str, Any], despues: Dict[str, Any]) -> bool:
+    """¿La regla de `antes` casa con todo lo que casaria la de `despues`?"""
+    if antes["intenciones"]:
+        if not despues["intenciones"] or not set(despues["intenciones"]) <= set(antes["intenciones"]):
+            return False
+    if antes["familias"]:
+        if not despues["familias"]:
+            return False
+        return all(any(_casan_familias(fa, fd) for fa in antes["familias"]) for fd in despues["familias"])
+    return True
+
+
+def _se_pisan(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    """¿Hay algun mensaje con el que casarian las dos?"""
+    intenciones = (not a["intenciones"] or not b["intenciones"]
+                   or bool(set(a["intenciones"]) & set(b["intenciones"])))
+    familias = (not a["familias"] or not b["familias"]
+                or any(_casan_familias(fa, fb) for fa in a["familias"] for fb in b["familias"]))
+    return intenciones and familias
+
+
+def avisos(cliente_id: str, reglas: Optional[List[Dict[str, Any]]] = None) -> Dict[str, List[str]]:
+    """Por cada regla, lo que va a hacer que no funcione como el negocio espera.
+
+    Fase 3 del plan de consolidacion: «indicar configuracion invalida/conflictiva».
+    Gana la primera regla activa por prioridad cuyas intenciones y familias casen
+    (`match`), asi que se avisa de: una regla tapada por otra que va antes; dos
+    reglas que se pisan con la MISMA prioridad (gana la que se creo antes, que el
+    negocio no ve); sin intenciones (casa con todo); intencion que no existe; texto
+    vacio en una accion que contesta; familia que no esta en su catalogo; y ofrecer
+    cita sin ningun servicio de valoracion al que llevar (la oferta no hace nada).
+
+    No bloquea nada: lo imposible se rechaza al guardar (`errores_al_guardar`).
+    """
+    from backend import intents
+
+    reglas = listar(cliente_id) if reglas is None else list(reglas)
+    salida: Dict[str, List[str]] = {str(r["id"]): [] for r in reglas}
+    normalizadas = []
+    for regla in reglas:
+        normalizadas.append(dict(regla,
+                                 intenciones=[_norm(i) for i in regla.get("intenciones") or [] if str(i).strip()],
+                                 familias=[_norm(f) for f in regla.get("familias") or [] if str(f).strip()],
+                                 prioridad=int(regla.get("prioridad") or 100)))
+
+    familias_del_negocio: set = set()
+    del_catalogo: List[str] = []
+    catalogo_leido = False
+    try:
+        from backend import catalog_pick
+
+        familias_del_negocio = {_norm(f) for f in intents.familias_del_tenant(cliente_id)}
+        del_catalogo = [_norm("%s %s" % (catalog_pick._nombre(s), s.get("category") or ""))
+                        for s in catalog_pick._servicios(cliente_id, "")]
+        catalogo_leido = bool(familias_del_negocio or del_catalogo)
+    except Exception:  # noqa: BLE001 - sin catalogo no se avisa de familias
+        catalogo_leido = False
+    hay_valoracion = None
+
+    for regla in normalizadas:
+        lista = salida[str(regla["id"])]
+        if not regla["intenciones"]:
+            lista.append("Sin «qué te piden»: casaría con cualquier mensaje, también con quien "
+                         "solo saluda o quiere reservar.")
+        raras = [i for i in regla["intenciones"] if i not in intents.INTENCIONES]
+        if raras:
+            lista.append("«%s» no es un tipo de petición que el asistente reconozca: esa parte "
+                         "no casará nunca." % ", ".join(raras))
+        if regla.get("accion") in _CONTESTAN and not str(regla.get("texto") or "").strip():
+            lista.append("No tiene texto: la clienta recibiría un mensaje vacío.")
+        if catalogo_leido:
+            for familia in regla["familias"]:
+                if familia not in familias_del_negocio and not any(familia in t for t in del_catalogo):
+                    lista.append("«%s» no aparece en tu catálogo: con esa familia la regla no "
+                                 "saltará." % familia)
+        if regla.get("accion") == "ofrecer_cita":
+            if hay_valoracion is None:
+                try:
+                    from backend import booking
+
+                    hay_valoracion = bool((booking._servicio_de_valoracion(cliente_id) or {}).get("id"))
+                except Exception:  # noqa: BLE001 - ante la duda no se avisa
+                    hay_valoracion = True
+            if not hay_valoracion:
+                lista.append("Para ofrecer cita hace falta un servicio de valoración o diagnóstico en "
+                             "tu catálogo, y no hay ninguno: la regla no ofrecerá nada.")
+
+    activas = sorted([r for r in normalizadas if r.get("activa")],
+                     key=lambda r: (r["prioridad"], str(r["id"])))
+    for indice, despues in enumerate(activas):
+        for antes in activas[:indice]:
+            if antes["prioridad"] < despues["prioridad"] and _cubre(antes, despues):
+                salida[str(despues["id"])].append(
+                    "Nunca saltará: «%s» (prioridad %d) cubre los mismos casos y va antes."
+                    % (antes.get("nombre") or antes["id"], antes["prioridad"]))
+                break
+        for otra in activas:
+            if (otra["id"] != despues["id"] and otra["prioridad"] == despues["prioridad"]
+                    and _se_pisan(otra, despues)):
+                salida[str(despues["id"])].append(
+                    "Comparte la prioridad %d con «%s» para casos que se pisan: gana la que se creó "
+                    "antes. Dale a cada una su prioridad." % (despues["prioridad"], otra.get("nombre") or otra["id"]))
+                break
+    return salida
+
+
 def contar_uso(regla_id: str) -> None:
     """Cuantas veces ha respondido esta regla. El negocio mide si le sirve."""
     try:

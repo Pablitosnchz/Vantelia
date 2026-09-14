@@ -5731,6 +5731,8 @@ async function loadBusinessRules() {
       +     preview
       +     '<div class="panel-sub" style="margin:6px 0 0;">Prioridad ' + regla.prioridad
       +       ' · usada ' + regla.veces + ' ' + (regla.veces === 1 ? 'vez' : 'veces') + '</div>'
+      +     (regla.avisos || []).map(a => '<div class="panel-sub" style="margin:6px 0 0; color:var(--warning);">⚠ '
+      +       escapeHtml(a) + '</div>').join('')
       +   '</div>'
       +   '<div style="display:flex; flex-direction:column; gap:6px;">'
       +     '<button class="btn btn-ghost" data-edit="1" style="padding:4px 10px; font-size:0.78rem;">Editar</button>'

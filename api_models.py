@@ -1091,6 +1091,8 @@ class AppBusinessRuleItem(BaseModel):
     prioridad: int = 100
     activa: bool = True
     veces: int = 0
+    # Lo que va a hacer que no funcione como se espera (tapada, empate, sin texto...).
+    avisos: List[str] = Field(default_factory=list)
 
 
 class AppBusinessRulePayload(BaseModel):

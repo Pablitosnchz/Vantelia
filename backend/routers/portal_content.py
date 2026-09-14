@@ -512,7 +512,9 @@ async def app_tone_save(
 
 
 def _business_rules_response(cliente_id: str) -> AppBusinessRulesResponse:
-    items = [AppBusinessRuleItem(**r) for r in rules.listar(cliente_id)]
+    lista = rules.listar(cliente_id)
+    avisos = rules.avisos(cliente_id, reglas=lista)
+    items = [AppBusinessRuleItem(**r, avisos=avisos.get(r["id"], [])) for r in lista]
     return AppBusinessRulesResponse(
         enabled=intents.config_enabled(cliente_id),
         exigir_dos_apellidos=clients.exige_dos_apellidos(cliente_id),
@@ -563,6 +565,9 @@ async def app_business_rule_create(
 ) -> AppBusinessRuleItem:
     security._require_portal_min_role(user, "manager")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    error = rules.errores_al_guardar(data.intenciones, data.accion, data.texto)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
     try:
         regla = rules.guardar(
             cliente_id, nombre=data.nombre, intenciones=data.intenciones,
@@ -571,7 +576,7 @@ async def app_business_rule_create(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return AppBusinessRuleItem(**regla)
+    return AppBusinessRuleItem(**regla, avisos=rules.avisos(cliente_id).get(regla.get("id"), []))
 
 
 @app.put("/auth/app/business-rules/{regla_id}", response_model=AppBusinessRuleItem)
@@ -584,6 +589,9 @@ async def app_business_rule_update(
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if not any(r["id"] == regla_id for r in rules.listar(cliente_id)):
         raise HTTPException(status_code=404, detail="Regla no encontrada.")
+    error = rules.errores_al_guardar(data.intenciones, data.accion, data.texto)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
     try:
         regla = rules.guardar(
             cliente_id, regla_id=regla_id, nombre=data.nombre, intenciones=data.intenciones,
@@ -592,7 +600,7 @@ async def app_business_rule_update(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return AppBusinessRuleItem(**regla)
+    return AppBusinessRuleItem(**regla, avisos=rules.avisos(cliente_id).get(regla.get("id"), []))
 
 
 @app.delete("/auth/app/business-rules/{regla_id}")
