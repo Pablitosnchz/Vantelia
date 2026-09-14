@@ -262,9 +262,10 @@ trabajan ese día (vacaciones de día entero desde Horario) es un día CERRADO p
 (`agenda.motivo_de_cierre_del_dia`). Antes el asistente decía «ese día lo tengo completo».
 Un bloqueo parcial, o las vacaciones de una sola profesional mientras otra trabaja, no cierran.
 
-`test_horario_no_depende_del_dia.py`: el caso del banco `horario-escrito-manda` exige nombrar
-al menos dos días de la semana distintos (`debe_varios`). Con «lunes» a secas pasaba los
-domingos y suspendía los lunes sin que ninguna respuesta diera el horario de la semana.
+`test_horario_no_depende_del_dia.py`: el caso del banco `horario-escrito-manda` exige el
+horario de la SEMANA (`horario_semanal`): dos días de la semana, «todos los días» o «excepto
+los domingos»; los días pegados a hoy/mañana no cuentan. Con «lunes» a secas pasaba los
+domingos y suspendía los lunes. Incluye las reproducciones de la revisión de Astra.
 
 `test_recordatorios_meta_ledger.py` recorre el builder real hasta un transporte
 simulado, guarda IDs y resultado, y verifica aceptación/auditoría en una misma

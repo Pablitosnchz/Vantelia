@@ -3599,14 +3599,18 @@ def _agenda_block_reasons_for_day(cliente_id: str, fecha: str) -> List[str]:
     return reasons
 
 
-def _tramo_cubierto(inicio: Optional[int], fin: Optional[int], filas: List[sqlite3.Row]) -> bool:
+def _tramos_en_minutos(pares: List[Tuple[Any, Any]]) -> List[Tuple[int, int]]:
+    tramos = []
+    for desde, hasta in pares:
+        desde_min, hasta_min = textnorm._time_to_min(desde), textnorm._time_to_min(hasta)
+        if desde_min is not None and hasta_min is not None:
+            tramos.append((desde_min, hasta_min))
+    return tramos
+
+
+def _tramo_cubierto(inicio: Optional[int], fin: Optional[int], tramos: List[Tuple[int, int]]) -> bool:
     if inicio is None or fin is None:
         return False
-    tramos = []
-    for fila in filas:
-        desde, hasta = textnorm._time_to_min(fila["start_time"]), textnorm._time_to_min(fila["end_time"])
-        if desde is not None and hasta is not None:
-            tramos.append((desde, hasta))
     cursor = inicio
     for desde, hasta in sorted(tramos):
         if desde > cursor:
@@ -3638,10 +3642,17 @@ def motivo_de_cierre_del_dia(
         booking_cfg = (cfg or {}).get("booking") or {}
         if not booking_cfg.get("enabled", True):
             return None
+        # Los descansos (el general del negocio y los de cada cual) no son horario de
+        # trabajo: 09-13 y 14-18 bloqueados con pausa de 13 a 14 es un dia sin nadie
+        # (revision de Astra sobre ef0d0dc).
+        pausas_generales = [(p.get("start"), p.get("end")) for p in _client_break_windows(cfg)]
         empleados = _list_public_employee_rows(cliente_id, include_inactive=False)
         if empleados:
-            turnos = [(str(fila["id"]), textnorm._weekday_hours(_employee_schedule_from_row(fila), dia.weekday()))
-                      for fila in empleados]
+            turnos = []
+            for fila in empleados:
+                horario = _employee_schedule_from_row(fila)
+                pausas = [(p.get("start"), p.get("end")) for p in horario.get("break_windows") or []]
+                turnos.append((str(fila["id"]), textnorm._weekday_hours(horario, dia.weekday()), pausas))
         else:
             base = {
                 "day_start": booking_cfg.get("day_start", "09:00"),
@@ -3649,14 +3660,16 @@ def motivo_de_cierre_del_dia(
                 "closed_weekdays": booking_cfg.get("closed_weekdays") or [],
                 "weekly_hours": booking_cfg.get("weekly_hours") or {},
             }
-            turnos = [("", textnorm._weekday_hours(base, dia.weekday()))]
-        turnos = [(empleado, ventana) for empleado, ventana in turnos if ventana is not None]
+            turnos = [("", textnorm._weekday_hours(base, dia.weekday()), [])]
+        turnos = [turno for turno in turnos if turno[1] is not None]
         if not turnos:
             return None
         motivos: List[str] = []
-        for empleado, (inicio, fin) in turnos:
+        for empleado, (inicio, fin), pausas in turnos:
             suyas = [fila for fila in filas if (fila["employee_id"] or "") in ("", empleado)]
-            if not _tramo_cubierto(textnorm._time_to_min(inicio), textnorm._time_to_min(fin), suyas):
+            tramos = _tramos_en_minutos(
+                [(fila["start_time"], fila["end_time"]) for fila in suyas] + pausas + pausas_generales)
+            if not _tramo_cubierto(textnorm._time_to_min(inicio), textnorm._time_to_min(fin), tramos):
                 return None
             for fila in suyas:
                 motivo = textnorm._sanitize_text(fila["reason"] or "")

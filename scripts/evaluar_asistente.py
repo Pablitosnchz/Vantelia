@@ -42,6 +42,31 @@ def _norm(texto: str) -> str:
     return "".join(c for c in limpio if not unicodedata.combining(c))
 
 
+_DIAS_DE_LA_SEMANA = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+_UN_DIA = r"(?:%s)s?" % "|".join(_DIAS_DE_LA_SEMANA)
+# «hoy lunes», «mañana, martes 15», «pasado mañana miercoles» hablan de UN dia, no de la
+# semana. «por la mañana, sabados» no es un dia relativo.
+_DIA_PEGADO_A_HOY = re.compile(
+    r"\b(?:hoy|pasado manana|(?<!la )manana)\b[\s,:(]*(?:es\s+|el\s+)?%s\b(?:\s+\d{1,2}\b)?" % _UN_DIA)
+_TODA_LA_SEMANA = re.compile(r"\b(?:todos los dias|cada dia|toda la semana|los siete dias|7 dias a la semana)\b")
+_SALVO_UN_DIA = re.compile(
+    r"\b(?:excepto|salvo|menos|cerramos|cerrado|cerrados|no abrimos|descansamos)(?:\s+\w+){0,2}?\s+%s\b"
+    % _UN_DIA)
+
+
+def _da_el_horario_de_la_semana(texto_normalizado: str) -> bool:
+    """¿Cuenta como es la semana, y no solo hoy y mañana? No depende del dia en que se mide.
+
+    Vale nombrar dos dias de la semana, la semana entera («todos los dias») o la
+    excepcion («excepto los domingos»); los dias pegados a hoy/mañana no cuentan. No
+    comprueba que el horario dicho coincida con el del negocio.
+    """
+    plano = _DIA_PEGADO_A_HOY.sub(" ", texto_normalizado)
+    if _TODA_LA_SEMANA.search(plano) or _SALVO_UN_DIA.search(plano):
+        return True
+    return len(set(re.findall(r"\b(%s)s?\b" % "|".join(_DIAS_DE_LA_SEMANA), plano))) >= 2
+
+
 def _cargar_casos():
     from evals import casos_asistente
 
@@ -399,16 +424,8 @@ def _falta_en_respuestas(caso, respuestas) -> str:
     if debe and not any(_norm(p) in todo for p in debe):
         return "no dice nada de %s" % debe
 
-    # Varias DISTINTAS, palabra entera (admite plural): dar el horario de la semana
-    # es nombrar dias de la semana, y con «lunes» a secas el resultado dependia del
-    # dia en que se medía («mañana, lunes» el domingo; «mañana, martes» el lunes).
-    varios = caso.get("debe_varios") or {}
-    if varios:
-        dichas = {_norm(p) for p in varios.get("de") or []
-                  if re.search(r"\b%ss?\b" % re.escape(_norm(p)), todo)}
-        minimo = int(varios.get("minimo") or 1)
-        if len(dichas) < minimo:
-            return "nombra %d de %s y hacen falta %d" % (len(dichas), varios.get("de"), minimo)
+    if caso.get("horario_semanal") and not _da_el_horario_de_la_semana(todo):
+        return "no da el horario de la semana (solo hoy/manana o nada)"
 
     # Donde no puede aparecer lo prohibido. Por defecto en ninguna respuesta, pero
     # hay casos en los que decirlo AL PRINCIPIO es lo correcto y el fallo esta en

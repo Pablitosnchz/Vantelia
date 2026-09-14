@@ -109,3 +109,18 @@ def test_las_vacaciones_de_una_profesional_no_cierran_el_salon(  # noqa: F811
     finally:
         _delete_employee(client, admin_cookies, ana)
         _delete_employee(client, admin_cookies, eva)
+
+
+def test_el_descanso_no_es_horario_de_trabajo(api_module, client, admin_cookies, bloqueo):  # noqa: F811
+    """Revision de Astra sobre ef0d0dc: 09-18 con pausa de 13 a 14, bloqueos 09-13 y 14-18."""
+    from backend import voice
+
+    fecha = _next_weekday(4)
+    ana = _make_employee(client, admin_cookies, break_windows=[{"start": "13:00", "end": "14:00"}])
+    try:
+        bloqueo(fecha, "09:00", "13:00", motivo="Vacaciones")
+        assert voice._dia_cerrado("demo", fecha) is False, "de 14 a 18 trabaja"
+        bloqueo(fecha, "14:00", "18:00", motivo="Vacaciones")
+        assert voice._dia_cerrado("demo", fecha) is True, "solo le queda el descanso"
+    finally:
+        _delete_employee(client, admin_cookies, ana)

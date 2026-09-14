@@ -17,8 +17,7 @@ COMO SE LEE UN CASO
         "gravedad": "critico",       # critico | importante | deseable
         "mensajes": ["cuanto cuestan unas mechas?"],
         "debe": ["diagnostico"],      # alguna de estas palabras
-        "debe_varios": {"de": ["lunes", "martes"], "minimo": 2},
-                                      # al menos N DISTINTAS, palabra entera
+        "horario_semanal": True,      # cuenta la SEMANA, no solo hoy/mañana
         "no_debe": ["€", "euros"],    # ninguna de estas
         "agenda": "crea",             # y que quede en la AGENDA: crea|no_crea|
                                       # cancela|cambia
@@ -255,12 +254,11 @@ CASOS = [
         "gravedad": "importante",
         "por_que": "Lo que el negocio ha redactado gana a nuestras heuristicas.",
         "mensajes": ["cual es vuestro horario?"],
-        # Dar el horario es nombrar dias de la semana. Con "debe": ["lunes"] pasaba el
-        # domingo («mañana, lunes») y suspendia el lunes («mañana, martes»), sin dar el
-        # horario ninguno de los dos: medía el calendario (14-sep-2026).
+        # Con "debe": ["lunes"] pasaba el domingo («mañana, lunes») y suspendia el lunes
+        # («mañana, martes»), sin dar el horario ninguno de los dos: medía el calendario
+        # (14-sep-2026). `horario_semanal` no cuenta los dias pegados a hoy/mañana.
         "debe": [],
-        "debe_varios": {"de": ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"],
-                        "minimo": 2},
+        "horario_semanal": True,
         "no_debe": [],
     },
     {

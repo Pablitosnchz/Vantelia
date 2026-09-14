@@ -71,10 +71,12 @@ existe- la tirada entera se da por mala.
 No basta con exportar `DB_PATH`: `settings.DB_PATH` se fija al importar. Ignorarlo
 costo siete citas de prueba en la agenda de un cliente real.
 
-Un caso mide PALABRAS con `debe` (alguna), `debe_varios` (al menos N distintas, palabra
-entera) y `no_debe`. Cuidado con lo que depende del calendario: `horario-escrito-manda`
-exigia «lunes» y aprobaba los domingos («mañana, lunes») y suspendia los lunes; ahora
-pide dos dias de la semana distintos (`tests/test_horario_no_depende_del_dia.py`).
+Un caso mide PALABRAS con `debe` (alguna) y `no_debe`. Cuidado con lo que depende del
+calendario: `horario-escrito-manda` exigia «lunes» y aprobaba los domingos («mañana,
+lunes») y suspendia los lunes. Ahora lleva `horario_semanal`: vale nombrar dos dias de la
+semana, «todos los dias» o «excepto los domingos», y los dias pegados a hoy/mañana no
+cuentan (`tests/test_horario_no_depende_del_dia.py`). No comprueba que el horario dicho sea
+el del negocio.
 
 Dos medidores con modelo real para puertas concretas del plan de consolidacion:
 
