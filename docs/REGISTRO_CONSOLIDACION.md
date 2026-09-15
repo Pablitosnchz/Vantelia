@@ -1278,3 +1278,7 @@ a fin en todas.
 - Navegador aislado (`verificar_pasos_codex.py`, sin datos reales, carpeta borrada): pasos 5/10/30 → 2 bloques sin tapar;
   pack de 5 min + 55 de espera → hueco «libre · 55 min», título 14:05–15:00; dos packs cancelados con el filtro
   «Canceladas» → 0 esperas, 0 tapados; 0 errores de consola. Suite de dd68b9a detenida (superada por este commit).
+- `codex review --commit 1112954`: sin hallazgos accionables (26 dirigidos). Suite completa de 1112954 (11:25–12:04):
+  2792 passed, 1 skipped, 0 fallos.
+- Siguiente: orden de Pablo para desplegar (junto o no con la confirmación antes de reprogramar) y, después, aplicar los
+  nombres de los pasos a los packs de Alicia con `aplicar_pasos_alicia.sh --aplicar` (copia previa).
