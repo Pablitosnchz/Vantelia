@@ -1489,3 +1489,26 @@ a fin en todas.
   7a8e473.
 - Decisión de Pablo (AskUserQuestion, 17:54): «Esperar a Astra» antes de desplegar. Encargo de revisión de main..7a8e473
   entregado a su sesión. Producción sigue con el fallo de «vale, cancela el cambio» hasta el despliegue.
+
+## 2026-09-15 17:57–18:16 +0200 - despliegue de 8be90fb (prueba de Alicia y arreglos de reprogramar) (Claude)
+
+- Astra se quedó sin créditos (hasta las 19:37) sin dejar nada sobre la rama: ni respuesta en el buzón, ni commits, ni
+  notas en sus copias. Orden de Pablo: «vale se ha quedado sin creditos puedes ver lo que ha hecho y desplegar».
+- Commit final 7a8e473 (+ registro 8be90fb): suite completa 2832 passed, 1 skipped, 0 fallos. Banco de Alicia con modelo
+  real sobre snap9: 44/44, 43 al primer intento y 1 tras reintento (`no-quiero-diagnostico-quiero-cita`: en el primero
+  insistió en el diagnóstico; en las tiradas anteriores salió a la primera, queda a vigilar). Borradas snap9, cfg9 y
+  todas las copias.
+- Antes de desplegar: `booking.precios_en_agenda: false` en el config de Alicia (copia
+  `/srv/vantelia-backups/config-pre-precios-agenda-20260915-160955.json`; solo cambia esa clave).
+- `main` avanzado sin fusión a 8be90fb (con `claude/reprogramar-confirmada` ya dentro); `.claude/settings.local.json`
+  apartado y restaurado. `deploy.ps1 -SkipLocalChecks`: `/health` 200, acceso público OK, humo en el servidor 5/5.
+  VERSION.json 8be90fb, `sucio` false. `main` subido a GitHub.
+- Comprobado en producción (solo lectura): `precios_en_agenda` False; resumen del panel sin etiqueta de precio y con
+  el importe para cobrar; página de la clienta sin precio ni en la etiqueta ni en los datos (0 servicios con precio);
+  «Pack grey blending medio» y «Pack mechas o balayage medio» → Alicia Rincon, Lorena, Conchi.
+- /health da 27 clientes (28 en el despliegue de las 12:29). No es por el cambio de config: la copia previa ya tenía 27.
+  Falta `demo_auto_tintorer_a_y_lavander_a_5asec__e020f7`, demo automática de captación, presente el 14-sep.
+- Copias de trabajo E:/vp-alicia y E:/vp-reprogramar quitadas (ramas integradas en `main`).
+- Limitaciones que quedan como en producción: «en vez del elumen quiero un corte» sigue preguntando; cita a nombre de
+  otra persona con clienta conocida. Pendiente: revisión de Astra de main..8be90fb cuando renueve créditos; respuestas
+  de Alicia (alisados, «Maquillaje y recogido», «Elumen largo», lista de precios que sí se pueden dar).
