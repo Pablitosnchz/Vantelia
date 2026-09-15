@@ -1244,3 +1244,6 @@ a fin en todas.
   en minutos; los 8 alisados no), «Pack maquillaje y recogido» con 2 pasos guardados y 3 en el Excel, «Pack elumen largo»
   repetido con pasos distintos en el Excel. Script de aplicación preparado (`aplicar_pasos_alicia.sh`, con copia previa);
   sin ejecutar hasta desplegar.
+- 65157de: el hueco del paso se parte alrededor de las otras citas. Suite completa de 65157de: 2789 passed, 1 skipped,
+  0 fallos (19 min 50 s). Revisión pedida a Astra sobre main..65157de. Preguntas para Alicia pasadas a Pablo: espera y
+  lavado en los alisados, pasos de «Maquillaje y recogido» y de «Elumen largo».
