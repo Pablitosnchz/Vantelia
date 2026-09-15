@@ -308,6 +308,31 @@ def test_si_corrigiendo_el_servicio_lo_lleva_el_agente(canal):
     assert c["al_agente"][-1] == "sí, solo corte"
 
 
+def test_un_si_que_elige_lo_ofrecido_tambien_acepta(canal):
+    """Medido con modelo real sobre cf58f52: con solo el «sí» a secas, «vale, la primera opción que me
+    has dicho» volvía al agente y la cita se quedaba sin mover."""
+    c = canal
+    c["turno"]("cualquier otro hueco que tengas me vale", c["cambio"]())
+    c["turno"]("vale, la primera opcion que me has dicho")
+    assert c["movidas"] == [("R-123456", "2099-09-20", "12:00", "")]
+
+
+def test_ensenar_el_resumen_no_borra_lo_que_sabe_el_agente(canal):
+    """Si contesta otra cosa y el agente vuelve a proponer el cambio, el freno del día que nadie ha
+    pedido no puede saltar porque al enseñar el resumen se borró que le daba igual el día."""
+    from backend import reserva
+
+    c = canal
+    estado = reserva.cargar("demo", c["numero"])
+    estado.dia_le_da_igual = True
+    reserva.guardar("demo", c["numero"], estado)
+    c["turno"]("cualquier otro hueco que tengas me vale", c["cambio"]())
+    assert c["botones"], "no se ofreció el cambio"
+    despues = reserva.cargar("demo", c["numero"])
+    assert despues.dia_le_da_igual is True
+    assert (despues.fecha, despues.hora, despues.intencion) == ("2099-09-20", "12:00", "reprogramar")
+
+
 def test_pulsar_tres_veces_sigue_diciendo_que_esta_hecho(canal):
     """La segunda pulsación ve la cita ya movida y borraba el acuse: la tercera decía «ya no vigente»."""
     c = canal

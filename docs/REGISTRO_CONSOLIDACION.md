@@ -1274,3 +1274,18 @@ a fin en todas.
   sí escrito, agente de citas, huecos para mover). pyflakes limpio.
 - Efecto esperado en la medición: «vale, la primera opción que me has dicho» ya no acepta sola el resumen (lo lleva el
   agente). Se repiten `cambiar-la-hora-de-verdad` ×6 y el humo sobre el commit nuevo con copia nueva de producción.
+
+## 2026-09-15 11:30–11:48 +0200 - revisión OK de cf58f52, pero la medición real empeora; arreglo (Claude)
+
+- `codex review --commit cf58f52`: sin hallazgos (50 dirigidos). Agenda por pasos 1112954: también sin hallazgos.
+- Medición con modelo real de cf58f52 (copia nueva de producción snap9, `cambiar-la-hora-de-verdad`): cambio_s1 y s2 OK
+  pero **al segundo intento**; el primero falló en los dos con «la cita no se ha movido de sitio». Leídos: tras el
+  resumen, «vale, la primera opción que me has dicho» ya no aceptaba (solo `_es_solo_confirmacion`), volvía al agente,
+  que llamaba otra vez a `reprogramar_cita` y chocaba con el freno del día que nadie ha pedido: enseñar el resumen
+  borraba con `empezar_otra_gestion` que le daba igual el día. Parada la tirada (s3–s6 y humo) y la suite de cf58f52.
+- Arreglo: `_wa_acepta_el_cambio` acepta un sí sin pega, sin día ni hora, que no pide otra cosa
+  (`_wa_cambia_el_servicio`) y no nombra el servicio actual ni el nuevo («sí, solo corte» sigue yendo al agente); el
+  resumen del agente ya no llama a `empezar_otra_gestion` y conserva lo que el agente sabe del cambio.
+- Tests nuevos (2): rojos con cf58f52, verdes con el arreglo; «sí, solo corte» sigue verde; 137 dirigidos verdes;
+  pyflakes limpio.
+- Siguiente: suite completa, revisión de Codex y repetir la medición (×6 y humo) sobre el commit nuevo.

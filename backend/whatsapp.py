@@ -2420,6 +2420,30 @@ def _wa_cambia_el_servicio(cliente_id: str, texto: str) -> bool:
     return False
 
 
+def _wa_acepta_el_cambio(cliente_id: str, texto: str, datos: Dict[str, Any]) -> bool:
+    """¿Es un sí, sin pegas ni correcciones, al cambio de cita que tiene delante?
+
+    Revisión de Codex a c3aae1c: «sí, solo corte» a un cambio Corte → Mechas pasaba por un sí y
+    cambiaba la cita a Mechas sin que el agente leyera la corrección. Pero quedarse solo con el «sí»
+    a secas (cf58f52) dejó sin mover la cita a quien escribió «vale, la primera opción que me has
+    dicho» (medido con modelo real el 15-sep-2026: el agente volvió a proponerla y chocó con el freno
+    del día). Vale un sí que no trae día ni hora, no pide otra cosa y no nombra ningún servicio.
+    """
+    plano = textnorm._strip_accents(str(texto or "").lower().strip())
+    if (not _wa_dice_que_si(plano) or _wa_trae_dia_u_hora(texto)
+            or _wa_cambia_el_servicio(cliente_id, texto)):
+        return False
+    if chat._es_solo_confirmacion(texto):
+        return True
+    dichas = re.findall(r"[a-z0-9]+", plano)
+    for nombre in (datos.get("servicio"), datos.get("nuevo_servicio")):
+        claves = [p for p in re.findall(r"[a-z0-9]+", textnorm._strip_accents(str(nombre or "").lower()))
+                  if len(p) >= 4]
+        if any(d.startswith(c) for c in claves for d in dichas):
+            return False
+    return True
+
+
 async def _wa_resumen_para_confirmar(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     flow: appstate.WAFlowState, texto_previo: str, request,
@@ -2775,10 +2799,8 @@ async def _wa_turno_del_agente(
     _cambio = _reserva.leer_confirmacion_reserva(_reserva.cargar(cliente_id, from_number))
     if (_cambio and _cambio["estado"] == "ofrecida"
             and _cambio["datos"].get("accion") == "reprogramar"
-            # Solo un sí SIN nada más. «sí, solo corte» también pasaba `_wa_dice_que_si` y cambiaba
-            # la cita a Mechas sin que el agente leyera la corrección (revisión de Codex a c3aae1c).
-            and chat._es_solo_confirmacion(incoming_text)
-            and not _wa_trae_dia_u_hora(incoming_text)
+            # Un sí sin pegas ni correcciones (`_wa_acepta_el_cambio`): «sí, solo corte» no lo es.
+            and _wa_acepta_el_cambio(cliente_id, incoming_text, _cambio["datos"])
             and _wa_ultimo_intent_enviado(cliente_id, session_id) == "oferta_reprogramacion"):
         await _wa_responder_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
             from_number=from_number, iid="resched_yes:" + _cambio["id"], request=request)
@@ -3159,7 +3181,8 @@ async def _wa_ofrecer_cambio_del_agente(*, cliente_id, phone_number_id, from_num
     flow.fecha, flow.hora = str(cambio.get("fecha") or ""), str(cambio.get("hora") or "")
     await _wa_ofrecer_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
         from_number=from_number, flow=flow, request=request, telefono=str(cambio.get("telefono") or ""),
-        email=str(cambio.get("email") or ""), servicio=str(cambio.get("servicio") or ""))
+        email=str(cambio.get("email") or ""), servicio=str(cambio.get("servicio") or ""),
+        desde_agente=True)
     if flow.flow == "manage_reschedule_confirm":
         # Lo que escriba después lo sigue llevando el agente: un «sí» acepta este resumen
         # (`_wa_turno_del_agente`) y «mejor a las 18» pide otro cambio.
@@ -3167,7 +3190,7 @@ async def _wa_ofrecer_cambio_del_agente(*, cliente_id, phone_number_id, from_num
 
 
 async def _wa_ofrecer_reprogramacion(*, cliente_id, phone_number_id, from_number, flow, request,
-                                     telefono="", email="", servicio=""):
+                                     telefono="", email="", servicio="", desde_agente=False):
     """Enseña el cambio y espera a que lo acepte: no mueve la cita.
 
     Fase 4, decisión de Pablo del 14-sep-2026 («solo el flujo de listas»). Antes, en cuanto
@@ -3210,7 +3233,15 @@ async def _wa_ofrecer_reprogramacion(*, cliente_id, phone_number_id, from_number
             from_number=from_number, request=request,
             texto="⚠️ " + await booking._reschedule_failure_text(cliente_id, ocupado, fecha, hora))
         return
-    reserva.empezar_otra_gestion(estado)
+    if desde_agente:
+        # Lo que el agente sabe de ESTE cambio se conserva (le da igual el día, los huecos ofrecidos, el
+        # día y la hora): si contesta otra cosa y se vuelve a llamar a `reprogramar_cita`, el freno del
+        # día que nadie ha pedido saltaba por haberlo borrado al enseñar el resumen (medido el 15-sep).
+        reserva.invalidar_propuesta_servicio(estado)
+        estado.confirmacion_reserva_json = estado.cambio_pendiente_json = ""
+        estado.hecho = estado.cancelada = estado.esperando_confirmacion = False
+    else:
+        reserva.empezar_otra_gestion(estado)
     datos = booking._booking_reschedule_snapshot(fila, fecha, hora, servicio)
     datos.update(accion="reprogramar", from_number=from_number, telefono=telefono or "", email=email or "")
     estado.intencion, estado.codigo = "reprogramar", datos["booking_code"]
