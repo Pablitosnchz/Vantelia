@@ -17,6 +17,9 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -153,3 +156,53 @@ def test_la_ficha_del_pack_edita_y_guarda_los_pasos():
     assert 'id="svcPasos"' in fuente, "la ficha del servicio no tiene editor de pasos"
     guardar = fuente.split("async function saveService()", 1)[1].split("\n}\n", 1)[0]
     assert "gaps" in guardar, "guardar el servicio no manda los pasos"
+
+
+def _ejecutar_js(prueba):
+    """Ejecuta en Node las funciones de pintado de la agenda con `prueba` detrás."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
+    fuente = _panel()
+    trozos = ["const assert = require('assert'); const citasState = {};",
+              re.search(r"^const CD_PX_PER_MIN.*$", fuente, re.M).group()]
+    for nombre in ("cdParseMin", "cdBookingStartMin", "cdTramos", "cdPasos", "cdDur",
+                   "cdPasosVisibles", "cdOcupaVisible", "cdRestarOcupado"):
+        encontrada = re.search(r"^function " + nombre + r"\(.*?^\}", fuente, re.S | re.M)
+        assert encontrada, "no existe la funcion %s en el panel" % nombre
+        trozos.append(encontrada.group())
+    subprocess.run([node, "-e", "\n".join(trozos + [prueba])], check=True, capture_output=True, text=True)
+
+
+def test_los_pasos_cortos_no_se_tapan_entre_si():
+    """Revisión de Codex a 65157de: pasos de 5, 10 y 30 min seguidos pintaban el alto mínimo cada
+    uno y el siguiente tapaba el nombre del anterior (reproducido en navegador)."""
+    _ejecutar_js("""
+const pasos = [{inicio:600, fin:605, paso:'Aplicar', n:1, total:3},
+               {inicio:605, fin:615, paso:'Lavado', n:2, total:3},
+               {inicio:615, fin:645, paso:'Secado', n:3, total:3}];
+const g = cdPasosVisibles(pasos);
+for (let i = 1; i < g.length; i++) {
+  assert.ok((g[i].inicio - g[i-1].inicio) * CD_PX_PER_MIN >= CD_MIN_BLOCK_H, 'un bloque tapa al anterior');
+  assert.ok(g[i].inicio >= g[i-1].finVisible, 'el hueco o el bloque se meten en el anterior');
+}
+assert.strictEqual(g[0].n, 1); assert.strictEqual(g[g.length-1].hasta, 3);
+for (let i = 1; i < g.length; i++) assert.strictEqual(g[i].n, g[i-1].hasta + 1, 'se pierde un paso');
+assert.ok(g.map(x => x.paso).join(' · ').includes('Lavado'), 'se pierde el nombre del paso');
+""")
+
+
+def test_la_espera_no_tapa_otra_cita_pintada_aunque_este_cancelada():
+    """Revisión de Codex a 65157de: con el filtro «Canceladas», la espera de un pack tapaba el paso
+    de otro pack cancelado metido en ella, porque solo se descontaban las citas vivas."""
+    _ejecutar_js("""
+const B = {estado:'cancelled', work_steps:[{inicio:630, fin:650, n:1, total:2},
+                                           {inicio:710, fin:730, n:2, total:2}]};
+const libres = cdRestarOcupado([[620, 680]], [B], {});
+assert.ok(libres.every(([x, y]) => y <= 630 || x >= 650), JSON.stringify(libres));
+assert.deepStrictEqual(libres, [[620, 630], [650, 680]]);
+const corta = {hora:'10:40', work_steps:[]};
+const sinCorta = cdRestarOcupado([[620, 680]], [corta], {});
+assert.ok(sinCorta.every(([x, y]) => y <= 640 || x >= 640 + CD_MIN_BLOCK_H / CD_PX_PER_MIN),
+          'una cita corta tapa mas de lo que dura: ' + JSON.stringify(sinCorta));
+""")

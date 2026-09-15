@@ -8648,14 +8648,38 @@ function cdPasos(b){
                         n: Number(p.n) || 0, total: Number(p.total) || ps.length }))
            .filter(p => p.fin > p.inicio);
 }
-// Quita de unos rangos libres lo que ocupan OTRAS citas (sus pasos o sus tramos). La clienta que se
-// atiende mientras actua el producto de otra no puede quedar tapada por el rayado de «libre».
+// Los pasos tal y como se PINTAN. Un paso corto (5 min) ocupa el alto minimo del bloque y el
+// siguiente, pegado, le tapaba el nombre (revision de Codex a 65157de): los pasos que empezarian
+// dentro de ese alto se juntan en un bloque «Pasos 1–2/3 · Aplicar · Lavado». `finVisible` es
+// hasta donde llega el bloque dibujado, para que ni su espera ni otra cita se le metan encima.
+function cdPasosVisibles(pasos){
+  const minimo = CD_MIN_BLOCK_H / CD_PX_PER_MIN;
+  const grupos = [];
+  pasos.forEach(p => {
+    const g = grupos[grupos.length - 1];
+    if (g && p.inicio < g.inicio + minimo) {
+      g.fin = Math.max(g.fin, p.fin); g.hasta = p.n; g.nombres.push(p.paso);
+    } else {
+      grupos.push({ inicio: p.inicio, fin: p.fin, n: p.n, hasta: p.n, total: p.total, nombres: [p.paso] });
+    }
+  });
+  grupos.forEach(g => { g.finVisible = Math.max(g.fin, g.inicio + minimo); g.paso = g.nombres.filter(Boolean).join(' · '); });
+  return grupos;
+}
+// Lo que TAPA una cita en la columna: sus bloques dibujados, con su alto minimo.
+function cdOcupaVisible(o, emp){
+  const pasos = cdPasos(o);
+  if (pasos.length > 1) return cdPasosVisibles(pasos).map(g => [g.inicio, g.finVisible]);
+  const s = cdBookingStartMin(o);
+  return s === null ? [] : [[s, s + Math.max(cdDur(o, emp), CD_MIN_BLOCK_H / CD_PX_PER_MIN)]];
+}
+// Quita de unos rangos libres lo que tapan OTRAS citas pintadas en la columna. La clienta que se
+// atiende mientras actua el producto de otra no puede quedar tapada por el rayado de «libre». Cuenta
+// todo lo dibujado, tambien las canceladas del filtro «Canceladas» (revision de Codex a 65157de).
 function cdRestarOcupado(rangos, otras, emp){
   let libres = rangos.slice();
-  otras.filter(o => cdEstado(o) !== 'cancelled').forEach(o => {
-    const pasos = cdPasos(o);
-    const ocupado = pasos.length > 1 ? pasos.map(p => [p.inicio, p.fin]) : cdTramos(o, emp);
-    ocupado.forEach(([a, z]) => {
+  otras.forEach(o => {
+    cdOcupaVisible(o, emp).forEach(([a, z]) => {
       libres = libres.flatMap(([x, y]) => (z <= x || a >= y)
         ? [[x, y]]
         : [[x, Math.min(a, y)], [Math.max(z, x), y]].filter(([p, q]) => q > p));
@@ -9012,7 +9036,10 @@ function renderCitasDay(){
     const evs = bookings.flatMap(b => {
       const s = cdBookingStartMin(b); if (s === null) return [];
       const pasos = cdPasos(b);
-      if (pasos.length > 1) return pasos.map((p, i) => ({ b, startM: p.inicio, endM: p.fin, paso: p, siguiente: pasos[i + 1] || null }));
+      if (pasos.length > 1) {
+        const grupos = cdPasosVisibles(pasos);
+        return grupos.map((g, i) => ({ b, startM: g.inicio, endM: g.finVisible, paso: g, siguiente: grupos[i + 1] || null }));
+      }
       return [{ b, startM:s, endM:s + cdDur(b, c.emp) }];
     });
     cdPackLanes(evs).forEach(ev => {
@@ -9033,7 +9060,7 @@ function renderCitasDay(){
       const hora = ev.paso ? cdFmtMin(ev.paso.inicio) : horaCita;
       // Cada paso de un pack se lee como un servicio: «Paso 2/3 · Lavado». Sin nombre, el del pack.
       const sub = ev.paso
-        ? `Paso ${ev.paso.n}/${ev.paso.total} · ${ev.paso.paso || b.servicio || 'Consulta'}`
+        ? `${ev.paso.hasta > ev.paso.n ? `Pasos ${ev.paso.n}–${ev.paso.hasta}` : `Paso ${ev.paso.n}`}/${ev.paso.total} · ${ev.paso.paso || b.servicio || 'Consulta'}`
         : (c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta'));
       // En las citas CORTAS (un tinte de 15 min) no cabe la segunda linea y el
       // servicio desaparecia: se veia el nombre y nada mas. El salon lo pidio el
@@ -9077,8 +9104,11 @@ function renderCitasDay(){
       // parecia cuatro horas macizas y el negocio no las usaba.
       // Con pasos, cada bloque pinta SOLO el hueco que le sigue, en su columna; sin pasos (una cita
       // antigua que solo trae `work_intervals`), todos los huecos de la cita como antes.
+      // El hueco empieza donde ACABA el bloque dibujado (`finVisible`), no a mitad de un paso corto.
+      // Una cancelada no deja «libre» que ofrecer: con el filtro «Canceladas» su rayado tapaba a otra.
       const tramos = ev.paso
-        ? (ev.siguiente ? [[ev.paso.inicio, ev.paso.fin], [ev.siguiente.inicio, ev.siguiente.fin]] : [])
+        ? (ev.siguiente && est !== 'cancelled'
+            ? [[ev.paso.inicio, ev.paso.finVisible], [ev.siguiente.inicio, ev.siguiente.fin]] : [])
         : cdTramos(b, c.emp);
       if (tramos.length > 1) {
         for (let i = 0; i < tramos.length - 1; i++) {

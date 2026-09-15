@@ -1247,3 +1247,21 @@ a fin en todas.
 - 65157de: el hueco del paso se parte alrededor de las otras citas. Suite completa de 65157de: 2789 passed, 1 skipped,
   0 fallos (19 min 50 s). Revisión pedida a Astra sobre main..65157de. Preguntas para Alicia pasadas a Pablo: espera y
   lavado en los alisados, pasos de «Maquillaje y recogido» y de «Elumen largo».
+
+## 2026-09-15 09:30–10:10 +0200 - agenda por pasos: revisión de Codex y arreglos (Claude)
+
+- Astra no recogió el encargo (su sesión no se mueve desde el 14-sep 23:31). `codex review --base main` sobre
+  `claude/agenda-pasos` (05491bd): **CAMBIOS**, dos P2 reproducidos por Codex en navegador con `renderCitasDay` y el CSS
+  reales: (1) pasos seguidos de 5, 10 y 30 min pintan cada uno el alto mínimo y el siguiente tapa el nombre del anterior;
+  (2) con el filtro «Canceladas», la espera de un pack tapa el paso de otro pack cancelado metido en ella
+  (`cdRestarOcupado` descartaba las canceladas aunque estuvieran dibujadas).
+- Arreglo: `cdPasosVisibles` junta los pasos que empezarían dentro del alto mínimo del anterior en un bloque «Pasos 1–2/3
+  · Aplicar · Lavado» y da `finVisible`; las columnas y el hueco usan ese final; `cdOcupaVisible` descuenta de la espera
+  todo lo dibujado (canceladas incluidas, con su alto mínimo); una cita cancelada no pinta «libre».
+- Tests nuevos con Node sobre las funciones del panel (`test_los_pasos_cortos_no_se_tapan_entre_si`,
+  `test_la_espera_no_tapa_otra_cita_pintada_aunque_este_cancelada`): con el HTML de 65157de fallan; con el arreglo 25
+  passed (pasos, tiempos de espera y de exposición).
+- Navegador en entorno aislado (`verificar_pasos_codex.py`, sin datos reales, carpeta borrada), escenarios de Codex:
+  pasos 5/10/30 → 2 bloques («Pasos 1–2/3 · Aplicar · Lavado», «Paso 3/3 · Secado»), ninguno tapado según
+  `elementFromPoint`; dos packs cancelados alternos con filtro «Canceladas» → 4 bloques, 0 esperas, ninguno tapado; 0
+  errores de consola.
