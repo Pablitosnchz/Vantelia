@@ -610,9 +610,6 @@ async def _ejecutar(
         return {
             "ok": False,
             "pendiente_de_confirmacion": True,
-            # El nombre de esta cita puede sustituir al que ya se sabia solo si lo ha escrito
-            # ella («es para mi hija Laura Garcia Lopez»); uno del modelo, no.
-            "nombre_dicho": _nombre_aparece_en(dicho, str(argumentos.get("nombre") or "")),
             "error": "Todavia no se puede crear: lo confirma la clienta.",
             # OJO a como se le pide: con "dile que se lo pasas para confirmar"
             # contestaba "voy a pasar esto para que lo confirmen", que suena a que
@@ -2077,12 +2074,13 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
 # Elegir de forma inequívoca: lo que diga manda aunque ya lo hubiera pedido
 # («al final quiero el corte», tras corte y elumen, es quedarse solo con el corte).
 _ELIGE_LO_PEDIDO = re.compile(
-    r"\b(al final quiero|al final solo|solo quiero|mejor solo|me quedo con|lo que quiero es|"
-    r"he cambiado de idea|cambio de idea|en vez de|en lugar de)\b")
+    r"\b(al final quiero|al final solo|solo quiero|mejor solo|me quedo con)\b")
 # Formas que pueden ser cambiar de idea o hablar de lo ya pedido («pues quiero el corte con
-# Lorena»): solo cuentan si piden una familia que no se habia pedido.
+# Lorena», «para el corte, en vez de Lorena quiero a Conchi»): solo cuentan si piden una
+# familia que no se habia pedido (revision de Codex a 467d290).
 _SUSTITUYE_LO_PEDIDO = re.compile(
-    r"\b(pues quiero|mejor quiero|ahora quiero|no,? quiero)\b")
+    r"\b(pues quiero|mejor quiero|ahora quiero|no,? quiero|en vez de|en lugar de|lo que quiero es|"
+    r"he cambiado de idea|cambio de idea)\b")
 _ANYADE_A_LO_PEDIDO = re.compile(
     r"\b(tambien|ademas|aparte|junto con|a la vez|y (un|una|unas|unos|el|la|los|las))\b")
 

@@ -1464,3 +1464,13 @@ a fin en todas.
   que solo así sustituye al que se sabía); elección clara (`_ELIGE_LO_PEDIDO`: «al final quiero», «solo quiero», «me
   quedo con»…) manda siempre, y las formas ambiguas («pues quiero») solo si piden una familia nueva. Tests nuevos: 4
   rojos con 7f3f1d0; 191 verdes (incluidos TPV y mapa del código); pyflakes limpio.
+- `codex review --commit 467d290`: **CAMBIOS**. P1 «para el corte, en vez de Lorena quiero a Conchi» contaba como elegir
+  solo el corte; P1 con solo mirar si el nombre aparece en el chat, «mi hija Laura Garcia Lopez me recomendó» cambiaba la
+  cita a Laura; P1 el importe volvía a ir en los datos de la página de la clienta con `mostrar_precios: false`; P2 «es
+  para mi hija Laura» se saltaba los apellidos.
+- Decisión (17:14): recortar lo que estaba ampliando comportamiento con reglas por frases. El nombre vuelve a como está en
+  producción (solo `_amplia_el_nombre`) y se mantiene solo que el freno de apellidos no conserva un nombre que no aparece
+  en lo que ella escribió; cambiar la cita a otra persona queda como estaba (pendiente aparte). «En vez de», «lo que
+  quiero es» y «cambio de idea» pasan a formas ambiguas (solo con una familia nueva); elección clara solo con «al final
+  quiero», «solo quiero», «mejor solo», «me quedo con». Página de la clienta: sin importe en los datos si
+  `precios_ocultos`. Tests: 3 rojos con 467d290; 191 verdes; pyflakes limpio.

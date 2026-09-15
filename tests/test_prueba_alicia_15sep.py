@@ -74,19 +74,16 @@ def test_un_nombre_distinto_del_modelo_no_pisa_el_que_ya_se_sabe(api_module):  #
     assert estado.nombre == "Ana Ruiz Perez"
 
 
-def test_la_cita_para_otra_persona_va_a_su_nombre(api_module):  # noqa: F811
-    """Revisión de Codex a 7f3f1d0: «la cita es para mi hija Laura Garcia Lopez» con la madre ya
-    conocida se quedaba a nombre de la madre."""
-    from backend import agent, reserva
+def test_un_nombre_mencionado_no_pisa_el_de_la_clienta_conocida(api_module):  # noqa: F811
+    """Revisión de Codex a 467d290: con solo mirar si el nombre aparece en el chat, «mi hija Laura
+    Garcia Lopez me recomendó pedir cita» cambiaba la cita a Laura. El nombre ya sabido no se toca."""
+    from backend import reserva
 
-    dicho = "Hola, quiero cita para un corte. La cita es para mi hija Laura Garcia Lopez"
-    assert agent._nombre_aparece_en(dicho, "Laura Garcia Lopez")
-    assert not agent._nombre_aparece_en(dicho, "Maria Garcia Lopez")
     estado = reserva.Estado()
     estado.nombre = "Ana Ruiz Perez"
     reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Laura Garcia Lopez"),
                              {"ok": False, "pendiente_de_confirmacion": True, "nombre_dicho": True})
-    assert estado.nombre == "Laura Garcia Lopez"
+    assert estado.nombre == "Ana Ruiz Perez"
 
 
 def test_el_freno_de_apellidos_marca_el_nombre_que_ella_no_dijo(api_module, monkeypatch):  # noqa: F811
@@ -215,6 +212,8 @@ def test_la_pagina_de_la_cita_no_ensena_precio_si_el_negocio_no_los_da(pack_con_
     _con_config(monkeypatch, mostrar_precios=False)
     oculto = booking._booking_public_detail_from_row(fila)
     assert oculto.service_price_label == ""
+    # Tampoco en los datos de la página (revisión de Codex a 467d290: iban en /booking/manage/…/data).
+    assert oculto.service_price_cents == 0
     assert ("min · " + precio) not in booking._booking_manage_page(oculto)
 
 

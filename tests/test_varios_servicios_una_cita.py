@@ -435,6 +435,8 @@ def test_pedir_algo_mas_sigue_contando_lo_anterior(salon, api_module):
         # Revisión de Codex a 0beeb96: hablar de lo que ya pidió no es cambiar de idea.
         ("Quiero un corte de senora y un elumen", "Para el corte prefiero a Lorena"),
         ("Quiero un corte de senora y un elumen", "pues quiero el corte con Lorena"),
+        # Revisión de Codex a 467d290: cambiar de profesional no es elegir un solo servicio.
+        ("Quiero un corte de senora y un elumen", "para el corte, en vez de Lorena quiero a Conchi"),
     ):
         freno = agent._freno_de_varios_servicios(
             CLIENTE, _mensajes(*conversacion), {"servicio": "Corte senora"})
