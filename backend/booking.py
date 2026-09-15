@@ -2575,7 +2575,9 @@ def _booking_public_detail_from_row(
         service_id=data.get("service_id", ""),
         service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
         service_price_cents=int(data.get("service_price_cents", 0) or 0),
-        service_price_label=data.get("service_price_label", ""),
+        # Detalle público de la cita (lo ve la clienta): sin precio si el negocio no los da.
+        service_price_label=("" if precios_ocultos(data["cliente_id"])
+                             else data.get("service_price_label", "")),
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
         confirmed_by_customer=_booking_confirmed_by_customer(data["booking_id"]),
@@ -2840,7 +2842,8 @@ def _portal_booking_summary_from_row(
         service_id=data.get("service_id", ""),
         service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
         service_price_cents=int(data.get("service_price_cents", 0) or 0),
-        service_price_label=data.get("service_price_label", ""),
+        service_price_label=(data.get("service_price_label", "")
+                             if precios_en_agenda(data["cliente_id"]) else ""),
         payment_status=payment["status"] if payment else "",
         pay_state=(row["payment_status"] if "payment_status" in row.keys() else "") or "",
         payment_amount_cents=int(payment["amount_cents"] or 0) if payment else 0,
@@ -4233,7 +4236,10 @@ def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "custome
     hora_txt = "A las " + str(booking.hora)
     if duracion:
         hora_txt += " \u00b7 " + str(duracion) + " min"
-    if booking.service_price_label:
+    # La clienta no ve precio si el negocio no los da por mensaje; el negocio, si no los
+    # quiere en su agenda (15-sep-2026).
+    ocultar_precio = (not precios_en_agenda(booking.cliente_id)) if es_negocio else precios_ocultos(booking.cliente_id)
+    if booking.service_price_label and not ocultar_precio:
         hora_txt += " \u00b7 " + booking.service_price_label
 
     profesional_html = ""
@@ -7349,6 +7355,22 @@ def precios_ocultos(cliente_id: str) -> bool:
     except Exception:  # noqa: BLE001 - nunca romper una respuesta por esto
         return False
     return booking_cfg.get("mostrar_precios") is False
+
+
+def precios_en_agenda(cliente_id: str) -> bool:
+    """¿Se ven los precios en la agenda del equipo (bloques y detalle de la cita)?
+
+    Opt-out por tenant (`booking.precios_en_agenda: false`). Lo pidio la duenya del
+    salon el 15-sep-2026: «en la agenda no es necesario que aparezcan los precios, nos
+    quita espacio de la cita y nos supone malestar». Sin la clave, se ven como siempre.
+    """
+    from backend import clients
+
+    try:
+        booking_cfg = clients._get_client_config(cliente_id).get("booking") or {}
+    except Exception:  # noqa: BLE001 - ante la duda, como siempre
+        return True
+    return booking_cfg.get("precios_en_agenda") is not False
 
 
 _RENUNCIA_AL_DIAGNOSTICO = re.compile(

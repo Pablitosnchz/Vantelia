@@ -2049,6 +2049,38 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
     return dicho[-300:], servicio_texto
 
 
+# Cambiar de idea frente a pedir algo MAS. Sin tildes: se compara con el texto ya
+# normalizado (ver tests/test_patrones_sin_tilde.py).
+_SUSTITUYE_LO_PEDIDO = re.compile(
+    r"\b(pues quiero|mejor quiero|prefiero|en vez de|en lugar de|al final quiero|"
+    r"he cambiado de idea|cambio de idea|ahora quiero|lo que quiero es|no,? quiero)\b")
+_ANYADE_A_LO_PEDIDO = re.compile(
+    r"\b(tambien|ademas|aparte|junto con|a la vez|y (un|una|unas|unos|el|la|los|las))\b")
+
+
+def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
+    """Lo escrito desde la ULTIMA vez que cambio de idea sobre QUE hacerse.
+
+    Prueba de la duenya del salon, 15-sep-2026: «quiero unas mechas», eligio el largo,
+    y despues «pues quiero un grey blindin»; eligio largo, dia y hora del grey
+    blending. `_freno_de_varios_servicios` leia TODA la conversacion, vio mechas y
+    grey, bloqueo la cita y le pregunto «¿cual de los dos prefieres?» cuando ya lo
+    habia dicho. Sustituir no es sumar: cuenta desde el ultimo mensaje que nombra un
+    servicio con una forma de cambiar de idea y sin «tambien/ademas». Lo que se suma
+    («y tambien un corte», «he pensado que quiero un alisado») sigue contando entero.
+    """
+    textos = [str(m.get("content") or "").strip() for m in mensajes
+              if str(m.get("role") or "") == "user" and isinstance(m.get("content"), str)
+              and str(m.get("content") or "").strip()]
+    desde = 0
+    for indice, texto in enumerate(textos):
+        plano = catalog_pick._norm(texto)
+        if (_SUSTITUYE_LO_PEDIDO.search(plano) and not _ANYADE_A_LO_PEDIDO.search(plano)
+                and catalog_pick.familias_pedidas(cliente_id, texto)):
+            desde = indice
+    return " ".join(textos[desde:])[-1500:]
+
+
 def _sin_lo_que_ha_rechazado(cliente_id: str, pedido: str, familias):
     """Quita de lo pedido la valoracion, si ella ha dicho que no la quiere."""
     try:
@@ -2095,7 +2127,9 @@ def _freno_de_varios_servicios(
     # ya era el resumen del diagnostico-. Sobraba.
     if _es_la_valoracion(cliente_id, str(argumentos.get("servicio") or "")):
         return None
-    pedido = _lo_que_ha_escrito(mensajes)
+    # Lo que pide AHORA: cambiar de idea («pues quiero un grey blending») no es pedir
+    # otra cosa mas (`_lo_que_pide_ahora`).
+    pedido = _lo_que_pide_ahora(cliente_id, mensajes)
     familias = catalog_pick.familias_pedidas(cliente_id, pedido)
     # El diagnostico que ella ha RECHAZADO no es un servicio que haya pedido.
     # Reportado el 3-sep-2026: dijo "no quiero cita para diagnostico, quiero que me

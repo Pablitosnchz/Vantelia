@@ -396,3 +396,32 @@ def test_un_rechazo_no_pisa_lo_que_ya_se_sabia(salon, api_module):
     )
     assert estado.nombre == "Laura"
     assert estado.hora == "14:00"
+
+
+# ─── Cambiar de idea no es pedir dos cosas (prueba de la dueña, 15-sep-2026) ──
+
+def test_cambiar_de_idea_no_cuenta_como_pedir_dos_cosas(salon, api_module):
+    """«Quiero unas mechas» → largo → «pues quiero un grey blindin» → largo, día y hora.
+    El freno veía mechas y grey y le preguntaba cuál de los dos quería (agent_turns 161)."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE,
+        _mensajes("Quiero coger una cita para un corte de senora", "lo tengo medio",
+                  "Pues quiero un elumen", "Medio", "Jueves 17 a las 10:30"),
+        {"servicio": "Elumen corto-medio"},
+    )
+    assert freno is None, "cambió de idea y se le frena como si quisiera las dos cosas"
+
+
+def test_pedir_algo_mas_sigue_contando_lo_anterior(salon, api_module):
+    """Lo que se SUMA no se confunde con cambiar de idea."""
+    from backend import agent
+
+    for conversacion in (
+        ("Quiero un corte de senora", "pues quiero tambien un elumen"),
+        ("Quiero un corte de senora", "y ademas prefiero hacerme un elumen"),
+    ):
+        freno = agent._freno_de_varios_servicios(
+            CLIENTE, _mensajes(*conversacion), {"servicio": "Corte senora"})
+        assert freno is not None, "dejó pasar una cita que se come otro servicio: %r" % (conversacion,)

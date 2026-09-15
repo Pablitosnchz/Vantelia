@@ -120,6 +120,9 @@ class Estado:
     # que ella lo acepte (codigo, fecha, hora, servicio, telefono, email). No mueve nada:
     # WhatsApp lo convierte en el resumen con botones y lo vacía.
     cambio_pendiente_json: str = ""
+    # Cuándo se rechazó por última vez `crear_cita` (un freno, un dato que falta). El
+    # canal no enseña el resumen en ese mismo turno: el agente acaba de preguntar.
+    creacion_rechazada_en: float = 0.0
 
     def vigente(self) -> bool:
         return (time.time() - self.tocado) < CADUCA_EN
@@ -926,7 +929,14 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         # la mesa. Pedir cita ES declarar la intencion.
         estado.intencion = estado.intencion or "reservar"
         estado.esperando_confirmacion = True
+        estado.creacion_rechazada_en = 0.0
         return
+    if tool == "crear_cita" and not resultado.get("ok"):
+        # Prueba de la duenya del salon (15-sep-2026): el freno de varios servicios
+        # rechazo la cita, el agente pregunto «¿mechas o grey blending?» y en el MISMO
+        # turno WhatsApp le mando el resumen con botones porque el estado estaba
+        # completo. Confirmo sin contestar la pregunta.
+        estado.creacion_rechazada_en = time.time()
     if not resultado.get("ok"):
         # Una llamada RECHAZADA puede traer datos buenos. Pasa cuando se frena por
         # haber pedido varias cosas: la cita no se crea -y bien-, pero el nombre, el

@@ -2807,6 +2807,7 @@ async def _wa_turno_del_agente(
         return True
     # El canal SI sabe a que viene (ha pulsado "Cancelar mi cita", o su texto ha
     # disparado ese camino). Pasarselo evita que el agente lo adivine.
+    inicio_del_turno = time.time()
     texto, cita_creada = await agent.responder(
         cliente_id, incoming_text, session_id=session_id, telefono=from_number,
         config=config, location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id),
@@ -2838,7 +2839,12 @@ async def _wa_turno_del_agente(
     # resumen y lo confirma ella. Es el mismo resumen con botones de siempre; al
     # unificar en el agente se habia perdido, y con el la ultima oportunidad de
     # corregir un dato antes de ocupar un hueco.
-    if not cita_creada and await _wa_resumen_para_confirmar(
+    # Pero NO en el turno en que se acaba de rechazar crear la cita: el agente le esta
+    # preguntando algo y el resumen le dejaba confirmar sin contestar (prueba de la
+    # duenya del salon, 15-sep-2026: «¿mechas o grey blending?» y, 3 s despues, el
+    # resumen con Jose). Al contestar, el siguiente turno lo vuelve a intentar.
+    frenada_ahora = float(getattr(estado, "creacion_rechazada_en", 0.0) or 0.0) >= inicio_del_turno
+    if not cita_creada and not frenada_ahora and await _wa_resumen_para_confirmar(
         cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
         flow=flow, texto_previo=texto, request=request,
     ):
