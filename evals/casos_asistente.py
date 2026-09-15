@@ -85,8 +85,9 @@ CASOS = [
         "mensajes": ["Quiero coger una cita para hacerme unas mechas",
                      "Pues tengo el cabello por los hombros yo creo que medio",
                      # Ella escribio «por las mañanas»; el banco no admite «mañana» literal
-                     # (test_calendario_de_las_medidas): mismo sentido sin la palabra.
-                     "Pues quiero un grey blindin", "Medio", "Y prefiero a primera hora",
+                     # (test_calendario_de_las_medidas) y «a primera hora» es «me da igual,
+                     # la primera que tengas» (reserva.py): mismo sentido sin ninguna de las dos.
+                     "Pues quiero un grey blindin", "Medio", "Y prefiero antes de mediodia",
                      "el {dia_abierto_nombre} a las 10:30", "me llamo Ana Ruiz Perez"],
         # El final bueno es el resumen (la cita nace al pulsar el boton), sin volver a
         # preguntarle si queria las mechas y con quien hace grey blending segun su Excel.
