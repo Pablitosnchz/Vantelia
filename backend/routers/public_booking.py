@@ -484,11 +484,15 @@ def _gaps_a_json(gaps: Any) -> str:
     """Serializa los tramos trabajo/espera de un servicio (vacio = sin tramos)."""
     if not gaps:
         return ""
-    limpios = [
-        {"activo": max(0, int(getattr(g, "activo", 0) or 0)),
-         "espera": max(0, int(getattr(g, "espera", 0) or 0))}
-        for g in gaps
-    ]
+    limpios = []
+    for g in gaps:
+        tramo = {"activo": max(0, int(getattr(g, "activo", 0) or 0)),
+                 "espera": max(0, int(getattr(g, "espera", 0) or 0))}
+        # El nombre del paso solo se guarda si lo hay: un pack sin nombres queda igual que antes.
+        paso = textnorm._sanitize_text(str(getattr(g, "paso", "") or ""))[:80]
+        if paso:
+            tramo["paso"] = paso
+        limpios.append(tramo)
     return json.dumps(limpios, ensure_ascii=False) if any(
         t["activo"] or t["espera"] for t in limpios
     ) else ""

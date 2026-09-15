@@ -345,8 +345,11 @@ def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
     }
 
 
-def _service_gaps_from_row(row: sqlite3.Row) -> List[Dict[str, int]]:
-    """Tramos trabajo/espera del servicio, saneados. Vacio = ocupa su rango entero."""
+def _service_gaps_from_row(row: sqlite3.Row) -> List[Dict[str, Any]]:
+    """Tramos trabajo/espera del servicio, saneados. Vacio = ocupa su rango entero.
+
+    `paso` (el nombre del paso, para pintarlo en la agenda) solo aparece si lo tiene.
+    """
     crudo = _row_str_or_empty(row, "gap_json")
     if not crudo:
         return []
@@ -356,17 +359,21 @@ def _service_gaps_from_row(row: sqlite3.Row) -> List[Dict[str, int]]:
         return []
     if not isinstance(tramos, list):
         return []
-    limpios: List[Dict[str, int]] = []
+    limpios: List[Dict[str, Any]] = []
     for tramo in tramos:
         if not isinstance(tramo, dict):
             continue
         try:
-            limpios.append({
+            limpio: Dict[str, Any] = {
                 "activo": max(0, int(tramo.get("activo") or 0)),
                 "espera": max(0, int(tramo.get("espera") or 0)),
-            })
+            }
         except (TypeError, ValueError):
             continue
+        paso = textnorm._sanitize_text(str(tramo.get("paso") or ""))[:80]
+        if paso:
+            limpio["paso"] = paso
+        limpios.append(limpio)
     return limpios
 
 

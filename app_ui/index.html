@@ -858,6 +858,12 @@
   border:1px dashed rgba(0,245,212,.45);display:flex;align-items:center;justify-content:center;}
 .cd-espera:hover{background:rgba(0,245,212,.18);z-index:8;}
 .cd-espera span{font-size:.62rem;letter-spacing:.03em;color:var(--success);text-transform:uppercase;}
+/* Un pack se pinta como sus pasos: cada paso es un bloque propio (15-sep-2026). El paso
+   que no es el primero lleva el borde izquierdo mas tenue para leer que es la misma cita. */
+.cd-event.cd-paso .cd-ev-svc{font-weight:600;}
+.cd-event.cd-paso.cd-paso-sigue{border-left-style:dashed;}
+.svc-paso{display:grid;grid-template-columns:minmax(0,1fr) 64px 64px 32px;gap:6px;margin-bottom:6px;align-items:center;}
+.svc-paso-cab{display:grid;grid-template-columns:minmax(0,1fr) 64px 64px 32px;gap:6px;margin-bottom:4px;font-size:.7rem;color:var(--soft-2);}
     .cd-event.cancelled { opacity:.62; }
     .cd-event.cancelled .cd-ev-name { text-decoration:line-through; }
     .cd-ev-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
@@ -4170,6 +4176,15 @@
       <div class="field"><label class="field-label">Duración (min) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
       <div class="field"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
     </div>
+    <!-- Pasos del pack: la agenda pinta cada paso como un servicio y deja libre la espera. -->
+    <details class="nb-more" id="svcPasosWrap" style="margin-bottom:10px;">
+      <summary id="svcPasosTitulo">Pasos del pack · para la agenda (opcional)</summary>
+      <p class="panel-sub" style="margin:6px 0 8px; font-size:0.78rem;">Cada paso se ve en la agenda como un servicio, y la espera entre pasos queda libre para atender a otra clienta. Al reservar se sigue cogiendo el servicio entero.</p>
+      <div class="svc-paso-cab"><span>Paso</span><span>Trabajo</span><span>Espera</span><span></span></div>
+      <div id="svcPasos"></div>
+      <button type="button" class="btn btn-ghost" id="svcPasoAdd" style="margin-top:4px;">+ Añadir paso</button>
+      <p class="panel-sub" id="svcPasosResumen" style="margin:8px 0 0; font-size:0.78rem;"></p>
+    </details>
     <div class="field" style="margin-bottom:10px;">
       <label class="field-label">¿Cómo se paga este servicio?</label>
       <select class="field-input" id="svcCobro">
@@ -8310,6 +8325,11 @@ function openServiceDrawer(svc = null) {
   // el título, que dice qué hay dentro; así nada configurado pasa desapercibido.
   document.getElementById('svcMasOpciones').open = false;
   document.getElementById('svcMasResumen').innerHTML = resumenExtrasServicio(svc);
+  const pasosEl = document.getElementById('svcPasos');
+  pasosEl.innerHTML = '';
+  ((svc && svc.gaps) || []).forEach(p => pasosEl.appendChild(svcPasoFila(p)));
+  document.getElementById('svcPasosWrap').open = false;
+  svcPasosResumen();
   document.getElementById('serviceDrawer').classList.add('open');
   document.getElementById('serviceOverlay').classList.add('open');
   loadSvcLocations(svc ? svc.id : '');
@@ -8318,6 +8338,51 @@ function closeServiceDrawer() {
   document.getElementById('serviceDrawer').classList.remove('open');
   document.getElementById('serviceOverlay').classList.remove('open');
 }
+// Pasos del pack (gaps del servicio): nombre, minutos de trabajo y de espera después. La
+// agenda pinta cada paso como un servicio y deja libre la espera (15-sep-2026). Si los pasos
+// suman más que la duración, el backend (`agenda._tramos_de_trabajo`) pinta el servicio entero,
+// así que aquí se avisa en vez de dejar que no se entienda por qué la agenda no los enseña.
+function svcPasoFila(p = {}) {
+  const fila = document.createElement('div');
+  fila.className = 'svc-paso';
+  fila.innerHTML = `<input type="text" class="field-input svc-paso-nombre" maxlength="80" placeholder="Ej. Aplicar producto" value="${escapeHtml(p.paso || '')}" />`
+    + `<input type="number" class="field-input svc-paso-activo" min="0" max="600" step="5" title="Minutos de trabajo" value="${Number(p.activo) || 0}" />`
+    + `<input type="number" class="field-input svc-paso-espera" min="0" max="600" step="5" title="Minutos de espera después" value="${Number(p.espera) || 0}" />`
+    + `<button type="button" class="btn btn-ghost svc-paso-quitar" title="Quitar paso">×</button>`;
+  fila.querySelector('.svc-paso-quitar').addEventListener('click', () => { fila.remove(); svcPasosResumen(); });
+  fila.querySelectorAll('input').forEach(i => i.addEventListener('input', svcPasosResumen));
+  return fila;
+}
+function svcPasosLeer() {
+  return [...document.querySelectorAll('#svcPasos .svc-paso')].map(f => ({
+    paso: f.querySelector('.svc-paso-nombre').value.trim(),
+    activo: Math.max(0, parseInt(f.querySelector('.svc-paso-activo').value, 10) || 0),
+    espera: Math.max(0, parseInt(f.querySelector('.svc-paso-espera').value, 10) || 0),
+  })).filter(p => p.activo || p.espera || p.paso);
+}
+function svcPasosResumen() {
+  const pasos = svcPasosLeer();
+  const resumen = document.getElementById('svcPasosResumen');
+  const titulo = document.getElementById('svcPasosTitulo');
+  if (!pasos.length) {
+    resumen.textContent = '';
+    titulo.textContent = 'Pasos del pack · para la agenda (opcional)';
+    return;
+  }
+  const trabajo = pasos.reduce((s, p) => s + p.activo, 0);
+  const espera = pasos.reduce((s, p) => s + p.espera, 0);
+  const duracion = parseInt(document.getElementById('svcDuracion').value, 10) || 0;
+  titulo.textContent = `Pasos del pack · ${pasos.length} ${pasos.length === 1 ? 'paso' : 'pasos'}`;
+  resumen.innerHTML = `Trabajo ${trabajo} min + espera ${espera} min = <b>${trabajo + espera} min</b> · el servicio dura ${duracion} min.`
+    + ((trabajo + espera) > duracion
+      ? ' <span style="color:#f59e0b;">No cuadra: los pasos suman más que la duración y la agenda pintará el servicio entero, sin pasos.</span>'
+      : '');
+}
+document.getElementById('svcPasoAdd')?.addEventListener('click', () => {
+  document.getElementById('svcPasos').appendChild(svcPasoFila());
+  svcPasosResumen();
+});
+document.getElementById('svcDuracion')?.addEventListener('input', svcPasosResumen);
 // Tras crear/editar/eliminar un servicio: propaga el cambio del catálogo al resto de
 // la app sin recargar la página -> selectores que usan allServices + vista de Citas
 // (calendario/día) para que la duración/precio/pago queden al día.
@@ -8348,7 +8413,10 @@ async function saveService() {
   const image_url = document.getElementById('svcImagen').value.trim();
   const category = document.getElementById('svcCategoria').value.trim();
   const booking_note = document.getElementById('svcBookingNote').value.trim();
-  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url, category, booking_note });
+  // Los pasos van siempre: la ficha los ha cargado del servicio, así que un pack que no se toca
+  // se guarda igual, y quitar todas las filas es quitarle los pasos.
+  const gaps = svcPasosLeer();
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url, category, gaps, booking_note });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
     const saved = slug
@@ -8570,6 +8638,15 @@ function cdTramos(b, emp){
   const ini = cdBookingStartMin(b);
   if (ini === null) return [];
   return [[ini, ini + cdDur(b, emp)]];
+}
+// Los pasos de un pack con su nombre (`work_steps` del backend). La agenda pinta cada uno como
+// un servicio y la espera entre ellos como hueco libre (encargo de Pablo del 15-sep-2026: «que
+// salga servicio + hueco + servicio (paso 2)»). Vacio = la cita no va por pasos.
+function cdPasos(b){
+  const ps = Array.isArray(b.work_steps) ? b.work_steps : [];
+  return ps.map(p => ({ inicio: Number(p.inicio), fin: Number(p.fin), paso: String(p.paso || ''),
+                        n: Number(p.n) || 0, total: Number(p.total) || ps.length }))
+           .filter(p => p.fin > p.inicio);
 }
 function cdDur(b, emp, useSlotFallback = true){
   // MANDA lo que ocupa la cita de verdad (su inicio y su fin), no la duracion del
@@ -8915,7 +8992,14 @@ function renderCitasDay(){
       info.blocks.forEach(bl => { const s = cdParseMin(bl.hora_inicio || bl.start_time), e = cdParseMin(bl.hora_fin || bl.end_time); if (s === null || e === null) return; band(s, e, { cls:'cd-block', label:(bl.motivo || bl.reason || 'Bloqueado') }); });
     }
 
-    const evs = bookings.map(b => { const s = cdBookingStartMin(b); if (s === null) return null; return { b, startM:s, endM:s + cdDur(b, c.emp) }; }).filter(Boolean);
+    // Un pack por pasos entra en las columnas POR PASO: la clienta que se mete en la espera sale a
+    // ancho completo y no apretada al lado de un bloque que no la pisa (15-sep-2026).
+    const evs = bookings.flatMap(b => {
+      const s = cdBookingStartMin(b); if (s === null) return [];
+      const pasos = cdPasos(b);
+      if (pasos.length > 1) return pasos.map((p, i) => ({ b, startM: p.inicio, endM: p.fin, paso: p, siguiente: pasos[i + 1] || null }));
+      return [{ b, startM:s, endM:s + cdDur(b, c.emp) }];
+    });
     cdPackLanes(evs).forEach(ev => {
       const b = ev.b, est = cdEstado(b), view = cdView(b);
       const top = (ev.startM - startMin) * CD_PX_PER_MIN;
@@ -8924,13 +9008,18 @@ function renderCitasDay(){
       const base = view.color;
       const leftColor = c.type === 'day' ? cdEmpColor(b) : c.color;
       const btn = document.createElement('button'); btn.type = 'button';
-      btn.className = 'cd-event' + (h < 46 ? ' compact' : '') + (est === 'cancelled' ? ' cancelled' : '');
+      btn.className = 'cd-event' + (h < 46 ? ' compact' : '') + (est === 'cancelled' ? ' cancelled' : '')
+        + (ev.paso ? ' cd-paso' + (ev.paso.n > 1 ? ' cd-paso-sigue' : '') : '');
       btn.style.top = top + 'px'; btn.style.height = h + 'px';
       btn.style.left = `calc(${lPct}% + 3px)`; btn.style.width = `calc(${wPct}% - 6px)`;
       btn.style.background = cdHexToRgba(base, 0.16); btn.style.borderColor = cdHexToRgba(base, 0.5); btn.style.borderLeftColor = leftColor;
       if ((b.booking_id || b.id) === citasState.selectedDayBookingId) btn.classList.add('selected');
-      const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
-      const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
+      const horaCita = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
+      const hora = ev.paso ? cdFmtMin(ev.paso.inicio) : horaCita;
+      // Cada paso de un pack se lee como un servicio: «Paso 2/3 · Lavado». Sin nombre, el del pack.
+      const sub = ev.paso
+        ? `Paso ${ev.paso.n}/${ev.paso.total} · ${ev.paso.paso || b.servicio || 'Consulta'}`
+        : (c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta'));
       // En las citas CORTAS (un tinte de 15 min) no cabe la segunda linea y el
       // servicio desaparecia: se veia el nombre y nada mas. El salon lo pidio el
       // 9-sep-2026 -"aunque sea de 15 minutos tengo que ver el nombre y el
@@ -8946,8 +9035,11 @@ function renderCitasDay(){
       // queda, que esa no se deduce del color.
       const linea = `${hora} · ${quien}`;
       const etiqueta = compacta ? cdPayMark(b) : escapeHtml(view.tag) + cdPayMark(b);
-      btn.title = [hora, quien, servicioCorto, view.label].filter(Boolean).join(' · ');
-      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(linea)}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${etiqueta}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
+      btn.title = [hora, quien, ev.paso ? sub : '', servicioCorto, view.label].filter(Boolean).join(' · ');
+      // Duración y precio van en el bloque de la cita o en el PRIMER paso del pack: repetidos en
+      // cada paso no dicen nada y quitan sitio al nombre del paso.
+      const meta = (ev.paso && ev.paso.n > 1) ? '' : cdServiceMeta(b);
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(linea)}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${etiqueta}</span></div><div class="cd-ev-svc">${escapeHtml(sub + meta)}</div>`;
       btn.addEventListener('click', () => {
         // Soltar el borde despues de estirar dispara un click sobre la cita, y
         // abria el panel de Gestionar cada vez. Se traga ese click y ya esta.
@@ -8955,7 +9047,9 @@ function renderCitasDay(){
         openManageBookingModal(b);
       });
       body.appendChild(btn);
-      if (est !== 'cancelled' && est !== 'completed' && est !== 'no_show' && hasPerm('agenda.create')) {
+      // Un pack por pasos no se estira desde la agenda: sus pasos tienen tiempos fijos y estirar el
+      // final dejaria la cola sin bloquear (`agenda._tramos_de_trabajo`). Se cambia desde Gestionar.
+      if (!ev.paso && est !== 'cancelled' && est !== 'completed' && est !== 'no_show' && hasPerm('agenda.create')) {
         // OJO: el `slotMin` de arriba vive dentro del bloque del hueco vacio, no
         // aqui. Se calcula igual pero en este ambito (lo cazo el navegador con un
         // "slotMin is not defined" que dejaba la columna SIN CITAS pintadas).
@@ -8966,7 +9060,11 @@ function renderCitasDay(){
       // Los ratos de exposicion se pintan ENCIMA del bloque, en hueco: es la unica
       // forma de que se vea que ahi se puede meter a otra clienta. Sin esto el pack
       // parecia cuatro horas macizas y el negocio no las usaba.
-      const tramos = cdTramos(b, c.emp);
+      // Con pasos, cada bloque pinta SOLO el hueco que le sigue, en su columna; sin pasos (una cita
+      // antigua que solo trae `work_intervals`), todos los huecos de la cita como antes.
+      const tramos = ev.paso
+        ? (ev.siguiente ? [[ev.paso.inicio, ev.paso.fin], [ev.siguiente.inicio, ev.siguiente.fin]] : [])
+        : cdTramos(b, c.emp);
       if (tramos.length > 1) {
         for (let i = 0; i < tramos.length - 1; i++) {
           const libreIni = tramos[i][1], libreFin = tramos[i + 1][0];

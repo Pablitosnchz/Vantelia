@@ -1206,3 +1206,30 @@ a fin en todas.
   su Q&A nueva; «cuánto cuestan las extensiones» → la de presupuesto.
 - `main` subido a GitHub (5adfd48..629fabf).
 - Siguiente: seguimiento fuera del plan (tabla de la fase 4); vigilar el uso real de Alicia cuando conecte su WhatsApp.
+
+## 2026-09-15 00:07 +0200 - etiqueta genérica «extensiones» fuera de la Q&A de Alicia (Claude)
+
+- Revisión de sus 22 Q&A en solo lectura: la etiqueta suelta «extensiones» de «Quiero ponerme extensiones, ¿me aconsejáis y
+  me dais presupuesto?» contestaba con el presupuesto a «me quiero quitar las extensiones», «tenéis extensiones rubias?»
+  o «hacéis extensiones de keratina?». Decisión de Pablo (AskUserQuestion): quitar solo esa etiqueta.
+- Producción, copia previa `/srv/vantelia-backups/pre-etiqueta-extensiones-20260914-220719.db` e
+  `info-pre-etiqueta-extensiones-20260914-220719.txt`: etiquetas de `qa_a47234af05` sin «extensiones» (quedan «ponerme
+  extensiones», «poner extensiones», «quiero extensiones», «extensiones de pelo», «presupuesto extensiones», «precio
+  extensiones»); `info.txt` regenerado y `olvidar_tenant`. Comprobado con `rag._match_qa_answer`: quitar, rubias y
+  keratina → el asistente; «quiero extensiones», «precio extensiones», «cuánto tarda poner extensiones» → presupuesto;
+  «cuánto duran las extensiones» → su Q&A nueva. Nada enviado a nadie.
+- Decisión de Pablo en la misma pregunta: confirmar antes de reprogramar desde el agente. Sin empezar (solo lectura de
+  código) al llegar el encargo de la agenda por pasos.
+
+## 2026-09-15 - agenda con los pasos de los packs: plan y decisiones (Claude)
+
+- Encargo de Pablo: en la agenda, un pack se ve como sus pasos («servicio + hueco + servicio (paso 2)…»); al reservar se
+  sigue cogiendo el pack. Solo pintado: disponibilidad, asistente y recordatorios no cambian.
+- Estado leído (solo lectura en producción): los packs guardan sus pasos en `gap_json` solo en minutos, sin nombre; no hay
+  editor en el panel; de 37 packs de Alicia, 29 cuadran (hoy bloque con «libre» encima) y 8 alisados no (pasos que suman
+  más que su duración: se pintan enteros). Los nombres de cada paso están en su Excel (hoja «Packs»), con erratas.
+- Plan: nombre por paso en `gap_json`; importar nombres del Excel donde el número de pasos coincide; `work_steps` por cita
+  en la API; un bloque por paso en vista Día/Semana con el hueco clicable, columnas por pasos y bordes solo en el primero y
+  el último; editor de pasos en la ficha del pack con suma y aviso.
+- Decisiones de Pablo (AskUserQuestion): alisados → preguntar a Alicia y mientras se pintan enteros; nombre en cada paso
+  (no enlace al catálogo); editor en la ficha del pack; la confirmación antes de reprogramar va después de la agenda.
