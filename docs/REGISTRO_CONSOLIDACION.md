@@ -1365,3 +1365,19 @@ a fin en todas.
 - Tests nuevos (2): rojos con cf58f52, verdes con el arreglo; «sí, solo corte» sigue verde; 137 dirigidos verdes;
   pyflakes limpio.
 - Siguiente: suite completa, revisión de Codex y repetir la medición (×6 y humo) sobre el commit nuevo.
+
+## 2026-09-15 11:48–12:28 +0200 - candidato de despliegue: agenda por pasos + reprogramar confirmada (Claude)
+
+- Medición real de 2ee6890 (copia nueva de producción snap9): `cambiar-la-hora-de-verdad` ×6 (cambio_t1–6) 6/6 al primer
+  intento, 0 reintentos, 0 no medidos. Leídas t3 y t6 enteras: el agente propone, WhatsApp envía el resumen y la cita se
+  mueve una sola vez al aceptar por escrito («vale, la primera opción que me has dicho»). Humo (humo_t) 5/5. Borradas
+  snap9, cfg9 y las copias de todas las tiradas (también las de cf58f52).
+- `codex review --commit 2ee6890` cortado por falta de cuota de Codex (vuelve a las 14:34); revisión propia del diff sin
+  hallazgos. Suite completa de 2ee6890: 2803 passed, 1 skipped, 0 fallos.
+- Decisiones de Pablo (AskUserQuestion): «Las dos al estar verdes» y poner los nombres de los pasos en los packs de
+  Alicia donde cuadran, con copia previa.
+- Candidato `claude/despliegue-15sep` (E:/vp-despliegue) desde main a4e7669: merge de `claude/agenda-pasos` (b4dd6e2) y
+  `claude/reprogramar-confirmada` (2ee6890). Único conflicto en este registro, resuelto conservando las dos ramas, sin
+  marcas. Suite completa de addcf95: 2813 passed, 1 skipped, 0 fallos (19 min 45 s).
+- Siguiente: main a este commit, despliegue, humo en el servidor, subir main, nombres de pasos de Alicia con copia
+  previa y revisión de Codex del último arreglo de reprogramar a las 14:34.
