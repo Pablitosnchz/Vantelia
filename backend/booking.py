@@ -2715,6 +2715,55 @@ def _work_intervals_of(row: sqlite3.Row, data: Dict[str, Any]) -> List[List[int]
         return []
 
 
+def _nombres_de_pasos(gap_json: str) -> List[str]:
+    """Nombres de los tramos CON trabajo, en orden: los mismos que da `agenda._tramos_de_trabajo`."""
+    try:
+        tramos = json.loads(gap_json) if gap_json else []
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(tramos, list):
+        return []
+    nombres: List[str] = []
+    for tramo in tramos:
+        if not isinstance(tramo, dict):
+            continue
+        try:
+            activo = int(tramo.get("activo") or 0)
+        except (TypeError, ValueError):
+            continue
+        if activo > 0:
+            nombres.append(textnorm._sanitize_text(str(tramo.get("paso") or ""))[:80])
+    return nombres
+
+
+def _work_steps_of(row: sqlite3.Row, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Cada paso de un pack con su hora y su nombre, para pintarlo en la agenda como un servicio.
+
+    Encargo de Pablo (15-sep-2026): en la agenda el pack se ve como sus pasos -«servicio +
+    hueco + servicio (paso 2)»-; al reservar se sigue cogiendo el pack. Los ratos son los de
+    `_work_intervals_of` (vacio = la cita no va por pasos). El nombre sale de la propia cita, que
+    lo copio al reservarse; si la cita es de antes de poner nombres, del pack actual cuando tiene
+    los mismos pasos. Nunca se inventa: sin nombre fiable, "".
+    """
+    intervalos = _work_intervals_of(row, data)
+    if not intervalos:
+        return []
+    total = len(intervalos)
+    try:
+        nombres = _nombres_de_pasos((row["gap_json"] if "gap_json" in row.keys() else "") or "")
+        if not any(nombres) and row["service_id"]:
+            servicio = agenda._get_service_row(row["cliente_id"], row["service_id"])
+            actuales = _nombres_de_pasos(
+                ((servicio["gap_json"] if "gap_json" in servicio.keys() else "") or "") if servicio is not None else "")
+            nombres = actuales if len(actuales) == total else []
+        if len(nombres) != total:
+            nombres = [""] * total
+    except Exception:  # noqa: BLE001 - un nombre no puede tumbar el listado de citas
+        nombres = [""] * total
+    return [{"inicio": a, "fin": b, "paso": nombres[i], "n": i + 1, "total": total}
+            for i, (a, b) in enumerate(intervalos)]
+
+
 def _portal_booking_summary_from_row(
     row: sqlite3.Row,
     request: Optional[Request] = None,
@@ -2795,6 +2844,8 @@ def _portal_booking_summary_from_row(
         # negocio creia tener la tarde entera cogida: la funcion estaba escrita, el
         # campo declarado y la pantalla preparada, pero nadie los unia.
         work_intervals=_work_intervals_of(row, data),
+        # Los mismos ratos con el nombre de cada paso: la agenda pinta el pack como sus pasos.
+        work_steps=_work_steps_of(row, data),
     )
 
 

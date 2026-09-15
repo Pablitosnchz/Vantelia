@@ -259,8 +259,8 @@ class ServicePublic(BaseModel):
     image_url: str = ""
     category: str = ""
     booking_note: str = ""
-    # Tramos trabajo/espera. Vacio = el servicio ocupa su duracion entera.
-    gaps: List[Dict[str, int]] = Field(default_factory=list)
+    # Tramos trabajo/espera (y el nombre del paso, si lo tiene). Vacio = ocupa su duracion entera.
+    gaps: List[Dict[str, Any]] = Field(default_factory=list)
     duration_minutes: int = 30
     price_cents: int = 0
     price_label: str = ""
@@ -289,6 +289,9 @@ class ServiceGap(BaseModel):
     """
     activo: int = Field(default=0, ge=0, le=600)
     espera: int = Field(default=0, ge=0, le=600)
+    # Nombre del paso («Aplicar producto», «Lavado»): la agenda pinta cada paso como un
+    # servicio. Solo pintado; reservar sigue siendo el pack entero.
+    paso: str = Field(default="", max_length=80)
 
 
 class ServicePayload(BaseModel):
@@ -1839,6 +1842,10 @@ class PortalBookingSummary(BaseModel):
     # ocupa su duracion entera. El campo se declaro por error solo en
     # `BookingDetailPublic`, que NO es el que lee el calendario del panel.
     work_intervals: List[List[int]] = []
+    # Los mismos ratos con el nombre de cada paso, para que la agenda pinte el pack como sus
+    # pasos: [{"inicio": 600, "fin": 620, "paso": "Aplicar producto", "n": 1, "total": 3}, ...].
+    # Vacio = la cita no va por pasos.
+    work_steps: List[Dict[str, Any]] = []
 
 
 class PortalBookingsResponse(BaseModel):

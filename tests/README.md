@@ -262,6 +262,14 @@ trabajan ese día (vacaciones de día entero desde Horario) es un día CERRADO p
 (`agenda.motivo_de_cierre_del_dia`). Antes el asistente decía «ese día lo tengo completo».
 Un bloqueo parcial, o las vacaciones de una sola profesional mientras otra trabaja, no cierran.
 
+`test_agenda_por_pasos.py`: en la agenda un pack se pinta como sus pasos (encargo de Pablo del
+15-sep-2026). Cada tramo de `gap_json` puede llevar su nombre (`paso`), la API del panel devuelve
+`work_steps` con hora y nombre (los de la cita o, si es anterior, los del pack actual cuando tiene
+los mismos pasos; nunca inventados), la agenda pinta un bloque por paso y la ficha del pack edita
+y guarda los pasos. Reservar sigue siendo el pack entero. Con Node (se salta sin él) ejecuta las
+funciones de pintado del panel: pasos cortos seguidos se juntan en un bloque en vez de taparse, y
+la espera no tapa ninguna cita dibujada, tampoco las del filtro «Canceladas» (revisión de Codex).
+
 `test_horario_no_depende_del_dia.py`: el caso del banco `horario-escrito-manda` exige el
 horario de la SEMANA (`horario_semanal`): dos días de la semana, «todos los días» o «excepto
 los domingos»; los días pegados a hoy/mañana no cuentan. Con «lunes» a secas pasaba los

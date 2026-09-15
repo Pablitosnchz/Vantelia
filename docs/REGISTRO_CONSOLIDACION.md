@@ -1206,3 +1206,79 @@ a fin en todas.
   su Q&A nueva; «cuánto cuestan las extensiones» → la de presupuesto.
 - `main` subido a GitHub (5adfd48..629fabf).
 - Siguiente: seguimiento fuera del plan (tabla de la fase 4); vigilar el uso real de Alicia cuando conecte su WhatsApp.
+
+## 2026-09-15 00:07 +0200 - etiqueta genérica «extensiones» fuera de la Q&A de Alicia (Claude)
+
+- Revisión de sus 22 Q&A en solo lectura: la etiqueta suelta «extensiones» de «Quiero ponerme extensiones, ¿me aconsejáis y
+  me dais presupuesto?» contestaba con el presupuesto a «me quiero quitar las extensiones», «tenéis extensiones rubias?»
+  o «hacéis extensiones de keratina?». Decisión de Pablo (AskUserQuestion): quitar solo esa etiqueta.
+- Producción, copia previa `/srv/vantelia-backups/pre-etiqueta-extensiones-20260914-220719.db` e
+  `info-pre-etiqueta-extensiones-20260914-220719.txt`: etiquetas de `qa_a47234af05` sin «extensiones» (quedan «ponerme
+  extensiones», «poner extensiones», «quiero extensiones», «extensiones de pelo», «presupuesto extensiones», «precio
+  extensiones»); `info.txt` regenerado y `olvidar_tenant`. Comprobado con `rag._match_qa_answer`: quitar, rubias y
+  keratina → el asistente; «quiero extensiones», «precio extensiones», «cuánto tarda poner extensiones» → presupuesto;
+  «cuánto duran las extensiones» → su Q&A nueva. Nada enviado a nadie.
+- Decisión de Pablo en la misma pregunta: confirmar antes de reprogramar desde el agente. Sin empezar (solo lectura de
+  código) al llegar el encargo de la agenda por pasos.
+
+## 2026-09-15 - agenda con los pasos de los packs: plan y decisiones (Claude)
+
+- Encargo de Pablo: en la agenda, un pack se ve como sus pasos («servicio + hueco + servicio (paso 2)…»); al reservar se
+  sigue cogiendo el pack. Solo pintado: disponibilidad, asistente y recordatorios no cambian.
+- Estado leído (solo lectura en producción): los packs guardan sus pasos en `gap_json` solo en minutos, sin nombre; no hay
+  editor en el panel; de 37 packs de Alicia, 29 cuadran (hoy bloque con «libre» encima) y 8 alisados no (pasos que suman
+  más que su duración: se pintan enteros). Los nombres de cada paso están en su Excel (hoja «Packs»), con erratas.
+- Plan: nombre por paso en `gap_json`; importar nombres del Excel donde el número de pasos coincide; `work_steps` por cita
+  en la API; un bloque por paso en vista Día/Semana con el hueco clicable, columnas por pasos y bordes solo en el primero y
+  el último; editor de pasos en la ficha del pack con suma y aviso.
+- Decisiones de Pablo (AskUserQuestion): alisados → preguntar a Alicia y mientras se pintan enteros; nombre en cada paso
+  (no enlace al catálogo); editor en la ficha del pack; la confirmación antes de reprogramar va después de la agenda.
+- 7ada73b (rama `claude/agenda-pasos`): `paso` en `gap_json`, `work_steps` en la API, un bloque por paso en la agenda y
+  editor en la ficha. 7 tests rojos antes; tras el cambio 23 de pasos y tramos y 111 de los que leen el panel verdes (uno,
+  `test_nota_servicio`, obligó a mandar `gaps` antes de `booking_note` en el cuerpo).
+- Verificación visual en entorno aislado (`captura_agenda_pasos.py`: app levantada en local, Playwright, sin datos
+  reales, carpeta borrada): pack de 5 pasos + corte en su espera. Primera captura: el rayado del hueco tapaba el corte,
+  que ahora sale a ancho completo; arreglado partiendo el hueco alrededor de las otras citas (`cdRestarOcupado`). Última
+  captura: 5 bloques de paso, 3 huecos, 0 errores de consola.
+- Simulación de nombres desde su Excel contra producción (solo lectura): 35 packs con el mismo número de pasos (27 cuadran
+  en minutos; los 8 alisados no), «Pack maquillaje y recogido» con 2 pasos guardados y 3 en el Excel, «Pack elumen largo»
+  repetido con pasos distintos en el Excel. Script de aplicación preparado (`aplicar_pasos_alicia.sh`, con copia previa);
+  sin ejecutar hasta desplegar.
+- 65157de: el hueco del paso se parte alrededor de las otras citas. Suite completa de 65157de: 2789 passed, 1 skipped,
+  0 fallos (19 min 50 s). Revisión pedida a Astra sobre main..65157de. Preguntas para Alicia pasadas a Pablo: espera y
+  lavado en los alisados, pasos de «Maquillaje y recogido» y de «Elumen largo».
+
+## 2026-09-15 09:30–10:10 +0200 - agenda por pasos: revisión de Codex y arreglos (Claude)
+
+- Astra no recogió el encargo (su sesión no se mueve desde el 14-sep 23:31). `codex review --base main` sobre
+  `claude/agenda-pasos` (05491bd): **CAMBIOS**, dos P2 reproducidos por Codex en navegador con `renderCitasDay` y el CSS
+  reales: (1) pasos seguidos de 5, 10 y 30 min pintan cada uno el alto mínimo y el siguiente tapa el nombre del anterior;
+  (2) con el filtro «Canceladas», la espera de un pack tapa el paso de otro pack cancelado metido en ella
+  (`cdRestarOcupado` descartaba las canceladas aunque estuvieran dibujadas).
+- Arreglo: `cdPasosVisibles` junta los pasos que empezarían dentro del alto mínimo del anterior en un bloque «Pasos 1–2/3
+  · Aplicar · Lavado» y da `finVisible`; las columnas y el hueco usan ese final; `cdOcupaVisible` descuenta de la espera
+  todo lo dibujado (canceladas incluidas, con su alto mínimo); una cita cancelada no pinta «libre».
+- Tests nuevos con Node sobre las funciones del panel (`test_los_pasos_cortos_no_se_tapan_entre_si`,
+  `test_la_espera_no_tapa_otra_cita_pintada_aunque_este_cancelada`): con el HTML de 65157de fallan; con el arreglo 25
+  passed (pasos, tiempos de espera y de exposición).
+- Navegador en entorno aislado (`verificar_pasos_codex.py`, sin datos reales, carpeta borrada), escenarios de Codex:
+  pasos 5/10/30 → 2 bloques («Pasos 1–2/3 · Aplicar · Lavado», «Paso 3/3 · Secado»), ninguno tapado según
+  `elementFromPoint`; dos packs cancelados alternos con filtro «Canceladas» → 4 bloques, 0 esperas, ninguno tapado; 0
+  errores de consola.
+
+## 2026-09-15 10:15–11:39 +0200 - agenda por pasos: segunda revisión de Codex (Claude)
+
+- `codex review --commit dd68b9a`: **CAMBIOS**, un P2 reproducido: tras un paso de 5 min con el siguiente a la hora, el
+  hueco contaba desde el final del alto mínimo («libre · 45.45 min», 10:15–11:00) en vez de 55 min desde las 10:05.
+- Arreglo: `cdHuecosDeEspera` separa las horas reales del hueco (minutos, título y hora del clic; solo resta lo que ocupan
+  de verdad las citas vivas, `cdOcupaReal`) del trozo que se raya sin tapar bloques (`finVisible` y lo dibujado de las
+  demás); la etiqueta sale una vez por hueco y en minutos enteros.
+- Test nuevo con Node (`test_el_hueco_cuenta_los_minutos_reales_aunque_se_dibuje_mas_corto`): rojo con el HTML de dd68b9a,
+  verde con el arreglo; 26 passed en pasos, esperas y exposición.
+- Navegador aislado (`verificar_pasos_codex.py`, sin datos reales, carpeta borrada): pasos 5/10/30 → 2 bloques sin tapar;
+  pack de 5 min + 55 de espera → hueco «libre · 55 min», título 14:05–15:00; dos packs cancelados con el filtro
+  «Canceladas» → 0 esperas, 0 tapados; 0 errores de consola. Suite de dd68b9a detenida (superada por este commit).
+- `codex review --commit 1112954`: sin hallazgos accionables (26 dirigidos). Suite completa de 1112954 (11:25–12:04):
+  2792 passed, 1 skipped, 0 fallos.
+- Siguiente: orden de Pablo para desplegar (junto o no con la confirmación antes de reprogramar) y, después, aplicar los
+  nombres de los pasos a los packs de Alicia con `aplicar_pasos_alicia.sh --aplicar` (copia previa).
