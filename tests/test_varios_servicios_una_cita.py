@@ -414,6 +414,17 @@ def test_cambiar_de_idea_no_cuenta_como_pedir_dos_cosas(salon, api_module):
     assert freno is None, "cambió de idea y se le frena como si quisiera las dos cosas"
 
 
+def test_elegir_uno_de_los_que_pidio_no_se_frena(salon, api_module):
+    """Revisión de Codex a 7f3f1d0: tras pedir corte y elumen, «al final quiero el corte» es elegir."""
+    from backend import agent
+
+    for eleccion in ("al final quiero el corte", "solo quiero el corte de senora", "me quedo con el corte"):
+        freno = agent._freno_de_varios_servicios(
+            CLIENTE, _mensajes("Quiero un corte de senora y un elumen", eleccion),
+            {"servicio": "Corte senora"})
+        assert freno is None, "eligió uno y se le sigue frenando: %r" % eleccion
+
+
 def test_pedir_algo_mas_sigue_contando_lo_anterior(salon, api_module):
     """Lo que se SUMA no se confunde con cambiar de idea."""
     from backend import agent

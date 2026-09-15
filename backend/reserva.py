@@ -915,6 +915,13 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         nombre_nuevo = str(argumentos.get("nombre") or "").strip()
         if nombre_nuevo and estado.nombre and _amplia_el_nombre(estado.nombre, nombre_nuevo):
             estado.nombre = nombre_nuevo
+        elif (nombre_nuevo and estado.nombre and resultado.get("nombre_dicho")
+              and not _es_nombre_de_relleno(nombre_nuevo)
+              and nombre_nuevo.strip().lower() != estado.nombre.strip().lower()):
+            # Otro nombre que ELLA ha escrito («la cita es para mi hija Laura Garcia Lopez»):
+            # la cita va a ese nombre. Uno que solo trae el modelo no pisa el que se sabia
+            # (revisiones de Codex a 0beeb96 y 7f3f1d0).
+            estado.nombre = nombre_nuevo
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if clave == "nombre" and _es_nombre_de_relleno(valor):

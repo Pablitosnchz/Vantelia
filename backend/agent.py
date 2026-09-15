@@ -358,6 +358,19 @@ def _lo_dijo_como_su_nombre(dicho: str, valor: str) -> bool:
     return " ".join(solo.split()) == limpio
 
 
+def _nombre_aparece_en(dicho: str, nombre: str) -> bool:
+    """¿Todas las palabras de ese nombre están en lo que ha escrito ella?
+
+    Sirve para distinguir el nombre que ella da («la cita es para mi hija Laura Garcia Lopez»)
+    del que se inventa el modelo («Maria Garcia», medido el 15-sep-2026): solo el primero puede
+    cambiar el nombre de la cita que va a confirmar.
+    """
+    palabras = re.findall(r"[a-z0-9]+", textnorm._strip_accents(str(nombre or "").lower()))
+    escritas = set(re.findall(r"[a-z0-9]+", textnorm._strip_accents(str(dicho or "").lower())))
+    palabras = [p for p in palabras if len(p) >= 2]
+    return bool(palabras) and all(p in escritas for p in palabras)
+
+
 def _es_una_profesional(cliente_id: str, valor: str) -> bool:
     """¿Ese "nombre de la clienta" es en realidad el de quien la va a atender?
 
@@ -563,7 +576,7 @@ async def _ejecutar(
         # 15-sep-2026 repitiendo la prueba de la duenya con modelo real: el modelo llamo con
         # «Maria Garcia», este freno lo guardo y el resumen salio a ese nombre aunque despues
         # ella dijera «me llamo Ana Ruiz Perez».
-        nombre_no_dicho = not _lo_dijo_como_su_nombre(dicho, quien_nombre)
+        nombre_no_dicho = not _nombre_aparece_en(dicho, quien_nombre)
         if (quien_nombre and telefono and not conocida
                 and clients.exige_dos_apellidos(cliente_id)
                 and not textnorm.tiene_dos_apellidos(quien_nombre)):
@@ -597,6 +610,9 @@ async def _ejecutar(
         return {
             "ok": False,
             "pendiente_de_confirmacion": True,
+            # El nombre de esta cita puede sustituir al que ya se sabia solo si lo ha escrito
+            # ella («es para mi hija Laura Garcia Lopez»); uno del modelo, no.
+            "nombre_dicho": _nombre_aparece_en(dicho, str(argumentos.get("nombre") or "")),
             "error": "Todavia no se puede crear: lo confirma la clienta.",
             # OJO a como se le pide: con "dile que se lo pasas para confirmar"
             # contestaba "voy a pasar esto para que lo confirmen", que suena a que
@@ -2058,9 +2074,15 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
 
 # Cambiar de idea frente a pedir algo MAS. Sin tildes: se compara con el texto ya
 # normalizado (ver tests/test_patrones_sin_tilde.py).
+# Elegir de forma inequívoca: lo que diga manda aunque ya lo hubiera pedido
+# («al final quiero el corte», tras corte y elumen, es quedarse solo con el corte).
+_ELIGE_LO_PEDIDO = re.compile(
+    r"\b(al final quiero|al final solo|solo quiero|mejor solo|me quedo con|lo que quiero es|"
+    r"he cambiado de idea|cambio de idea|en vez de|en lugar de)\b")
+# Formas que pueden ser cambiar de idea o hablar de lo ya pedido («pues quiero el corte con
+# Lorena»): solo cuentan si piden una familia que no se habia pedido.
 _SUSTITUYE_LO_PEDIDO = re.compile(
-    r"\b(pues quiero|mejor quiero|en vez de|en lugar de|al final quiero|"
-    r"he cambiado de idea|cambio de idea|ahora quiero|lo que quiero es|no,? quiero)\b")
+    r"\b(pues quiero|mejor quiero|ahora quiero|no,? quiero)\b")
 _ANYADE_A_LO_PEDIDO = re.compile(
     r"\b(tambien|ademas|aparte|junto con|a la vez|y (un|una|unas|unos|el|la|los|las))\b")
 
@@ -2082,15 +2104,16 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
     desde = 0
     for indice, texto in enumerate(textos):
         plano = catalog_pick._norm(texto)
-        if not _SUSTITUYE_LO_PEDIDO.search(plano) or _ANYADE_A_LO_PEDIDO.search(plano):
+        elige = bool(_ELIGE_LO_PEDIDO.search(plano))
+        if not (elige or _SUSTITUYE_LO_PEDIDO.search(plano)) or _ANYADE_A_LO_PEDIDO.search(plano):
             continue
         nuevas = set(catalog_pick.familias_pedidas(cliente_id, texto))
         antes = set(catalog_pick.familias_pedidas(cliente_id, " ".join(textos[desde:indice])))
-        # Solo cambia de idea quien pide una familia que NO habia pedido. «Pues quiero el corte
-        # con Lorena» habla de lo que ya pidio y no borra el resto (revision de Codex a 0beeb96:
-        # con «prefiero» en la lista, «para el corte prefiero a Lorena» dejaba pasar una cita
-        # que se comia los demas servicios).
-        if nuevas and antes and not (nuevas & antes):
+        # Con una forma ambigua solo cambia de idea quien pide una familia que NO habia pedido:
+        # «pues quiero el corte con Lorena» habla de lo que ya pidio y no borra el resto
+        # (revision de Codex a 0beeb96). Con una eleccion clara, manda lo que dice ahora
+        # (revision de Codex a 7f3f1d0: «al final quiero el corte» seguia frenado).
+        if nuevas and (elige or (antes and not (nuevas & antes))):
             desde = indice
     return " ".join(textos[desde:])[-1500:]
 

@@ -1820,6 +1820,9 @@ class PortalBookingSummary(BaseModel):
     service_duration_minutes: int = 0
     service_price_cents: int = 0
     service_price_label: str = ""
+    # False si el negocio no quiere ver precios en su agenda (`booking.precios_en_agenda`): el
+    # panel no los pinta, pero el importe sigue ahí para cobrar.
+    precios_en_agenda: bool = True
     payment_status: str = ""
     pay_state: str = ""
     payment_amount_cents: int = 0

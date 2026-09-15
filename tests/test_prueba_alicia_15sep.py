@@ -70,8 +70,23 @@ def test_un_nombre_distinto_del_modelo_no_pisa_el_que_ya_se_sabe(api_module):  #
     estado = reserva.Estado()
     estado.nombre = "Ana Ruiz Perez"
     reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia Lopez"),
-                             {"ok": False, "pendiente_de_confirmacion": True})
+                             {"ok": False, "pendiente_de_confirmacion": True, "nombre_dicho": False})
     assert estado.nombre == "Ana Ruiz Perez"
+
+
+def test_la_cita_para_otra_persona_va_a_su_nombre(api_module):  # noqa: F811
+    """Revisión de Codex a 7f3f1d0: «la cita es para mi hija Laura Garcia Lopez» con la madre ya
+    conocida se quedaba a nombre de la madre."""
+    from backend import agent, reserva
+
+    dicho = "Hola, quiero cita para un corte. La cita es para mi hija Laura Garcia Lopez"
+    assert agent._nombre_aparece_en(dicho, "Laura Garcia Lopez")
+    assert not agent._nombre_aparece_en(dicho, "Maria Garcia Lopez")
+    estado = reserva.Estado()
+    estado.nombre = "Ana Ruiz Perez"
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Laura Garcia Lopez"),
+                             {"ok": False, "pendiente_de_confirmacion": True, "nombre_dicho": True})
+    assert estado.nombre == "Laura Garcia Lopez"
 
 
 def test_el_freno_de_apellidos_marca_el_nombre_que_ella_no_dijo(api_module, monkeypatch):  # noqa: F811
@@ -177,8 +192,17 @@ def test_la_agenda_no_ensena_precios_si_el_negocio_no_los_quiere(pack_con_pasos,
     _con_config(monkeypatch, precios_en_agenda=False)
     resumen = booking._portal_booking_summary_from_row(fila)
     assert resumen.service_price_label == ""
-    # La ficha de Gestionar cita pinta «Precio» con los céntimos (revisión de Codex a 0beeb96).
-    assert resumen.service_price_cents == 0
+    # La ficha de Gestionar cita no lo pinta (revisión de Codex a 0beeb96), pero el importe se queda
+    # para cobrar y el TPV (revisión de Codex a 7f3f1d0).
+    assert resumen.precios_en_agenda is False
+    assert resumen.service_price_cents > 0
+
+
+def test_la_ficha_de_gestionar_cita_respeta_los_precios_ocultos():
+    from pathlib import Path
+
+    panel = (Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(encoding="utf-8")
+    assert "precios_en_agenda === false" in panel, "la ficha de Gestionar cita sigue pintando el precio"
 
 
 def test_la_pagina_de_la_cita_no_ensena_precio_si_el_negocio_no_los_da(pack_con_pasos, monkeypatch):  # noqa: F811

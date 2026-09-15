@@ -9692,6 +9692,9 @@ function openManageBookingModal(b){
   const payPaid = b.pay_kind === 'pagado' || b.payment_status === 'partially_refunded';
   const paymentBadge = mgPaymentBadge(b);
   const priceText = mgMoney(b.service_price_cents) || mgMoney(b.payment_amount_cents) || 'Sin importe';
+  // El negocio puede no querer precios en su agenda (booking.precios_en_agenda): no se pintan,
+  // pero el importe sigue ahí para cobrar (15-sep-2026).
+  const sinPrecios = b.precios_en_agenda === false;
   const contactSummary = [email, phone].filter(Boolean).join(' - ') || 'Sin datos de contacto';
 
   const agendaActions = [
@@ -9752,7 +9755,7 @@ function openManageBookingModal(b){
             </div>
             <div class="mg-info-list">
               <div class="mg-info-row"><span>Reserva</span><span>${escapeHtml(b.booking_code || bid)}</span></div>
-              <div class="mg-info-row"><span>Precio</span><span>${escapeHtml(priceText)}</span></div>
+              ${sinPrecios ? '' : `<div class="mg-info-row"><span>Precio</span><span>${escapeHtml(priceText)}</span></div>`}
               <div class="mg-info-row"><span>Pago</span><span>${paymentBadge || '<span style="color:var(--soft);">Sin pago registrado</span>'}</span></div>
               <div class="mg-info-row"><span>Creada</span><span>${escapeHtml(mgDateTime(b.created_at) || '-')}</span></div>
               <div class="mg-info-row"><span>Proveedor</span><span>${escapeHtml(b.provider_name || 'Interno')}${b.provider_status ? ' - ' + escapeHtml(b.provider_status) : ''}</span></div>
@@ -9789,7 +9792,7 @@ function openManageBookingModal(b){
         <div class="mg-summary-grid">
           <div>
             <div class="inf-kpis mg-kpis">
-              <div class="inf-kpi"><div class="k-label">Importe</div><div class="k-value">${escapeHtml(priceText)}</div></div>
+              ${sinPrecios ? '' : `<div class="inf-kpi"><div class="k-label">Importe</div><div class="k-value">${escapeHtml(priceText)}</div></div>`}
               <div class="inf-kpi"><div class="k-label">Estado</div><div class="k-value">${paymentBadge || '<span style="color:var(--soft);">Sin pago</span>'}</div></div>
             </div>
             <div class="mg-action-group">

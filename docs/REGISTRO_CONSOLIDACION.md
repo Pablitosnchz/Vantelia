@@ -1455,3 +1455,12 @@ a fin en todas.
   `anotar_resultado` no conserve un nombre que ella no dijo; sin precios en la agenda también `service_price_cents` = 0
   (en la página de la clienta, si `precios_ocultos`). Tests nuevos: 5 rojos con 0beeb96; 181 verdes en los ficheros
   tocados; pyflakes limpio. Paradas la suite y la medición de 0beeb96 (superadas).
+- `codex review --commit 7f3f1d0`: **CAMBIOS**, tres P1. (1) Poner `service_price_cents` a 0 rompía cobrar y el TPV del
+  panel, que usan ese importe. (2) Con el nombre ya sabido, «la cita es para mi hija Laura Garcia Lopez» no cambiaba el
+  nombre de la cita. (3) «Al final quiero el corte», tras corte y elumen, seguía frenado.
+- Arreglos (17:00): el importe se conserva y `PortalBookingSummary.precios_en_agenda` le dice al panel que no lo pinte
+  (bloques y ficha de Gestionar cita: filas «Precio» e «Importe»); `_nombre_aparece_en` separa el nombre que ella ha
+  escrito del que trae el modelo (`nombre_no_dicho` en el freno de apellidos, `nombre_dicho` en la creación pendiente,
+  que solo así sustituye al que se sabía); elección clara (`_ELIGE_LO_PEDIDO`: «al final quiero», «solo quiero», «me
+  quedo con»…) manda siempre, y las formas ambiguas («pues quiero») solo si piden una familia nueva. Tests nuevos: 4
+  rojos con 7f3f1d0; 191 verdes (incluidos TPV y mapa del código); pyflakes limpio.
