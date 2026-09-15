@@ -1512,3 +1512,30 @@ a fin en todas.
 - Limitaciones que quedan como en producción: «en vez del elumen quiero un corte» sigue preguntando; cita a nombre de
   otra persona con clienta conocida. Pendiente: revisión de Astra de main..8be90fb cuando renueve créditos; respuestas
   de Alicia (alisados, «Maquillaje y recogido», «Elumen largo», lista de precios que sí se pueden dar).
+
+## 2026-09-15 18:15–19:12 +0200 - agenda sin «libre», clientes repetidos y un apellido para Alicia; despliegue de 311b58e (Claude)
+
+- Encargo de Pablo: «en los packs, quita lo del libre, ya se sabe que está libre, con que dejes el hueco en la agenda
+  vale»; además, Alicia acepta un apellido en vez de dos; y «se me ha duplicado el cliente de paula fernandez oro».
+- 73529e0: la espera entre pasos de un pack no se pinta (fuera `.cd-espera`, `cdHuecosDeEspera`, `cdRestarOcupado` y
+  compañía); queda como agenda vacía y el clic abre «Nueva cita» por la columna. Test nuevo rojo con f19aa0c; 41 verdes;
+  navegador aislado: 0 esperas pintadas, bloques de paso intactos, 0 errores de consola.
+- Duplicados (solo lectura): cada cita apuntada desde el panel sin email ni teléfono creaba otro contacto
+  (`_crm_upsert_contact` solo casaba por email o teléfono). En Alicia, 10 nombres repetidos y 24 contactos de sobra
+  («Paula Fernandez Oro» 5, «maria garcia» 6, «yolanda» 6…). 311b58e: sin datos de contacto se reutiliza el contacto del
+  mismo nombre que tampoco los tenga (no se junta con alguien del mismo nombre que tenga email o teléfono). 2 tests
+  rojos con 73529e0; 136 verdes.
+- Un apellido: ya era el interruptor del panel «Exigir dos apellidos» (`booking.exigir_dos_apellidos`); sin código.
+- Decisiones de Pablo (AskUserQuestion): juntar los duplicados existentes; poner un apellido al desplegar; desplegar al
+  salir verde. Suite completa de 311b58e: 2833 passed, 1 skipped, 0 fallos.
+- Producción: `exigir_dos_apellidos: false` en el config de Alicia (copia
+  `/srv/vantelia-backups/config-pre-un-apellido-20260915-170802.json`, 27 negocios antes y después); `main` avanzado sin
+  fusión a 311b58e (settings apartado y restaurado); `deploy.ps1 -SkipLocalChecks`: acceso público OK, humo 5/5,
+  VERSION.json 311b58e sin cambios pendientes; `main` subido. Duplicados juntados (copia
+  `/srv/vantelia-backups/pre-crm-duplicados-20260915-171208.db`): se queda el contacto más antiguo con enlaces, historial y
+  cobros de los demás; 24 borrados, 0 grupos repetidos y 1 «Paula Fernandez Oro».
+- Comprobado en la app viva: `exige_dos_apellidos` False, `precios_en_agenda` False, panel servido sin `cd-espera`,
+  health ok (27 clientes).
+- Pendiente: datos de Alicia (alisados, «Maquillaje y recogido», «Elumen largo», precios que sí se pueden dar); tres
+  limitaciones apuntadas (sustitución «en vez del X quiero Y», cita para otra persona, insistencia en el diagnóstico una
+  vez en el banco) a diseñar con Astra; revisión de Astra de 8be90fb y 311b58e cuando tenga créditos.
