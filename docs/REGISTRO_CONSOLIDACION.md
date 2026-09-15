@@ -1397,3 +1397,52 @@ a fin en todas.
   les pone los nombres actuales. Erratas del Excel conservadas tal cual («Flahs repair», «Brusing»).
 - Nada enviado a nadie. Pendiente: revisión de Codex del último arreglo de reprogramar (2ee6890) cuando vuelva su cuota
   (14:34, lanzada en segundo plano); respuestas de Alicia sobre alisados, «Maquillaje y recogido» y «Elumen largo».
+
+## 2026-09-15 12:48–13:54 +0200 - prueba de Alicia por WhatsApp del 15-sep: conversación, plan y arreglos (Claude)
+
+- Encargo de Pablo: repasar la conversación de Alicia (sus mensajes de las 00:36) y planificar con Astra antes de tocar
+  nada. Conversación leída en producción (solo lectura): sesión `wa_d953be8f…` desde su número, 00:15–00:34, agent_turns
+  156–161. Pidió mechas, dio el largo, cambió a «grey blindin», dio largo, «por las mañanas» y «jueves 17 a las 10:30».
+  El freno de varios servicios rechazó `crear_cita` tres veces (mechas + grey), el agente preguntó «¿cuál de los dos
+  prefieres?» y 3 s después, en el mismo turno, salió el resumen con botones (Grey blending medio, 7 h 20 min, Jose).
+  Confirmó: R-214107 con Jose.
+- Causas: (1) los 37 packs asignados a todo el equipo desde el 20-ago (la hoja Packs del Excel no tiene «Operario»),
+  Jose y Lucía incluidos; (2) el freno leía toda la conversación; (3) el resumen salía aunque la creación se acabara de
+  rechazar; (4) `cdServiceMeta` pinta `service_price_label` en la agenda.
+- Plan enviado a Astra por el buzón (encargo 20260915T105336). Pablo: «adelante tira tú sin que esté Codex», sin
+  bloquearse esperando revisiones.
+- Decisiones de Pablo (AskUserQuestion): cancelar R-214107 ya; precios de la IA «ninguno por ahora» (cuando Alicia pase
+  la lista se añaden como excepción); aplicar el equipo desde el Excel ya.
+- Producción: R-214107 cancelada por el núcleo (copia `/srv/vantelia-backups/pre-cancelar-R-214107-20260915-113942.db`;
+  salió el aviso normal a su propio número). Equipo desde la columna «Operario» (pack = quien hace todos sus pasos; sin
+  pasos con nombre, el servicio suelto del nombre del pack): Lorena 190→165 y Conchi 193→168 (ids viejos), Lucía y Jose
+  108→91 (fuera 17 packs de grey blending, mechas o balayage, matiz, cambio de color y maquillaje y medio recogido);
+  «Pack maquillaje y recogido» sin resolver, se conserva. Copia `/srv/vantelia-backups/pre-equipo-alicia-20260915-114611.db`.
+  Comprobado: «Pack grey blending medio» y «Pack mechas o balayage medio» → Alicia Rincon, Lorena, Conchi.
+- Rama `claude/alicia-prueba-15sep` (E:/vp-alicia, desde main b598331), 18248f2: `_lo_que_pide_ahora` (cambiar de idea
+  no suma servicios; «también/además» sí), `Estado.creacion_rechazada_en` y WhatsApp sin resumen en el turno del rechazo,
+  `booking.precios_en_agenda` (agenda y página de la cita del negocio) y la página de la clienta sin precio si el negocio
+  no los da. Tests: 7 rojos con main, 79 verdes en los ficheros tocados; pyflakes limpio. Caso de banco
+  `cambia-de-mechas-a-grey-blending` (32f6e1e, 405c2e4: sin «mañana» literal).
+- Aparte: `test_banco_por_negocio` (2 tests) falla lanzado suelto en una copia de trabajo sin `storage/`; también en
+  E:/vp-reprogramar sin el caso nuevo: es del entorno.
+- En marcha: el caso ×6, banco de Alicia y humo con modelo real sobre copia nueva de producción (snap9 tras el equipo) y
+  suite completa de 405c2e4. Pendiente al desplegar: `booking.precios_en_agenda: false` en el config de Alicia.
+- Medición real sobre copia nueva de producción (snap9, tras el equipo): banco de Alicia en 405c2e4 44/44 al primer
+  intento (con el caso nuevo), 0 fallos; humo 5/5. `cambia-de-mechas-a-grey-blending` en 405c2e4 («a primera hora»): a1
+  y a2 OK, pero leída a1 salió a las 10:00 (no 10:30) y a nombre de «Maria Garcia»: «primera hora» es «la primera que
+  tengas» (reserva.py), así que se paró la tanda; con frase neutra (0eed340) 6/6 al primer intento, leídas b1 y b4
+  enteras: sin «¿cuál de los dos?», resumen a las 10:30, a nombre de Ana Ruiz Perez y con Conchi/Lorena.
+- «Maria Garcia» (agent_turns de la copia): el modelo lo inventó en `crear_cita`, el freno de apellidos lo conservó y el
+  nombre que ella dio después no lo sustituía. Arreglo: en la creación pendiente, el nombre de la llamada manda si es un
+  nombre de verdad con apellido. Los contactos «maria garcia» de producción son citas del panel sin teléfono (sin relación).
+- Suite completa de 405c2e4: 2820 passed, 1 failed (`test_banco_por_negocio`: el catálogo de prueba «como el de Alicia»
+  no tenía grey blending); corregido el catálogo del test.
+- Revisión de Codex de 2ee6890 (lo desplegado de reprogramar), llegada a las 14:37: P1 «vale, cancela el cambio» y «sí,
+  déjalo como está» aceptaban el cambio por escrito y movían la cita; P2 tras «Mantener cita» quedaban día, hora y huecos
+  del cambio rechazado. Arreglos: `_NO_ACEPTA_EL_CAMBIO` + `_message_retracts_management` en `_wa_acepta_el_cambio`;
+  «Mantener» llama a `empezar_otra_gestion`. Tests nuevos: 5 rojos con 0eed340; 168 verdes en los ficheros tocados.
+- Astra (buzón 14:48): cerró el encargo antiguo de la agenda por pasos como superado, sin hallazgos; el plan de hoy sigue
+  sin respuesta.
+- 16:28: siguiente, suite completa, repetir el caso de Alicia y `cambiar-la-hora-de-verdad` con modelo real, revisión de
+  Astra y orden de Pablo para desplegar (con `booking.precios_en_agenda: false` para Alicia).

@@ -2420,6 +2420,12 @@ def _wa_cambia_el_servicio(cliente_id: str, texto: str) -> bool:
     return False
 
 
+# Palabras de echarse atras en un mensaje que empieza por «sí/vale». Sin tildes: se compara
+# con el texto ya normalizado (tests/test_patrones_sin_tilde.py).
+_NO_ACEPTA_EL_CAMBIO = re.compile(
+    r"\b(no|cancel\w*|anul\w*|manten\w*|deja\w*|olvid\w*|como esta|espera|igual|quita\w*)\b")
+
+
 def _wa_acepta_el_cambio(cliente_id: str, texto: str, datos: Dict[str, Any]) -> bool:
     """¿Es un sí, sin pegas ni correcciones, al cambio de cita que tiene delante?
 
@@ -2431,7 +2437,11 @@ def _wa_acepta_el_cambio(cliente_id: str, texto: str, datos: Dict[str, Any]) -> 
     """
     plano = textnorm._strip_accents(str(texto or "").lower().strip())
     if (not _wa_dice_que_si(plano) or _wa_trae_dia_u_hora(texto)
-            or _wa_cambia_el_servicio(cliente_id, texto)):
+            or _wa_cambia_el_servicio(cliente_id, texto)
+            # «vale, cancela el cambio», «sí, déjalo como está»: echarse atrás no es aceptar
+            # (revisión de Codex a 2ee6890: lo contaba como un sí y movía la cita).
+            or _NO_ACEPTA_EL_CAMBIO.search(plano)
+            or booking._message_retracts_management(plano)):
         return False
     if chat._es_solo_confirmacion(texto):
         return True
@@ -3307,7 +3317,10 @@ async def _wa_responder_reprogramacion(*, cliente_id, phone_number_id, from_numb
               and datos.get("accion") == "reprogramar" and datos.get("from_number") == from_number
               and set(datos) == claves)
     if valida and accion == "resched_no" and propuesta["estado"] == "ofrecida":
-        estado.confirmacion_reserva_json = ""
+        # Rechazado el cambio, no queda nada de él: ni el día y la hora ofrecidos ni los huecos
+        # que se conservaron para el agente. Revisión de Codex a 2ee6890: la siguiente gestión
+        # podía reutilizar el hueco que acababa de rechazar.
+        reserva.empezar_otra_gestion(estado)
         estado.intencion = ""
         try:
             reserva.guardar(cliente_id, from_number, estado)

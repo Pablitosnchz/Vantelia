@@ -86,6 +86,7 @@ def test_ningun_caso_deja_el_marcador_sin_resolver():
 # ─── Condiciones sobre los datos del negocio ─────────────────────────────
 
 SALON = [{"nombre": "Mechas corto", "category": "Trabajos de color"},
+         {"nombre": "Pack grey blending corto", "category": "Trabajos de color"},
          {"nombre": "Keratina premium corto", "category": "Alisados"},
          {"nombre": "Corte señora", "category": "Cortes"},
          {"nombre": "Diseño cejas", "category": "Depilaciones"},

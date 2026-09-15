@@ -317,6 +317,32 @@ def test_un_si_que_elige_lo_ofrecido_tambien_acepta(canal):
     assert c["movidas"] == [("R-123456", "2099-09-20", "12:00", "")]
 
 
+# ─── Revisión de Codex a 2ee6890 ───────────────────────────────────────────
+
+@pytest.mark.parametrize("dicho", ["vale, cancela el cambio", "sí, déjalo como está",
+                                   "si, mejor no", "vale no, mantenla"])
+def test_echarse_atras_con_un_si_delante_no_acepta_el_cambio(canal, dicho):
+    """«vale, cancela el cambio» pasaba por un sí sin pegas y movía la cita que ella rechazaba."""
+    c = canal
+    c["turno"]("¿me la pasas al 20 a las 12?", c["cambio"]())
+    c["turno"](dicho)
+    assert c["movidas"] == [], "movió la cita con %r" % dicho
+    assert c["al_agente"][-1] == dicho
+
+
+def test_mantener_la_cita_borra_el_cambio_rechazado(canal):
+    """Tras «Mantener cita» quedaban el día, la hora y los huecos del cambio rechazado, y la siguiente
+    gestión podía reutilizarlos."""
+    from backend import reserva
+
+    c = canal
+    c["turno"]("¿me la pasas al 20 a las 12?", c["cambio"]())
+    c["pulsar"](c["botones"][-1]["buttons"][1][0])
+    assert c["movidas"] == []
+    estado = reserva.cargar("demo", c["numero"])
+    assert (estado.fecha, estado.hora, estado.huecos, estado.codigo) == ("", "", [], "")
+
+
 def test_ensenar_el_resumen_no_borra_lo_que_sabe_el_agente(canal):
     """Si contesta otra cosa y el agente vuelve a proponer el cambio, el freno del día que nadie ha
     pedido no puede saltar porque al enseñar el resumen se borró que le daba igual el día."""

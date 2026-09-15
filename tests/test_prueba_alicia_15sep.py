@@ -47,6 +47,25 @@ def test_el_rechazo_de_crear_la_cita_queda_anotado_y_la_propuesta_lo_limpia(api_
     assert estado.creacion_rechazada_en == 0.0
 
 
+def test_el_nombre_inventado_no_llega_al_resumen(api_module):  # noqa: F811
+    """Medido al repetir la prueba con modelo real: el modelo llamó a crear_cita con «Maria Garcia»
+    (nadie lo dijo), el freno de apellidos lo conservó, y cuando ella dijo su nombre el resumen salió
+    a nombre de Maria Garcia. El nombre de la cita que va a confirmar manda."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia"), {
+        "ok": False, "conserva_los_datos": True, "error": "Faltan apellidos"})
+    assert estado.nombre == "Maria Garcia"
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Ana Ruiz Perez"),
+                             {"ok": False, "pendiente_de_confirmacion": True})
+    assert estado.nombre == "Ana Ruiz Perez"
+    # Un nombre de relleno no pisa uno de verdad.
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Cliente"),
+                             {"ok": False, "pendiente_de_confirmacion": True})
+    assert estado.nombre == "Ana Ruiz Perez"
+
+
 @pytest.fixture
 def turno_whatsapp(api_module, monkeypatch):  # noqa: F811
     from backend import agent, appstate, messaging, reserva, whatsapp
