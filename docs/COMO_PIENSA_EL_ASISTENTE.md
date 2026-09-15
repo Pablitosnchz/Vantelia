@@ -283,6 +283,10 @@ respuesta:
 gestión), se llena **solo con lo que devuelven las tools** más lo que se extrae del
 mensaje de forma determinista, y **fuerza** la herramienta que cierra
 (`crear_cita`, `reprogramar_cita`, `cancelar_cita`) cuando no falta ningún dato.
+Por WhatsApp crear y mover no ejecutan al llamarse: `crear_cita` frena en el resumen
+con botón y, desde el 15-sep-2026, `reprogramar_cita` comprueba y **propone** el
+cambio (`agent._proponer_cambio_de_cita`); WhatsApp lo enseña con botones y solo el
+botón o un «sí» a ese resumen lo mueve. Con el cambio delante no se vuelve a forzar.
 De los doce detectores quedan **tres**, y los tres contrastan con datos, no con
 redacción.
 

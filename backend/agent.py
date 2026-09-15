@@ -601,6 +601,11 @@ async def _ejecutar(
                           "reservada, ni le des ningun numero de reserva."),
         }
 
+    if nombre == "reprogramar_cita" and remate_manual:
+        # Lo mismo al MOVER una cita: por WhatsApp la clienta acepta el cambio concreto
+        # con un boton (o un «si» a ese resumen). La tool comprueba y propone; no mueve.
+        return await _proponer_cambio_de_cita(cliente_id, argumentos, telefono=telefono)
+
     # OJO al orden: si el freno fuera lo PRIMERO, un nombre inventado se colaria
     # sin pasar por la comprobacion de abajo y la cita saldria a nombre de
     # "cliente". Paso: el resumen decia "👤 cliente".
@@ -652,6 +657,58 @@ async def _ejecutar(
         if firma:
             ya_creadas.add(firma)
     return resultado
+
+
+async def _proponer_cambio_de_cita(
+    cliente_id: str, argumentos: Dict[str, Any], *, telefono: str,
+) -> Dict[str, Any]:
+    """`reprogramar_cita` cuando el canal confirma con boton: comprueba y propone, no mueve.
+
+    15-sep-2026, decision de Pablo: por WhatsApp crear y cancelar ya pedian aceptar un
+    resumen, pero cambiar la cita hablando con el asistente la movia en cuanto el modelo
+    llamaba a la tool. Ahora pasa por los MISMOS controles que mover
+    (`voice._voice_preparar_reprogramacion`: de quien es la cita, el dia dicho, que
+    cambie algo) mas el hueco, y devuelve el cambio para que WhatsApp lo ensene con
+    botones (`whatsapp._wa_ofrecer_cambio_del_agente`). Tambien cuando cambia el servicio.
+    """
+    from backend import booking, voice
+
+    fila, cambio, error = await voice._voice_preparar_reprogramacion(
+        cliente_id, str(argumentos.get("codigo_reserva") or ""),
+        str(argumentos.get("fecha") or ""), str(argumentos.get("hora") or ""),
+        servicio=str(argumentos.get("servicio") or ""), from_number=telefono,
+        telefono=str(argumentos.get("telefono") or ""), email=str(argumentos.get("email") or ""),
+        fecha_texto=str(argumentos.get("fecha_texto") or ""),
+    )
+    if error:
+        return error
+    if fila["status"] in ("cancelled", "completed", "no_show"):
+        return {"ok": False, "error": "Esa cita ya no se puede cambiar."}
+    servicio = cambio["servicio"] if cambio["cambia_servicio"] else ""
+    # Los dobles de los tests antiguos no aceptan `servicio`: solo se pasa si cambia.
+    extra = {"servicio": servicio} if servicio else {}
+    if not await booking._reschedule_slot_is_free(cliente_id, fila, cambio["fecha"], cambio["hora"], **extra):
+        return {
+            "ok": False,
+            "error": "Ese hueco no esta libre para su cita.",
+            "que_hacer": ("Mira los huecos de ese dia con consultar_disponibilidad y "
+                          "ofreceselos. No le digas que la cita esta cambiada."),
+        }
+    return {
+        "ok": False,
+        "pendiente_de_confirmacion": True,
+        "cambio": {
+            "codigo": str(fila["booking_code"] or ""), "fecha": cambio["fecha"],
+            "hora": cambio["hora"], "servicio": servicio,
+            # Con lo que se verifico la cita; WhatsApp la vuelve a verificar al ofrecerla.
+            "telefono": str(argumentos.get("telefono") or ""),
+            "email": str(argumentos.get("email") or ""),
+        },
+        "error": "Todavia no se ha cambiado: lo confirma la clienta.",
+        "que_hacer": ("Dile en UNA frase corta el cambio (dia, hora y, si cambia, el "
+                      "servicio) y que le pasas el resumen para que lo confirme ella. NO "
+                      "digas que ya esta cambiada ni que se lo pasas a nadie."),
+    }
 
 
 def _tool_consultar_profesionales(

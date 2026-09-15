@@ -2982,7 +2982,7 @@ async def _voice_cancel_booking(
     }
 
 
-async def _voice_reschedule_booking(
+async def _voice_preparar_reprogramacion(
     cliente_id: str,
     codigo_reserva: str,
     fecha: str,
@@ -2993,12 +2993,19 @@ async def _voice_reschedule_booking(
     telefono: str = "",
     email: str = "",
     fecha_texto: str = "",
-) -> Dict[str, Any]:
+) -> Tuple[Optional[sqlite3.Row], Dict[str, Any], Optional[Dict[str, Any]]]:
+    """Lo que se comprueba ANTES de mover una cita: de quien es, que dia dijo y que cambie algo.
+
+    Devuelve (cita, cambio, error). La comparten la tool que mueve
+    (`_voice_reschedule_booking`) y la que por WhatsApp solo PROPONE el cambio para que
+    la clienta lo acepte (`agent._proponer_cambio_de_cita`): lo que se le enseña y lo
+    que se mueve pasan por los mismos controles.
+    """
     row, error = await _voice_lookup_for_mutation(
         cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
     )
     if error:
-        return error
+        return None, {}, error
     # Fecha hablada blindada (igual que consultar_disponibilidad/crear_cita): si el cliente
     # dijo la fecha en lenguaje natural, la frase manda sobre el YYYY-MM-DD que derive el modelo.
     fecha = _voice_correct_date_from_text(cliente_id, fecha, fecha_texto)[0]
@@ -3026,12 +3033,36 @@ async def _voice_reschedule_booking(
     if (limpia_fecha == (row["booking_date"] or "")
             and limpia_hora == (row["booking_time"] or "")
             and not cambia_servicio):
-        return {
+        return row, {}, {
             "ok": False,
             "error": ("Esa cita YA es de ese dia y esa hora: asi no cambia nada. Si "
                       "quiere otro momento, pregunta cual y mira si hay hueco; si lo "
                       "que quiere es ANULARLA, usa cancelar_cita."),
         }
+    return row, {"fecha": limpia_fecha, "hora": limpia_hora, "servicio": nuevo_servicio,
+                 "cambia_servicio": cambia_servicio}, None
+
+
+async def _voice_reschedule_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    fecha: str,
+    hora: str,
+    *,
+    servicio: str = "",
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+    fecha_texto: str = "",
+) -> Dict[str, Any]:
+    row, cambio, error = await _voice_preparar_reprogramacion(
+        cliente_id, codigo_reserva, fecha, hora, servicio=servicio, from_number=from_number,
+        telefono=telefono, email=email, fecha_texto=fecha_texto,
+    )
+    if error:
+        return error
+    limpia_fecha, limpia_hora, nuevo_servicio = cambio["fecha"], cambio["hora"], cambio["servicio"]
+    fecha, hora = limpia_fecha, limpia_hora
 
     verified_by_code = _voice_booking_otp_verified(cliente_id, row["id"])
     payload = booking._booking_update_payload_from_reschedule(

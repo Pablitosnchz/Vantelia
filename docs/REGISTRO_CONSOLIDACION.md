@@ -1206,3 +1206,35 @@ a fin en todas.
   su Q&A nueva; «cuánto cuestan las extensiones» → la de presupuesto.
 - `main` subido a GitHub (5adfd48..629fabf).
 - Siguiente: seguimiento fuera del plan (tabla de la fase 4); vigilar el uso real de Alicia cuando conecte su WhatsApp.
+
+## 2026-09-15 - confirmar antes de reprogramar desde el agente: decisiones (Claude)
+
+- Encargo pendiente del 15-sep (00:07): el agente conversacional mueve la cita en cuanto llama a `reprogramar_cita`,
+  sin resumen ni aceptación, a diferencia de crear y cancelar. Rama `claude/reprogramar-confirmada` (copia
+  E:/vp-reprogramar) desde `main` a4e7669, en paralelo a la revisión de la agenda por pasos.
+- Estado leído: crear en WhatsApp se frena con `remate_manual` (`pendiente_de_confirmacion`) y sale el resumen con botón;
+  el flujo guiado ya tiene `_wa_ofrecer_reprogramacion`/`_wa_responder_reprogramacion` con botones e identidad, pero su
+  resumen guardado solo lleva día y hora; el chat de la web y la voz no confirman ni al crear.
+- Decisiones de Pablo (AskUserQuestion): también se confirma el cambio de servicio; se acepta con el botón o con un «sí»
+  escrito (si lo último enviado fue ese cambio y no trae pegas ni otro día u hora); solo WhatsApp.
+
+## 2026-09-15 08:30–09:21 +0200 - confirmar antes de reprogramar desde el agente: implementación (Claude)
+
+- Rama `claude/reprogramar-confirmada` (E:/vp-reprogramar, sobre a4e7669), sin commit todavía.
+- `voice._voice_preparar_reprogramacion`: los controles de mover (verificación, fecha dicha, «así no cambia nada»)
+  salen de `_voice_reschedule_booking`, que los sigue usando igual.
+- `agent._ejecutar`: con `remate_manual` (WhatsApp) `reprogramar_cita` va a `_proponer_cambio_de_cita`: mismos
+  controles + estado de la cita + hueco (con la duración del servicio nuevo si cambia) y devuelve
+  `pendiente_de_confirmacion` con el cambio, `ok: False`. Web y voz sin cambios.
+- `reserva`: campo `cambio_pendiente_json`; `anotar_resultado` lo guarda sin encender `esperando_confirmacion`;
+  `tool_que_remata` y `instruccion_de_cierre` no obligan a repetir la tool con el cambio por aceptar.
+- `whatsapp`: `_wa_ofrecer_cambio_del_agente` envía la frase del agente y el resumen de `_wa_ofrecer_reprogramacion`
+  (ahora con `servicio`, línea «Servicio: antes ➡️ nuevo»), y deja el flujo en `agente`; un «sí» escrito a ese resumen
+  (último enviado `oferta_reprogramacion`, sin pega ni día u hora) entra por `_wa_responder_reprogramacion`, que ahora
+  pasa el servicio a `booking._reschedule_booking_by_code(servicio=)` y cuenta `veces_movida` (la tercera vez se
+  ofrece llamar, regla del salón que antes contaba la tool).
+- Tests: `tests/test_reprogramar_desde_el_agente.py`, 15. Contra el código original 11 fallan y 4 pasan (guardas:
+  mismo día y hora, chat web, «sí, pero a las 18», sí a otra pregunta); con el cambio 15 passed. pyflakes limpio en
+  backend. Suite completa en marcha.
+- Siguiente: suite completa, commit, revisión de Astra y medición con modelo real (cambiar la hora por WhatsApp contra
+  copia de producción) antes de pedir orden de despliegue.

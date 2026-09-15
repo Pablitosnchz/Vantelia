@@ -114,6 +114,11 @@ interactivos de WhatsApp son la capa nativa sobre las MISMAS funciones de negoci
   alternativas reales del día** (texto compartido `booking._reschedule_failure_text`,
   igual que el chat), y confirma con la **fecha en humano** ("lunes 6 de julio"), nunca
   ISO crudo.
+- ✅ **El cambio se acepta antes de mover** (14 y 15-sep-2026): tanto el flujo guiado
+  como el agente conversacional enseñan un resumen con «Sí, cambiar cita» / «Mantener
+  cita» (`_wa_ofrecer_reprogramacion`); también cuando cambia el servicio. Con el agente,
+  un «sí» escrito a ese resumen vale como el botón; «sí, pero a las 18» sigue la
+  conversación.
 - ✅ Escape con "menu" en cualquier paso.
 
 ### 3.6 Recordatorios y confirmación

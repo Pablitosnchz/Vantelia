@@ -366,12 +366,15 @@ CASOS = [
         "por_que": "Reprogramar tiene que mover la cita, no crear otra.",
         "con_cita": True,
         # Cuatro turnos porque mover una cita SIN que elija hora seria peor:
-        # ofrecer y esperar a que diga cual es lo correcto.
+        # ofrecer y esperar a que diga cual es lo correcto. El quinto, «si», acepta
+        # el resumen del cambio: desde el 15-sep-2026 por WhatsApp no se mueve sin
+        # aceptarlo (decision de Pablo; tests/test_reprogramar_desde_el_agente.py).
         "mensajes": [
             "buenas, necesito cambiar mi cita de dia",
             "{codigo}",
             "cualquier otro hueco que tengas me vale",
             "vale, la primera opcion que me has dicho",
+            "si",
         ],
         "agenda": "cambia",
         "debe": [],
