@@ -1463,7 +1463,11 @@ async def _reschedule_slot_is_free(cliente_id: str, row, fecha: str, hora: str, 
     try:
         nuevo = _service_for_existing_booking(row, servicio) if servicio else ""
         if nuevo and nuevo != (row["servicio"] or ""):
-            minutos = int(agenda._service_duration_minutes(cliente_id, nuevo, None) or 0)
+            # Con la profesional de la cita, como al guardarla (`_update_booking_details`): el
+            # centro puede tener otra duración para ese servicio (revisión de Codex a c3aae1c).
+            empleada = (agenda._get_employee_row(row["employee_id"], cliente_id=cliente_id)
+                        if row["employee_id"] else None)
+            minutos = int(agenda._service_duration_minutes(cliente_id, nuevo, empleada) or 0)
         else:
             minutos = _minutos_que_ocupa_ahora(row)
         return await agenda._booking_slot_available_for_reschedule(

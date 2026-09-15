@@ -1259,3 +1259,18 @@ a fin en todas.
 - Borradas snap9 (con WAL), cfg9, cfg9_metareview, meta_rag y todas las copias de las tiradas. Quedan informes y logs.
 - Astra no ha recogido encargos desde el 14-sep 23:31; revisión de c3aae1c pedida a Codex (`codex review --commit`).
 - Siguiente: veredicto de la revisión y orden de Pablo para desplegar.
+
+## 2026-09-15 10:15–11:39 +0200 - revisión de Codex a c3aae1c y arreglos (Claude)
+
+- `codex review --commit c3aae1c`: **CAMBIOS**, cuatro hallazgos reproducidos por Codex: P1 «sí, solo corte» a un cambio
+  Corte → Mechas lo aceptaba sin pasar por el agente; P2 el hueco del servicio nuevo se medía sin la profesional de la
+  cita (otra duración que la de su centro, que sí usa `_update_booking_details`); P2 un resumen guardado antes de
+  desplegar (sin `nuevo_servicio`) dejaba de valer, también una aceptación con resultado perdido; P2 la tercera
+  pulsación decía «ya no vigente» (el `elif` que borra el acuse quedó colgado del contador `veces_movida`).
+- Arreglos: el «sí» escrito al cambio solo vale si es SOLO confirmación (`chat._es_solo_confirmacion`);
+  `_reschedule_slot_is_free` resuelve la profesional de la cita; `_wa_responder_reprogramacion` completa
+  `nuevo_servicio` vacío en resúmenes antiguos; el acuse solo se borra si falla, aparte del contador.
+- Tests nuevos (4): rojos con c3aae1c, verdes con el arreglo; 121 dirigidos verdes (reprogramar desde el agente, guiado,
+  sí escrito, agente de citas, huecos para mover). pyflakes limpio.
+- Efecto esperado en la medición: «vale, la primera opción que me has dicho» ya no acepta sola el resumen (lo lleva el
+  agente). Se repiten `cambiar-la-hora-de-verdad` ×6 y el humo sobre el commit nuevo con copia nueva de producción.

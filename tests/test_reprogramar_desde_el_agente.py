@@ -211,7 +211,7 @@ def canal(api_module, monkeypatch):  # noqa: F811
         return {"codigo": "R-123456", "fecha": fecha, "hora": hora, "servicio": servicio,
                 "telefono": "", "email": ""}
 
-    yield dict(flow=flow, fila=fila, botones=botones, textos=textos, movidas=movidas,
+    yield dict(flow=flow, fila=fila, botones=botones, textos=textos, movidas=movidas, numero=numero,
                al_agente=al_agente, turno=turno, pulsar=pulsar, cambio=cambio)
     whatsapp._wa_clear_flow("demo", numero)
 
@@ -295,3 +295,64 @@ def test_mantener_no_mueve(canal):
     c["pulsar"](c["botones"][-1]["buttons"][1][0])
     c["pulsar"](boton)
     assert c["movidas"] == []
+
+
+# ─── Revisión de Codex a c3aae1c ───────────────────────────────────────────
+
+def test_si_corrigiendo_el_servicio_lo_lleva_el_agente(canal):
+    """«sí, solo corte» a un cambio Corte → Mechas pasaba por un sí y cambiaba la cita a Mechas."""
+    c = canal
+    c["turno"]("mejor unas mechas", c["cambio"](servicio="Mechas"))
+    c["turno"]("sí, solo corte")
+    assert c["movidas"] == [], "acepto el cambio de servicio que ella estaba corrigiendo"
+    assert c["al_agente"][-1] == "sí, solo corte"
+
+
+def test_pulsar_tres_veces_sigue_diciendo_que_esta_hecho(canal):
+    """La segunda pulsación ve la cita ya movida y borraba el acuse: la tercera decía «ya no vigente»."""
+    c = canal
+    c["turno"]("¿me la pasas al 20 a las 12?", c["cambio"]())
+    boton = _si_cambiar(c)
+    for _ in range(3):
+        c["pulsar"](boton)
+    assert c["movidas"] == [("R-123456", "2099-09-20", "12:00", "")]
+    assert "✅" in c["textos"][-1], c["textos"][-1]
+
+
+def test_un_resumen_guardado_antes_del_servicio_sigue_valiendo(canal):
+    """Un cambio ofrecido antes de desplegar no lleva `nuevo_servicio`: se acepta conservando el suyo."""
+    from backend import reserva
+
+    c = canal
+    c["turno"]("¿me la pasas al 20 a las 12?", c["cambio"]())
+    boton = _si_cambiar(c)
+    estado = reserva.cargar("demo", c["numero"])
+    propuesta = json.loads(estado.confirmacion_reserva_json)
+    del propuesta["datos"]["nuevo_servicio"]
+    estado.confirmacion_reserva_json = json.dumps(propuesta, ensure_ascii=True, sort_keys=True)
+    reserva.guardar("demo", c["numero"], estado)
+    c["pulsar"](boton)
+    assert c["movidas"] == [("R-123456", "2099-09-20", "12:00", "")]
+
+
+def test_el_hueco_del_servicio_nuevo_usa_la_duracion_de_su_profesional(api_module, monkeypatch):  # noqa: F811
+    """Proponer y guardar tienen que medir igual: con la profesional de la cita (y su centro)."""
+    from backend import agenda, booking
+
+    empleada = {"id": "emp_centro", "location_id": "loc_b"}
+    visto = {}
+
+    def duracion(cliente_id, servicio, empleado=None):
+        visto["empleada"] = empleado
+        return 45
+
+    async def hueco(cliente_id, fecha, hora, **kw):
+        visto["minutos"] = kw.get("duration_minutes")
+        return True
+
+    monkeypatch.setattr(agenda, "_get_employee_row", lambda employee_id, cliente_id=None: empleada)
+    monkeypatch.setattr(agenda, "_service_duration_minutes", duracion)
+    monkeypatch.setattr(agenda, "_booking_slot_available_for_reschedule", hueco)
+    fila = dict(FILA, employee_id="emp_centro")
+    assert asyncio.run(booking._reschedule_slot_is_free("demo", fila, "2099-09-20", "12:00", servicio="Mechas"))
+    assert visto == {"empleada": empleada, "minutos": 45}

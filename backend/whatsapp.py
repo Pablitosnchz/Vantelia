@@ -2775,7 +2775,9 @@ async def _wa_turno_del_agente(
     _cambio = _reserva.leer_confirmacion_reserva(_reserva.cargar(cliente_id, from_number))
     if (_cambio and _cambio["estado"] == "ofrecida"
             and _cambio["datos"].get("accion") == "reprogramar"
-            and _wa_dice_que_si(textnorm._strip_accents((incoming_text or "").lower().strip()))
+            # Solo un sí SIN nada más. «sí, solo corte» también pasaba `_wa_dice_que_si` y cambiaba
+            # la cita a Mechas sin que el agente leyera la corrección (revisión de Codex a c3aae1c).
+            and chat._es_solo_confirmacion(incoming_text)
             and not _wa_trae_dia_u_hora(incoming_text)
             and _wa_ultimo_intent_enviado(cliente_id, session_id) == "oferta_reprogramacion"):
         await _wa_responder_reprogramacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
@@ -3255,6 +3257,10 @@ async def _wa_responder_reprogramacion(*, cliente_id, phone_number_id, from_numb
     propuesta = reserva.leer_confirmacion_reserva(estado, incluir_hecha=True)
     accion, _, identidad = iid.partition(":")
     datos = propuesta["datos"] if propuesta else {}
+    if datos.get("accion") == "reprogramar" and "nuevo_servicio" not in datos:
+        # Resumen guardado antes de que el cambio pudiera llevar servicio (15-sep-2026): conserva el
+        # suyo. Rechazarlo dejaba sin recuperar una aceptación cuyo resultado se perdió.
+        datos = dict(datos, nuevo_servicio="")
     texto = "Esa solicitud ya no está vigente. Vuelve a pedir el cambio para revisar la cita."
     claves = set(booking._booking_reschedule_snapshot(datos, "", "")) | {
         "accion", "from_number", "telefono", "email"}
@@ -3314,12 +3320,12 @@ async def _wa_responder_reprogramacion(*, cliente_id, phone_number_id, from_numb
             if vigente and vigente["id"] == identidad:
                 if resultado.get("ok"):
                     actual.hecho = True
+                elif not resultado.get("resultado_desconocido"):
+                    actual.confirmacion_reserva_json = ""
                 if movida:
                     # A la tercera vez que se le mueve se le ofrece llamar (lo dejó dicho
                     # la dueña del salón): antes lo contaba la tool al mover.
                     actual.veces_movida = int(actual.veces_movida or 0) + 1
-                elif not resultado.get("resultado_desconocido"):
-                    actual.confirmacion_reserva_json = ""
                 try:
                     reserva.guardar(cliente_id, from_number, actual)
                 except conversation_state.ConversationStateConflict:
