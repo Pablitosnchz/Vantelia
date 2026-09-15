@@ -280,8 +280,8 @@ Un bloqueo parcial, o las vacaciones de una sola profesional mientras otra traba
 `work_steps` con hora y nombre (los de la cita o, si es anterior, los del pack actual cuando tiene
 los mismos pasos; nunca inventados), la agenda pinta un bloque por paso y la ficha del pack edita
 y guarda los pasos. Reservar sigue siendo el pack entero. Con Node (se salta sin él) ejecuta las
-funciones de pintado del panel: pasos cortos seguidos se juntan en un bloque en vez de taparse, y
-la espera no tapa ninguna cita dibujada, tampoco las del filtro «Canceladas» (revisión de Codex).
+funciones de pintado del panel: pasos cortos seguidos se juntan en un bloque en vez de taparse. La
+espera entre pasos queda como agenda vacía, sin rayado ni «libre» encima (Pablo, 15-sep-2026).
 
 `test_horario_no_depende_del_dia.py`: el caso del banco `horario-escrito-manda` exige el
 horario de la SEMANA (`horario_semanal`): dos días de la semana, «todos los días» o «excepto

@@ -168,8 +168,7 @@ def _ejecutar_js(prueba):
               re.search(r"^const CD_PX_PER_MIN.*$", fuente, re.M).group(),
               re.search(r"^const CD_ESTADO_NORM.*$", fuente, re.M).group()]
     for nombre in ("cdEstado", "cdParseMin", "cdBookingStartMin", "cdTramos", "cdPasos", "cdDur",
-                   "cdPasosVisibles", "cdOcupaVisible", "cdOcupaReal", "cdRestarOcupado",
-                   "cdHuecosDeEspera"):
+                   "cdPasosVisibles"):
         # Funciones de una línea («function cdEstado(b){ ... }») o de varias, cerradas en la columna 0.
         una = re.search(r"^function " + nombre + r"\([^\n]*\}[ \t]*$", fuente, re.M)
         if una and una.group().count("{") == una.group().count("}"):
@@ -199,39 +198,10 @@ assert.ok(g.map(x => x.paso).join(' · ').includes('Lavado'), 'se pierde el nomb
 """)
 
 
-def test_la_espera_no_tapa_otra_cita_pintada_aunque_este_cancelada():
-    """Revisión de Codex a 65157de: con el filtro «Canceladas», la espera de un pack tapaba el paso
-    de otro pack cancelado metido en ella, porque solo se descontaban las citas vivas."""
-    _ejecutar_js("""
-const B = {estado:'cancelled', work_steps:[{inicio:630, fin:650, n:1, total:2},
-                                           {inicio:710, fin:730, n:2, total:2}]};
-const libres = cdRestarOcupado([[620, 680]], [B], {});
-assert.ok(libres.every(([x, y]) => y <= 630 || x >= 650), JSON.stringify(libres));
-assert.deepStrictEqual(libres, [[620, 630], [650, 680]]);
-const corta = {hora:'10:40', work_steps:[]};
-const sinCorta = cdRestarOcupado([[620, 680]], [corta], {});
-assert.ok(sinCorta.every(([x, y]) => y <= 640 || x >= 640 + CD_MIN_BLOCK_H / CD_PX_PER_MIN),
-          'una cita corta tapa mas de lo que dura: ' + JSON.stringify(sinCorta));
-""")
-
-
-def test_el_hueco_cuenta_los_minutos_reales_aunque_se_dibuje_mas_corto():
-    """Revisión de Codex a dd68b9a: tras un paso de 5 min, el hueco se dibujaba desde el final del alto
-    mínimo y además contaba desde ahí («libre · 45.45 min», 10:15) en vez de 55 min desde las 10:05."""
-    _ejecutar_js("""
-const g = cdPasosVisibles([{inicio:600, fin:605, paso:'Aplicar', n:1, total:2},
-                           {inicio:660, fin:690, paso:'Secado', n:2, total:2}]);
-assert.strictEqual(g.length, 2);
-const h = cdHuecosDeEspera({paso: g[0], siguiente: g[1]}, [], {});
-assert.deepStrictEqual(h.map(x => [x.libreIni, x.libreFin]), [[605, 660]], JSON.stringify(h));
-assert.ok(h[0].dibIni >= g[0].finVisible, 'el rayado tapa el bloque del paso');
-const otra = {hora:'10:30', duration_minutes:5};
-const h2 = cdHuecosDeEspera({paso: g[0], siguiente: g[1]}, [otra], {});
-assert.deepStrictEqual(h2.map(x => [x.libreIni, x.libreFin]), [[605, 630], [635, 660]], JSON.stringify(h2));
-h2.forEach(x => assert.ok(x.dibFin <= 630 || x.dibIni >= 630 + CD_MIN_BLOCK_H / CD_PX_PER_MIN, 'tapa la otra cita'));
-const cancelada = {hora:'10:30', duration_minutes:5, estado:'cancelled'};
-const h3 = cdHuecosDeEspera({paso: g[0], siguiente: g[1]}, [cancelada], {});
-assert.deepStrictEqual([...new Set(h3.map(x => x.libreIni + '-' + x.libreFin))], ['605-660'],
-                       'una cancelada no quita minutos libres: ' + JSON.stringify(h3));
-assert.strictEqual(h3.filter(x => x.primero).length, 1, 'la etiqueta se repetiria en cada trozo');
-""")
+def test_la_espera_entre_pasos_queda_como_agenda_vacia():
+    """Pablo, 15-sep-2026: «en los packs quita lo del libre, ya se sabe que está libre, con que dejes el
+    hueco en la agenda vale». Nada pintado encima de la espera: ni rayado ni «libre · N min». El clic
+    en ese hueco es el de cualquier hueco vacío de la columna (abre «Nueva cita»)."""
+    fuente = _panel()
+    assert "cd-espera" not in fuente, "la agenda sigue pintando algo encima de la espera del pack"
+    assert "libre · " not in fuente, "la agenda sigue poniendo «libre · N min» en la espera"

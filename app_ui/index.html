@@ -850,14 +850,6 @@
     }
     .cd-event:hover { filter:brightness(1.12); box-shadow:0 4px 14px rgba(0,0,0,0.3); z-index:5; }
     .cd-event.selected { box-shadow:0 0 0 2px var(--accent); z-index:6; }
-/* Por ENCIMA de la cita, incluso cuando el raton la resalta: `.cd-event:hover`
-   sube a z-index 5 y se llevaba el clic del hueco, asi que pinchar en "libre"
-   abria a veces el panel de gestion de la cita en vez de agendar una nueva. */
-.cd-espera{position:absolute;z-index:7;border-radius:8px;cursor:pointer;
-  background:repeating-linear-gradient(135deg,rgba(0,245,212,.10) 0 6px,transparent 6px 12px);
-  border:1px dashed rgba(0,245,212,.45);display:flex;align-items:center;justify-content:center;}
-.cd-espera:hover{background:rgba(0,245,212,.18);z-index:8;}
-.cd-espera span{font-size:.62rem;letter-spacing:.03em;color:var(--success);text-transform:uppercase;}
 /* Un pack se pinta como sus pasos: cada paso es un bloque propio (15-sep-2026). El paso
    que no es el primero lleva el borde izquierdo mas tenue para leer que es la misma cita. */
 .cd-event.cd-paso .cd-ev-svc{font-weight:600;}
@@ -8651,7 +8643,7 @@ function cdPasos(b){
 // Los pasos tal y como se PINTAN. Un paso corto (5 min) ocupa el alto minimo del bloque y el
 // siguiente, pegado, le tapaba el nombre (revision de Codex a 65157de): los pasos que empezarian
 // dentro de ese alto se juntan en un bloque «Pasos 1–2/3 · Aplicar · Lavado». `finVisible` es
-// hasta donde llega el bloque dibujado, para que ni su espera ni otra cita se le metan encima.
+// hasta donde llega el bloque dibujado, para que otra cita no se le meta encima.
 function cdPasosVisibles(pasos){
   const minimo = CD_MIN_BLOCK_H / CD_PX_PER_MIN;
   const grupos = [];
@@ -8665,46 +8657,6 @@ function cdPasosVisibles(pasos){
   });
   grupos.forEach(g => { g.finVisible = Math.max(g.fin, g.inicio + minimo); g.paso = g.nombres.filter(Boolean).join(' · '); });
   return grupos;
-}
-// Lo que TAPA una cita en la columna: sus bloques dibujados, con su alto minimo.
-function cdOcupaVisible(o, emp){
-  const pasos = cdPasos(o);
-  if (pasos.length > 1) return cdPasosVisibles(pasos).map(g => [g.inicio, g.finVisible]);
-  const s = cdBookingStartMin(o);
-  return s === null ? [] : [[s, s + Math.max(cdDur(o, emp), CD_MIN_BLOCK_H / CD_PX_PER_MIN)]];
-}
-// Lo que OCUPA de verdad una cita: sus pasos o sus tramos de trabajo, sin alto minimo.
-function cdOcupaReal(o, emp){
-  const pasos = cdPasos(o);
-  return pasos.length > 1 ? pasos.map(p => [p.inicio, p.fin]) : cdTramos(o, emp);
-}
-// Quita de unos rangos libres lo que tienen OTRAS citas de la columna. Con `visible` (dibujar), todo
-// lo pintado con su alto minimo, tambien las canceladas del filtro «Canceladas» (revision de Codex a
-// 65157de): la clienta que se atiende mientras actua el producto de otra no queda tapada por el
-// rayado. Sin `visible` (contar minutos libres), solo lo que ocupan de verdad las citas vivas.
-function cdRestarOcupado(rangos, otras, emp, visible = true){
-  let libres = rangos.slice();
-  otras.filter(o => visible || cdEstado(o) !== 'cancelled').forEach(o => {
-    (visible ? cdOcupaVisible(o, emp) : cdOcupaReal(o, emp)).forEach(([a, z]) => {
-      libres = libres.flatMap(([x, y]) => (z <= x || a >= y)
-        ? [[x, y]]
-        : [[x, Math.min(a, y)], [Math.max(z, x), y]].filter(([p, q]) => q > p));
-    });
-  });
-  return libres.filter(([p, q]) => q > p);
-}
-// Los huecos de la espera que sigue a un bloque de paso. `libreIni/libreFin` son las horas REALES,
-// las que se cuentan y se ofrecen al hacer clic; `dibIni/dibFin`, el trozo que se puede rayar sin
-// tapar ningun bloque. Revision de Codex a dd68b9a: tras un paso de 5 min el hueco contaba desde el
-// final del alto minimo («libre · 45.45 min», 10:15) en vez de sus 55 minutos desde las 10:05.
-function cdHuecosDeEspera(ev, otras, emp){
-  if (!ev.paso || !ev.siguiente || ev.siguiente.inicio <= ev.paso.fin) return [];
-  const out = [];
-  cdRestarOcupado([[ev.paso.fin, ev.siguiente.inicio]], otras, emp, false).forEach(([libreIni, libreFin]) => {
-    cdRestarOcupado([[Math.max(libreIni, ev.paso.finVisible), libreFin]], otras, emp, true)
-      .forEach(([dibIni, dibFin], k) => out.push({ libreIni, libreFin, dibIni, dibFin, primero: k === 0 }));
-  });
-  return out;
 }
 function cdDur(b, emp, useSlotFallback = true){
   // MANDA lo que ocupa la cita de verdad (su inicio y su fin), no la duracion del
@@ -9118,45 +9070,10 @@ function renderCitasDay(){
           || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
         cdPonerBordes(btn, b, ev, body, startMin, pasoRejilla);
       }
-      // Los ratos de exposicion se pintan ENCIMA del bloque, en hueco: es la unica
-      // forma de que se vea que ahi se puede meter a otra clienta. Sin esto el pack
-      // parecia cuatro horas macizas y el negocio no las usaba.
-      // Con pasos, cada bloque pinta SOLO el hueco que le sigue (`cdHuecosDeEspera`): partido alrededor
-      // de otra cita metida en la espera y empezando donde acaba el bloque dibujado, pero contando las
-      // horas reales. Sin pasos (una cita antigua que solo trae `work_intervals`), todos los huecos de
-      // la cita encima del propio pack, como antes. Una cancelada no deja «libre» que ofrecer.
-      const huecos = [];
-      if (ev.paso) {
-        if (est !== 'cancelled') huecos.push(...cdHuecosDeEspera(ev, bookings.filter(o => o !== b), c.emp));
-      } else {
-        const tramos = cdTramos(b, c.emp);
-        for (let i = 0; i < tramos.length - 1; i++) {
-          if (tramos[i + 1][0] > tramos[i][1]) {
-            huecos.push({ libreIni: tramos[i][1], libreFin: tramos[i + 1][0],
-                          dibIni: tramos[i][1], dibFin: tramos[i + 1][0], primero: true });
-          }
-        }
-      }
-      huecos.forEach(({ libreIni, libreFin, dibIni, dibFin, primero }) => {
-        const hueco = document.createElement('div');
-        hueco.className = 'cd-espera';
-        hueco.style.top = ((dibIni - startMin) * CD_PX_PER_MIN) + 'px';
-        hueco.style.height = ((dibFin - dibIni) * CD_PX_PER_MIN) + 'px';
-        hueco.style.left = `calc(${lPct}% + 3px)`;
-        hueco.style.width = `calc(${wPct}% - 6px)`;
-        hueco.title = `Exposición: libre para otra clienta (${cdFmtMin(libreIni)}–${cdFmtMin(libreFin)})`;
-        if (primero && libreFin - libreIni >= 25 && dibFin - dibIni >= 10) {
-          hueco.innerHTML = `<span>libre · ${Math.round(libreFin - libreIni)} min</span>`;
-        }
-        hueco.addEventListener('click', (e) => {
-          e.stopPropagation();   // el clic es del hueco, no de la cita de debajo
-          openNewBookingDrawer({
-            fecha: c.dateKey, hora: cdFmtMin(libreIni),
-            employee_id: b.employee_id || '',
-          });
-        });
-        body.appendChild(hueco);
-      });
+      // La espera entre dos pasos de un pack NO se pinta: queda como agenda vacia, y pinchar ahi
+      // abre «Nueva cita» igual que en cualquier hueco (el clic va a la columna). Antes llevaba un
+      // rayado con la etiqueta de minutos libres; Pablo, 15-sep-2026: «ya se sabe que está libre,
+      // con que dejes el hueco en la agenda vale».
     });
 
     col.appendChild(head); col.appendChild(body); grid.appendChild(col);
