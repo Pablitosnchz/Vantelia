@@ -1381,3 +1381,19 @@ a fin en todas.
   marcas. Suite completa de addcf95: 2813 passed, 1 skipped, 0 fallos (19 min 45 s).
 - Siguiente: main a este commit, despliegue, humo en el servidor, subir main, nombres de pasos de Alicia con copia
   previa y revisión de Codex del último arreglo de reprogramar a las 14:34.
+
+## 2026-09-15 12:27–12:34 +0200 - despliegue de 9b73bef y nombres de los pasos de Alicia (Claude)
+
+- `main` avanzado sin fusión a 9b73bef (candidato addcf95 + registro). `.claude/settings.local.json` apartado con stash
+  y restaurado después (sin commitear).
+- `deploy.ps1 -SkipLocalChecks`: imagen construida, `/health` 200 (28 clientes), acceso público OK, humo en el servidor
+  5/5 (también `reprogramar-mueve-la-cita`). VERSION.json 9b73bef, `sucio` false. `main` subido a GitHub.
+- Nombres de los pasos (decisión de Pablo, «Sí, los que cuadran»): simulación 35 packs / saltados «Pack elumen largo» y
+  «Pack maquillaje y recogido»; aplicado igual con copia previa
+  `/srv/vantelia-backups/pre-pasos-alicia-20260915-103336.db`, sin tocar minutos ni duraciones, con `olvidar_tenant`.
+- Comprobado en solo lectura: 37 packs con pasos, 35 con nombre (p. ej. «Pack acido lactico bio premium corto» →
+  «Aplicar producto acido o keratina», «Lavado solo corto y medio», «Secado y plancha alisado corto»). Las 2 citas
+  futuras de pack (grey blending corto 15-sep 13:45 y medio 17-sep 10:30) tienen 7 pasos, igual que su pack: la agenda
+  les pone los nombres actuales. Erratas del Excel conservadas tal cual («Flahs repair», «Brusing»).
+- Nada enviado a nadie. Pendiente: revisión de Codex del último arreglo de reprogramar (2ee6890) cuando vuelva su cuota
+  (14:34, lanzada en segundo plano); respuestas de Alicia sobre alisados, «Maquillaje y recogido» y «Elumen largo».
