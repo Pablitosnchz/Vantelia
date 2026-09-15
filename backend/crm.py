@@ -158,6 +158,18 @@ def _crm_upsert_contact(
                 "SELECT * FROM crm_contacts WHERE cliente_id = ? AND phone_normalized = ? LIMIT 1",
                 (cliente_id, phone_norm),
             ).fetchone()
+        if not row and not email_norm and not phone_norm and name:
+            # Sin email ni telefono solo queda el nombre: se reutiliza el contacto con ese mismo nombre
+            # que TAMPOCO tenga datos de contacto. Sin esto, cada cita apuntada a mano desde el panel
+            # creaba otro contacto: «Paula Fernandez Oro» salio cinco veces en el buscador de clientes
+            # del salon (15-sep-2026). Si hay alguien con ese nombre y telefono o email, no se toca:
+            # puede ser otra persona.
+            row = connection.execute(
+                "SELECT * FROM crm_contacts WHERE cliente_id = ? AND search_text = ?"
+                " AND COALESCE(email_normalized, '') = '' AND COALESCE(phone_normalized, '') = ''"
+                " ORDER BY created_at LIMIT 1",
+                (cliente_id, _crm_search_text(name)),
+            ).fetchone()
         if row:
             contact_id = row["id"]
             next_status = row["status"] or "nuevo"

@@ -68,6 +68,33 @@ def test_crm_deduplicates_email_and_phone(api_module):
     assert [item["entity_type"] for item in links] == ["booking", "lead"]
 
 
+def test_sin_email_ni_telefono_el_mismo_nombre_es_el_mismo_contacto(api_module):
+    """15-sep-2026: «Paula Fernandez Oro» salió cinco veces en el buscador de clientes del salón; cada
+    cita apuntada a mano sin email ni teléfono creaba otro contacto."""
+    nombre = "Paula Fernandez Oro %s" % uuid.uuid4().hex[:6]
+    primero = api_module._crm_upsert_contact("demo", name=nombre, source="portal_manual",
+                                             entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    segundo = api_module._crm_upsert_contact("demo", name=nombre.upper(), source="portal",
+                                             entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    assert primero == segundo, "el mismo nombre sin datos de contacto creó otro contacto"
+    with api_module._get_db_connection() as connection:
+        total = connection.execute("SELECT COUNT(*) FROM crm_contacts WHERE cliente_id='demo' AND lower(name)=lower(?)",
+                                   (nombre,)).fetchone()[0]
+        enlaces = connection.execute("SELECT COUNT(*) FROM crm_contact_links WHERE contact_id=?", (primero,)).fetchone()[0]
+    assert total == 1 and enlaces == 2
+
+
+def test_un_nombre_sin_datos_no_se_junta_con_alguien_que_tiene_telefono(api_module):
+    """Dos personas se pueden llamar igual: la que tiene teléfono no absorbe la cita sin datos."""
+    nombre = "Laura Gil Mora %s" % uuid.uuid4().hex[:6]
+    con_telefono = api_module._crm_upsert_contact("demo", name=nombre, phone="+34611%06d" % (uuid.uuid4().int % 10**6),
+                                                  source="whatsapp")
+    sin_datos = api_module._crm_upsert_contact("demo", name=nombre, source="portal_manual")
+    assert sin_datos != con_telefono
+    otra_vez = api_module._crm_upsert_contact("demo", name=nombre, source="portal_manual")
+    assert otra_vez == sin_datos
+
+
 def test_crm_keeps_tenants_isolated(api_module):
     phone = f"+3491{uuid.uuid4().int % 10_000_000:07d}"
     first_id = api_module._crm_upsert_contact("demo", phone=phone, source="voice")
