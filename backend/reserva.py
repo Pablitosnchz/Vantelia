@@ -116,6 +116,10 @@ class Estado:
     confirmacion_reserva_json: str = ""
     # Correlación de la entrada nativa vigente; la propuesta sigue siendo única.
     formulario_reserva_json: str = ""
+    # Cambio de cita que el agente ha comprobado y que el canal tiene que ENSEÑAR para
+    # que ella lo acepte (codigo, fecha, hora, servicio, telefono, email). No mueve nada:
+    # WhatsApp lo convierte en el resumen con botones y lo vacía.
+    cambio_pendiente_json: str = ""
 
     def vigente(self) -> bool:
         return (time.time() - self.tocado) < CADUCA_EN
@@ -140,6 +144,15 @@ def leer_confirmacion_reserva(estado: Estado, *, incluir_hecha: bool = False):
         return p
     except (ValueError, TypeError):
         return None
+
+
+def cambio_por_aceptar(estado: Estado) -> bool:
+    """¿Tiene un cambio de su cita comprobado, por enseñar u ofrecido, que aún no ha aceptado?"""
+    if estado.cambio_pendiente_json:
+        return True
+    propuesta = leer_confirmacion_reserva(estado)
+    return (bool(propuesta) and propuesta["estado"] in ("preparada", "ofrecida")
+            and propuesta["datos"].get("accion") == "reprogramar")
 
 
 def leer_formulario_reserva(estado: Estado):
@@ -817,6 +830,21 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
     """
     if not isinstance(resultado, dict):
         return
+    if tool == "reprogramar_cita" and resultado.get("pendiente_de_confirmacion"):
+        # El cambio esta comprobado pero no hecho: lo acepta ella con el resumen que
+        # monta el canal. Va aparte de `esperando_confirmacion`, que abre el resumen
+        # de CREAR una cita.
+        cambio = resultado.get("cambio")
+        if isinstance(cambio, dict) and cambio.get("codigo"):
+            estado.cambio_pendiente_json = json.dumps(
+                {k: str(cambio.get(k) or "") for k in
+                 ("codigo", "fecha", "hora", "servicio", "telefono", "email")},
+                ensure_ascii=True, sort_keys=True)
+            estado.intencion = "reprogramar"
+            estado.codigo = str(cambio["codigo"])
+            estado.fecha = str(cambio.get("fecha") or estado.fecha)
+            estado.hora = str(cambio.get("hora") or estado.hora)
+        return
     if (estado.propuesta_servicio is not None
             and estado.propuesta_servicio.estado in ("preparada", "ofrecida")
             and tool in ("buscar_servicio", "consultar_disponibilidad", "crear_cita")):
@@ -1064,6 +1092,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     """
     invalidar_propuesta_servicio(estado)
     estado.confirmacion_reserva_json = ""
+    estado.cambio_pendiente_json = ""
     estado.intencion = "reservar"
     estado.servicio = ""
     estado.servicio_exacto = ""
@@ -1367,7 +1396,9 @@ def tool_que_remata(estado: Estado, nombre_conocido: str = "") -> str:
     if estado.intencion == "cancelar":
         return "cancelar_cita"
     if estado.intencion == "reprogramar":
-        return "reprogramar_cita"
+        # Ya tiene el cambio delante para aceptarlo: obligar a llamar otra vez solo
+        # le repetiria el mismo resumen. Si pide otra hora, el modelo la llama solo.
+        return "" if cambio_por_aceptar(estado) else "reprogramar_cita"
     if estado.servicio and estado.fecha and estado.hora:
         return "crear_cita"
     return ""
@@ -1406,6 +1437,11 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "", cliente_id:
         if estado.intencion == "cancelar":
             return ("Tienes la cita localizada. Confirma con ella que quiere "
                     "cancelarla y llama a `cancelar_cita`.")
+        if estado.intencion == "reprogramar" and cambio_por_aceptar(estado):
+            return ("Ya le has pasado el resumen del cambio para que lo acepte con el "
+                    "boton: la cita AUN NO esta cambiada. No digas que lo esta. Si pide "
+                    "otro dia, otra hora u otro servicio, mira si hay hueco y vuelve a "
+                    "llamar a `reprogramar_cita` con lo nuevo.")
         herramienta = "reprogramar_cita" if estado.intencion == "reprogramar" else "crear_cita"
         return ("Tienes todo lo que hace falta. Llama a `%s` AHORA; no vuelvas a "
                 "preguntarle lo que ya te ha dicho." % herramienta)

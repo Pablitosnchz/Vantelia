@@ -253,8 +253,15 @@ con una confirmación automática dudosa posterior a otra entrega.
 
 `test_reprogramacion_whatsapp_confirmada.py`: fase 4, el flujo guiado de WhatsApp no
 mueve la cita hasta aceptar el cambio concreto (botones con identidad, cita cambiada desde
-el portal, hueco ocupado, reinicio, doble pulsación y resultado perdido). El agente
-conversacional no cambia (decisión de Pablo del 14-sep-2026).
+el portal, hueco ocupado, reinicio, doble pulsación y resultado perdido). Desde el
+15-sep-2026 el agente usa el mismo resumen (siguiente fichero).
+
+`test_reprogramar_desde_el_agente.py`: por WhatsApp `reprogramar_cita` del agente comprueba
+cita, día, hora y hueco pero NO mueve (`agent._proponer_cambio_de_cita`); WhatsApp enseña el
+cambio con los botones del flujo guiado y solo el botón o un «sí» escrito a ESE resumen lo
+ejecutan. «sí, pero a las 18» y un sí a otra pregunta vuelven al agente; el cambio de servicio
+también se enseña y se guarda al aceptar. El chat de la web sigue moviendo directamente
+(decisiones de Pablo del 15-sep-2026: servicio incluido, botón o «sí», solo WhatsApp).
 
 `test_vacaciones_son_dia_cerrado.py`: un bloqueo que deja sin horario a todos los que
 trabajan ese día (vacaciones de día entero desde Horario) es un día CERRADO para

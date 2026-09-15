@@ -1282,3 +1282,86 @@ a fin en todas.
   2792 passed, 1 skipped, 0 fallos.
 - Siguiente: orden de Pablo para desplegar (junto o no con la confirmación antes de reprogramar) y, después, aplicar los
   nombres de los pasos a los packs de Alicia con `aplicar_pasos_alicia.sh --aplicar` (copia previa).
+
+## 2026-09-15 - confirmar antes de reprogramar desde el agente: decisiones (Claude)
+
+- Encargo pendiente del 15-sep (00:07): el agente conversacional mueve la cita en cuanto llama a `reprogramar_cita`,
+  sin resumen ni aceptación, a diferencia de crear y cancelar. Rama `claude/reprogramar-confirmada` (copia
+  E:/vp-reprogramar) desde `main` a4e7669, en paralelo a la revisión de la agenda por pasos.
+- Estado leído: crear en WhatsApp se frena con `remate_manual` (`pendiente_de_confirmacion`) y sale el resumen con botón;
+  el flujo guiado ya tiene `_wa_ofrecer_reprogramacion`/`_wa_responder_reprogramacion` con botones e identidad, pero su
+  resumen guardado solo lleva día y hora; el chat de la web y la voz no confirman ni al crear.
+- Decisiones de Pablo (AskUserQuestion): también se confirma el cambio de servicio; se acepta con el botón o con un «sí»
+  escrito (si lo último enviado fue ese cambio y no trae pegas ni otro día u hora); solo WhatsApp.
+
+## 2026-09-15 08:30–09:21 +0200 - confirmar antes de reprogramar desde el agente: implementación (Claude)
+
+- Rama `claude/reprogramar-confirmada` (E:/vp-reprogramar, sobre a4e7669), sin commit todavía.
+- `voice._voice_preparar_reprogramacion`: los controles de mover (verificación, fecha dicha, «así no cambia nada»)
+  salen de `_voice_reschedule_booking`, que los sigue usando igual.
+- `agent._ejecutar`: con `remate_manual` (WhatsApp) `reprogramar_cita` va a `_proponer_cambio_de_cita`: mismos
+  controles + estado de la cita + hueco (con la duración del servicio nuevo si cambia) y devuelve
+  `pendiente_de_confirmacion` con el cambio, `ok: False`. Web y voz sin cambios.
+- `reserva`: campo `cambio_pendiente_json`; `anotar_resultado` lo guarda sin encender `esperando_confirmacion`;
+  `tool_que_remata` y `instruccion_de_cierre` no obligan a repetir la tool con el cambio por aceptar.
+- `whatsapp`: `_wa_ofrecer_cambio_del_agente` envía la frase del agente y el resumen de `_wa_ofrecer_reprogramacion`
+  (ahora con `servicio`, línea «Servicio: antes ➡️ nuevo»), y deja el flujo en `agente`; un «sí» escrito a ese resumen
+  (último enviado `oferta_reprogramacion`, sin pega ni día u hora) entra por `_wa_responder_reprogramacion`, que ahora
+  pasa el servicio a `booking._reschedule_booking_by_code(servicio=)` y cuenta `veces_movida` (la tercera vez se
+  ofrece llamar, regla del salón que antes contaba la tool).
+- Tests: `tests/test_reprogramar_desde_el_agente.py`, 15. Contra el código original 11 fallan y 4 pasan (guardas:
+  mismo día y hora, chat web, «sí, pero a las 18», sí a otra pregunta); con el cambio 15 passed. pyflakes limpio en
+  backend. Suite completa en marcha.
+- Siguiente: suite completa, commit, revisión de Astra y medición con modelo real (cambiar la hora por WhatsApp contra
+  copia de producción) antes de pedir orden de despliegue.
+
+## 2026-09-15 09:21–10:10 +0200 - reprogramar confirmada: suite, commit y medición real (Claude)
+
+- Suite del árbol sin commit: 2796 passed, 1 failed (`test_mover_una_cita_al_mismo_hueco_no_es_moverla` leía el código de
+  `_voice_reschedule_booking` y el control está ahora en `_voice_preparar_reprogramacion`; el test mira las dos). Banco:
+  al caso `cambiar-la-hora-de-verdad` se le añade un quinto mensaje «si» (sin aceptar, ya no se mueve por decisión de
+  Pablo). Commit c3aae1c. Suite exacta de c3aae1c: 2797 passed, 1 skipped, 0 fallos (20 min 30 s).
+- Copia nueva de producción snap9 (solo lectura, 773 citas), cfg9 y RAG de metareview; código de E:/vp-reprogramar
+  (`lanzar_en9.py`, sucio=0). Resultados:
+  - Banco de Alicia (banco_r): 43/43 al primer intento, 0 tras reintento, 0 fallos, 0 no medidos, 1 no aplica. Igual que
+    b6226bd.
+  - `cambiar-la-hora-de-verdad` ×6 (cambio_r1–6): 6/6 al primer intento. Leídas enteras r1 y r5: el agente propone,
+    WhatsApp envía su frase y el resumen «¿Cambiamos tu cita? … Ahora … ➡️ Nueva …», y la cita se mueve al aceptar por
+    escrito («vale, la primera opción que me has dicho» en r1, «si» en r5), una sola vez; el «si» sobrante contesta «Ya la
+    tienes cogida».
+  - Metareview (banco_meta_r): 15/16 al primer intento, 1 reintento fallido, 0 no medidos, 28 no aplican; el fallo es el
+    conocido `horario-escrito-manda`, igual que b6226bd.
+  - Humo (humo_r): 5/5, también `reprogramar-mueve-la-cita`.
+- Borradas snap9 (con WAL), cfg9, cfg9_metareview, meta_rag y todas las copias de las tiradas. Quedan informes y logs.
+- Astra no ha recogido encargos desde el 14-sep 23:31; revisión de c3aae1c pedida a Codex (`codex review --commit`).
+- Siguiente: veredicto de la revisión y orden de Pablo para desplegar.
+
+## 2026-09-15 10:15–11:39 +0200 - revisión de Codex a c3aae1c y arreglos (Claude)
+
+- `codex review --commit c3aae1c`: **CAMBIOS**, cuatro hallazgos reproducidos por Codex: P1 «sí, solo corte» a un cambio
+  Corte → Mechas lo aceptaba sin pasar por el agente; P2 el hueco del servicio nuevo se medía sin la profesional de la
+  cita (otra duración que la de su centro, que sí usa `_update_booking_details`); P2 un resumen guardado antes de
+  desplegar (sin `nuevo_servicio`) dejaba de valer, también una aceptación con resultado perdido; P2 la tercera
+  pulsación decía «ya no vigente» (el `elif` que borra el acuse quedó colgado del contador `veces_movida`).
+- Arreglos: el «sí» escrito al cambio solo vale si es SOLO confirmación (`chat._es_solo_confirmacion`);
+  `_reschedule_slot_is_free` resuelve la profesional de la cita; `_wa_responder_reprogramacion` completa
+  `nuevo_servicio` vacío en resúmenes antiguos; el acuse solo se borra si falla, aparte del contador.
+- Tests nuevos (4): rojos con c3aae1c, verdes con el arreglo; 121 dirigidos verdes (reprogramar desde el agente, guiado,
+  sí escrito, agente de citas, huecos para mover). pyflakes limpio.
+- Efecto esperado en la medición: «vale, la primera opción que me has dicho» ya no acepta sola el resumen (lo lleva el
+  agente). Se repiten `cambiar-la-hora-de-verdad` ×6 y el humo sobre el commit nuevo con copia nueva de producción.
+
+## 2026-09-15 11:30–11:48 +0200 - revisión OK de cf58f52, pero la medición real empeora; arreglo (Claude)
+
+- `codex review --commit cf58f52`: sin hallazgos (50 dirigidos). Agenda por pasos 1112954: también sin hallazgos.
+- Medición con modelo real de cf58f52 (copia nueva de producción snap9, `cambiar-la-hora-de-verdad`): cambio_s1 y s2 OK
+  pero **al segundo intento**; el primero falló en los dos con «la cita no se ha movido de sitio». Leídos: tras el
+  resumen, «vale, la primera opción que me has dicho» ya no aceptaba (solo `_es_solo_confirmacion`), volvía al agente,
+  que llamaba otra vez a `reprogramar_cita` y chocaba con el freno del día que nadie ha pedido: enseñar el resumen
+  borraba con `empezar_otra_gestion` que le daba igual el día. Parada la tirada (s3–s6 y humo) y la suite de cf58f52.
+- Arreglo: `_wa_acepta_el_cambio` acepta un sí sin pega, sin día ni hora, que no pide otra cosa
+  (`_wa_cambia_el_servicio`) y no nombra el servicio actual ni el nuevo («sí, solo corte» sigue yendo al agente); el
+  resumen del agente ya no llama a `empezar_otra_gestion` y conserva lo que el agente sabe del cambio.
+- Tests nuevos (2): rojos con cf58f52, verdes con el arreglo; «sí, solo corte» sigue verde; 137 dirigidos verdes;
+  pyflakes limpio.
+- Siguiente: suite completa, revisión de Codex y repetir la medición (×6 y humo) sobre el commit nuevo.

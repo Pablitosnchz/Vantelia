@@ -7,8 +7,8 @@ Fase 4 del plan de consolidación. Cancelar por WhatsApp ya pedía aceptar un re
 con identidad (tests/test_cancelacion_whatsapp_confirmada.py), pero el flujo guiado de
 reprogramar movía la cita en cuanto tenía día y hora: sin resumen, sin botón y sin poder
 recuperar un resultado perdido. Decisión de Pablo del 14-sep-2026: «Solo el flujo de
-listas». El agente conversacional (el que usa Alicia) no cambia: sigue moviendo cuando ella
-lo confirma en la conversación.
+listas». Desde el 15-sep-2026 el agente conversacional (el que usa Alicia) usa este mismo
+resumen: ver tests/test_reprogramar_desde_el_agente.py.
 """
 import asyncio
 import uuid

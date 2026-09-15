@@ -32,6 +32,7 @@ llámala; no reimplementes el pipeline.
 | Reservar desde el panel | `routers/portal_app.py` (`POST /auth/bookings`) | idem |
 | Cancelar (cualquier canal) | — | `booking._cancel_booking_core` |
 | Reprogramar / editar | — | `booking._update_booking_details` |
+| Reprogramar por WhatsApp (guiado o agente) | `whatsapp._wa_ofrecer_reprogramacion` (resumen con botones; el agente llega por `agent._proponer_cambio_de_cita`) → `_wa_responder_reprogramacion` | `booking._reschedule_booking_by_code` → idem |
 | Confirmar asistencia | — | `booking._mark_booking_confirmed_by_customer` |
 
 El canal solo decide **su política de entrada** (qué profesional, qué textos) y

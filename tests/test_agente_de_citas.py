@@ -596,7 +596,10 @@ def test_mover_una_cita_al_mismo_hueco_no_es_moverla(api_module, client):  # noq
 
     from backend import voice
 
-    fuente = inspect.getsource(voice._voice_reschedule_booking)
+    # Desde el 15-sep-2026 el control vive en `_voice_preparar_reprogramacion`, que
+    # comparten la tool que mueve y la que por WhatsApp solo propone el cambio.
+    assert "_voice_preparar_reprogramacion(" in inspect.getsource(voice._voice_reschedule_booking)
+    fuente = inspect.getsource(voice._voice_preparar_reprogramacion)
     assert 'row["booking_date"]' in fuente and 'row["booking_time"]' in fuente, (
         "no se compara con el dia y la hora que ya tenia"
     )

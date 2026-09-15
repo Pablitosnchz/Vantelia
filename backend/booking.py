@@ -1379,6 +1379,7 @@ async def _reschedule_booking_by_code(
     source: str,
     request: Optional[Request] = None,
     expected_snapshot=None,
+    servicio: str = "",
 ) -> Dict[str, Any]:
     row, error = await _lookup_and_verify_booking_by_code(
         cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email
@@ -1390,7 +1391,8 @@ async def _reschedule_booking_by_code(
         return {"ok": False, "cita_cambiada": True,
                 "error": "La cita ha cambiado desde el resumen. Pide de nuevo el cambio para revisar sus datos."}
     payload = _booking_update_payload_from_reschedule(
-        row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora))
+        row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora)),
+        servicio=servicio,
     )
     try:
         response = await _update_booking_details(
@@ -1422,10 +1424,12 @@ async def _reschedule_booking_by_code(
     }
 
 
-def _booking_reschedule_snapshot(row, fecha: str, hora: str) -> Dict[str, str]:
-    """La cita que un cambio propone mover y el día y la hora a los que la mueve."""
+def _booking_reschedule_snapshot(row, fecha: str, hora: str, servicio: str = "") -> Dict[str, str]:
+    """La cita que un cambio propone mover, el día y la hora a los que la mueve y, si
+    también cambia, el servicio nuevo (vacío = conserva el suyo)."""
     datos = _booking_cancellation_snapshot(row)
-    datos.update(nueva_fecha=str(fecha or ""), nueva_hora=str(hora or ""))
+    datos.update(nueva_fecha=str(fecha or ""), nueva_hora=str(hora or ""),
+                 nuevo_servicio=str(servicio or ""))
     return datos
 
 
@@ -1451,12 +1455,24 @@ async def _prepare_booking_reschedule(
     return row, None
 
 
-async def _reschedule_slot_is_free(cliente_id: str, row, fecha: str, hora: str) -> bool:
-    """¿Se puede ofrecer mover la cita a ese día y hora? No ofrecer lo que luego no se guardará."""
+async def _reschedule_slot_is_free(cliente_id: str, row, fecha: str, hora: str, servicio: str = "") -> bool:
+    """¿Se puede ofrecer mover la cita a ese día y hora? No ofrecer lo que luego no se guardará.
+
+    Con `servicio` cuenta lo que dura el servicio nuevo, no lo que ocupa hoy la cita.
+    """
     try:
+        nuevo = _service_for_existing_booking(row, servicio) if servicio else ""
+        if nuevo and nuevo != (row["servicio"] or ""):
+            # Con la profesional de la cita, como al guardarla (`_update_booking_details`): el
+            # centro puede tener otra duración para ese servicio (revisión de Codex a c3aae1c).
+            empleada = (agenda._get_employee_row(row["employee_id"], cliente_id=cliente_id)
+                        if row["employee_id"] else None)
+            minutos = int(agenda._service_duration_minutes(cliente_id, nuevo, empleada) or 0)
+        else:
+            minutos = _minutos_que_ocupa_ahora(row)
         return await agenda._booking_slot_available_for_reschedule(
             cliente_id, fecha, hora, employee_id=row["employee_id"] or "",
-            exclude_booking_id=row["id"], duration_minutes=_minutos_que_ocupa_ahora(row) or None)
+            exclude_booking_id=row["id"], duration_minutes=minutos or None)
     except Exception:  # noqa: BLE001 - ante la duda no se ofrece
         return False
 
