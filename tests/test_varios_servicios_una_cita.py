@@ -421,6 +421,9 @@ def test_pedir_algo_mas_sigue_contando_lo_anterior(salon, api_module):
     for conversacion in (
         ("Quiero un corte de senora", "pues quiero tambien un elumen"),
         ("Quiero un corte de senora", "y ademas prefiero hacerme un elumen"),
+        # Revisión de Codex a 0beeb96: hablar de lo que ya pidió no es cambiar de idea.
+        ("Quiero un corte de senora y un elumen", "Para el corte prefiero a Lorena"),
+        ("Quiero un corte de senora y un elumen", "pues quiero el corte con Lorena"),
     ):
         freno = agent._freno_de_varios_servicios(
             CLIENTE, _mensajes(*conversacion), {"servicio": "Corte senora"})

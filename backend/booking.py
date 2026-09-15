@@ -2574,8 +2574,9 @@ def _booking_public_detail_from_row(
         manage_url=data["manage_url"],
         service_id=data.get("service_id", ""),
         service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
-        service_price_cents=int(data.get("service_price_cents", 0) or 0),
         # Detalle público de la cita (lo ve la clienta): sin precio si el negocio no los da.
+        service_price_cents=(0 if precios_ocultos(data["cliente_id"])
+                             else int(data.get("service_price_cents", 0) or 0)),
         service_price_label=("" if precios_ocultos(data["cliente_id"])
                              else data.get("service_price_label", "")),
         contact_email=data["contact_email"],
@@ -2841,7 +2842,10 @@ def _portal_booking_summary_from_row(
         completed_source=data.get("completed_source", ""),
         service_id=data.get("service_id", ""),
         service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
-        service_price_cents=int(data.get("service_price_cents", 0) or 0),
+        # Sin precios en la agenda, tampoco el importe del catálogo: la ficha de Gestionar cita lo
+        # pintaba como «Precio» (revisión de Codex a 0beeb96). Lo cobrado de verdad sigue saliendo.
+        service_price_cents=(int(data.get("service_price_cents", 0) or 0)
+                             if precios_en_agenda(data["cliente_id"]) else 0),
         service_price_label=(data.get("service_price_label", "")
                              if precios_en_agenda(data["cliente_id"]) else ""),
         payment_status=payment["status"] if payment else "",

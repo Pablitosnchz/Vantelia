@@ -55,15 +55,37 @@ def test_el_nombre_inventado_no_llega_al_resumen(api_module):  # noqa: F811
 
     estado = reserva.Estado()
     reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia"), {
-        "ok": False, "conserva_los_datos": True, "error": "Faltan apellidos"})
-    assert estado.nombre == "Maria Garcia"
+        "ok": False, "conserva_los_datos": True, "nombre_no_dicho": True, "error": "Faltan apellidos"})
+    assert estado.nombre == "", "guardó un nombre que ella no dijo"
     reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Ana Ruiz Perez"),
                              {"ok": False, "pendiente_de_confirmacion": True})
     assert estado.nombre == "Ana Ruiz Perez"
-    # Un nombre de relleno no pisa uno de verdad.
-    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Cliente"),
+
+
+def test_un_nombre_distinto_del_modelo_no_pisa_el_que_ya_se_sabe(api_module):  # noqa: F811
+    """Revisión de Codex a 0beeb96: un nombre alucinado con apellido no puede sustituir en el resumen
+    al que ya se sabía (de su teléfono o dicho por ella)."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    estado.nombre = "Ana Ruiz Perez"
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia Lopez"),
                              {"ok": False, "pendiente_de_confirmacion": True})
     assert estado.nombre == "Ana Ruiz Perez"
+
+
+def test_el_freno_de_apellidos_marca_el_nombre_que_ella_no_dijo(api_module, monkeypatch):  # noqa: F811
+    from backend import agent, clients
+
+    monkeypatch.setattr(clients, "exige_dos_apellidos", lambda cliente_id: True)
+    inventado = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia"), telefono="34600111999",
+        remate_manual=True, dicho="Pues quiero un grey blending. Y prefiero antes de mediodia"))
+    assert inventado.get("conserva_los_datos") and inventado.get("nombre_no_dicho") is True, inventado
+    dicho = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia"), telefono="34600111999",
+        remate_manual=True, dicho="me llamo Maria Garcia"))
+    assert dicho.get("conserva_los_datos") and dicho.get("nombre_no_dicho") is False, dicho
 
 
 @pytest.fixture
@@ -153,7 +175,10 @@ def test_la_agenda_no_ensena_precios_si_el_negocio_no_los_quiere(pack_con_pasos,
     fila = _coger()
     assert booking._portal_booking_summary_from_row(fila).service_price_label, "sin la opción, como siempre"
     _con_config(monkeypatch, precios_en_agenda=False)
-    assert booking._portal_booking_summary_from_row(fila).service_price_label == ""
+    resumen = booking._portal_booking_summary_from_row(fila)
+    assert resumen.service_price_label == ""
+    # La ficha de Gestionar cita pinta «Precio» con los céntimos (revisión de Codex a 0beeb96).
+    assert resumen.service_price_cents == 0
 
 
 def test_la_pagina_de_la_cita_no_ensena_precio_si_el_negocio_no_los_da(pack_con_pasos, monkeypatch):  # noqa: F811

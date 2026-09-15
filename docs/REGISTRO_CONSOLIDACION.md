@@ -1446,3 +1446,12 @@ a fin en todas.
   sin respuesta.
 - 16:28: siguiente, suite completa, repetir el caso de Alicia y `cambiar-la-hora-de-verdad` con modelo real, revisión de
   Astra y orden de Pablo para desplegar (con `booking.precios_en_agenda: false` para Alicia).
+- `codex review --base main` sobre 0beeb96: **CAMBIOS**. P1 «prefiero» contaba como cambiar de idea: «para el corte
+  prefiero a Lorena» borraba los demás servicios pedidos y el freno dejaba pasar una cita corta. P1 la regla nueva del
+  nombre dejaba que un nombre del modelo con apellido («Maria Garcia Lopez») pisara uno ya sabido. P2 con
+  `precios_en_agenda: false` la ficha de Gestionar cita seguía pintando «Precio» con `service_price_cents`.
+- Arreglos (16:46): cambiar de idea solo si pide una familia que no había pedido y sin «prefiero»; se deshace la regla del
+  nombre en la creación pendiente y el freno de apellidos marca `nombre_no_dicho` (`_lo_dijo_como_su_nombre`) para que
+  `anotar_resultado` no conserve un nombre que ella no dijo; sin precios en la agenda también `service_price_cents` = 0
+  (en la página de la clienta, si `precios_ocultos`). Tests nuevos: 5 rojos con 0beeb96; 181 verdes en los ficheros
+  tocados; pyflakes limpio. Paradas la suite y la medición de 0beeb96 (superadas).

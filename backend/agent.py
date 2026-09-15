@@ -559,6 +559,11 @@ async def _ejecutar(
             argumentos["nombre"] = ""
         conocida = str((quien or {}).get("nombre", "")).strip()
         quien_nombre = str(argumentos.get("nombre") or conocida).strip()
+        # Un nombre que ella no ha dicho no se conserva al frenar por los apellidos. Medido el
+        # 15-sep-2026 repitiendo la prueba de la duenya con modelo real: el modelo llamo con
+        # «Maria Garcia», este freno lo guardo y el resumen salio a ese nombre aunque despues
+        # ella dijera «me llamo Ana Ruiz Perez».
+        nombre_no_dicho = not _lo_dijo_como_su_nombre(dicho, quien_nombre)
         if (quien_nombre and telefono and not conocida
                 and clients.exige_dos_apellidos(cliente_id)
                 and not textnorm.tiene_dos_apellidos(quien_nombre)):
@@ -571,6 +576,7 @@ async def _ejecutar(
                               "tenga, llama a `crear_cita` con el nombre COMPLETO. No te "
                               "los inventes ni cojas la cita sin ellos."),
                 "conserva_los_datos": True,
+                "nombre_no_dicho": nombre_no_dicho,
             }
         if quien_nombre and not conocida and not textnorm.tiene_algun_apellido(quien_nombre):
             return {
@@ -579,6 +585,7 @@ async def _ejecutar(
                 "que_hacer": ("Preguntale sus apellidos en UNA frase corta y espera a que "
                               "los diga. No te los inventes ni cojas la cita sin ellos."),
                 "conserva_los_datos": True,
+                "nombre_no_dicho": nombre_no_dicho,
             }
 
     if nombre == "crear_cita" and remate_manual and _nombre_de_verdad(
@@ -2052,7 +2059,7 @@ def _descripcion_para_buscar(cliente_id: str, dicho: str, servicio_texto: str,
 # Cambiar de idea frente a pedir algo MAS. Sin tildes: se compara con el texto ya
 # normalizado (ver tests/test_patrones_sin_tilde.py).
 _SUSTITUYE_LO_PEDIDO = re.compile(
-    r"\b(pues quiero|mejor quiero|prefiero|en vez de|en lugar de|al final quiero|"
+    r"\b(pues quiero|mejor quiero|en vez de|en lugar de|al final quiero|"
     r"he cambiado de idea|cambio de idea|ahora quiero|lo que quiero es|no,? quiero)\b")
 _ANYADE_A_LO_PEDIDO = re.compile(
     r"\b(tambien|ademas|aparte|junto con|a la vez|y (un|una|unas|unos|el|la|los|las))\b")
@@ -2075,8 +2082,15 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
     desde = 0
     for indice, texto in enumerate(textos):
         plano = catalog_pick._norm(texto)
-        if (_SUSTITUYE_LO_PEDIDO.search(plano) and not _ANYADE_A_LO_PEDIDO.search(plano)
-                and catalog_pick.familias_pedidas(cliente_id, texto)):
+        if not _SUSTITUYE_LO_PEDIDO.search(plano) or _ANYADE_A_LO_PEDIDO.search(plano):
+            continue
+        nuevas = set(catalog_pick.familias_pedidas(cliente_id, texto))
+        antes = set(catalog_pick.familias_pedidas(cliente_id, " ".join(textos[desde:indice])))
+        # Solo cambia de idea quien pide una familia que NO habia pedido. «Pues quiero el corte
+        # con Lorena» habla de lo que ya pidio y no borra el resto (revision de Codex a 0beeb96:
+        # con «prefiero» en la lista, «para el corte prefiero a Lorena» dejaba pasar una cita
+        # que se comia los demas servicios).
+        if nuevas and antes and not (nuevas & antes):
             desde = indice
     return " ".join(textos[desde:])[-1500:]
 

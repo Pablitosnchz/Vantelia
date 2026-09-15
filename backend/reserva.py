@@ -915,18 +915,6 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         nombre_nuevo = str(argumentos.get("nombre") or "").strip()
         if nombre_nuevo and estado.nombre and _amplia_el_nombre(estado.nombre, nombre_nuevo):
             estado.nombre = nombre_nuevo
-        # El nombre de la cita que va a confirmar MANDA, como el servicio, el dia y la hora.
-        # Medido el 15-sep-2026 (prueba de la duenya repetida con modelo real): el modelo
-        # llamo a crear_cita con «Maria Garcia», que nadie habia dicho; el freno de apellidos
-        # lo rechazo conservando los datos, y cuando ella dijo «me llamo Ana Ruiz Perez» el
-        # resumen salio a nombre de Maria Garcia. Aqui ya ha pasado el control de nombre y
-        # apellidos de `agent._ejecutar`.
-        elif nombre_nuevo and estado.nombre and not _es_nombre_de_relleno(nombre_nuevo):
-            from backend import catalog_pick, textnorm
-
-            if (textnorm.tiene_algun_apellido(nombre_nuevo)
-                    and catalog_pick._norm(nombre_nuevo) != catalog_pick._norm(estado.nombre)):
-                estado.nombre = nombre_nuevo
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if clave == "nombre" and _es_nombre_de_relleno(valor):
@@ -961,6 +949,8 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         if resultado.get("conserva_los_datos"):
             for clave in ("fecha", "hora", "nombre", "profesional"):
                 valor = str(argumentos.get(clave) or "").strip()
+                if clave == "nombre" and resultado.get("nombre_no_dicho"):
+                    continue  # lo puso el modelo, no ella (agent._ejecutar, freno de apellidos)
                 if clave == "nombre" and _es_nombre_de_relleno(valor):
                     continue  # "Cliente" no es un dato bueno que conservar
                 if valor and not getattr(estado, clave, ""):
