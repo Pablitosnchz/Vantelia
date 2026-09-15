@@ -1233,3 +1233,14 @@ a fin en todas.
   el último; editor de pasos en la ficha del pack con suma y aviso.
 - Decisiones de Pablo (AskUserQuestion): alisados → preguntar a Alicia y mientras se pintan enteros; nombre en cada paso
   (no enlace al catálogo); editor en la ficha del pack; la confirmación antes de reprogramar va después de la agenda.
+- 7ada73b (rama `claude/agenda-pasos`): `paso` en `gap_json`, `work_steps` en la API, un bloque por paso en la agenda y
+  editor en la ficha. 7 tests rojos antes; tras el cambio 23 de pasos y tramos y 111 de los que leen el panel verdes (uno,
+  `test_nota_servicio`, obligó a mandar `gaps` antes de `booking_note` en el cuerpo).
+- Verificación visual en entorno aislado (`captura_agenda_pasos.py`: app levantada en local, Playwright, sin datos
+  reales, carpeta borrada): pack de 5 pasos + corte en su espera. Primera captura: el rayado del hueco tapaba el corte,
+  que ahora sale a ancho completo; arreglado partiendo el hueco alrededor de las otras citas (`cdRestarOcupado`). Última
+  captura: 5 bloques de paso, 3 huecos, 0 errores de consola.
+- Simulación de nombres desde su Excel contra producción (solo lectura): 35 packs con el mismo número de pasos (27 cuadran
+  en minutos; los 8 alisados no), «Pack maquillaje y recogido» con 2 pasos guardados y 3 en el Excel, «Pack elumen largo»
+  repetido con pasos distintos en el Excel. Script de aplicación preparado (`aplicar_pasos_alicia.sh`, con copia previa);
+  sin ejecutar hasta desplegar.

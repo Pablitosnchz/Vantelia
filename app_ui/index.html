@@ -8648,6 +8648,21 @@ function cdPasos(b){
                         n: Number(p.n) || 0, total: Number(p.total) || ps.length }))
            .filter(p => p.fin > p.inicio);
 }
+// Quita de unos rangos libres lo que ocupan OTRAS citas (sus pasos o sus tramos). La clienta que se
+// atiende mientras actua el producto de otra no puede quedar tapada por el rayado de «libre».
+function cdRestarOcupado(rangos, otras, emp){
+  let libres = rangos.slice();
+  otras.filter(o => cdEstado(o) !== 'cancelled').forEach(o => {
+    const pasos = cdPasos(o);
+    const ocupado = pasos.length > 1 ? pasos.map(p => [p.inicio, p.fin]) : cdTramos(o, emp);
+    ocupado.forEach(([a, z]) => {
+      libres = libres.flatMap(([x, y]) => (z <= x || a >= y)
+        ? [[x, y]]
+        : [[x, Math.min(a, y)], [Math.max(z, x), y]].filter(([p, q]) => q > p));
+    });
+  });
+  return libres;
+}
 function cdDur(b, emp, useSlotFallback = true){
   // MANDA lo que ocupa la cita de verdad (su inicio y su fin), no la duracion del
   // catalogo. Era al reves y por eso estirar una cita se guardaba bien pero se
@@ -9067,26 +9082,33 @@ function renderCitasDay(){
         : cdTramos(b, c.emp);
       if (tramos.length > 1) {
         for (let i = 0; i < tramos.length - 1; i++) {
-          const libreIni = tramos[i][1], libreFin = tramos[i + 1][0];
-          if (libreFin <= libreIni) continue;
-          const hueco = document.createElement('div');
-          hueco.className = 'cd-espera';
-          hueco.style.top = ((libreIni - startMin) * CD_PX_PER_MIN) + 'px';
-          hueco.style.height = ((libreFin - libreIni) * CD_PX_PER_MIN) + 'px';
-          hueco.style.left = `calc(${lPct}% + 3px)`;
-          hueco.style.width = `calc(${wPct}% - 6px)`;
-          hueco.title = `Exposición: libre para otra clienta (${cdFmtMin(libreIni)}–${cdFmtMin(libreFin)})`;
-          if (libreFin - libreIni >= 25) {
-            hueco.innerHTML = `<span>libre · ${libreFin - libreIni} min</span>`;
-          }
-          hueco.addEventListener('click', (ev) => {
-            ev.stopPropagation();   // el clic es del hueco, no de la cita de debajo
-            openNewBookingDrawer({
-              fecha: c.dateKey, hora: cdFmtMin(libreIni),
-              employee_id: b.employee_id || '',
+          if (tramos[i + 1][0] <= tramos[i][1]) continue;
+          // Con pasos, en la espera puede haber OTRA cita metida (la clienta que se atiende mientras
+          // actua el producto): el hueco se parte alrededor de ella para no taparla. Sin pasos el
+          // hueco se pinta encima del propio pack, como siempre.
+          const libres = ev.paso
+            ? cdRestarOcupado([[tramos[i][1], tramos[i + 1][0]]], bookings.filter(o => o !== b), c.emp)
+            : [[tramos[i][1], tramos[i + 1][0]]];
+          libres.forEach(([libreIni, libreFin]) => {
+            const hueco = document.createElement('div');
+            hueco.className = 'cd-espera';
+            hueco.style.top = ((libreIni - startMin) * CD_PX_PER_MIN) + 'px';
+            hueco.style.height = ((libreFin - libreIni) * CD_PX_PER_MIN) + 'px';
+            hueco.style.left = `calc(${lPct}% + 3px)`;
+            hueco.style.width = `calc(${wPct}% - 6px)`;
+            hueco.title = `Exposición: libre para otra clienta (${cdFmtMin(libreIni)}–${cdFmtMin(libreFin)})`;
+            if (libreFin - libreIni >= 25) {
+              hueco.innerHTML = `<span>libre · ${libreFin - libreIni} min</span>`;
+            }
+            hueco.addEventListener('click', (e) => {
+              e.stopPropagation();   // el clic es del hueco, no de la cita de debajo
+              openNewBookingDrawer({
+                fecha: c.dateKey, hora: cdFmtMin(libreIni),
+                employee_id: b.employee_id || '',
+              });
             });
+            body.appendChild(hueco);
           });
-          body.appendChild(hueco);
         }
       }
     });
