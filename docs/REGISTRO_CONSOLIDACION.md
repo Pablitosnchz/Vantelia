@@ -1238,3 +1238,24 @@ a fin en todas.
   backend. Suite completa en marcha.
 - Siguiente: suite completa, commit, revisión de Astra y medición con modelo real (cambiar la hora por WhatsApp contra
   copia de producción) antes de pedir orden de despliegue.
+
+## 2026-09-15 09:21–10:10 +0200 - reprogramar confirmada: suite, commit y medición real (Claude)
+
+- Suite del árbol sin commit: 2796 passed, 1 failed (`test_mover_una_cita_al_mismo_hueco_no_es_moverla` leía el código de
+  `_voice_reschedule_booking` y el control está ahora en `_voice_preparar_reprogramacion`; el test mira las dos). Banco:
+  al caso `cambiar-la-hora-de-verdad` se le añade un quinto mensaje «si» (sin aceptar, ya no se mueve por decisión de
+  Pablo). Commit c3aae1c. Suite exacta de c3aae1c: 2797 passed, 1 skipped, 0 fallos (20 min 30 s).
+- Copia nueva de producción snap9 (solo lectura, 773 citas), cfg9 y RAG de metareview; código de E:/vp-reprogramar
+  (`lanzar_en9.py`, sucio=0). Resultados:
+  - Banco de Alicia (banco_r): 43/43 al primer intento, 0 tras reintento, 0 fallos, 0 no medidos, 1 no aplica. Igual que
+    b6226bd.
+  - `cambiar-la-hora-de-verdad` ×6 (cambio_r1–6): 6/6 al primer intento. Leídas enteras r1 y r5: el agente propone,
+    WhatsApp envía su frase y el resumen «¿Cambiamos tu cita? … Ahora … ➡️ Nueva …», y la cita se mueve al aceptar por
+    escrito («vale, la primera opción que me has dicho» en r1, «si» en r5), una sola vez; el «si» sobrante contesta «Ya la
+    tienes cogida».
+  - Metareview (banco_meta_r): 15/16 al primer intento, 1 reintento fallido, 0 no medidos, 28 no aplican; el fallo es el
+    conocido `horario-escrito-manda`, igual que b6226bd.
+  - Humo (humo_r): 5/5, también `reprogramar-mueve-la-cita`.
+- Borradas snap9 (con WAL), cfg9, cfg9_metareview, meta_rag y todas las copias de las tiradas. Quedan informes y logs.
+- Astra no ha recogido encargos desde el 14-sep 23:31; revisión de c3aae1c pedida a Codex (`codex review --commit`).
+- Siguiente: veredicto de la revisión y orden de Pablo para desplegar.
