@@ -1484,3 +1484,8 @@ a fin en todas.
   se arregla (test ya escrito), pendiente de aplicar al terminar la suite de f833dca.
 - Limitaciones que quedan apuntadas: sustitución explícita de servicio dentro del mismo mensaje («en vez del X quiero Y»)
   y cita a nombre de otra persona con clienta conocida («es para mi hija Laura»), ambas como en producción.
+- 7a8e473: `available_services` del detalle público sin `price_cents`/`price_label` si `precios_ocultos` (test rojo con
+  f833dca; 70 verdes). Suite completa de f833dca: 2832 passed, 1 skipped, 0 fallos. En curso: suite y banco de Alicia de
+  7a8e473.
+- Decisión de Pablo (AskUserQuestion, 17:54): «Esperar a Astra» antes de desplegar. Encargo de revisión de main..7a8e473
+  entregado a su sesión. Producción sigue con el fallo de «vale, cancela el cambio» hasta el despliegue.
