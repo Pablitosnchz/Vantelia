@@ -1265,3 +1265,16 @@ a fin en todas.
   pasos 5/10/30 → 2 bloques («Pasos 1–2/3 · Aplicar · Lavado», «Paso 3/3 · Secado»), ninguno tapado según
   `elementFromPoint`; dos packs cancelados alternos con filtro «Canceladas» → 4 bloques, 0 esperas, ninguno tapado; 0
   errores de consola.
+
+## 2026-09-15 10:15–11:39 +0200 - agenda por pasos: segunda revisión de Codex (Claude)
+
+- `codex review --commit dd68b9a`: **CAMBIOS**, un P2 reproducido: tras un paso de 5 min con el siguiente a la hora, el
+  hueco contaba desde el final del alto mínimo («libre · 45.45 min», 10:15–11:00) en vez de 55 min desde las 10:05.
+- Arreglo: `cdHuecosDeEspera` separa las horas reales del hueco (minutos, título y hora del clic; solo resta lo que ocupan
+  de verdad las citas vivas, `cdOcupaReal`) del trozo que se raya sin tapar bloques (`finVisible` y lo dibujado de las
+  demás); la etiqueta sale una vez por hueco y en minutos enteros.
+- Test nuevo con Node (`test_el_hueco_cuenta_los_minutos_reales_aunque_se_dibuje_mas_corto`): rojo con el HTML de dd68b9a,
+  verde con el arreglo; 26 passed en pasos, esperas y exposición.
+- Navegador aislado (`verificar_pasos_codex.py`, sin datos reales, carpeta borrada): pasos 5/10/30 → 2 bloques sin tapar;
+  pack de 5 min + 55 de espera → hueco «libre · 55 min», título 14:05–15:00; dos packs cancelados con el filtro
+  «Canceladas» → 0 esperas, 0 tapados; 0 errores de consola. Suite de dd68b9a detenida (superada por este commit).

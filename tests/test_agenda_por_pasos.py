@@ -165,10 +165,17 @@ def _ejecutar_js(prueba):
         pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
     fuente = _panel()
     trozos = ["const assert = require('assert'); const citasState = {};",
-              re.search(r"^const CD_PX_PER_MIN.*$", fuente, re.M).group()]
-    for nombre in ("cdParseMin", "cdBookingStartMin", "cdTramos", "cdPasos", "cdDur",
-                   "cdPasosVisibles", "cdOcupaVisible", "cdRestarOcupado"):
-        encontrada = re.search(r"^function " + nombre + r"\(.*?^\}", fuente, re.S | re.M)
+              re.search(r"^const CD_PX_PER_MIN.*$", fuente, re.M).group(),
+              re.search(r"^const CD_ESTADO_NORM.*$", fuente, re.M).group()]
+    for nombre in ("cdEstado", "cdParseMin", "cdBookingStartMin", "cdTramos", "cdPasos", "cdDur",
+                   "cdPasosVisibles", "cdOcupaVisible", "cdOcupaReal", "cdRestarOcupado",
+                   "cdHuecosDeEspera"):
+        # Funciones de una línea («function cdEstado(b){ ... }») o de varias, cerradas en la columna 0.
+        una = re.search(r"^function " + nombre + r"\([^\n]*\}[ \t]*$", fuente, re.M)
+        if una and una.group().count("{") == una.group().count("}"):
+            encontrada = una
+        else:
+            encontrada = re.search(r"^function " + nombre + r"\(.*?^\}", fuente, re.S | re.M)
         assert encontrada, "no existe la funcion %s en el panel" % nombre
         trozos.append(encontrada.group())
     subprocess.run([node, "-e", "\n".join(trozos + [prueba])], check=True, capture_output=True, text=True)
@@ -205,4 +212,26 @@ const corta = {hora:'10:40', work_steps:[]};
 const sinCorta = cdRestarOcupado([[620, 680]], [corta], {});
 assert.ok(sinCorta.every(([x, y]) => y <= 640 || x >= 640 + CD_MIN_BLOCK_H / CD_PX_PER_MIN),
           'una cita corta tapa mas de lo que dura: ' + JSON.stringify(sinCorta));
+""")
+
+
+def test_el_hueco_cuenta_los_minutos_reales_aunque_se_dibuje_mas_corto():
+    """Revisión de Codex a dd68b9a: tras un paso de 5 min, el hueco se dibujaba desde el final del alto
+    mínimo y además contaba desde ahí («libre · 45.45 min», 10:15) en vez de 55 min desde las 10:05."""
+    _ejecutar_js("""
+const g = cdPasosVisibles([{inicio:600, fin:605, paso:'Aplicar', n:1, total:2},
+                           {inicio:660, fin:690, paso:'Secado', n:2, total:2}]);
+assert.strictEqual(g.length, 2);
+const h = cdHuecosDeEspera({paso: g[0], siguiente: g[1]}, [], {});
+assert.deepStrictEqual(h.map(x => [x.libreIni, x.libreFin]), [[605, 660]], JSON.stringify(h));
+assert.ok(h[0].dibIni >= g[0].finVisible, 'el rayado tapa el bloque del paso');
+const otra = {hora:'10:30', duration_minutes:5};
+const h2 = cdHuecosDeEspera({paso: g[0], siguiente: g[1]}, [otra], {});
+assert.deepStrictEqual(h2.map(x => [x.libreIni, x.libreFin]), [[605, 630], [635, 660]], JSON.stringify(h2));
+h2.forEach(x => assert.ok(x.dibFin <= 630 || x.dibIni >= 630 + CD_MIN_BLOCK_H / CD_PX_PER_MIN, 'tapa la otra cita'));
+const cancelada = {hora:'10:30', duration_minutes:5, estado:'cancelled'};
+const h3 = cdHuecosDeEspera({paso: g[0], siguiente: g[1]}, [cancelada], {});
+assert.deepStrictEqual([...new Set(h3.map(x => x.libreIni + '-' + x.libreFin))], ['605-660'],
+                       'una cancelada no quita minutos libres: ' + JSON.stringify(h3));
+assert.strictEqual(h3.filter(x => x.primero).length, 1, 'la etiqueta se repetiria en cada trozo');
 """)

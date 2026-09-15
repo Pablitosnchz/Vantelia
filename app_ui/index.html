@@ -8673,19 +8673,38 @@ function cdOcupaVisible(o, emp){
   const s = cdBookingStartMin(o);
   return s === null ? [] : [[s, s + Math.max(cdDur(o, emp), CD_MIN_BLOCK_H / CD_PX_PER_MIN)]];
 }
-// Quita de unos rangos libres lo que tapan OTRAS citas pintadas en la columna. La clienta que se
-// atiende mientras actua el producto de otra no puede quedar tapada por el rayado de «libre». Cuenta
-// todo lo dibujado, tambien las canceladas del filtro «Canceladas» (revision de Codex a 65157de).
-function cdRestarOcupado(rangos, otras, emp){
+// Lo que OCUPA de verdad una cita: sus pasos o sus tramos de trabajo, sin alto minimo.
+function cdOcupaReal(o, emp){
+  const pasos = cdPasos(o);
+  return pasos.length > 1 ? pasos.map(p => [p.inicio, p.fin]) : cdTramos(o, emp);
+}
+// Quita de unos rangos libres lo que tienen OTRAS citas de la columna. Con `visible` (dibujar), todo
+// lo pintado con su alto minimo, tambien las canceladas del filtro «Canceladas» (revision de Codex a
+// 65157de): la clienta que se atiende mientras actua el producto de otra no queda tapada por el
+// rayado. Sin `visible` (contar minutos libres), solo lo que ocupan de verdad las citas vivas.
+function cdRestarOcupado(rangos, otras, emp, visible = true){
   let libres = rangos.slice();
-  otras.forEach(o => {
-    cdOcupaVisible(o, emp).forEach(([a, z]) => {
+  otras.filter(o => visible || cdEstado(o) !== 'cancelled').forEach(o => {
+    (visible ? cdOcupaVisible(o, emp) : cdOcupaReal(o, emp)).forEach(([a, z]) => {
       libres = libres.flatMap(([x, y]) => (z <= x || a >= y)
         ? [[x, y]]
         : [[x, Math.min(a, y)], [Math.max(z, x), y]].filter(([p, q]) => q > p));
     });
   });
-  return libres;
+  return libres.filter(([p, q]) => q > p);
+}
+// Los huecos de la espera que sigue a un bloque de paso. `libreIni/libreFin` son las horas REALES,
+// las que se cuentan y se ofrecen al hacer clic; `dibIni/dibFin`, el trozo que se puede rayar sin
+// tapar ningun bloque. Revision de Codex a dd68b9a: tras un paso de 5 min el hueco contaba desde el
+// final del alto minimo («libre · 45.45 min», 10:15) en vez de sus 55 minutos desde las 10:05.
+function cdHuecosDeEspera(ev, otras, emp){
+  if (!ev.paso || !ev.siguiente || ev.siguiente.inicio <= ev.paso.fin) return [];
+  const out = [];
+  cdRestarOcupado([[ev.paso.fin, ev.siguiente.inicio]], otras, emp, false).forEach(([libreIni, libreFin]) => {
+    cdRestarOcupado([[Math.max(libreIni, ev.paso.finVisible), libreFin]], otras, emp, true)
+      .forEach(([dibIni, dibFin], k) => out.push({ libreIni, libreFin, dibIni, dibFin, primero: k === 0 }));
+  });
+  return out;
 }
 function cdDur(b, emp, useSlotFallback = true){
   // MANDA lo que ocupa la cita de verdad (su inicio y su fin), no la duracion del
@@ -9102,45 +9121,42 @@ function renderCitasDay(){
       // Los ratos de exposicion se pintan ENCIMA del bloque, en hueco: es la unica
       // forma de que se vea que ahi se puede meter a otra clienta. Sin esto el pack
       // parecia cuatro horas macizas y el negocio no las usaba.
-      // Con pasos, cada bloque pinta SOLO el hueco que le sigue, en su columna; sin pasos (una cita
-      // antigua que solo trae `work_intervals`), todos los huecos de la cita como antes.
-      // El hueco empieza donde ACABA el bloque dibujado (`finVisible`), no a mitad de un paso corto.
-      // Una cancelada no deja «libre» que ofrecer: con el filtro «Canceladas» su rayado tapaba a otra.
-      const tramos = ev.paso
-        ? (ev.siguiente && est !== 'cancelled'
-            ? [[ev.paso.inicio, ev.paso.finVisible], [ev.siguiente.inicio, ev.siguiente.fin]] : [])
-        : cdTramos(b, c.emp);
-      if (tramos.length > 1) {
+      // Con pasos, cada bloque pinta SOLO el hueco que le sigue (`cdHuecosDeEspera`): partido alrededor
+      // de otra cita metida en la espera y empezando donde acaba el bloque dibujado, pero contando las
+      // horas reales. Sin pasos (una cita antigua que solo trae `work_intervals`), todos los huecos de
+      // la cita encima del propio pack, como antes. Una cancelada no deja «libre» que ofrecer.
+      const huecos = [];
+      if (ev.paso) {
+        if (est !== 'cancelled') huecos.push(...cdHuecosDeEspera(ev, bookings.filter(o => o !== b), c.emp));
+      } else {
+        const tramos = cdTramos(b, c.emp);
         for (let i = 0; i < tramos.length - 1; i++) {
-          if (tramos[i + 1][0] <= tramos[i][1]) continue;
-          // Con pasos, en la espera puede haber OTRA cita metida (la clienta que se atiende mientras
-          // actua el producto): el hueco se parte alrededor de ella para no taparla. Sin pasos el
-          // hueco se pinta encima del propio pack, como siempre.
-          const libres = ev.paso
-            ? cdRestarOcupado([[tramos[i][1], tramos[i + 1][0]]], bookings.filter(o => o !== b), c.emp)
-            : [[tramos[i][1], tramos[i + 1][0]]];
-          libres.forEach(([libreIni, libreFin]) => {
-            const hueco = document.createElement('div');
-            hueco.className = 'cd-espera';
-            hueco.style.top = ((libreIni - startMin) * CD_PX_PER_MIN) + 'px';
-            hueco.style.height = ((libreFin - libreIni) * CD_PX_PER_MIN) + 'px';
-            hueco.style.left = `calc(${lPct}% + 3px)`;
-            hueco.style.width = `calc(${wPct}% - 6px)`;
-            hueco.title = `Exposición: libre para otra clienta (${cdFmtMin(libreIni)}–${cdFmtMin(libreFin)})`;
-            if (libreFin - libreIni >= 25) {
-              hueco.innerHTML = `<span>libre · ${libreFin - libreIni} min</span>`;
-            }
-            hueco.addEventListener('click', (e) => {
-              e.stopPropagation();   // el clic es del hueco, no de la cita de debajo
-              openNewBookingDrawer({
-                fecha: c.dateKey, hora: cdFmtMin(libreIni),
-                employee_id: b.employee_id || '',
-              });
-            });
-            body.appendChild(hueco);
-          });
+          if (tramos[i + 1][0] > tramos[i][1]) {
+            huecos.push({ libreIni: tramos[i][1], libreFin: tramos[i + 1][0],
+                          dibIni: tramos[i][1], dibFin: tramos[i + 1][0], primero: true });
+          }
         }
       }
+      huecos.forEach(({ libreIni, libreFin, dibIni, dibFin, primero }) => {
+        const hueco = document.createElement('div');
+        hueco.className = 'cd-espera';
+        hueco.style.top = ((dibIni - startMin) * CD_PX_PER_MIN) + 'px';
+        hueco.style.height = ((dibFin - dibIni) * CD_PX_PER_MIN) + 'px';
+        hueco.style.left = `calc(${lPct}% + 3px)`;
+        hueco.style.width = `calc(${wPct}% - 6px)`;
+        hueco.title = `Exposición: libre para otra clienta (${cdFmtMin(libreIni)}–${cdFmtMin(libreFin)})`;
+        if (primero && libreFin - libreIni >= 25 && dibFin - dibIni >= 10) {
+          hueco.innerHTML = `<span>libre · ${Math.round(libreFin - libreIni)} min</span>`;
+        }
+        hueco.addEventListener('click', (e) => {
+          e.stopPropagation();   // el clic es del hueco, no de la cita de debajo
+          openNewBookingDrawer({
+            fecha: c.dateKey, hora: cdFmtMin(libreIni),
+            employee_id: b.employee_id || '',
+          });
+        });
+        body.appendChild(hueco);
+      });
     });
 
     col.appendChild(head); col.appendChild(body); grid.appendChild(col);
