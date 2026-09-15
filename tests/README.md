@@ -129,7 +129,13 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   formas: reservar uno habiendo pedido varios, bajar a la variante corta de lo que
   se pidió por su nombre largo, y decir una duración que no está en el catálogo.
   La duración se lee con el MISMO resolutor que aparta el hueco, y si el negocio
-  trabaja por packs es la del pack.
+  trabaja por packs es la del pack. Cambiar de idea («pues quiero un grey
+  blending») no es pedir dos cosas; «y también…» sí suma.
+- `test_prueba_alicia_15sep.py` — la prueba de la dueña del salón por WhatsApp del
+  15-sep-2026: en el turno en que un freno rechaza crear la cita no sale el resumen
+  con botones (le llegaron a la vez la pregunta y el resumen), y los precios se
+  pueden quitar de la agenda del equipo (`booking.precios_en_agenda`) y no se
+  enseñan a la clienta en su página de la cita si el negocio no los da.
 - `test_precio_oculto_no_pregunta_el_largo.py` — dos instrucciones del código no
   pueden contradecirse en el mismo turno. Un salón que no da precios acababa
   preguntando el largo del pelo como paso previo a decir una cifra que no debe

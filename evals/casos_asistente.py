@@ -71,6 +71,26 @@ CASOS = [
         "no_debe_en": "ultima",
         "no_debe": ["acido lactico", "ácido láctico", "keratina", "clienta"],
     },
+    # ─── La prueba de la duenya por WhatsApp, 15-sep-2026 ──────────────────
+    {
+        "id": "cambia-de-mechas-a-grey-blending",
+        "gravedad": "critico",
+        "solo_si": ["tiene_servicio:mechas", "tiene_servicio:grey blending"],
+        "por_que": ("Prueba de la duenya del 15-sep-2026: pidio mechas, dio el largo, cambio de "
+                    "idea a grey blending y dio largo, dia y hora. El freno de varios servicios le "
+                    "pregunto '¿mechas o grey blending?' y en el MISMO turno le llego el resumen "
+                    "con Jose, que no hace grey blending. Confirmo sin contestar la pregunta."),
+        "servicio_calendario": "Pack grey blending medio",
+        "horas_calendario": ["10:30"],
+        "mensajes": ["Quiero coger una cita para hacerme unas mechas",
+                     "Pues tengo el cabello por los hombros yo creo que medio",
+                     "Pues quiero un grey blindin", "Medio", "Y prefiero por las mañanas",
+                     "el {dia_abierto_nombre} a las 10:30", "me llamo Ana Ruiz Perez"],
+        # El final bueno es el resumen (la cita nace al pulsar el boton), sin volver a
+        # preguntarle si queria las mechas y con quien hace grey blending segun su Excel.
+        "debe": ["Resumen de tu cita"],
+        "no_debe": ["cual de los dos", "o las mechas", "Jose", "Lucia"],
+    },
     # ─── La demo del 8-sep-2026, delante de la duenya ──────────────────────
     {
         "id": "palabra-suelta-no-es-un-servicio",
