@@ -1474,3 +1474,13 @@ a fin en todas.
   quiero es» y «cambio de idea» pasan a formas ambiguas (solo con una familia nueva); elección clara solo con «al final
   quiero», «solo quiero», «mejor solo», «me quedo con». Página de la clienta: sin importe en los datos si
   `precios_ocultos`. Tests: 3 rojos con 467d290; 191 verdes; pyflakes limpio.
+- Medición con modelo real de f833dca (snap9): `cambia-de-mechas-a-grey-blending` ×6 6/6 al primer intento (leída f6:
+  resumen con Conchi, 10:30, Ana Ruiz Perez); `cambiar-la-hora-de-verdad` ×3: 2/3 al primer intento y 1 tras reintento
+  (f1 leída: el modelo contestó «voy a consultar… un momento» sin consultar, se retrasó un turno y el último «si» provocó
+  la oferta en vez de aceptarla; no toca la aceptación por escrito); humo 5/5. Copias borradas.
+- `codex review --commit f833dca` (17:39): **CAMBIOS**. P1 «En vez del elumen quiero un corte» sigue frenado como si pidiera
+  dos cosas: igual que hoy en producción (el freno pregunta, lado seguro); no se añade otra regla por frases, queda como
+  limitación conocida. P1 la página de la clienta con `mostrar_precios: false` aún lleva precios en `available_services`:
+  se arregla (test ya escrito), pendiente de aplicar al terminar la suite de f833dca.
+- Limitaciones que quedan apuntadas: sustitución explícita de servicio dentro del mismo mensaje («en vez del X quiero Y»)
+  y cita a nombre de otra persona con clienta conocida («es para mi hija Laura»), ambas como en producción.

@@ -2583,10 +2583,15 @@ def _booking_public_detail_from_row(
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
         confirmed_by_customer=_booking_confirmed_by_customer(data["booking_id"]),
-        available_services=agenda._services_for_employee(
-            data["cliente_id"],
-            agenda._get_employee_row(data["employee_id"], cliente_id=data["cliente_id"]) if data["employee_id"] else None,
-        ),
+        # La lista para cambiar de servicio también va en los datos de la página: sin precios si el
+        # negocio no los da (revisión de Codex a f833dca).
+        available_services=[
+            (dict(servicio, price_cents=0, price_label="") if precios_ocultos(data["cliente_id"]) else servicio)
+            for servicio in agenda._services_for_employee(
+                data["cliente_id"],
+                agenda._get_employee_row(data["employee_id"], cliente_id=data["cliente_id"]) if data["employee_id"] else None,
+            )
+        ],
     )
 
 

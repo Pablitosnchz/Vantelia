@@ -212,8 +212,12 @@ def test_la_pagina_de_la_cita_no_ensena_precio_si_el_negocio_no_los_da(pack_con_
     _con_config(monkeypatch, mostrar_precios=False)
     oculto = booking._booking_public_detail_from_row(fila)
     assert oculto.service_price_label == ""
-    # Tampoco en los datos de la página (revisión de Codex a 467d290: iban en /booking/manage/…/data).
+    # Tampoco en los datos de la página (revisión de Codex a 467d290: iban en /booking/manage/…/data),
+    # ni en la lista de servicios que lleva para cambiar de servicio (revisión de Codex a f833dca).
     assert oculto.service_price_cents == 0
+    assert oculto.available_services, "la cita de prueba debería traer servicios disponibles"
+    assert all(not s.get("price_cents") and not s.get("price_label") for s in oculto.available_services), \
+        [(s.get("nombre"), s.get("price_cents"), s.get("price_label")) for s in oculto.available_services][:3]
     assert ("min · " + precio) not in booking._booking_manage_page(oculto)
 
 
