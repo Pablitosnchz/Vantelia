@@ -133,3 +133,12 @@ def test_una_confianza_numerica_o_en_texto_sigue_valiendo(api_module, monkeypatc
     intents = _con_modelo_de_intents(monkeypatch, '{"intencion": "reservar", "confianza": %s}' % confianza)
     resultado = intents.classify("demo", "quiero una cita para el viernes, confianza %s" % confianza)
     assert resultado and resultado["confianza"] == 0.9
+
+
+@pytest.mark.parametrize("pregunta", ['"\u00b2"', '"\u0663"', '"1x"', '""'])
+def test_un_indice_en_texto_que_no_es_un_numero_no_corta_la_clasificacion(api_module, monkeypatch, pregunta):  # noqa: F811
+    """Revisión de Astra a 1d6e054: «²» pasa isdigit() pero int() lo rechaza, y cortaba classify."""
+    intents = _con_modelo_de_intents(
+        monkeypatch, '{"intencion": "reservar", "confianza": 0.9, "pregunta": %s}' % pregunta)
+    resultado = intents.classify("demo", "quiero una cita para el viernes, indice %s" % pregunta)
+    assert resultado and resultado["qa_id"] == "", resultado

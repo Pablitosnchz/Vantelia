@@ -710,8 +710,15 @@ def classify(
         indice = bruto
     elif isinstance(bruto, float) and math.isfinite(bruto) and bruto.is_integer():
         indice = int(bruto)
-    elif isinstance(bruto, str) and bruto.strip().isdigit():
-        indice = int(bruto.strip())
+    elif isinstance(bruto, str):
+        # Solo cifras ASCII: «²» pasa isdigit() pero int() lo rechaza y cortaba classify
+        # (revisión de Astra a 1d6e054). La conversión sigue protegida.
+        limpio = bruto.strip()
+        if limpio.isascii() and limpio.isdecimal():
+            try:
+                indice = int(limpio)
+            except ValueError:
+                indice = 0
     if 1 <= indice <= len(preguntas):
         elegida = preguntas[indice - 1]
         # Y que vaya de lo MISMO. Medido en la simulacion del 2-sep: a "quiero
