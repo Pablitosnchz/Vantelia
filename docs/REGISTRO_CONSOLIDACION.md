@@ -1570,3 +1570,33 @@ a fin en todas.
 - Pruebas: ninguna, porque no cambia código. No se ha implementado nada de los bloques 1 y 2.
 - Siguiente: revisar el primer commit de Astra del bloque 1 cuando llegue y preparar la medición del bloque 4 (candidato
   frente a referencia con `--db-origen`), sin lanzarla hasta que haya SHA candidato.
+
+## 2026-09-16 11:40–13:45 Europe/Madrid — bloques 1 y 2 del cierre, medición y pack de maquillaje (Claude)
+
+- Orden de Pablo: Astra se quedó sin créditos a mitad del bloque 1 («sigue tú, úsala de apoyo»). Su sesión figura sin
+  créditos hasta las 15:46; el encargo de revisión espera en su buzón.
+- Bloque 1, revisión de 952ae99 (Astra) en `claude/rechazo-persistente`: con el rechazo persistente, si la conversación
+  seguía por las listas (negocio guiado, o agente sin contestar y servicio preguntado a mano), al dar el nombre no le
+  llegaba nada a la clienta. 0353c06: elegir el servicio en ese paso aclara el rechazo. Test en rojo sin el arreglo en
+  las dos variantes y verde con él. Suite completa de 0353c06: 2845 passed, 1 skipped, 0 fallos.
+- Bloque 2 en `claude/servicio-y-titular` (sobre 0353c06): 4dbb056 quitar un servicio en el mismo mensaje («en vez del
+  corte quiero un elumen», «no quiero el corte, quiero un elumen») y «y un» deja de sumar a lo anterior; 2cedcf7 decisión
+  de Pablo «ficha intacta» (una cita a otro nombre no renombra la ficha del teléfono; solo si el nombre nuevo completa
+  el anterior); a303e27 un nombre que la clienta conocida no ha escrito no es titular; dcf91ce caso crítico del banco
+  `en-vez-de-mechas-grey-blending`; d444647 elegir y quitar a la vez se queda con lo elegido. Cada uno con test en rojo
+  antes y verde después. Suite completa de d444647: 2859 passed, 1 skipped, 0 fallos.
+- Medición con modelo real, copia de producción snap10 (16-sep 12:39) y cfg10, mismo banco (evals de dcf91ce):
+  referencia 311b58e (código de producción, evals copiados) Alicia 45 medidos: 44 al primer intento, 0 tras reintento,
+  1 fallo crítico (`en-vez-de-mechas-grey-blending`: «para poder hacerte el grey blending y las mechas en una misma
+  cita, necesitamos cuadrarlo bien»); metareview 16 medidos: 14 primer intento, 1 tras reintento, 1 fallo importante
+  (`horario-escrito-manda`, conocido y ajeno a Alicia). Candidata d444647 Alicia 45 medidos: 44 al primer intento, 1 tras
+  reintento (`cambiar-la-hora-de-verdad`: en el primer intento el modelo pidió el día en vez de ofrecer huecos y se
+  retrasó un turno; mismo patrón medido el 15-sep en la referencia), 0 fallos, 0 no medidos. Metareview de la
+  candidata y críticos ×6 en curso.
+- Pack maquillaje y recogido de Alicia en producción (respuesta de Alicia vía Pablo; orden «Aplicar ya»): Maquillaje 45 +
+  Recogido 45, sin esperas; 90 min (antes 170). Copia `/srv/vantelia-backups/pre-pack-maquillaje-20260916-110651.db`;
+  comprobado en la app viva que la agenda aparta 90. Pack elumen largo sin tocar: su respuesta (15 + 20 + 30) coincide
+  con el corto; Pablo le repregunta.
+- Limitación que queda: «es para mi hija» sin nombre sale con el nombre de la ficha en el resumen, sin preguntarlo.
+- Siguiente: terminar metareview y críticos ×6 de d444647, leer cualquier no OK, y pasar el SHA exacto a revisión de
+  Astra. Sin push ni despliegue.

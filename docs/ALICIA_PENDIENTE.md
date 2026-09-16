@@ -23,7 +23,7 @@ en solo lectura (BD abierta con `mode=ro` y config cargada por `clients`), 16-se
 | Diagnóstico | `valoracion_obligatoria` [extensiones]; 4 reglas activas: foto para presupuesto de alisado, diagnóstico si no sabe qué alisado, valoración de extensiones, color/mechas sin precio (cita de diagnóstico o teléfono) | Q&A → Reglas de tu negocio | Agosto y 13-sep |
 | Q&A | 22 preguntas (alisados, extensiones, fianza, diagnóstico, grey blending, landing…) | Q&A | Alicia, agosto |
 | Catálogo | 169 activos, 22 inactivos, 0 activos sin duración | Servicios | Excel de Alicia |
-| Packs con pasos | 37. **Sin nombre de paso:** «Pack elumen largo» y «Pack maquillaje y recogido». **Pasos que no cuadran con la duración total** (se pintan en bloque): 8 packs de ácido láctico bio premium y keratina premium (p. ej. medio: 120 min de total, 335 sumando pasos) | Servicios → pasos | Totales del Excel; pasos pendientes de Alicia |
+| Packs con pasos | 37. **Sin nombre de paso:** «Pack elumen largo» (140 min, sin precio). «Pack maquillaje y recogido» quedó el 16-sep 13:06 en Maquillaje 45 + Recogido 45, sin esperas (antes 170 min; respuesta de Alicia y orden de Pablo, copia `pre-pack-maquillaje-20260916-110651.db`). **Pasos que no cuadran con la duración total** (se pintan en bloque): 8 packs de ácido láctico bio premium y keratina premium (p. ej. medio: 120 min de total, 335 sumando pasos) | Servicios → pasos | Totales del Excel; pasos pendientes de Alicia |
 | Equipo | Agenda general (por defecto), Alicia (todos), Lorena (165), Conchi (168), Lucía (91), Jose (91); todas con horario semanal propio, cierre en lunes y domingo | Equipo / Horarios | Excel de operarios, 15-sep |
 | Vacaciones y bloqueos | Ninguno a futuro | Horarios | — |
 | Agenda | `slot_minutes` 15, Europe/Madrid | Horarios | Agosto |
@@ -32,8 +32,11 @@ en solo lectura (BD abierta con `mode=ro` y config cargada por `clients`), 16-se
 
 **Decisiones de Alicia que faltan** (bloquean solo sus casos; no se inventan):
 
-1. Pasos (nombre y minutos) de «Pack maquillaje y recogido» y «Pack elumen largo»
-   (este sale dos veces en su Excel con pasos distintos).
+1. Pasos de «Pack elumen largo» (sale dos veces en su Excel con pasos distintos). El
+   16-sep contestó 15 de aplicar + 20 de exposición + 30 de secado, que es justo el Pack
+   elumen corto; en «Pack color raíz y elumen largo» tiene 30 de elumen + 60 de brusing
+   largo. Pablo le repregunta antes de tocarlo (no se aplica: con pelo largo se apartaría
+   menos tiempo del que hace falta).
 2. Alisados: si quiere dar los pasos bien o se quedan pintados en bloque (la
    duración total ya es la correcta).
 3. Servicios de los que el asistente sí puede dar precio (hoy ninguno).
