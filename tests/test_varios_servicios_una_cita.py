@@ -513,3 +513,17 @@ def test_elegir_y_quitar_a_la_vez_manda_la_eleccion(salon, api_module):
         CLIENTE, _mensajes("Quiero un corte de senora y un secado", "al final solo quiero el elumen, en vez del corte"),
         {"servicio": "Elumen corto-medio"})
     assert freno is None, freno and freno["error"]
+
+
+@pytest.mark.parametrize("cambio", [
+    "en vez de Lorena quiero a Conchi y un secado",
+    "pues quiero a Conchi y un secado",
+])
+def test_cambiar_otro_detalle_y_sumar_un_servicio_no_borra_lo_anterior(salon, api_module, cambio):
+    """Revisión de Codex a 78d931e: sin «y un» como suma, cambiar de profesional y añadir un secado
+    dejaba solo el secado y la cita del corte se perdía en silencio."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora", cambio), {"servicio": "Secado al aire medio"})
+    assert freno is not None, "se ha comido el corte: %r" % cambio

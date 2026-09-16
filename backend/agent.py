@@ -2088,10 +2088,13 @@ _ELIGE_LO_PEDIDO = re.compile(
 _SUSTITUYE_LO_PEDIDO = re.compile(
     r"\b(pues quiero|mejor quiero|ahora quiero|no,? quiero|en vez de|en lugar de|lo que quiero es|"
     r"he cambiado de idea|cambio de idea)\b")
-# Suman a lo anterior. «y un» no está: une lo que pide en ese mismo mensaje («mejor quiero un
-# corte y un secado», tras el elumen, no es sumar el corte y el secado al elumen).
+# Suman a lo anterior.
 _ANYADE_A_LO_PEDIDO = re.compile(
     r"\b(tambien|ademas|aparte|junto con|a la vez)\b")
+# «y un» suma a lo anterior cuando trae UNA familia nueva («en vez de Lorena quiero a Conchi y un
+# secado», revisión de Codex a 78d931e), y une lo nuevo cuando trae varias («mejor quiero un
+# corte y un secado», tras el elumen, es cambiar el elumen por las dos).
+_UNE_LO_PEDIDO = re.compile(r"\by (un|una|unas|unos|el|la|los|las)\b")
 # Lo que va detrás se nombra para QUITARLO («en vez del corte quiero un elumen», «no quiero el
 # corte, quiero un elumen»), y llega hasta una pausa o hasta lo que pide en su lugar.
 _QUITA_LO_PEDIDO = re.compile(r"\b(en vez del?|en lugar del?|no quiero)\b")
@@ -2167,6 +2170,8 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
         if not (elige or _SUSTITUYE_LO_PEDIDO.search(plano)) or _ANYADE_A_LO_PEDIDO.search(plano):
             continue
         nuevas = set(catalog_pick.familias_pedidas(cliente_id, texto))
+        if _UNE_LO_PEDIDO.search(plano) and len(nuevas) < 2:
+            continue
         antes = set(catalog_pick.familias_pedidas(cliente_id, " ".join(textos[desde:indice])))
         # Con una forma ambigua solo cambia de idea quien pide una familia que NO habia pedido:
         # «pues quiero el corte con Lorena» habla de lo que ya pidio y no borra el resto
