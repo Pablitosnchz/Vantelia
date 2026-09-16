@@ -144,3 +144,24 @@ def test_el_informe_dice_la_cobertura_la_latencia_y_las_vueltas(api_module):  # 
     assert resumen["llamadas_sin_uso"] == 1
     assert "ms_p95" in resumen
     assert resumen["vueltas"] == {"1": 1, "2": 1}
+
+
+def test_la_consulta_del_turno_dice_que_el_coste_es_desconocido(api_module):  # noqa: F811
+    """Revisión de Astra a c057e3b: se guardaba como desconocido, pero `del_turno` (GET /admin/traza)
+    devolvía coste_euros 0.0 sin decirlo. Frontera BD → consulta."""
+    from backend import trazas
+
+    session_id = "consulta-sin-uso-" + uuid.uuid4().hex[:6]
+    traza = trazas.Traza("demo", session_id)
+    traza.respuesta_del_modelo("gpt-4o-mini", types.SimpleNamespace(usage=None))
+    traza.guardar(mensaje="hola", respuesta="hola")
+    vista = trazas.del_turno("demo", session_id)[-1]
+    assert vista["coste_desconocido"] is True, vista
+    assert vista["llamadas_modelo"] == 1 and vista["llamadas_sin_uso"] == 1, vista
+    assert "coste_euros" in vista  # compatibilidad: el campo sigue estando
+
+    conocido = "consulta-con-uso-" + uuid.uuid4().hex[:6]
+    traza = trazas.Traza("demo", conocido)
+    traza.respuesta_del_modelo("gpt-4o-mini", types.SimpleNamespace(usage=_uso(10, 1)))
+    traza.guardar()
+    assert trazas.del_turno("demo", conocido)[-1]["coste_desconocido"] is False

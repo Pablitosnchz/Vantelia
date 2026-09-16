@@ -245,6 +245,11 @@ def _fila_a_dict(fila) -> Dict[str, Any]:
         "modelo": fila["modelo"],
         "tokens": {"entrada": fila["tokens_entrada"], "salida": fila["tokens_salida"]},
         "coste_euros": fila["coste_euros"],
+        # Revisión de Astra a c057e3b: la consulta por turno (GET /admin/traza) tiene que decir
+        # que un 0.0 no es gratis cuando parte del consumo no se sabe.
+        "coste_desconocido": bool(fila["coste_desconocido"]),
+        "llamadas_modelo": fila["llamadas_modelo"],
+        "llamadas_sin_uso": fila["llamadas_sin_uso"],
     }
 
 
