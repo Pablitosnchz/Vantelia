@@ -96,3 +96,15 @@ def test_una_cita_creada_de_verdad_se_confirma_igual(api_module, monkeypatch, en
     turno, la confirmación sale tal cual."""
     texto, _ = _turno(monkeypatch, CITA_FALSA, en_el_cierre=en_el_cierre, herramienta="crear_cita")
     assert texto == CITA_FALSA or "confirmada" in texto, texto
+
+
+@pytest.mark.parametrize("en_el_cierre", [False, True], ids=["ultima-vuelta", "cierre"])
+def test_precio_y_cita_inexistente_a_la_vez_se_corrigen_los_dos(api_module, monkeypatch, en_el_cierre):  # noqa: F811
+    """Revisión de Astra a 437325d: se quitaba el precio y salía la confirmación falsa."""
+    from backend import agent
+
+    texto, llamadas = _turno(monkeypatch, "Las mechas son 80 €. Tu cita está confirmada para el jueves a las 10:00.",
+                             en_el_cierre=en_el_cierre)
+    assert not agent._afirma_que_hay_cita_confirmada(texto) and not agent._da_la_cita_por_hecha(texto), texto
+    assert "80" not in texto, texto
+    assert llamadas <= agent.MAX_VUELTAS + 1

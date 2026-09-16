@@ -3361,6 +3361,27 @@ def _salida_segura(texto: str, motivo: str, hora_real: str = "") -> str:
     return "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
 
 
+def _corregir_sin_vueltas(cliente_id: str, texto: str, traza: Any, **contexto: Any) -> str:
+    """Corrige TODAS las infracciones de una respuesta final sin vueltas, no solo la primera.
+
+    Revisión de Astra a 437325d: «Las mechas son 80 €. Tu cita está confirmada para el jueves»
+    perdía la cifra y salía con la confirmación falsa, porque solo se corregía la primera
+    infracción y no se volvía a comprobar. Se comprueba de nuevo tras cada corrección; si una
+    misma infracción no desaparece, sale el texto neutro, que no incumple ninguna.
+    """
+    vistas = []
+    for _ in range(6):
+        motivo, hora_real = _infraccion_sin_vueltas(cliente_id, texto, **contexto)
+        if not motivo:
+            return texto
+        traza.freno("sin_vueltas:" + motivo)
+        if motivo in vistas:
+            break
+        vistas.append(motivo)
+        texto = _salida_segura(texto, motivo, hora_real)
+    return "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
+
+
 def _aviso_del_precio_que_no_se_da(cliente_id: str, lo_que_ha_escrito) -> str:
     """Qué se le pide al modelo al quitar una cifra de dinero de su respuesta.
 
@@ -4553,13 +4574,10 @@ async def responder(
                 # Sin otra vuelta, las comprobaciones de hechos de arriba no han podido pedir
                 # que se corrija: lo que incumpla no sale tal cual.
                 if vuelta + 1 >= MAX_VUELTAS:
-                    motivo, hora_real = _infraccion_sin_vueltas(
-                        cliente_id, texto_final, dicho_de_ella=dicho_de_ella, telefono=telefono,
+                    texto_final = _corregir_sin_vueltas(
+                        cliente_id, texto_final, traza, dicho_de_ella=dicho_de_ella, telefono=telefono,
                         estado=estado, mutada=mutada, creada=creada,
                         mirada_la_cita=mirada_la_cita, ofrecidas=ofrecidas)
-                    if motivo:
-                        traza.freno("sin_vueltas:" + motivo)
-                        texto_final = _salida_segura(texto_final, motivo, hora_real)
                 # Solo cuenta como dicho si de verdad ha salido en su respuesta.
                 if aviso and "25" in texto_final:
                     estado.recargo_dicho = True
@@ -5041,12 +5059,9 @@ async def responder(
         remate_final = (cierre.choices[0].message.content or "").strip()
         traza.freno("se_acabaron_las_vueltas")
         # El cierre no pasaba por ninguna comprobación de hechos (bloque A, 16-sep-2026).
-        motivo, hora_real = _infraccion_sin_vueltas(
-            cliente_id, remate_final, dicho_de_ella=dicho_de_ella, telefono=telefono, estado=estado,
+        remate_final = _corregir_sin_vueltas(
+            cliente_id, remate_final, traza, dicho_de_ella=dicho_de_ella, telefono=telefono, estado=estado,
             mutada=mutada, creada=creada, mirada_la_cita=mirada_la_cita, ofrecidas=ofrecidas)
-        if motivo:
-            traza.freno("sin_vueltas:" + motivo)
-            remate_final = _salida_segura(remate_final, motivo, hora_real)
         remate_final = _fechas_en_humano(remate_final)
         traza.guardar(mensaje=mensaje, respuesta=remate_final)
         return remate_final, cita_creada
