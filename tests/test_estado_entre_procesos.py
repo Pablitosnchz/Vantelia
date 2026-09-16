@@ -26,6 +26,12 @@ elif accion == "rechazar":
     assert p is not None
     assert reserva.responder_propuesta_servicio(estado, p.id, "rechaza", revision_config="v1")
     reserva.guardar(tenant, canal_id, estado)
+elif accion == "rechazar_creacion":
+    reserva.anotar_resultado(estado, "crear_cita", {}, {"ok": False})
+    reserva.guardar(tenant, canal_id, estado)
+elif accion == "validar_creacion":
+    reserva.anotar_resultado(estado, "crear_cita", {}, {"pendiente_de_confirmacion": True})
+    reserva.guardar(tenant, canal_id, estado)
 elif accion == "competir":
     from backend import booking
     booking.alternativa_vigente_de_propuesta = lambda *a: {
@@ -36,7 +42,8 @@ elif accion == "competir":
     print(json.dumps({"resultado": ok}), flush=True)
 p = estado.propuesta_servicio
 print(json.dumps({"id": p.id if p else None, "estado": p.estado if p else None,
-                  "servicio": estado.servicio, "hecho": estado.hecho}))
+                  "servicio": estado.servicio, "hecho": estado.hecho,
+                  "creacion_rechazada": reserva.creacion_requiere_aclaracion(estado)}))
 '''
 
 
@@ -75,6 +82,14 @@ def test_rechazo_no_desaparece_al_reiniciar(proceso_estado):
     rechazada = proceso_estado("rechazar")
     assert proceso_estado("leer") == rechazada
     assert rechazada["estado"] == "rechazada"
+
+
+def test_rechazo_creacion_sobrevive_al_proceso_y_se_resuelve_al_validar(proceso_estado):
+    assert proceso_estado("rechazar_creacion")["creacion_rechazada"]
+    assert proceso_estado("leer")["creacion_rechazada"]
+    assert not proceso_estado("leer", tenant="dos")["creacion_rechazada"]
+    assert not proceso_estado("validar_creacion")["creacion_rechazada"]
+    assert not proceso_estado("leer")["creacion_rechazada"]
 
 
 def test_tenant_y_canal_no_comparten_autorizacion(proceso_estado):

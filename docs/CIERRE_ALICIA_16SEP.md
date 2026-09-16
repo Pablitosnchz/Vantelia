@@ -35,6 +35,12 @@ Fuentes: `REGISTRO_CONSOLIDACION.md`, entradas del 15-sep 17:57–19:12;
 
 ## 1. Cerrar el rechazo pendiente de creación — prioridad primera
 
+En ejecución por Astra en `astra/rechazo-persistente`, base `141f6e9`.
+Regresión causal `9bade14`: dos casos rojos en el código anterior (mensaje sin
+aclaración tras rechazo). Arreglo y pruebas de emisor real, reinicio, aceptación
+duplicada y concurrencia en verde. Pendientes suite completa, revisión y medición;
+esta anotación no declara el bloque aceptado.
+
 Implementar en el estado existente una condición de rechazo pendiente que sobreviva
 a mensajes, reinicios y concurrencia. Reutilizar `reserva.anotar_resultado`,
 `reserva.cargar/guardar` y su control de versión; el canal consulta esa condición.
