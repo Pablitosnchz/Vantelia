@@ -42,11 +42,16 @@ from __future__ import annotations
 
 import json
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Dict, List
 
 from backend import db, settings, timeutils
+
+# La traza del turno que está en marcha: lo que se llame al modelo fuera del agente (intents)
+# durante ese turno se apunta en ella. Fuera de un turno no hay traza y no se apunta nada.
+_EN_CURSO: ContextVar = ContextVar("traza_en_curso", default=None)
 
 # Cuanto cuesta cada modelo, en euros por millon de tokens (entrada, salida).
 # Aproximado a proposito: sirve para saber si una conversacion cuesta centimos o
@@ -89,6 +94,12 @@ class Traza:
     _tokens_salida: int = 0
     _vueltas: int = 0
     _arranque: float = field(default_factory=time.time)
+    # Bloque C (16-sep-2026): cuántas llamadas, cuáles llegaron sin `usage` y si alguna parte
+    # del coste no se sabe (sin uso o modelo sin tarifa). Desconocido no es gratis.
+    _llamadas: int = 0
+    _llamadas_sin_uso: int = 0
+    _coste: float = 0.0
+    _coste_desconocido: bool = False
 
     # ─── Lo que se va apuntando ────────────────────────────────────────────
 
@@ -110,10 +121,36 @@ class Traza:
             self._frenos.append(limpio)
 
     def modelo(self, nombre: str, *, prompt: int = 0, salida: int = 0) -> None:
-        """Suma lo gastado. Un turno puede llamar al modelo varias veces."""
-        self._modelo = str(nombre or "")[:40] or self._modelo
-        self._tokens_entrada += max(0, int(prompt or 0))
-        self._tokens_salida += max(0, int(salida or 0))
+        """Suma lo gastado en UNA llamada. Un turno puede llamar al modelo varias veces,
+        y con modelos distintos: cada llamada se cobra con su tarifa."""
+        nombre = str(nombre or "").strip()
+        self._modelo = nombre[:40] or self._modelo
+        entrada, salida = max(0, int(prompt or 0)), max(0, int(salida or 0))
+        self._tokens_entrada += entrada
+        self._tokens_salida += salida
+        self._llamadas += 1
+        if nombre not in PRECIO_POR_MILLON:
+            self._coste_desconocido = True
+        self._coste += coste_euros(nombre, entrada, salida)
+
+    def respuesta_del_modelo(self, nombre: str, respuesta: Any) -> None:
+        """Apunta una llamada a partir de lo que devolvió el proveedor. Nunca levanta."""
+        try:
+            uso = getattr(respuesta, "usage", None)
+            if uso is None:
+                self._modelo = str(nombre or "")[:40] or self._modelo
+                self._llamadas += 1
+                self._llamadas_sin_uso += 1
+                self._coste_desconocido = True
+                return
+            self.modelo(nombre, prompt=getattr(uso, "prompt_tokens", 0) or 0,
+                        salida=getattr(uso, "completion_tokens", 0) or 0)
+        except Exception as exc:  # noqa: BLE001 - una métrica no frena nada
+            settings.logger.warning("[trazas] no se pudo apuntar el uso: %s", exc)
+
+    def activar(self) -> None:
+        """Esta es la traza del turno en marcha (hasta que se guarde)."""
+        _EN_CURSO.set(self)
 
     def vuelta(self) -> None:
         self._vueltas += 1
@@ -140,14 +177,17 @@ class Traza:
 
     def guardar(self, *, mensaje: str = "", respuesta: str = "") -> None:
         """Escribe la traza. Nunca levanta: es un cuaderno, no la conversacion."""
+        if _EN_CURSO.get() is self:
+            _EN_CURSO.set(None)
         try:
             ms = int((time.time() - self._arranque) * 1000)
             with db._get_db_connection() as conexion:
                 conexion.execute(
                     "INSERT INTO agent_turns (cliente_id, session_id, canal, mensaje,"
                     " respuesta, tools_json, frenos_json, vueltas, ms, modelo,"
-                    " tokens_entrada, tokens_salida, coste_euros, created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " tokens_entrada, tokens_salida, coste_euros, llamadas_modelo,"
+                    " llamadas_sin_uso, coste_desconocido, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         self.cliente_id, self.session_id, self.canal,
                         str(mensaje or "")[:500], str(respuesta or "")[:1000],
@@ -155,13 +195,21 @@ class Traza:
                         json.dumps(self._frenos, ensure_ascii=False)[:600],
                         self._vueltas, ms, self._modelo,
                         self._tokens_entrada, self._tokens_salida,
-                        coste_euros(self._modelo, self._tokens_entrada, self._tokens_salida),
+                        round(self._coste, 6), self._llamadas, self._llamadas_sin_uso,
+                        1 if self._coste_desconocido else 0,
                         timeutils._utc_now_iso(),
                     ),
                 )
                 conexion.commit()
         except Exception as exc:  # noqa: BLE001 - jamas puede tumbar una conversacion
             settings.logger.warning("[trazas] no se pudo guardar el turno: %s", exc)
+
+
+def anotar_llamada(nombre: str, respuesta: Any) -> None:
+    """Apunta una llamada al modelo hecha fuera del agente en la traza del turno en marcha."""
+    traza = _EN_CURSO.get()
+    if traza is not None:
+        traza.respuesta_del_modelo(nombre, respuesta)
 
 
 # ─── Leerlas ───────────────────────────────────────────────────────────────
@@ -259,10 +307,22 @@ def resumen_del_dia(cliente_id: str = "", horas: int = 24) -> Dict[str, Any]:
         fila = conexion.execute(
             "SELECT COUNT(*) turnos, COUNT(DISTINCT session_id) conversaciones,"
             " COALESCE(SUM(coste_euros), 0) coste, COALESCE(AVG(ms), 0) ms_medio,"
-            " COALESCE(SUM(tokens_entrada + tokens_salida), 0) tokens"
+            " COALESCE(SUM(tokens_entrada + tokens_salida), 0) tokens,"
+            " COALESCE(SUM(llamadas_modelo), 0) llamadas, COALESCE(SUM(llamadas_sin_uso), 0) sin_uso,"
+            " COALESCE(SUM(coste_desconocido), 0) desconocidos"
             " FROM agent_turns WHERE " + donde,
             parametros,
         ).fetchone()
+        # Percentil 95 del tiempo por turno: la media esconde los turnos que se eternizan.
+        total_ms = int(fila["turnos"] or 0)
+        p95 = conexion.execute(
+            "SELECT ms FROM agent_turns WHERE " + donde + " ORDER BY ms LIMIT 1 OFFSET ?",
+            parametros + [max(0, int(0.95 * (total_ms - 1)))],
+        ).fetchone() if total_ms else None
+        vueltas_filas = conexion.execute(
+            "SELECT vueltas, COUNT(*) turnos FROM agent_turns WHERE " + donde + " GROUP BY vueltas",
+            parametros,
+        ).fetchall()
         frenos_filas = conexion.execute(
             "SELECT frenos_json FROM agent_turns WHERE " + donde + " AND frenos_json != '[]'",
             parametros,
@@ -291,7 +351,15 @@ def resumen_del_dia(cliente_id: str = "", horas: int = 24) -> Dict[str, Any]:
         "coste_euros": round(coste, 4),
         "coste_por_conversacion": round(coste / max(1, int(fila["conversaciones"] or 1)), 4),
         "ms_medio": int(fila["ms_medio"] or 0),
+        "ms_p95": int(p95["ms"]) if p95 else 0,
         "tokens": int(fila["tokens"] or 0),
+        # Coste aproximado (tarifas de PRECIO_POR_MILLON). Los turnos con parte del consumo
+        # desconocido no suman 0 en silencio: se cuentan y dan la cobertura del total.
+        "llamadas_modelo": int(fila["llamadas"] or 0),
+        "llamadas_sin_uso": int(fila["sin_uso"] or 0),
+        "turnos_con_coste_desconocido": int(fila["desconocidos"] or 0),
+        "cobertura_de_consumo": (round(1 - int(fila["desconocidos"] or 0) / turnos, 3) if turnos else None),
+        "vueltas": {str(r["vueltas"]): int(r["turnos"]) for r in vueltas_filas},
         "frenos": sorted(frenos.items(), key=lambda x: -x[1]),
         "por_cliente": [
             {"cliente_id": r["cliente_id"], "turnos": r["turnos"],

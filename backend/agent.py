@@ -3951,6 +3951,8 @@ async def responder(
     # El cuaderno de bitacora del turno. Nunca puede tumbar la conversacion: todo
     # lo suyo esta envuelto, y si falla se registra y se sigue.
     traza = trazas.Traza(cliente_id, session_id, canal="whatsapp" if telefono else "chat")
+    # Lo que `intents` llame al modelo durante este turno también se apunta aquí.
+    traza.activar()
 
     quien = _quien_escribe(cliente_id, telefono)
     historial = _historial(session_id, cliente_id)
@@ -4158,14 +4160,7 @@ async def responder(
                 max_tokens=400,
             )
             traza.vuelta()
-            try:
-                uso = getattr(respuesta, "usage", None)
-                if uso is not None:
-                    traza.modelo(_modelo_del_negocio(cfg),
-                                 prompt=getattr(uso, "prompt_tokens", 0) or 0,
-                                 salida=getattr(uso, "completion_tokens", 0) or 0)
-            except Exception:  # noqa: BLE001 - una metrica no frena nada
-                pass
+            traza.respuesta_del_modelo(_modelo_del_negocio(cfg), respuesta)
             elegido = respuesta.choices[0].message
             if not getattr(elegido, "tool_calls", None):
                 texto_final = (elegido.content or "").strip()
@@ -4977,6 +4972,8 @@ async def responder(
             temperature=_temperatura_del_negocio(cfg),
             max_tokens=300,
         )
+        # El cierre también gasta: antes no se apuntaba (bloque C, 16-sep-2026).
+        traza.respuesta_del_modelo(_modelo_del_negocio(cfg), cierre)
         reserva.guardar(cliente_id, clave_estado, estado,
                         pedido=reserva.que_falta(estado, conocido))
         remate_final = _fechas_en_humano((cierre.choices[0].message.content or "").strip())
