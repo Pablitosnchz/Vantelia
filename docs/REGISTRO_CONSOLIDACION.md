@@ -1599,3 +1599,16 @@ a fin en todas.
 - `git diff --check` correcto. Modelo, proveedor y Meta simulados; no es medición real.
 - Siguiente: una suite completa sobre este candidato estable, después revisión del
   SHA exacto por Claude. No push, despliegue ni cambios en producción.
+
+## 2026-09-16 20:10 Europe/Madrid — protocolo operativo independiente (Astra)
+
+- Rama `astra/aceptacion-operativa-alicia`, base `30c5e15`. Claude mide esa
+  candidata según su relevo; no se duplican suite ni banco.
+- Entrega `ACEPTACION_OPERATIVA_ALICIA.md`: recorridos Meta/agenda/portal,
+  recordatorios y evidencia de aceptación frente a entrega; acta sin resultados
+  inventados. Excepciones aplazadas por Pablo según registro y buzón de Claude.
+- Referencias contrastadas con inventario de main y pruebas existentes. Revisión
+  documental y `git diff --check`; no pytest porque solo cambia documentación.
+- Siguiente: Claude incorpora el protocolo y sus resultados del SHA definitivo;
+  prueba operativa cuando estén conectados y autorizados entorno y destinatarios.
+- Sin código, push, despliegue, acceso a producción ni mensajes a clientas.
