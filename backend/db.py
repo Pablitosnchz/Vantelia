@@ -1658,6 +1658,13 @@ def _init_database() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_turns_fecha ON agent_turns(created_at)"
         )
+        # Bloque C (16-sep-2026): cuántas llamadas al modelo hubo en el turno, cuántas sin
+        # `usage` y si parte del coste es desconocido (desconocido no es gratis).
+        columnas_turnos = {row[1] for row in connection.execute("PRAGMA table_info(agent_turns)").fetchall()}
+        for columna in ("llamadas_modelo", "llamadas_sin_uso", "coste_desconocido"):
+            if columna not in columnas_turnos:
+                connection.execute(
+                    "ALTER TABLE agent_turns ADD COLUMN %s INTEGER NOT NULL DEFAULT 0" % columna)
         # Conversaciones que la vigilancia de calidad ha marcado para que alguien
         # las mire. Una fila por conversacion: si se vuelve a repasar, se
         # actualizan las senyales pero NO se pierde que el negocio ya la atendio.

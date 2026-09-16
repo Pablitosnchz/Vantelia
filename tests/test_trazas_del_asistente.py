@@ -139,7 +139,9 @@ def test_el_agente_deja_traza_de_lo_que_hace(api_module):  # noqa: F811
     fuente = inspect.getsource(agent.responder)
     assert "traza.tool(" in fuente, "no apunta las herramientas"
     assert "traza.freno(" in fuente, "no apunta que freno ha saltado"
-    assert "traza.modelo(" in fuente, "no apunta el coste"
+    # Desde el bloque C (16-sep-2026) el uso se apunta desde la respuesta del proveedor, que
+    # declara también las llamadas sin `usage`; la regla es la misma: apuntar el coste.
+    assert fuente.count("traza.respuesta_del_modelo(") >= 2, "no apunta el coste de cada llamada (bucle y cierre)"
     # Y se guarda en TODOS los finales, incluido el que revienta: es cuando mas
     # falta hace saber que paso.
     assert fuente.count("traza.guardar(") >= 3, (

@@ -42,7 +42,7 @@ import math
 import time
 from typing import Any, Dict, List, Optional
 
-from backend import agenda, appstate, clients, db, rag, settings, textnorm
+from backend import agenda, appstate, clients, db, rag, settings, textnorm, trazas
 
 # Lo que un cliente puede querer. Cerrada a proposito: una lista abierta hace que
 # el modelo invente etiquetas y que las reglas del negocio no casen nunca.
@@ -416,6 +416,7 @@ def extraer_datos_servicio(
             max_tokens=120,
             response_format={"type": "json_object"},
         )
+        trazas.anotar_llamada(settings.DEFAULT_CHAT_MODEL, respuesta)
         datos = textnorm.objeto_json((respuesta.choices[0].message.content or "").strip())
     except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
         settings.logger.warning("[servicio] no se pudo extraer (%s): %s", cliente_id, exc)
@@ -533,6 +534,7 @@ def _presentar_servicio(cliente_id: str, servicio: str, datos: Dict[str, str]) -
             temperature=0.4,
             max_tokens=140,
         )
+        trazas.anotar_llamada(settings.DEFAULT_CHAT_MODEL, respuesta)
         texto = (respuesta.choices[0].message.content or "").strip()
     except Exception as exc:  # noqa: BLE001
         settings.logger.warning("[servicio] no se pudo presentar (%s): %s", cliente_id, exc)
@@ -664,6 +666,7 @@ def classify(
             max_tokens=80,
             response_format={"type": "json_object"},
         )
+        trazas.anotar_llamada(settings.DEFAULT_CHAT_MODEL, respuesta)
         crudo = (respuesta.choices[0].message.content or "").strip()
         datos = textnorm.objeto_json(crudo)
     except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
