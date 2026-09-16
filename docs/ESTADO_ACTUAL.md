@@ -33,6 +33,22 @@ mensajero.
 
 ## En curso
 
+### Relevo vigente — 16-sep-2026 10:49 Europe/Madrid
+
+- **Testigo:** Astra para planificación de cierre operativo, por petición de Pablo.
+- **Base:** main 61a5d8a, código 311b58e. Despliegue registrado el 15-sep 19:12;
+  no se ha consultado producción en esta sesión. Suite registrada 2833 passed / 1 skipped.
+- **Plan:** [CIERRE_ALICIA_16SEP.md](CIERRE_ALICIA_16SEP.md). El cierre histórico
+  con excepciones no acredita aceptación completa de los cambios posteriores.
+- **Siguiente:** regresión y arreglo de rechazo persistente de creación; después
+  sustitución de servicio/titular, datos de Alicia y aceptación de un SHA estable.
+- **Espera a:** relevo de Claude sobre procesos activos, conexión Meta y decisiones
+  de Alicia pendientes. Ese relevo no bloquea diseñar el rechazo persistente.
+- **Actividad real:** planificación terminada; no se ha arrancado implementación,
+  suite ni medición nueva. Sin cambios de código, producción, push o despliegue.
+
+## En curso anterior (histórico, sustituido por el relevo del 16-sep)
+
 Quien tiene el testigo lo actualiza cada vez que cambia (no solo al cerrar). La
 página de sincronía lo enseña tal cual.
 

@@ -1539,3 +1539,20 @@ a fin en todas.
 - Pendiente: datos de Alicia (alisados, «Maquillaje y recogido», «Elumen largo», precios que sí se pueden dar); tres
   limitaciones apuntadas (sustitución «en vez del X quiero Y», cita para otra persona, insistencia en el diagnóstico una
   vez en el banco) a diseñar con Astra; revisión de Astra de 8be90fb y 311b58e cuando tenga créditos.
+
+## 2026-09-16 10:49 Europe/Madrid — plan de cierre operativo de Alicia (Astra)
+
+- Petición directa de Pablo: ponerse al día y planificar versión final. Base main61a5d8a,
+  código311b58e, rama propia astra/plan-cierre-alicia-16sep; cambios ajenos intactos.
+- Leídos Sincronía, registro, aceptación, contrato y puntos concretos de código.
+  Confirmado en código que el rechazo de creación todavía se compara solo con inicio
+  del turno. La reproducción anterior de 7a8e473 no se ha relanzado ni se presenta
+  como prueba nueva de 311b58e. No se ha accedido a producción ni secretos.
+- Plan en CIERRE_ALICIA_16SEP.md: rechazo persistente, servicio/titular, datos por
+  tenant, candidato y medición comparables, prueba real autorizada de Meta y entrega.
+  Descubrimiento delegado solo de documentación/APIs; síntesis de Astra.
+- Solicitado relevo a Claude sobre actividad, número real y decisiones pendientes.
+  No se repiten suites ni bancos validados. Validación de esta entrega: documentación
+  y referencias; no se han ejecutado tests porque no cambia código.
+- Siguiente: implementar bloque1 en rama propia tras comprobar reparto; no queda
+  proceso de implementación/pruebas ejecutándose al cerrar esta planificación.
