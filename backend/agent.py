@@ -607,9 +607,16 @@ async def _ejecutar(
         # El canal quiere que la cita la confirme la clienta con un boton. No basta
         # con no forzar la herramienta: el modelo la llamaba igual y la cita nacia
         # antes de que ella confirmase nada. Aqui se le impide de verdad.
+        dado = str(argumentos.get("nombre") or "").strip()
         return {
             "ok": False,
             "pendiente_de_confirmacion": True,
+            # A una clienta conocida no le salta el freno de apellidos: un nombre que no ha
+            # escrito (inventado por el modelo) no pasa a ser el titular de la cita. Su nombre
+            # de la ficha no hace falta que lo escriba (cierre de Alicia, bloque 2, 16-sep-2026).
+            "nombre_no_dicho": bool(
+                dicho and dado and textnorm.normalizar(dado) != textnorm.normalizar(conocida)
+                and not _nombre_aparece_en(dicho, dado)),
             "error": "Todavia no se puede crear: lo confirma la clienta.",
             # OJO a como se le pide: con "dile que se lo pasas para confirmar"
             # contestaba "voy a pasar esto para que lo confirmen", que suena a que
@@ -2081,8 +2088,63 @@ _ELIGE_LO_PEDIDO = re.compile(
 _SUSTITUYE_LO_PEDIDO = re.compile(
     r"\b(pues quiero|mejor quiero|ahora quiero|no,? quiero|en vez de|en lugar de|lo que quiero es|"
     r"he cambiado de idea|cambio de idea)\b")
+# Suman a lo anterior.
 _ANYADE_A_LO_PEDIDO = re.compile(
-    r"\b(tambien|ademas|aparte|junto con|a la vez|y (un|una|unas|unos|el|la|los|las))\b")
+    r"\b(tambien|ademas|aparte|junto con|a la vez)\b")
+# «y un» suma a lo anterior cuando trae UNA familia nueva («en vez de Lorena quiero a Conchi y un
+# secado», revisión de Codex a 78d931e), y une lo nuevo cuando trae varias («mejor quiero un
+# corte y un secado», tras el elumen, es cambiar el elumen por las dos).
+_UNE_LO_PEDIDO = re.compile(r"\by (un|una|unas|unos|el|la|los|las)\b")
+# Lo que va detrás se nombra para QUITARLO («en vez del corte quiero un elumen»), y llega hasta
+# una pausa o hasta lo que pide en su lugar. «no quiero» no está: «no quiero el corte demasiado
+# corto» o «no quiero el corte con Lorena» matizan, no quitan (revisión de Astra a e81f010).
+_QUITA_LO_PEDIDO = re.compile(r"\b(en vez del?|en lugar del?)\b")
+_FIN_DE_LO_QUITADO = re.compile(r"[,.;:!?]|\b(quiero|prefiero)\b")
+_ARTICULOS = {"el", "la", "los", "las", "un", "una", "unos", "unas", "lo"}
+
+
+def _lo_que_quita(cliente_id: str, texto: str):
+    """(mensaje sin lo que quita, raíces de familia quitadas) de «en vez de X quiero Y».
+
+    Solo cuenta si lo quitado y lo que pide en su lugar son familias del catálogo distintas.
+    «en vez de Lorena quiero a Conchi» no quita servicios, y «no quiero que me cortéis mucho»
+    describe, no quita: en la duda no se quita nada y el freno pregunta.
+    """
+    plano = catalog_pick._norm(texto)
+    # «no quiero perder el corte, quiero también un elumen» suma: con «también» no se quita nada
+    # (revisión de Codex a 167fc8d).
+    if _ANYADE_A_LO_PEDIDO.search(plano):
+        return texto, set()
+    trozos, quitadas, desde = [], set(), 0
+    for marca in _QUITA_LO_PEDIDO.finditer(plano):
+        if marca.start() < desde:
+            continue
+        fin = _FIN_DE_LO_QUITADO.search(plano, marca.end())
+        hasta = fin.start() if fin else len(plano)
+        clausula = plano[marca.end():hasta]
+        raices = set(catalog_pick._raices_pedidas(cliente_id, clausula))
+        palabras = clausula.split()
+        # Lo quitado es el servicio mismo («el corte», «las mechas», «corte»), no una frase con
+        # verbo delante («que me cortéis mucho», «perder el corte»).
+        if not palabras or not (palabras[0] in _ARTICULOS or catalog_pick._raices(palabras[0]) & raices):
+            continue
+        if raices:
+            trozos.append(plano[desde:marca.start()])
+            quitadas |= raices
+            desde = hasta
+    resto = " ".join(trozos + [plano[desde:]])
+    if not quitadas:
+        return texto, set()
+    piden = set(catalog_pick._raices_pedidas(cliente_id, resto))
+    if not piden or piden & quitadas:
+        return texto, set()
+    return resto, quitadas
+
+
+def _sin_lo_quitado(texto: str, quitadas) -> str:
+    """Lo que dijo antes, sin las palabras de las familias que acaba de quitar."""
+    return " ".join(palabra for palabra in texto.split()
+                    if not (catalog_pick._raices(palabra) & quitadas))
 
 
 def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
@@ -2095,17 +2157,31 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
     habia dicho. Sustituir no es sumar: cuenta desde el ultimo mensaje que nombra un
     servicio con una forma de cambiar de idea y sin «tambien/ademas». Lo que se suma
     («y tambien un corte», «he pensado que quiero un alisado») sigue contando entero.
+    Quitar uno («en vez del elumen quiero un secado») solo quita ese: lo demás sigue.
     """
     textos = [str(m.get("content") or "").strip() for m in mensajes
               if str(m.get("role") or "") == "user" and isinstance(m.get("content"), str)
               and str(m.get("content") or "").strip()]
     desde = 0
     for indice, texto in enumerate(textos):
+        resto, quitadas = _lo_que_quita(cliente_id, texto)
+        if quitadas:
+            # Cierre de Alicia, bloque 2 (16-sep-2026): nombrar algo para quitarlo no es pedirlo.
+            textos[indice] = resto
+            for anterior in range(desde, indice):
+                textos[anterior] = _sin_lo_quitado(textos[anterior], quitadas)
+            # «al final solo quiero el elumen, en vez del corte»: además de quitar, elige.
+            if _ELIGE_LO_PEDIDO.search(catalog_pick._norm(resto)) and catalog_pick.familias_pedidas(cliente_id, resto):
+                desde = indice
+            continue
         plano = catalog_pick._norm(texto)
         elige = bool(_ELIGE_LO_PEDIDO.search(plano))
         if not (elige or _SUSTITUYE_LO_PEDIDO.search(plano)) or _ANYADE_A_LO_PEDIDO.search(plano):
             continue
         nuevas = set(catalog_pick.familias_pedidas(cliente_id, texto))
+        # Una elección clara manda aunque lleve «y el jueves» detrás (revisión de Codex a ec79548).
+        if not elige and _UNE_LO_PEDIDO.search(plano) and len(nuevas) < 2:
+            continue
         antes = set(catalog_pick.familias_pedidas(cliente_id, " ".join(textos[desde:indice])))
         # Con una forma ambigua solo cambia de idea quien pide una familia que NO habia pedido:
         # «pues quiero el corte con Lorena» habla de lo que ya pidio y no borra el resto
@@ -3236,6 +3312,26 @@ def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
     return any(familia and familia in hablando_de for familia in familias)
 
 
+def _aviso_del_precio_que_no_se_da(cliente_id: str, lo_que_ha_escrito) -> str:
+    """Qué se le pide al modelo al quitar una cifra de dinero de su respuesta.
+
+    Pedía siempre reescribir «ofreciéndole esa cita» de valoración, también a quien acababa
+    de rechazarla: con los precios ocultos, la fianza de las mechas en el borrador bastaba
+    para que el propio código le hiciera insistir en el diagnóstico (cierre de Alicia,
+    16-sep-2026, caso crítico `no-quiero-diagnostico-quiero-cita`). Si ya lo ha rechazado
+    -y la valoración no es obligatoria para lo que pide-, se quita la cifra y se sigue.
+    """
+    from backend import booking
+
+    if booking.renuncio_al_diagnostico_en_mensajes(cliente_id, lo_que_ha_escrito):
+        return ("NO puedes dar cifras de dinero: este negocio no las da por mensaje. Reescribe tu "
+                "respuesta sin ninguna cifra. Ella YA ha dicho que no quiere la cita de valoracion: "
+                "no se la vuelvas a ofrecer ni le hables del diagnostico; sigue con lo que pide.")
+    return ("NO tienes ese precio y no puedes inventartelo ni dar un rango aproximado: este "
+            "negocio lo dice en la cita de valoracion. Reescribe tu respuesta sin ninguna cifra, "
+            "explicandole por que y ofreciendole esa cita.")
+
+
 PREGUNTA_EL_PRECIO = ("precio", "precios", "cuanto cuesta", "cuanto vale",
                       "cuanto me costaria", "cuanto seria", "tarifa", "tarifas",
                       "presupuesto", "cuanto sale", "que vale", "coste",
@@ -4157,11 +4253,8 @@ async def responder(
                     traza.freno("precio_que_no_se_da")
                     mensajes.append({
                         "role": "system",
-                        "content": ("NO tienes ese precio y no puedes inventartelo ni "
-                                    "dar un rango aproximado: este negocio lo dice en "
-                                    "la cita de valoracion. Reescribe tu respuesta sin "
-                                    "ninguna cifra, explicandole por que y ofreciendole "
-                                    "esa cita."),
+                        "content": _aviso_del_precio_que_no_se_da(cliente_id, [str(mensaje)] + [
+                            str(m.get("content") or "") for m in historial if m.get("role") == "user"]),
                     })
                     continue
                 # 3 bis) Los minutos que nadie ha pedido. Queja literal de la

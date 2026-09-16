@@ -100,6 +100,34 @@ def test_el_freno_de_apellidos_marca_el_nombre_que_ella_no_dijo(api_module, monk
     assert dicho.get("conserva_los_datos") and dicho.get("nombre_no_dicho") is False, dicho
 
 
+def test_un_nombre_que_no_ha_escrito_no_es_el_titular_de_la_clienta_conocida(api_module):  # noqa: F811
+    """Bloque 2 del cierre de Alicia (16-sep-2026). A una clienta conocida no se le aplica el freno de
+    apellidos, así que un nombre que se inventaba el modelo llegaba al resumen como titular de la
+    cita. Solo un nombre que ella ha escrito («es para mi hija Laura Ruiz Gomez») lo es."""
+    from backend import agent, reserva
+
+    conocida = {"nombre": "Ana Ruiz Perez"}
+    inventado = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia Lopez"), telefono="34600111998",
+        quien=conocida, remate_manual=True, dicho="Quiero un grey blending el jueves a las 10:30"))
+    assert inventado.get("pendiente_de_confirmacion") and inventado.get("nombre_no_dicho") is True, inventado
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia Lopez"), inventado)
+    assert estado.nombre == "", "la cita iba a salir a nombre de alguien que nadie ha nombrado"
+
+    hija = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Laura Ruiz Gomez"), telefono="34600111998",
+        quien=conocida, remate_manual=True, dicho="Es para mi hija Laura Ruiz Gomez, un grey blending"))
+    assert hija.get("pendiente_de_confirmacion") and not hija.get("nombre_no_dicho"), hija
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Laura Ruiz Gomez"), hija)
+    assert estado.nombre == "Laura Ruiz Gomez"
+
+    propia = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Ana Ruiz Perez"), telefono="34600111998",
+        quien=conocida, remate_manual=True, dicho="Quiero un grey blending el jueves"))
+    assert not propia.get("nombre_no_dicho"), "su propio nombre de la ficha no hace falta que lo escriba"
+
+
 @pytest.fixture
 def turno_whatsapp(api_module, monkeypatch):  # noqa: F811
     from backend import agent, appstate, messaging, reserva, whatsapp
@@ -147,7 +175,7 @@ def turno_whatsapp(api_module, monkeypatch):  # noqa: F811
             cliente_id="demo", phone_number_id="PN", from_number=numero, incoming_text=dicho,
             flow=flow, config={}, request=None))
 
-    yield dict(turno=turno, vistos=vistos, modo=modo)
+    yield dict(turno=turno, vistos=vistos, modo=modo, numero=numero, flow=flow)
     whatsapp._wa_clear_flow("demo", numero)
 
 
@@ -164,6 +192,26 @@ def test_al_contestar_la_pregunta_si_sale_el_resumen(turno_whatsapp):
     t["modo"]["rechaza"] = False
     t["turno"]("solo el grey blending")
     assert t["vistos"]["resumenes"] == 1
+
+
+@pytest.mark.parametrize("mensaje", ["no entiendo la pregunta", "gracias"])
+def test_el_rechazo_sigue_bloqueando_el_siguiente_mensaje(turno_whatsapp, monkeypatch, mensaje):
+    """Pasar de turno no resuelve la causa por la que se rechazó crear_cita."""
+    from backend import agent
+    t = turno_whatsapp
+    t["turno"]("Jueves 17 a las 10:30")
+
+    async def explicar(*a, **kw):
+        return "Necesito saber si quieres mechas o grey blending.", False
+
+    with monkeypatch.context() as parche:
+        parche.setattr(agent, "responder", explicar)
+        t["turno"](mensaje)
+        t["turno"](mensaje)  # Repetirlo tampoco aporta una respuesta válida.
+        assert t["vistos"]["resumenes"] == 0
+    t["modo"]["rechaza"] = False
+    t["turno"]("solo grey blending")
+    assert t["vistos"]["resumenes"] == 1, "aclarar y validar debe permitir continuar"
 
 
 # ─── 4. Precios en la agenda y en la página de la cita ─────────────────────

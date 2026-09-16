@@ -121,11 +121,16 @@ class Estado:
     # WhatsApp lo convierte en el resumen con botones y lo vacía.
     cambio_pendiente_json: str = ""
     # Cuándo se rechazó por última vez `crear_cita` (un freno, un dato que falta). El
-    # canal no enseña el resumen en ese mismo turno: el agente acaba de preguntar.
+    # canal espera una propuesta validada o una gestión nueva, también tras reiniciar.
     creacion_rechazada_en: float = 0.0
 
     def vigente(self) -> bool:
         return (time.time() - self.tocado) < CADUCA_EN
+
+
+def creacion_requiere_aclaracion(estado: Estado) -> bool:
+    """El paso del tiempo o un mensaje nuevo no resuelven un rechazo del núcleo."""
+    return estado.creacion_rechazada_en > 0
 
 
 def leer_confirmacion_reserva(estado: Estado, *, incluir_hecha: bool = False):
@@ -912,12 +917,13 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             estado.hora_del_codigo = False
         # Si le faltaban apellidos y los ha dado, el nombre mas completo manda: el
         # resumen tiene que salir con ellos (dos apellidos a clientas nuevas).
-        nombre_nuevo = str(argumentos.get("nombre") or "").strip()
+        # Un nombre que ella no ha escrito no entra (`nombre_no_dicho`, cierre de Alicia, 16-sep-2026).
+        nombre_nuevo = "" if resultado.get("nombre_no_dicho") else str(argumentos.get("nombre") or "").strip()
         if nombre_nuevo and estado.nombre and _amplia_el_nombre(estado.nombre, nombre_nuevo):
             estado.nombre = nombre_nuevo
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
-            if clave == "nombre" and _es_nombre_de_relleno(valor):
+            if clave == "nombre" and (_es_nombre_de_relleno(valor) or resultado.get("nombre_no_dicho")):
                 continue
             if valor and not getattr(estado, clave, ""):
                 setattr(estado, clave, valor)
@@ -937,6 +943,13 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         # turno WhatsApp le mando el resumen con botones porque el estado estaba
         # completo. Confirmo sin contestar la pregunta.
         estado.creacion_rechazada_en = time.time()
+        estado.esperando_confirmacion = False
+        pendiente = leer_confirmacion_reserva(estado, incluir_hecha=True)
+        # Un botón anterior no autoriza la propuesta ahora rechazada. Conservar
+        # las operaciones ya aceptadas: su resultado todavía puede recuperarse.
+        if (pendiente and pendiente["estado"] in ("preparada", "ofrecida")
+                and pendiente["datos"].get("accion") not in ("cancelar", "reprogramar")):
+            estado.confirmacion_reserva_json = ""
     if not resultado.get("ok"):
         # Una llamada RECHAZADA puede traer datos buenos. Pasa cuando se frena por
         # haber pedido varias cosas: la cita no se crea -y bien-, pero el nombre, el
@@ -1005,6 +1018,7 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         # normal; coger dos seguidas sin que nadie lo pida, no.
         if tool == "crear_cita":
             estado.ya_creada = True
+            estado.creacion_rechazada_en = 0.0
         # Que la cita esta ANULADA hay que recordarlo: al pedir "vuelvela a abrir"
         # el asistente contestaba "tu cita esta confirmada para manyana a las
         # 10:00" con la cita cancelada en la base de datos.
@@ -1106,6 +1120,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.confirmacion_reserva_json = ""
     estado.cambio_pendiente_json = ""
     estado.intencion = "reservar"
+    estado.creacion_rechazada_en = 0.0
     estado.servicio = ""
     estado.servicio_exacto = ""
     estado.servicio_texto = ""

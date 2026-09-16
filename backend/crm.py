@@ -125,6 +125,29 @@ def contact_by_phone(cliente_id: str, phone: str) -> Optional[sqlite3.Row]:
         ).fetchone()
 
 
+_NOMBRES_DE_RELLENO = {"cliente whatsapp", "cliente"}
+
+
+def _nombre_para_la_ficha(anterior: str, nuevo: str) -> str:
+    """El nombre con el que queda una ficha que ya existía.
+
+    Decisión de Pablo, 16-sep-2026 («ficha intacta»): una clienta conocida pedía por WhatsApp
+    cita para su hija desde su teléfono y la ficha tomaba el nombre de la hija, así que el
+    asistente la saludaba como a su hija. Una cita a otro nombre no renombra la ficha; un
+    nombre que completa el que había («Ana» → «Ana Ruiz Pérez») sí la actualiza. Cambiar el
+    nombre a mano sigue yendo por la edición de la ficha.
+    """
+    if not nuevo or not anterior:
+        return nuevo or anterior
+    # «Cliente WhatsApp» (formulario sin nombre) no es un nombre: el real lo sustituye
+    # (revisión de Codex a 167fc8d).
+    if textnorm.normalizar(anterior) in _NOMBRES_DE_RELLENO:
+        return nuevo
+    antes = textnorm.normalizar(anterior).split()
+    despues = textnorm.normalizar(nuevo).split()
+    return nuevo if despues[:len(antes)] == antes else anterior
+
+
 def _crm_upsert_contact(
     cliente_id: str,
     *,
@@ -176,8 +199,9 @@ def _crm_upsert_contact(
             if status in CRM_CONTACT_STATUSES and next_status != "perdido":
                 if CRM_STATUS_PRIORITY.get(status, 0) > CRM_STATUS_PRIORITY.get(next_status, 0):
                     next_status = status
+            name = _nombre_para_la_ficha(row["name"] or "", name)
             updates = {
-                "name": name or row["name"],
+                "name": name,
                 "email": email or row["email"],
                 "email_normalized": email_norm or row["email_normalized"],
                 "phone": phone or row["phone"],

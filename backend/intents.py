@@ -234,6 +234,20 @@ def familias_del_tenant(cliente_id: str, *, sellos: Optional[Dict[str, str]] = N
     )
 
 
+# Un ordinal delante del nombre no es la familia: con «Primera sesion con deposito» la
+# familia salía «primera», y «el primer hueco que tengas» contaba como pedir ese servicio
+# (medido el 16-sep-2026 en el segundo negocio del cierre de Alicia). Sin tildes.
+_ORDINALES = {"primer", "primera", "primero", "primeras", "primeros", "segunda", "segundo", "segundas",
+              "segundos", "tercera", "tercero", "ultima", "ultimo"}
+
+
+def _sin_ordinales_delante(texto: str) -> str:
+    palabras = _norm(texto).split()
+    while palabras and palabras[0] in _ORDINALES:
+        palabras.pop(0)
+    return " ".join(palabras)
+
+
 def _familias_del_tenant(cliente_id: str) -> List[str]:
     familias: List[str] = []
     vistas = set()
@@ -242,7 +256,18 @@ def _familias_del_tenant(cliente_id: str) -> List[str]:
     except Exception:  # noqa: BLE001
         return []
     for servicio in servicios:
-        for candidata in (servicio.get("category"), (servicio.get("nombre") or "").split(" ")[0]):
+        nombre = _norm(servicio.get("nombre") or "")
+        # Un nombre que empieza por ordinal no da familia si tiene categoría: la palabra de
+        # detrás («Primera consulta dermatologica» → «consulta») frenaba «consultar el precio
+        # del láser» (revisión de Codex a 78d931e). Sin categoría sí la da, o el servicio se
+        # quedaba sin familia y el freno dejaba reservar solo una parte de lo pedido
+        # (revisión de Codex a ec79548): mejor frenar de más que apartar menos tiempo.
+        sin_ordinal = _sin_ordinales_delante(nombre)
+        if sin_ordinal == nombre:
+            primera = nombre.split(" ")[0]
+        else:
+            primera = "" if _norm(servicio.get("category") or "") else sin_ordinal.split(" ")[0]
+        for candidata in (_sin_ordinales_delante(servicio.get("category") or ""), primera):
             clave = _norm(candidata)
             if len(clave) < 4 or clave in vistas:
                 continue

@@ -1498,7 +1498,8 @@ async def _wa_send_booking_summary(
     usaba.
     """
     from backend import reserva
-    pendiente = reserva.leer_confirmacion_reserva(reserva.cargar(cliente_id, to_number))
+    estado = reserva.cargar(cliente_id, to_number)
+    pendiente = reserva.leer_confirmacion_reserva(estado)
     if pendiente and pendiente["estado"] == "aceptada":
         if pendiente["datos"].get("accion") == "cancelar":
             await _wa_texto_cancelacion(cliente_id=cliente_id, phone_number_id=phone_number_id,
@@ -1507,6 +1508,8 @@ async def _wa_send_booking_summary(
         else:
             await _wa_recuperar_creacion_confirmada(cliente_id=cliente_id, phone_number_id=phone_number_id,
                 to_number=to_number, propuesta=pendiente, request=request)
+        return False
+    if reserva.creacion_requiere_aclaracion(estado):
         return False
     try:
         booking.validar_servicio_publico(cliente_id, flow.servicio)
@@ -1602,6 +1605,10 @@ async def _wa_send_booking_summary(
     lineas.append("¿Confirmamos la cita?")
     from backend import reserva
     estado = reserva.cargar(cliente_id, to_number)
+    # La preparación consulta la agenda de forma asíncrona. Un rechazo que otro
+    # turno haya guardado durante esa consulta también invalida este resumen.
+    if reserva.creacion_requiere_aclaracion(estado):
+        return False
     try:
         identidad = reserva.preparar_confirmacion_reserva(
             estado, _wa_datos_del_resumen(flow), formulario_token=formulario_token,
@@ -2220,6 +2227,9 @@ async def _wa_handle_flow_reply(
     if not flow.nombre:
         conocido = crm.contact_by_phone(cliente_id, from_number)
         flow.nombre = str(conocido["name"]).strip() if conocido else "Cliente WhatsApp"
+    # Servicio, profesional, día y hora vienen elegidos en el formulario: aclaran un rechazo
+    # anterior del asistente (revisión de Codex a 167fc8d).
+    _wa_servicio_elegido_en_la_lista(cliente_id, from_number)
 
     return await _wa_send_booking_summary(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -2463,6 +2473,8 @@ async def _wa_resumen_para_confirmar(
 
     estado = reserva.cargar(cliente_id, from_number)
     conocido = ""
+    if reserva.creacion_requiere_aclaracion(estado):
+        return False
     contacto = crm.contact_by_phone(cliente_id, from_number)
     if contacto is not None:
         conocido = str(contacto["name"] or "").strip()
@@ -2817,7 +2829,6 @@ async def _wa_turno_del_agente(
         return True
     # El canal SI sabe a que viene (ha pulsado "Cancelar mi cita", o su texto ha
     # disparado ese camino). Pasarselo evita que el agente lo adivine.
-    inicio_del_turno = time.time()
     texto, cita_creada = await agent.responder(
         cliente_id, incoming_text, session_id=session_id, telefono=from_number,
         config=config, location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id),
@@ -2852,9 +2863,9 @@ async def _wa_turno_del_agente(
     # Pero NO en el turno en que se acaba de rechazar crear la cita: el agente le esta
     # preguntando algo y el resumen le dejaba confirmar sin contestar (prueba de la
     # duenya del salon, 15-sep-2026: «¿mechas o grey blending?» y, 3 s despues, el
-    # resumen con Jose). Al contestar, el siguiente turno lo vuelve a intentar.
-    frenada_ahora = float(getattr(estado, "creacion_rechazada_en", 0.0) or 0.0) >= inicio_del_turno
-    if not cita_creada and not frenada_ahora and await _wa_resumen_para_confirmar(
+    # resumen con Jose). Solo una propuesta validada levanta ese rechazo;
+    # contestar sin resolver la pregunta no autoriza otro resumen.
+    if not cita_creada and not reserva.creacion_requiere_aclaracion(estado) and await _wa_resumen_para_confirmar(
         cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
         flow=flow, texto_previo=texto, request=request,
     ):
@@ -2887,6 +2898,27 @@ async def _wa_turno_del_agente(
         # flujo de reserva del que luego hay que salir.
         flow.flow = "agente"
     return True
+
+
+def _wa_servicio_elegido_en_la_lista(cliente_id: str, from_number: str) -> None:
+    """Elegir el servicio en el paso guiado aclara un rechazo anterior del asistente.
+
+    Sin esto, tras frenar el asistente la cita y seguir por las listas (negocio guiado, o el
+    agente sin contestar), la clienta elegía servicio, día y hora y el resumen no salía: seguía
+    bloqueado por aquel rechazo y el canal se callaba (revisión de Claude a 952ae99). Lo que
+    viene después (profesional, día y hora) sale de la agenda real en los pasos siguientes.
+    """
+    from backend import conversation_state, reserva
+
+    estado = reserva.cargar(cliente_id, from_number)
+    if not reserva.creacion_requiere_aclaracion(estado):
+        return
+    estado.creacion_rechazada_en = 0.0
+    try:
+        reserva.guardar(cliente_id, from_number, estado)
+    except conversation_state.ConversationStateConflict:
+        # Otro turno escribió a la vez: su estado manda y el resumen sigue frenado.
+        pass
 
 
 async def _wa_start_booking_flow(
@@ -4055,6 +4087,7 @@ async def _handle_whatsapp_message(
         if resuelto and resuelto["servicio"]:
             flow.servicio = resuelto["servicio"]
             flow.servicio_texto = ""
+            _wa_servicio_elegido_en_la_lista(cliente_id, from_number)
             flow.intentos_fallidos = 0
             empleados = _wa_employees_for_service(
                 cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id,
@@ -4146,6 +4179,7 @@ async def _handle_whatsapp_message(
             )
             return
         flow.servicio = chosen
+        _wa_servicio_elegido_en_la_lista(cliente_id, from_number)
 
         employees = _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id)
         if not employees:

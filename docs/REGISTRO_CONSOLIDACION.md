@@ -1571,6 +1571,35 @@ a fin en todas.
 - Siguiente: revisar el primer commit de Astra del bloque 1 cuando llegue y preparar la medición del bloque 4 (candidato
   frente a referencia con `--db-origen`), sin lanzarla hasta que haya SHA candidato.
 
+## 2026-09-16 11:21 Europe/Madrid — bloque 1, rechazo persistente (Astra)
+
+- Rama `astra/rechazo-persistente`, base `141f6e9`, regresiones en `9bade14`.
+- Rojo causal confirmado: `test_prueba_alicia_15sep -k rechazo_sigue`, 2 failed;
+  mensajes «gracias» y «no entiendo» intentan resumen sin nueva validación.
+- Segundo rojo antes del arreglo: nuevo fichero `test_rechazo_creacion_persistente`,
+  2 failed / 1 passed: emisor común permite resumen, nueva gestión conserva la marca.
+- Arreglo en preparación: consultar rechazo persistido en lugar del reloj del turno;
+  invalidar botones anteriores de creación; conservar operaciones ya aceptadas y
+  cancelaciones/reprogramaciones; revalidar la marca tras consultar la agenda.
+- Dirigidos en ejecución. Reinicio se comprueba con intérpretes separados y SQLite
+  temporal; modelo y transporte simulados, sin mensajes reales ni datos de producción.
+- Siguiente: cerrar dirigidos y candidato estable, suite completa una vez, revisión
+  de Claude. No se declara cerrado el bloque ni aceptación con modelo real.
+
+## 2026-09-16 11:25 Europe/Madrid — dirigidos del bloque 1 (Astra)
+
+- Rama `astra/rechazo-persistente`, descendiente de `9bade14` y `141f6e9`.
+- Primera tanda: 104 passed / 1 failed; el fallo era del test nuevo (trataba como
+  diccionario la identidad devuelta como texto). Corregido el test, no el contrato.
+- Segunda tanda del nuevo fichero: 7 passed, incluidos el recorrido real de resumen,
+  botón previo inválido, aclaración y aceptación duplicada con una sola cita,
+  conflicto de estado, rechazo durante consulta de agenda y conservación de otras
+  gestiones. La primera tanda incluyó los reinicios entre intérpretes, recuperación,
+  transporte, cancelación y compatibilidad del shim. Aviso de Trio preexistente.
+- `git diff --check` correcto. Modelo, proveedor y Meta simulados; no es medición real.
+- Siguiente: una suite completa sobre este candidato estable, después revisión del
+  SHA exacto por Claude. No push, despliegue ni cambios en producción.
+
 ## 2026-09-16 11:40–13:45 Europe/Madrid — bloques 1 y 2 del cierre, medición y pack de maquillaje (Claude)
 
 - Orden de Pablo: Astra se quedó sin créditos a mitad del bloque 1 («sigue tú, úsala de apoyo»). Su sesión figura sin
