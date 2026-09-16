@@ -2158,6 +2158,9 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
             textos[indice] = resto
             for anterior in range(desde, indice):
                 textos[anterior] = _sin_lo_quitado(textos[anterior], quitadas)
+            # «al final solo quiero el elumen, en vez del corte»: además de quitar, elige.
+            if _ELIGE_LO_PEDIDO.search(catalog_pick._norm(resto)) and catalog_pick.familias_pedidas(cliente_id, resto):
+                desde = indice
             continue
         plano = catalog_pick._norm(texto)
         elige = bool(_ELIGE_LO_PEDIDO.search(plano))

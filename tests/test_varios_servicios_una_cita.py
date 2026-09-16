@@ -503,3 +503,13 @@ def test_describir_con_no_quiero_no_quita_el_servicio(salon, api_module):
                            "no quiero que me corteis mucho, quiero el elumen"),
         {"servicio": "Elumen corto-medio"})
     assert freno is not None, "tomó una descripción del corte por quitarlo"
+
+
+def test_elegir_y_quitar_a_la_vez_manda_la_eleccion(salon, api_module):
+    """«al final solo quiero el elumen, en vez del corte» tras corte y secado: elige, no solo quita."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora y un secado", "al final solo quiero el elumen, en vez del corte"),
+        {"servicio": "Elumen corto-medio"})
+    assert freno is None, freno and freno["error"]
