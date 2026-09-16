@@ -3382,24 +3382,36 @@ def _infraccion_sin_vueltas(cliente_id: str, texto: str, *, dicho_de_ella: str, 
     return "", ""
 
 
+def _sin_las_frases_que(texto: str, incumple) -> str:
+    """El texto sin las frases en las que `incumple(frase)`; vacío si no queda nada."""
+    frases = re.findall(r"[^.!?\n]+[.!?]*[ \t]*|\n", texto or "")
+    return "".join(f for f in frases if not incumple(f)).strip()
+
+
 def _salida_segura(texto: str, motivo: str, hora_real: str = "") -> str:
     """Lo que sale cuando la respuesta final incumple y ya no hay vuelta para corregirla.
 
-    Sin otra llamada al modelo. La cifra se quita frase a frase, conservando el resto; lo que
-    afirma algo falso de la agenda se sustituye entero por lo que dice el estado.
+    Sin otra llamada al modelo. Se quitan SOLO las frases que incumplen y se conserva el resto:
+    sustituir la respuesta entera tiraba, por ejemplo, cómo se paga la fianza por una frase
+    condicional («la cita queda confirmada al pagar») que se leía como cita dada por hecha
+    (banco de Alicia con modelo real, 17-sep-2026). Si no queda nada, sale lo que dice el estado.
+    `_corregir_sin_vueltas` vuelve a comprobar el resultado entero.
     """
     if motivo == "precio_que_no_se_da":
-        frases = re.findall(r"[^.!?\n]+[.!?]*[ \t]*|\n", texto or "")
-        limpio = "".join(f for f in frases if not _UNA_CIFRA_DE_DINERO.search(f)).strip()
-        if limpio and not _UNA_CIFRA_DE_DINERO.search(limpio):
-            return limpio
-        return "Ese precio no te lo puedo dar por mensaje: te lo dicen en el salón."
+        limpio = _sin_las_frases_que(texto, _UNA_CIFRA_DE_DINERO.search)
+        return limpio or "Ese precio no te lo puedo dar por mensaje: te lo dicen en el salón."
     if motivo == "hora_que_no_es_la_suya":
         return "Tu cita es a las %s." % hora_real
     if motivo == "daba_por_viva_una_cita_cancelada":
         return ("Tu cita está cancelada. Si quieres, miramos si ese hueco sigue libre y te "
                 "cojo una nueva.")
-    return "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
+    comprobacion = {
+        "dijo_que_hay_cita_sin_haberla": _afirma_que_hay_cita_confirmada,
+        "daba_la_cita_por_hecha": _da_la_cita_por_hecha,
+        "dijo_haberlo_hecho_sin_hacerlo": _dice_que_acaba_de_hacerlo,
+    }.get(motivo)
+    limpio = _sin_las_frases_que(texto, comprobacion) if comprobacion else ""
+    return limpio or "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
 
 
 def _corregir_sin_vueltas(cliente_id: str, texto: str, traza: Any, **contexto: Any) -> str:

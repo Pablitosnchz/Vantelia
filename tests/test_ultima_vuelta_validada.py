@@ -108,3 +108,24 @@ def test_precio_y_cita_inexistente_a_la_vez_se_corrigen_los_dos(api_module, monk
     assert not agent._afirma_que_hay_cita_confirmada(texto) and not agent._da_la_cita_por_hecha(texto), texto
     assert "80" not in texto, texto
     assert llamadas <= agent.MAX_VUELTAS + 1
+
+
+FIANZA = ("La fianza se abona para confirmar y asegurar tu cita, y se descuenta del importe total el día de tu "
+          "tratamiento. Lo más cómodo es que, cuando tu cita quede pendiente de pago, te enviamos un enlace seguro "
+          "para pagar con tarjeta. Así, solo tienes que abrirlo y pagar en un minuto, y la cita queda confirmada "
+          "automáticamente. Si prefieres, también puedes hacerlo por Bizum o transferencia. Si eliges Bizum, el "
+          "número es 670 387 625 y solo necesitas poner tu nombre y apellido como concepto.")
+
+
+@pytest.mark.parametrize("en_el_cierre", [False, True], ids=["ultima-vuelta", "cierre"])
+def test_quitar_lo_que_incumple_no_tira_la_respuesta_entera(api_module, monkeypatch, en_el_cierre):  # noqa: F811
+    """Medido con modelo real el 17-sep-2026 (banco de Alicia, f2a9696, caso crítico
+    digresion-fianza-a-media-reserva, 2 de 2): «la cita queda confirmada automáticamente» al
+    explicar la fianza se tomaba por una cita dada por hecha, y la salida segura sustituía la
+    respuesta entera por «Todavía no tienes la cita cogida», perdiendo cómo se paga. Se quitan
+    solo las frases que incumplen; lo demás se conserva."""
+    from backend import agent
+
+    texto, _ = _turno(monkeypatch, FIANZA, en_el_cierre=en_el_cierre)
+    assert "Bizum" in texto and "670 387 625" in texto, texto
+    assert not agent._afirma_que_hay_cita_confirmada(texto) and not agent._da_la_cita_por_hecha(texto), texto
