@@ -8,7 +8,8 @@ Este documento **no autoriza** desplegar ni conectar nada: cada paso marcado con
 
 - Rama `claude/servicio-y-titular`, candidata **30c5e15** sobre producción 311b58e.
 - Evidencia y rondas de revisión: [REGISTRO_CONSOLIDACION.md](REGISTRO_CONSOLIDACION.md)
-  (entradas del 16-sep). Medición de 30c5e15 y revisión de Astra: en curso al escribir esto.
+  (entradas del 16-sep). Medición y revisión OK terminadas; desplegado `c110bd9`
+  (mismo código) el 16-sep a las 21:35, según registro y relevo de Claude.
 - Qué cambia para Alicia: el resumen no sale mientras el asistente le está preguntando
   algo a la clienta; cambiar de servicio («pues quiero…», «en vez de…») sin volver a
   preguntar lo descartado; no insiste en el diagnóstico rechazado; una cita para otra
@@ -18,10 +19,10 @@ Este documento **no autoriza** desplegar ni conectar nada: cada paso marcado con
 
 | # | Paso | Quién | Estado |
 | --- | --- | --- | --- |
-| 1 | Revisión de Astra del SHA exacto: OK | Astra | Pendiente |
-| 2 | Medición de la candidata sin fallos críticos ni casos no medidos (Alicia y segundo negocio) | Claude | En curso |
-| 3 | Orden de desplegar y despliegue (`deploy/deploy.ps1`: copia de la BD, imagen anterior guardada, humo) | Pablo / Claude | Pendiente |
-| 4 | Comprobar en producción `VERSION.json`, health y su configuración | Claude | Pendiente |
+| 1 | Revisión de Astra del SHA exacto: OK | Astra | Terminada sobre 30c5e15 |
+| 2 | Medición de la candidata sin fallos críticos ni casos no medidos (Alicia y segundo negocio) | Claude | Terminada: Alicia 45/45 y segundo negocio 16/16 al primer intento; 1 caso no aplica en Alicia |
+| 3 | Orden de desplegar y despliegue (`deploy/deploy.ps1`: copia de la BD, imagen anterior guardada, humo) | Pablo / Claude | Desplegado c110bd9 por orden de Pablo, humo 5/5 |
+| 4 | Comprobar en producción `VERSION.json`, health y su configuración | Claude | Verificado por Claude y registrado el 16-sep 21:30–21:40 |
 | 5 | Alicia conecta su número desde su portal → pestaña **WhatsApp** → «Conectar mi WhatsApp» (Coexistence: sigue con su app en el móvil) | Alicia (con Pablo) | Botón disponible desde el 11-sep |
 | 6 | Método de pago en su WhatsApp Manager (Meta cobra cada plantilla de recordatorio al negocio) | Alicia | Pendiente |
 | 7 | Plantilla `vantelia_recordatorio_cita`: la da de alta y consulta su aprobación el propio sistema al conectar | Automático | Tras el paso 5 |

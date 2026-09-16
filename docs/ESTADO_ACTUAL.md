@@ -33,6 +33,19 @@ mensajero.
 
 ## En curso
 
+### Relevo vigente — 16-sep-2026 21:55 Europe/Madrid
+
+- Despliegue confirmado por registro y buzón de Claude: `c110bd9`, código
+  `30c5e15`, a las 21:35; health correcto y humo 5/5. OK de Astra emitido.
+- La suite y los bancos de ese candidato terminaron; los relevos anteriores que
+  los describen pendientes son históricos. Evidencia en REGISTRO_CONSOLIDACION.
+- Pablo solicita plan técnico independiente de Alicia. Entrega de Astra:
+  [PLAN_TECNICO_POSTDESPLIEGUE.md](PLAN_TECNICO_POSTDESPLIEGUE.md).
+- Siguiente propuesto: contrato único de cambios de selección de servicios,
+  reemplazando progresivamente decisiones por frases, antes de ampliar canales.
+- Planificación terminada: no se ha iniciado implementación, prueba ni seguimiento
+  automático en este bloque. Coordinar propietario con Claude antes de editar.
+
 ### Relevo de aceptación operativa — 16-sep-2026 20:10 Europe/Madrid
 
 - Claude implementa y mide `30c5e15` en `claude/servicio-y-titular`, según su
