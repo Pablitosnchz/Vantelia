@@ -79,3 +79,30 @@ def test_la_palabra_detras_del_ordinal_no_es_una_familia(catalogo):
     mensajes = [{"role": "user", "content": "quiero consultar el precio del laser y reservarlo"}]
     freno = agent._freno_de_varios_servicios(CLIENTE, mensajes, {"servicio": "Laser facial QA"})
     assert freno is None, freno and freno["error"]
+
+
+def test_un_servicio_ordinal_sin_categoria_sigue_contando(catalogo):
+    """Revisión de Codex a ec79548: sin categoría (valor por defecto al crear un servicio), «Primera
+    consulta capilar» se quedaba sin familia y el freno dejaba reservar solo el láser a quien pedía
+    las dos cosas. Sin categoría, la palabra de detrás del ordinal sigue siendo su familia: mejor
+    frenar de más que apartar menos tiempo del que hace falta."""
+    from backend import agent, agenda, appstate, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    nombre = "Primera consulta capilar QA"
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, duration_minutes, price_cents, description,"
+            " is_active, sort_order, category, created_at, updated_at) VALUES (?, ?, ?, 30, 1000, '', 1, 0, '', ?, ?)",
+            (CLIENTE, agenda._normalize_service_id(nombre), nombre, ahora, ahora))
+        conexion.commit()
+    with appstate.state_lock:
+        appstate.intent_cache.clear()
+    try:
+        mensajes = [{"role": "user", "content": "quiero una consulta capilar y un laser facial"}]
+        freno = agent._freno_de_varios_servicios(CLIENTE, mensajes, {"servicio": "Laser facial QA"})
+        assert freno is not None, "reserva solo el láser a quien ha pedido también la consulta"
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id=? AND name=?", (CLIENTE, nombre))
+            conexion.commit()

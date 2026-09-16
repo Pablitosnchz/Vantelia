@@ -527,3 +527,14 @@ def test_cambiar_otro_detalle_y_sumar_un_servicio_no_borra_lo_anterior(salon, ap
     freno = agent._freno_de_varios_servicios(
         CLIENTE, _mensajes("Quiero un corte de senora", cambio), {"servicio": "Secado al aire medio"})
     assert freno is not None, "se ha comido el corte: %r" % cambio
+
+
+def test_elegir_con_un_dia_detras_no_cuenta_como_sumar(salon, api_module):
+    """Revisión de Codex a ec79548: «al final solo quiero el elumen y el jueves a las diez» casaba
+    «y el» como suma, conservaba el corte y frenaba la cita del elumen."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora", "al final solo quiero el elumen y el jueves a las diez"),
+        {"servicio": "Elumen corto-medio"})
+    assert freno is None, freno and freno["error"]

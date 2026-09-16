@@ -2170,7 +2170,8 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
         if not (elige or _SUSTITUYE_LO_PEDIDO.search(plano)) or _ANYADE_A_LO_PEDIDO.search(plano):
             continue
         nuevas = set(catalog_pick.familias_pedidas(cliente_id, texto))
-        if _UNE_LO_PEDIDO.search(plano) and len(nuevas) < 2:
+        # Una elección clara manda aunque lleve «y el jueves» detrás (revisión de Codex a ec79548).
+        if not elige and _UNE_LO_PEDIDO.search(plano) and len(nuevas) < 2:
             continue
         antes = set(catalog_pick.familias_pedidas(cliente_id, " ".join(textos[desde:indice])))
         # Con una forma ambigua solo cambia de idea quien pide una familia que NO habia pedido:
