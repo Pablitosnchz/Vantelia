@@ -1600,3 +1600,38 @@ a fin en todas.
 - Limitación que queda: «es para mi hija» sin nombre sale con el nombre de la ficha en el resumen, sin preguntarlo.
 - Siguiente: terminar metareview y críticos ×6 de d444647, leer cualquier no OK, y pasar el SHA exacto a revisión de
   Astra. Sin push ni despliegue.
+
+## 2026-09-16 13:45–19:30 Europe/Madrid — candidata e81f010 del cierre de Alicia (Claude)
+
+- Rama `claude/servicio-y-titular`, candidata congelada **e81f010** (141f6e9..e81f010: bloque 1 de Astra 9bade14/952ae99
+  y lo de Claude). Sin push ni despliegue. Producción sigue en 311b58e.
+- Tres rondas de revisión de Codex con la cuota renovada de Astra. Regla de Pablo («congelar y medir»): se arregla lo que
+  hace reservar menos tiempo o deja a la clienta sin respuesta, lo que solo pregunta de más queda apuntado.
+  - Sobre 78d931e: «en vez de Lorena quiero a Conchi y un secado» perdía el corte (ec79548); «Primera consulta
+    dermatologica» daba la familia «consulta» (7d41ace); ficha con el nombre de la primera cita aunque sea para otra
+    persona → decisión de Pablo «dejarlo así» (limitación).
+  - Sobre ec79548: servicio ordinal sin categoría sin familia y «al final solo quiero el elumen y el jueves» frenado
+    (167fc8d).
+  - Sobre 167fc8d: «no quiero perder el corte, quiero también un elumen» quitaba el corte; formulario nativo de WhatsApp
+    tras un rechazo sin respuesta; «Cliente WhatsApp» no se corregía (e81f010). Ordinales que faltan (tercer, cuarta):
+    apuntado.
+  - Sobre e81f010: el formulario nativo no valida los dos apellidos (ya pasa en producción, sin rechazo previo; Alicia
+    tiene un apellido) y «en vez del corte quiero también un secado» no quita (pregunta de más): apuntados.
+  - Cada arreglo con test en rojo antes y verde después.
+- Fallo real encontrado al medir el segundo negocio (también en 311b58e): «Primera sesion con deposito» daba la familia
+  «primera» y «el primer hueco que tengas» frenaba la cita y ofrecía la sesión con fianza (78d931e).
+- Evidencia sobre e81f010 (copia de producción snap10 16-sep 12:39, cfg10, sin modificar la copia): suite completa 2871
+  passed, 1 skipped, 0 fallos. Banco de Alicia 45 medidos: 44 al primer intento, 0 tras reintento, 1 fallo crítico
+  `no-quiero-diagnostico-quiero-cita` (los dos intentos: el modelo insiste en el diagnóstico). Investigado: familias
+  (40, misma huella) y freno idénticos a 78d931e; repeticiones del caso e81f010 4/6 + 10/10 al primer intento (2 tras
+  reintento), 78d931e 6/6 + 10/10. Sin camino de código que lo explique; mismo caso inestable ya medido el 15-sep en
+  7a8e473. Críticos ×6 (crear, cancelar, reprogramar, rechazo, cambio de servicio, «dice que sí»): 36/36 al primer
+  intento. Metareview: 16/16 al primer intento, 0 fallos.
+- Referencia 311b58e, mismo banco y copia: Alicia 44 al primer intento + 1 fallo crítico (`en-vez-de-mechas-grey-blending`);
+  metareview 14 + 1 tras reintento + 1 fallo importante (`horario-escrito-manda`).
+- Candidatas intermedias medidas: 78d931e suite 2863/0 fallos, Alicia 45/45, críticos 36/36, metareview 14+1+1 fallo
+  horario; mediciones de ec79548 y 167fc8d paradas al cambiar la candidata (apartadas, no cuentan).
+- Limitaciones que quedan: reglas de frases contra NORMAS_AGENTE_IA 37-39 (diseño limpio pendiente con Astra: el modelo
+  declara lo que quita y el resumen muestra «No incluye»); «es para mi hija» sin nombre; las apuntadas arriba.
+- Datos: todas las copias de BD de producción y configs de medición borradas del scratchpad y del servidor.
+- Siguiente: revisión de Astra de e81f010 (encargo entregado en su sesión); con su OK, decisión de Pablo sobre desplegar.
