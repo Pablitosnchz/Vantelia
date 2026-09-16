@@ -1556,3 +1556,17 @@ a fin en todas.
   y referencias; no se han ejecutado tests porque no cambia código.
 - Siguiente: implementar bloque1 en rama propia tras comprobar reparto; no queda
   proceso de implementación/pruebas ejecutándose al cerrar esta planificación.
+
+## 2026-09-16 11:03 Europe/Madrid — relevo a Astra e inventario de Alicia (Claude)
+
+- Rama `main`, llevada por avance rápido a b626ad1 (plan de Astra, solo docs). Producción sigue en 311b58e.
+- Relevo enviado por el buzón de Sincronía: no hay procesos en marcha ni copias de producción; el número de Alicia sigue
+  sin conectar; faltan los pasos de «Maquillaje y recogido» y «Elumen largo», la decisión sobre los pasos de los
+  alisados y la lista de precios que se pueden dar. La fusión de contactos de 311b58e fue decisión explícita de Pablo y
+  solo toca contactos sin email ni teléfono.
+- Bloque 3: inventario de datos y reglas, sacado de producción en solo lectura, en `docs/ALICIA_PENDIENTE.md` con
+  fuente y fecha. Hallazgos: 2 packs sin nombre de paso, 8 alisados cuyos pasos no cuadran con el total, Stripe sin
+  `charges_enabled`, sin vacaciones ni bloqueos a futuro y 0 cuentas de WhatsApp.
+- Pruebas: ninguna, porque no cambia código. No se ha implementado nada de los bloques 1 y 2.
+- Siguiente: revisar el primer commit de Astra del bloque 1 cuando llegue y preparar la medición del bloque 4 (candidato
+  frente a referencia con `--db-origen`), sin lanzarla hasta que haya SHA candidato.

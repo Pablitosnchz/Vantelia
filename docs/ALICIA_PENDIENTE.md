@@ -1,9 +1,46 @@
 # Alicia Rincón Estilistas: lo pedido, lo hecho y lo que falta
 
-Estado a 21-ago-2026. Tenant `alicia_rincon_estilistas`.
+Estado a 21-ago-2026. Tenant `alicia_rincon_estilistas`. El inventario de abajo
+(16-sep) manda sobre lo anterior cuando no coinciden.
 
 Este documento existe porque sus peticiones llegan por WhatsApp a lo largo del
 día y se pierden. Cuando algo se cierra, se borra de aquí.
+
+---
+
+## Inventario congelado para el cierre (16-sep-2026)
+
+Bloque 3 de [CIERRE_ALICIA_16SEP.md](CIERRE_ALICIA_16SEP.md). **Fuente:** producción
+en solo lectura (BD abierta con `mode=ro` y config cargada por `clients`), 16-sep-2026
+10:58 Europe/Madrid, código desplegado 311b58e. Sin datos de clientas.
+
+| Dato | Valor en producción | Dónde se cambia | Fuente de la decisión |
+| --- | --- | --- | --- |
+| WhatsApp propio | **Sin conectar**: `whatsapp.enabled` false, 0 cuentas en `client_whatsapp_accounts`, `prueba` `{dias: 10}` sin empezar | Pestaña WhatsApp (alta self-service) | Pendiente de Alicia/Pablo |
+| Forma de reservar | `estilo` conversacional, `ai_intents` activo, `preferir_packs` true | Tune AI | Configuración de agosto |
+| Precios | `mostrar_precios` false y `precios_en_agenda` false: el asistente no da ninguno y la agenda no los enseña | Tune AI / config | Pablo, 15-sep: «ninguno por ahora». Falta la lista de Alicia si quiere excepciones |
+| Apellidos | `exigir_dos_apellidos` false (vale uno) | Q&A → Reglas de tu negocio | Alicia vía Pablo, 15-sep |
+| Diagnóstico | `valoracion_obligatoria` [extensiones]; 4 reglas activas: foto para presupuesto de alisado, diagnóstico si no sabe qué alisado, valoración de extensiones, color/mechas sin precio (cita de diagnóstico o teléfono) | Q&A → Reglas de tu negocio | Agosto y 13-sep |
+| Q&A | 22 preguntas (alisados, extensiones, fianza, diagnóstico, grey blending, landing…) | Q&A | Alicia, agosto |
+| Catálogo | 169 activos, 22 inactivos, 0 activos sin duración | Servicios | Excel de Alicia |
+| Packs con pasos | 37. **Sin nombre de paso:** «Pack elumen largo» y «Pack maquillaje y recogido». **Pasos que no cuadran con la duración total** (se pintan en bloque): 8 packs de ácido láctico bio premium y keratina premium (p. ej. medio: 120 min de total, 335 sumando pasos) | Servicios → pasos | Totales del Excel; pasos pendientes de Alicia |
+| Equipo | Agenda general (por defecto), Alicia (todos), Lorena (165), Conchi (168), Lucía (91), Jose (91); todas con horario semanal propio, cierre en lunes y domingo | Equipo / Horarios | Excel de operarios, 15-sep |
+| Vacaciones y bloqueos | Ninguno a futuro | Horarios | — |
+| Agenda | `slot_minutes` 15, Europe/Madrid | Horarios | Agosto |
+| Señal | 53 servicios con depósito; Stripe con `charges_enabled` 0, así que **no se cobra** | Pagos | Bloqueado desde 20-ago |
+| Recordatorios | Prioridad WhatsApp → email → SMS; llamadas apagadas | Recordatorios | Sin WhatsApp conectado solo sale email |
+
+**Decisiones de Alicia que faltan** (bloquean solo sus casos; no se inventan):
+
+1. Pasos (nombre y minutos) de «Pack maquillaje y recogido» y «Pack elumen largo»
+   (este sale dos veces en su Excel con pasos distintos).
+2. Alisados: si quiere dar los pasos bien o se quedan pintados en bloque (la
+   duración total ya es la correcta).
+3. Servicios de los que el asistente sí puede dar precio (hoy ninguno).
+4. Número de WhatsApp: cuándo lo conecta, que es lo que arranca los 10 días de prueba.
+5. De las preguntas abiertas de agosto (abajo) no hay respuesta registrada de la 1
+   (señal en servicios baratos) ni de la 2 (grey blending largo). La 3 es el punto 1
+   de esta lista. La 4 se resolvió con el Excel de operarios del 15-sep.
 
 ---
 
