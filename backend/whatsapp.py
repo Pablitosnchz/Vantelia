@@ -2227,6 +2227,9 @@ async def _wa_handle_flow_reply(
     if not flow.nombre:
         conocido = crm.contact_by_phone(cliente_id, from_number)
         flow.nombre = str(conocido["name"]).strip() if conocido else "Cliente WhatsApp"
+    # Servicio, profesional, día y hora vienen elegidos en el formulario: aclaran un rechazo
+    # anterior del asistente (revisión de Codex a 167fc8d).
+    _wa_servicio_elegido_en_la_lista(cliente_id, from_number)
 
     return await _wa_send_booking_summary(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,

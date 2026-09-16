@@ -125,6 +125,9 @@ def contact_by_phone(cliente_id: str, phone: str) -> Optional[sqlite3.Row]:
         ).fetchone()
 
 
+_NOMBRES_DE_RELLENO = {"cliente whatsapp", "cliente"}
+
+
 def _nombre_para_la_ficha(anterior: str, nuevo: str) -> str:
     """El nombre con el que queda una ficha que ya existía.
 
@@ -136,6 +139,10 @@ def _nombre_para_la_ficha(anterior: str, nuevo: str) -> str:
     """
     if not nuevo or not anterior:
         return nuevo or anterior
+    # «Cliente WhatsApp» (formulario sin nombre) no es un nombre: el real lo sustituye
+    # (revisión de Codex a 167fc8d).
+    if textnorm.normalizar(anterior) in _NOMBRES_DE_RELLENO:
+        return nuevo
     antes = textnorm.normalizar(anterior).split()
     despues = textnorm.normalizar(nuevo).split()
     return nuevo if despues[:len(antes)] == antes else anterior

@@ -538,3 +538,14 @@ def test_elegir_con_un_dia_detras_no_cuenta_como_sumar(salon, api_module):
         CLIENTE, _mensajes("Quiero un corte de senora", "al final solo quiero el elumen y el jueves a las diez"),
         {"servicio": "Elumen corto-medio"})
     assert freno is None, freno and freno["error"]
+
+
+def test_no_quiero_perder_algo_no_es_quitarlo(salon, api_module):
+    """Revisión de Codex a 167fc8d: «no quiero perder el corte, quiero también un elumen» quitaba el
+    corte y dejaba reservar solo el elumen, con menos tiempo del que hace falta."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora", "no quiero perder el corte, quiero tambien un elumen"),
+        {"servicio": "Elumen corto-medio"})
+    assert freno is not None, "se ha comido el corte"

@@ -297,3 +297,16 @@ def test_replay_tras_resultado_perdido_recupera_sin_segundo_proveedor(formulario
     assert len(f["citas"]()) == int(tras_commit)
     actual = reserva.leer_confirmacion_reserva(reserva.cargar("demo", f["numero"]), incluir_hecha=True)
     assert actual["id"] == p["id"]
+
+
+def test_formulario_tras_un_rechazo_del_asistente_ensena_el_resumen(formulario):
+    """Revisión de Codex a 167fc8d: con un rechazo del asistente guardado, el formulario nativo de
+    WhatsApp traía servicio, profesional, día y hora validados y la clienta no recibía nada: el
+    resumen seguía bloqueado. Rellenar el formulario es la aclaración."""
+    from backend import reserva
+    f = formulario
+    estado = reserva.cargar("demo", f["numero"])
+    reserva.anotar_resultado(estado, "crear_cita", {}, {"ok": False, "error": "Falta aclarar el servicio"})
+    reserva.guardar("demo", f["numero"], estado)
+    assert f["recibir"](), "el formulario no ha seguido: %s" % f["textos"][-2:]
+    assert f["botones"], "rellenó el formulario y no le llegó el resumen"

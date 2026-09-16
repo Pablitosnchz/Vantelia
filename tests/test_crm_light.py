@@ -116,6 +116,19 @@ def test_un_nombre_que_completa_el_de_la_ficha_si_la_actualiza(api_module, antes
     assert nombre == despues
 
 
+def test_un_nombre_de_relleno_en_la_ficha_se_cambia_por_el_real(api_module):
+    """Revisión de Codex a 167fc8d: el formulario de WhatsApp sin nombre guarda «Cliente WhatsApp» y,
+    con la ficha intacta, el nombre real que diera después ya no lo sustituía."""
+    telefono = "+34644%06d" % (uuid.uuid4().int % 10**6)
+    ficha = api_module._crm_upsert_contact("demo", name="Cliente WhatsApp", phone=telefono, source="whatsapp",
+                                           entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    api_module._crm_upsert_contact("demo", name="Ana Ruiz Perez", phone=telefono, source="whatsapp",
+                                   entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    with api_module._get_db_connection() as connection:
+        nombre = connection.execute("SELECT name FROM crm_contacts WHERE id=?", (ficha,)).fetchone()[0]
+    assert nombre == "Ana Ruiz Perez"
+
+
 def test_un_nombre_sin_datos_no_se_junta_con_alguien_que_tiene_telefono(api_module):
     """Dos personas se pueden llamar igual: la que tiene teléfono no absorbe la cita sin datos."""
     nombre = "Laura Gil Mora %s" % uuid.uuid4().hex[:6]

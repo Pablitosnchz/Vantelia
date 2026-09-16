@@ -2099,6 +2099,7 @@ _UNE_LO_PEDIDO = re.compile(r"\by (un|una|unas|unos|el|la|los|las)\b")
 # corte, quiero un elumen»), y llega hasta una pausa o hasta lo que pide en su lugar.
 _QUITA_LO_PEDIDO = re.compile(r"\b(en vez del?|en lugar del?|no quiero)\b")
 _FIN_DE_LO_QUITADO = re.compile(r"[,.;:!?]|\b(quiero|prefiero)\b")
+_ARTICULOS = {"el", "la", "los", "las", "un", "una", "unos", "unas", "lo"}
 
 
 def _lo_que_quita(cliente_id: str, texto: str):
@@ -2109,6 +2110,10 @@ def _lo_que_quita(cliente_id: str, texto: str):
     describe, no quita: en la duda no se quita nada y el freno pregunta.
     """
     plano = catalog_pick._norm(texto)
+    # «no quiero perder el corte, quiero también un elumen» suma: con «también» no se quita nada
+    # (revisión de Codex a 167fc8d).
+    if _ANYADE_A_LO_PEDIDO.search(plano):
+        return texto, set()
     trozos, quitadas, desde = [], set(), 0
     for marca in _QUITA_LO_PEDIDO.finditer(plano):
         if marca.start() < desde:
@@ -2116,9 +2121,12 @@ def _lo_que_quita(cliente_id: str, texto: str):
         fin = _FIN_DE_LO_QUITADO.search(plano, marca.end())
         hasta = fin.start() if fin else len(plano)
         clausula = plano[marca.end():hasta]
-        if clausula.strip().startswith("que "):
-            continue
         raices = set(catalog_pick._raices_pedidas(cliente_id, clausula))
+        palabras = clausula.split()
+        # Lo quitado es el servicio mismo («el corte», «las mechas», «corte»), no una frase con
+        # verbo delante («que me cortéis mucho», «perder el corte»).
+        if not palabras or not (palabras[0] in _ARTICULOS or catalog_pick._raices(palabras[0]) & raices):
+            continue
         if raices:
             trozos.append(plano[desde:marca.start()])
             quitadas |= raices
