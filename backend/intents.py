@@ -256,8 +256,12 @@ def _familias_del_tenant(cliente_id: str) -> List[str]:
     except Exception:  # noqa: BLE001
         return []
     for servicio in servicios:
-        nombre = _sin_ordinales_delante(servicio.get("nombre") or "")
-        for candidata in (_sin_ordinales_delante(servicio.get("category") or ""), nombre.split(" ")[0]):
+        nombre = _norm(servicio.get("nombre") or "")
+        # Un nombre que empieza por ordinal no da familia: tampoco la palabra de detrás
+        # («Primera consulta dermatologica» daba «consulta», y «consultar el precio del
+        # láser» frenaba la cita del láser; revisión de Codex a 78d931e). Su categoría sí.
+        primera = "" if _sin_ordinales_delante(nombre) != nombre else nombre.split(" ")[0]
+        for candidata in (_sin_ordinales_delante(servicio.get("category") or ""), primera):
             clave = _norm(candidata)
             if len(clave) < 4 or clave in vistas:
                 continue

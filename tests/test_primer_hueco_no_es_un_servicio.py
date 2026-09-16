@@ -11,6 +11,11 @@ sesion estandar» + «el primer hueco que tengas», el freno de varios servicios
 familias, frenaba la cita y ofrecía la sesión con fianza de 30 € a quien había pedido
 la estándar. El resumen llegaba un turno tarde y la clienta se quedaba sin cita.
 Cualquier negocio con «Primera visita» o «Primera consulta» tenía el mismo fallo.
+
+Revisión de Codex a 78d931e: saltarse el ordinal y quedarse con la palabra de detrás
+creaba otra familia falsa («Primera consulta dermatologica» → «consulta», y «consultar el
+precio del láser» frenaba la cita del láser). Un nombre que empieza por ordinal no da
+familia; su categoría sí.
 """
 from __future__ import annotations
 
@@ -20,7 +25,8 @@ from test_booking_exhaustive import api_module  # noqa: F401
 
 CLIENTE = "demo"
 CATALOGO = [("Sesion estandar QA", "Sesiones QA", 60), ("Primera sesion con deposito QA", "Sesiones QA", 60),
-            ("Primera visita QA", "Primeras visitas QA", 30)]
+            ("Primera visita QA", "Primeras visitas QA", 30),
+            ("Primera consulta dermatologica QA", "Dermatologia QA", 30), ("Laser facial QA", "Laser QA", 30)]
 
 
 @pytest.fixture
@@ -51,7 +57,8 @@ def test_un_ordinal_no_es_una_familia_de_servicio(catalogo):
 
     familias = intents.familias_del_tenant(CLIENTE)
     assert "primera" not in familias and not any(f.startswith("primeras") for f in familias), familias
-    assert "visitas qa" in familias or "visita" in familias, familias
+    assert "visitas qa" in familias, familias
+    assert "consulta" not in familias, familias
 
 
 @pytest.mark.parametrize("hueco", ["el primer hueco que tengas", "la primera que tengas", "primero quiero saber la hora"])
@@ -61,4 +68,14 @@ def test_pedir_el_primer_hueco_no_frena_la_cita(catalogo, hueco):
     mensajes = [{"role": "user", "content": t}
                 for t in ("hola quiero cita para una sesion estandar", hueco, "me llamo Marta Ruiz Gomez")]
     freno = agent._freno_de_varios_servicios(CLIENTE, mensajes, {"servicio": "Sesion estandar QA"})
+    assert freno is None, freno and freno["error"]
+
+
+def test_la_palabra_detras_del_ordinal_no_es_una_familia(catalogo):
+    """Revisión de Codex a 78d931e: con «Primera consulta dermatologica» en el catálogo, «consultar el
+    precio del láser» contaba como pedir una consulta y un láser, y frenaba la cita del láser."""
+    from backend import agent
+
+    mensajes = [{"role": "user", "content": "quiero consultar el precio del laser y reservarlo"}]
+    freno = agent._freno_de_varios_servicios(CLIENTE, mensajes, {"servicio": "Laser facial QA"})
     assert freno is None, freno and freno["error"]
