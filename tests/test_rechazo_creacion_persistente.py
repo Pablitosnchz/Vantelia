@@ -125,3 +125,58 @@ def test_rechazo_durante_consulta_de_agenda_impide_publicar_resumen(canal, monke
         flow=whatsapp._wa_get_flow("demo", numero)))
     responder()
     assert not botones and not citas() and not proveedores
+
+
+@pytest.mark.parametrize("como", ["lista", "hablado"])
+def test_elegir_servicio_en_la_lista_resuelve_el_rechazo_anterior(canal, monkeypatch, como):
+    """Revisión de Claude a 952ae99. Si el asistente frena la cita y la conversación sigue por las
+    listas (negocio guiado, o el agente no contesta y se pregunta a mano), la clienta elige el
+    servicio, el día y la hora y, al dar su nombre, no le llegaba nada: el resumen seguía bloqueado
+    por el rechazo anterior y el canal se callaba. Elegir el servicio en ese paso es la aclaración."""
+    from backend import booking, messaging, reserva, whatsapp
+    numero, responder, citas, textos, proveedores = canal
+    flow = whatsapp._wa_get_flow("demo", numero)
+    elegido = dict(fecha=flow.fecha, hora=flow.hora, employee_id=flow.employee_id,
+                   employee_name=flow.employee_name)
+    estado = reserva.cargar("demo", numero)
+    reserva.anotar_resultado(estado, "crear_cita", {}, {"ok": False, "error": "Falta aclarar el servicio"})
+    reserva.guardar("demo", numero, estado)
+    servicios = booking._public_services_for_booking("demo")
+    assert servicios, "el negocio de prueba no tiene servicios que elegir"
+    servicio = servicios[0]
+    botones = []
+
+    async def enviar(**kw):
+        botones.append(kw)
+        return True
+
+    async def lista(**kw):
+        return True
+
+    monkeypatch.setattr(messaging, "_send_whatsapp_buttons", enviar)
+    monkeypatch.setattr(messaging, "_send_whatsapp_list", lista)
+
+    def escribe(texto, iid=""):
+        asyncio.run(whatsapp._handle_whatsapp_message(
+            cliente_id="demo", phone_number_id="PN", from_number=numero,
+            incoming_text=texto, interactive_id=iid, request=None))
+
+    nombre_servicio = servicio.get("nombre") or servicio.get("name")
+    flow.flow = "booking_service"
+    if como == "lista":
+        escribe(nombre_servicio, "svc_%s" % (servicio.get("id") or servicio.get("slug")))
+    else:
+        # Conversacional con el agente sin contestar: se pregunta a mano y lo resuelve el catálogo.
+        from backend import intents
+        monkeypatch.setattr(whatsapp, "_wa_modo_conversacional", lambda config: True)
+        monkeypatch.setattr(intents, "resolver_servicio", lambda *a, **k: {
+            "servicio": nombre_servicio, "pregunta": "", "confirmacion": ""})
+        escribe(nombre_servicio)
+    flow = whatsapp._wa_get_flow("demo", numero)
+    assert flow.servicio, "la lista no dejó elegido el servicio"
+    # Profesional, día y hora salen de las listas siguientes; se dejan como las dejan ellas.
+    for clave, valor in elegido.items():
+        setattr(flow, clave, valor)
+    flow.flow = "booking_name"
+    escribe("Ana Prueba Ruiz")
+    assert botones, "eligió todo en las listas y no le llegó el resumen: %s" % textos[-2:]

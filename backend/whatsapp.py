@@ -2897,6 +2897,27 @@ async def _wa_turno_del_agente(
     return True
 
 
+def _wa_servicio_elegido_en_la_lista(cliente_id: str, from_number: str) -> None:
+    """Elegir el servicio en el paso guiado aclara un rechazo anterior del asistente.
+
+    Sin esto, tras frenar el asistente la cita y seguir por las listas (negocio guiado, o el
+    agente sin contestar), la clienta elegía servicio, día y hora y el resumen no salía: seguía
+    bloqueado por aquel rechazo y el canal se callaba (revisión de Claude a 952ae99). Lo que
+    viene después (profesional, día y hora) sale de la agenda real en los pasos siguientes.
+    """
+    from backend import conversation_state, reserva
+
+    estado = reserva.cargar(cliente_id, from_number)
+    if not reserva.creacion_requiere_aclaracion(estado):
+        return
+    estado.creacion_rechazada_en = 0.0
+    try:
+        reserva.guardar(cliente_id, from_number, estado)
+    except conversation_state.ConversationStateConflict:
+        # Otro turno escribió a la vez: su estado manda y el resumen sigue frenado.
+        pass
+
+
 async def _wa_start_booking_flow(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     flow: appstate.WAFlowState, config: Dict[str, Any], dicho: str = "",
@@ -4063,6 +4084,7 @@ async def _handle_whatsapp_message(
         if resuelto and resuelto["servicio"]:
             flow.servicio = resuelto["servicio"]
             flow.servicio_texto = ""
+            _wa_servicio_elegido_en_la_lista(cliente_id, from_number)
             flow.intentos_fallidos = 0
             empleados = _wa_employees_for_service(
                 cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id,
@@ -4154,6 +4176,7 @@ async def _handle_whatsapp_message(
             )
             return
         flow.servicio = chosen
+        _wa_servicio_elegido_en_la_lista(cliente_id, from_number)
 
         employees = _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id)
         if not employees:
