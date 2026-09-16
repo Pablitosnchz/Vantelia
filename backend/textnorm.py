@@ -652,6 +652,15 @@ def _sin_constantes_no_finitas(nombre: str):
     raise ValueError("JSON con %s" % nombre)
 
 
+def _decimal_finito(texto: str) -> float:
+    # `1e309` no es NaN ni Infinity para `parse_constant`: se convierte en infinito al leerlo
+    # (revisión de Astra a cb46dae).
+    valor = float(texto)
+    if not math.isfinite(valor):
+        raise ValueError("JSON con un número fuera de rango")
+    return valor
+
+
 def objeto_json(crudo: Any) -> Optional[Dict[str, Any]]:
     """Un objeto JSON, o None si lo que llega es otra cosa.
 
@@ -662,7 +671,7 @@ def objeto_json(crudo: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(crudo, (str, bytes)):
         return None
     try:
-        datos = json.loads(crudo, parse_constant=_sin_constantes_no_finitas)
+        datos = json.loads(crudo, parse_constant=_sin_constantes_no_finitas, parse_float=_decimal_finito)
     except (ValueError, TypeError):
         return None
     return datos if isinstance(datos, dict) else None

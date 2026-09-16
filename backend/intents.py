@@ -677,12 +677,18 @@ def classify(
     intencion = _norm(textnorm.texto_de_json(datos.get("intencion")))
     if intencion not in INTENCIONES:
         return None
-    try:
-        confianza = float(datos.get("confianza") or 0)
-    except (TypeError, ValueError):
+    bruta = datos.get("confianza")
+    # Una confianza es un número finito: `true` no es 1.0 ni NaN la da por segura
+    # (`min(1.0, nan)` devuelve 1.0). Revisión de Astra a cb46dae.
+    if isinstance(bruta, str):
+        try:
+            bruta = float(bruta.strip())
+        except ValueError:
+            bruta = None
+    if isinstance(bruta, bool) or not isinstance(bruta, (int, float)) or not math.isfinite(bruta):
         confianza = 0.0
-    # NaN o infinito no son una confianza: `min(1.0, nan)` la daba por segura.
-    confianza = max(0.0, min(1.0, confianza)) if math.isfinite(confianza) else 0.0
+    else:
+        confianza = max(0.0, min(1.0, float(bruta)))
     if confianza < CONFIANZA_MINIMA:
         settings.logger.info(
             "[intents] descartada por poca confianza (%.2f) en %s: %s",
@@ -698,10 +704,14 @@ def classify(
         "qa_answer": "",
     }
     # ¿Le estan haciendo una de las preguntas que el negocio ya tiene respondidas?
-    try:
-        indice = int(datos.get("pregunta") or 0)
-    except (TypeError, ValueError):
-        indice = 0
+    bruto = datos.get("pregunta")
+    indice = 0
+    if isinstance(bruto, int) and not isinstance(bruto, bool):
+        indice = bruto
+    elif isinstance(bruto, float) and math.isfinite(bruto) and bruto.is_integer():
+        indice = int(bruto)
+    elif isinstance(bruto, str) and bruto.strip().isdigit():
+        indice = int(bruto.strip())
     if 1 <= indice <= len(preguntas):
         elegida = preguntas[indice - 1]
         # Y que vaya de lo MISMO. Medido en la simulacion del 2-sep: a "quiero

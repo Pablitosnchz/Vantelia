@@ -116,3 +116,20 @@ def test_extraer_datos_con_otra_forma_no_revienta(api_module, monkeypatch, conte
     intents = _con_modelo_de_intents(monkeypatch, contenido)
     datos = intents.extraer_datos_servicio("demo", "quiero unas mechas %s" % json.dumps(contenido))
     assert datos is None or all(isinstance(datos[k], str) for k in ("familia", "tecnica", "talla", "para_quien"))
+
+
+@pytest.mark.parametrize("contenido", ['{"intencion": "reservar", "confianza": true}',
+                                       '{"intencion": "reservar", "confianza": 0.9, "pregunta": 1e309}',
+                                       '{"intencion": "reservar", "confianza": 1e309}'])
+def test_numeros_que_no_lo_son_no_dan_confianza_ni_revientan(api_module, monkeypatch, contenido):  # noqa: F811
+    """Revisión de Astra a cb46dae: `true` daba confianza 1.0 y `1e309` (que no es NaN ni Infinity
+    para parse_constant) llegaba como infinito y hacía saltar OverflowError fuera de classify."""
+    intents = _con_modelo_de_intents(monkeypatch, contenido)
+    assert intents.classify("demo", "quiero una cita para el viernes %s" % json.dumps(contenido)) is None
+
+
+@pytest.mark.parametrize("confianza", ['0.9', '"0.9"'])
+def test_una_confianza_numerica_o_en_texto_sigue_valiendo(api_module, monkeypatch, confianza):  # noqa: F811
+    intents = _con_modelo_de_intents(monkeypatch, '{"intencion": "reservar", "confianza": %s}' % confianza)
+    resultado = intents.classify("demo", "quiero una cita para el viernes, confianza %s" % confianza)
+    assert resultado and resultado["confianza"] == 0.9
