@@ -1636,7 +1636,7 @@ a fin en todas.
 - Datos: todas las copias de BD de producción y configs de medición borradas del scratchpad y del servidor.
 - Siguiente: revisión de Astra de e81f010 (encargo entregado en su sesión); con su OK, decisión de Pablo sobre desplegar.
 
-## 2026-09-16 17:40–23:15 Europe/Madrid — revisión de Astra y candidata 30c5e15 (Claude)
+## 2026-09-16 17:40–21:30 Europe/Madrid — revisión de Astra y candidata 30c5e15 (Claude)
 
 - Revisión de Astra a e81f010: CAMBIOS (nota en el buzón de su árbol `E:/Vantelia-astra-revision-e81`, 17:45).
   Crítico: «No quiero el corte demasiado corto, quiero un elumen» y «No quiero el corte con Lorena, quiero el elumen con
