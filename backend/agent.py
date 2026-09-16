@@ -3312,6 +3312,76 @@ def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
     return any(familia and familia in hablando_de for familia in familias)
 
 
+def _infraccion_sin_vueltas(cliente_id: str, texto: str, *, dicho_de_ella: str, telefono: str,
+                            estado: Any, mutada: bool, creada: bool, mirada_la_cita: bool,
+                            ofrecidas) -> Tuple[str, str]:
+    """(motivo, hora real) de la primera comprobación de HECHOS que incumple una respuesta final.
+
+    Son las mismas comprobaciones y condiciones del bucle de `responder`, que allí solo actúan
+    si queda otra vuelta para que el modelo corrija. Cuando no queda -última vuelta o llamada
+    de cierre- la respuesta salía sin comprobar (bloque A de COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE,
+    16-sep-2026): un precio que el negocio no da o una cita que no existe.
+    """
+    if _da_un_precio_prohibido(cliente_id, texto, dicho_de_ella):
+        return "precio_que_no_se_da", ""
+    if (_afirma_que_hay_cita_confirmada(texto) and not mutada and not mirada_la_cita
+            and not _la_cita_que_afirma_existe(cliente_id, telefono, texto)):
+        return "dijo_que_hay_cita_sin_haberla", ""
+    hora_real = _le_dice_una_hora_que_no_es_la_suya(
+        cliente_id, telefono, texto, mutada, pedidas=set(ofrecidas) | _horas_que_ha_dicho(dicho_de_ella))
+    if hora_real:
+        return "hora_que_no_es_la_suya", hora_real
+    if _dice_que_acaba_de_hacerlo(texto) and not mutada:
+        return "dijo_haberlo_hecho_sin_hacerlo", ""
+    if estado.cancelada and not mutada and _da_la_cita_por_hecha(texto):
+        return "daba_por_viva_una_cita_cancelada", ""
+    if (_da_la_cita_por_hecha(texto)
+            and not (creada or mirada_la_cita or (estado.hecho and not estado.cancelada))):
+        return "daba_la_cita_por_hecha", ""
+    return "", ""
+
+
+def _salida_segura(texto: str, motivo: str, hora_real: str = "") -> str:
+    """Lo que sale cuando la respuesta final incumple y ya no hay vuelta para corregirla.
+
+    Sin otra llamada al modelo. La cifra se quita frase a frase, conservando el resto; lo que
+    afirma algo falso de la agenda se sustituye entero por lo que dice el estado.
+    """
+    if motivo == "precio_que_no_se_da":
+        frases = re.findall(r"[^.!?\n]+[.!?]*[ \t]*|\n", texto or "")
+        limpio = "".join(f for f in frases if not _UNA_CIFRA_DE_DINERO.search(f)).strip()
+        if limpio and not _UNA_CIFRA_DE_DINERO.search(limpio):
+            return limpio
+        return "Ese precio no te lo puedo dar por mensaje: te lo dicen en el salón."
+    if motivo == "hora_que_no_es_la_suya":
+        return "Tu cita es a las %s." % hora_real
+    if motivo == "daba_por_viva_una_cita_cancelada":
+        return ("Tu cita está cancelada. Si quieres, miramos si ese hueco sigue libre y te "
+                "cojo una nueva.")
+    return "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
+
+
+def _corregir_sin_vueltas(cliente_id: str, texto: str, traza: Any, **contexto: Any) -> str:
+    """Corrige TODAS las infracciones de una respuesta final sin vueltas, no solo la primera.
+
+    Revisión de Astra a 437325d: «Las mechas son 80 €. Tu cita está confirmada para el jueves»
+    perdía la cifra y salía con la confirmación falsa, porque solo se corregía la primera
+    infracción y no se volvía a comprobar. Se comprueba de nuevo tras cada corrección; si una
+    misma infracción no desaparece, sale el texto neutro, que no incumple ninguna.
+    """
+    vistas = []
+    for _ in range(6):
+        motivo, hora_real = _infraccion_sin_vueltas(cliente_id, texto, **contexto)
+        if not motivo:
+            return texto
+        traza.freno("sin_vueltas:" + motivo)
+        if motivo in vistas:
+            break
+        vistas.append(motivo)
+        texto = _salida_segura(texto, motivo, hora_real)
+    return "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
+
+
 def _aviso_del_precio_que_no_se_da(cliente_id: str, lo_que_ha_escrito) -> str:
     """Qué se le pide al modelo al quitar una cifra de dinero de su respuesta.
 
@@ -4501,6 +4571,13 @@ async def responder(
                                     "una propuesta y pregunta si le viene bien."),
                     })
                     continue
+                # Sin otra vuelta, las comprobaciones de hechos de arriba no han podido pedir
+                # que se corrija: lo que incumpla no sale tal cual.
+                if vuelta + 1 >= MAX_VUELTAS:
+                    texto_final = _corregir_sin_vueltas(
+                        cliente_id, texto_final, traza, dicho_de_ella=dicho_de_ella, telefono=telefono,
+                        estado=estado, mutada=mutada, creada=creada,
+                        mirada_la_cita=mirada_la_cita, ofrecidas=ofrecidas)
                 # Solo cuenta como dicho si de verdad ha salido en su respuesta.
                 if aviso and "25" in texto_final:
                     estado.recargo_dicho = True
@@ -4979,8 +5056,13 @@ async def responder(
         )
         reserva.guardar(cliente_id, clave_estado, estado,
                         pedido=reserva.que_falta(estado, conocido))
-        remate_final = _fechas_en_humano((cierre.choices[0].message.content or "").strip())
+        remate_final = (cierre.choices[0].message.content or "").strip()
         traza.freno("se_acabaron_las_vueltas")
+        # El cierre no pasaba por ninguna comprobación de hechos (bloque A, 16-sep-2026).
+        remate_final = _corregir_sin_vueltas(
+            cliente_id, remate_final, traza, dicho_de_ella=dicho_de_ella, telefono=telefono, estado=estado,
+            mutada=mutada, creada=creada, mirada_la_cita=mirada_la_cita, ofrecidas=ofrecidas)
+        remate_final = _fechas_en_humano(remate_final)
         traza.guardar(mensaje=mensaje, respuesta=remate_final)
         return remate_final, cita_creada
     except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
