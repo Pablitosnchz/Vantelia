@@ -33,6 +33,7 @@ numero de reserva solo existe si `crear_cita` lo devuelve.
 from __future__ import annotations
 
 import json
+import math
 import re
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
@@ -516,6 +517,46 @@ _ALIAS_DE_ARGUMENTO = {
     "telefono_contacto": "telefono",
     "nombre_cliente": "nombre",
 }
+
+
+_TIPOS_JSON = {
+    "string": lambda v: isinstance(v, str) or (not isinstance(v, bool) and isinstance(v, (int, float))
+                                               and math.isfinite(v)),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v),
+    "boolean": lambda v: isinstance(v, bool),
+    "array": lambda v: isinstance(v, list),
+}
+
+
+def _argumentos_validos(nombre: str, crudo: Any, herramientas) -> Tuple[Optional[Dict[str, Any]], str]:
+    """(argumentos, error) de una llamada, comprobados contra el esquema que se le ofreció.
+
+    Bloque B de COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE (16-sep-2026): una lista, `null` o un campo
+    con otro tipo llegaban a `argumentos.get` y tumbaban el turno entero. Solo se comprueba la
+    FORMA: la autorización sigue en el núcleo. Los campos que el esquema no declara no se
+    rechazan (pueden ser alias que resuelve `_normalizar_argumentos`); un `null` es no decirlo.
+    """
+    datos = textnorm.objeto_json(crudo if crudo not in (None, "") else "{}")
+    if datos is None:
+        return None, "Los argumentos tienen que ser un objeto JSON."
+    esquema = next((h["function"].get("parameters") or {} for h in herramientas or []
+                    if h.get("function", {}).get("name") == nombre), {})
+    propiedades = esquema.get("properties") or {}
+    limpios = {}
+    for campo, valor in datos.items():
+        if valor is None:
+            continue
+        declarado = propiedades.get(campo) or {}
+        tipo = declarado.get("type")
+        if tipo in _TIPOS_JSON and not _TIPOS_JSON[tipo](valor):
+            return None, "El campo «%s» tiene que ser %s." % (campo, tipo)
+        if declarado.get("enum") and valor not in declarado["enum"]:
+            return None, "El campo «%s» no admite ese valor." % campo
+        if not tipo and isinstance(valor, (dict, list)):
+            return None, "El campo «%s» no puede ser una lista ni un objeto." % campo
+        limpios[campo] = valor
+    return limpios, ""
 
 
 def _normalizar_argumentos(argumentos: Dict[str, Any]) -> Dict[str, Any]:
@@ -4219,10 +4260,11 @@ async def responder(
             # Los hechos ya validados sobreviven también si el proveedor falla
             # o el proceso cae mientras espera la respuesta del modelo.
             reserva.guardar(cliente_id, clave_estado, estado, pedido=reserva.que_falta(estado, conocido))
+            herramientas_ofrecidas = _herramientas(estado)
             respuesta = cliente.chat.completions.create(
                 model=_modelo_del_negocio(cfg),
                 messages=turno,
-                tools=_herramientas(estado),
+                tools=herramientas_ofrecidas,
                 tool_choice=eleccion,
                 temperature=_temperatura_del_negocio(cfg),
                 max_tokens=400,
@@ -4608,10 +4650,17 @@ async def responder(
                 ],
             })
             for llamada in elegido.tool_calls:
-                try:
-                    argumentos = json.loads(llamada.function.arguments or "{}")
-                except (ValueError, TypeError):
-                    argumentos = {}
+                argumentos, error_de_forma = _argumentos_validos(
+                    llamada.function.name, llamada.function.arguments, herramientas_ofrecidas)
+                if argumentos is None:
+                    # No se ejecuta ni se anota nada: se le devuelve el error para que corrija.
+                    traza.tool(llamada.function.name, {}, ok=False, nota=error_de_forma)
+                    traza.freno("argumentos_con_otra_forma")
+                    mensajes.append({"role": "tool", "tool_call_id": llamada.id, "content": json.dumps({
+                        "ok": False, "error": error_de_forma,
+                        "que_hacer": "Vuelve a llamar a la herramienta con los argumentos del esquema."},
+                        ensure_ascii=False)})
+                    continue
                 if llamada.function.name == "responder_propuesta":
                     hora_dicha, hora_del_codigo = estado.hora, estado.hora_del_codigo
                     ok = booking.contestar_alternativa_de_precio(

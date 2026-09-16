@@ -38,10 +38,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from typing import Any, Dict, List, Optional
 
-from backend import agenda, appstate, clients, db, rag, settings
+from backend import agenda, appstate, clients, db, rag, settings, textnorm
 
 # Lo que un cliente puede querer. Cerrada a proposito: una lista abierta hace que
 # el modelo invente etiquetas y que las reglas del negocio no casen nunca.
@@ -415,22 +416,30 @@ def extraer_datos_servicio(
             max_tokens=120,
             response_format={"type": "json_object"},
         )
-        datos = json.loads((respuesta.choices[0].message.content or "").strip())
+        datos = textnorm.objeto_json((respuesta.choices[0].message.content or "").strip())
     except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
         settings.logger.warning("[servicio] no se pudo extraer (%s): %s", cliente_id, exc)
+        return None
+    if datos is None:
+        # Una lista, `null` o un texto no son los datos pedidos (bloque B, 16-sep-2026).
+        settings.logger.warning("[servicio] respuesta sin forma de objeto (%s)", cliente_id)
         return None
 
     from backend import catalog_pick
 
+    def campo(nombre: str) -> str:
+        return _norm(textnorm.texto_de_json(datos.get(nombre)))
+
     # La talla se comprueba tambien sobre el texto: si el modelo no la ve pero ella
     # dijo "por los hombros", el catalogo sabe que eso es "medio".
-    talla = _norm(datos.get("talla")) or catalog_pick.talla_de(texto)
+    talla = campo("talla") or catalog_pick.talla_de(texto)
+    edad = datos.get("edad")
     return {
-        "familia": _norm(datos.get("familia"))[:40],
-        "tecnica": _norm(datos.get("tecnica"))[:60],
+        "familia": campo("familia")[:40],
+        "tecnica": campo("tecnica")[:60],
         "talla": talla[:20],
-        "para_quien": _norm(datos.get("para_quien"))[:20],
-        "edad": datos.get("edad"),
+        "para_quien": campo("para_quien")[:20],
+        "edad": edad if (textnorm.texto_de_json(edad) or edad is None) and not isinstance(edad, bool) else None,
         "texto": texto[:400],
     }
 
@@ -656,18 +665,30 @@ def classify(
             response_format={"type": "json_object"},
         )
         crudo = (respuesta.choices[0].message.content or "").strip()
-        datos = json.loads(crudo)
+        datos = textnorm.objeto_json(crudo)
     except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
         settings.logger.warning("[intents] no se pudo clasificar (%s): %s", cliente_id, exc)
         return None
+    if datos is None:
+        # Una lista, `null` o un texto no son una clasificación (bloque B, 16-sep-2026).
+        settings.logger.warning("[intents] respuesta sin forma de objeto (%s)", cliente_id)
+        return None
 
-    intencion = _norm(datos.get("intencion"))
+    intencion = _norm(textnorm.texto_de_json(datos.get("intencion")))
     if intencion not in INTENCIONES:
         return None
-    try:
-        confianza = max(0.0, min(1.0, float(datos.get("confianza") or 0)))
-    except (TypeError, ValueError):
+    bruta = datos.get("confianza")
+    # Una confianza es un número finito: `true` no es 1.0 ni NaN la da por segura
+    # (`min(1.0, nan)` devuelve 1.0). Revisión de Astra a cb46dae.
+    if isinstance(bruta, str):
+        try:
+            bruta = float(bruta.strip())
+        except ValueError:
+            bruta = None
+    if isinstance(bruta, bool) or not isinstance(bruta, (int, float)) or not math.isfinite(bruta):
         confianza = 0.0
+    else:
+        confianza = max(0.0, min(1.0, float(bruta)))
     if confianza < CONFIANZA_MINIMA:
         settings.logger.info(
             "[intents] descartada por poca confianza (%.2f) en %s: %s",
@@ -676,17 +697,28 @@ def classify(
         return None
     resultado = {
         "intencion": intencion,
-        "familia": _norm(datos.get("familia"))[:60],
+        "familia": _norm(textnorm.texto_de_json(datos.get("familia")))[:60],
         "confianza": confianza,
         "fuente": "modelo",
         "qa_id": "",
         "qa_answer": "",
     }
     # ¿Le estan haciendo una de las preguntas que el negocio ya tiene respondidas?
-    try:
-        indice = int(datos.get("pregunta") or 0)
-    except (TypeError, ValueError):
-        indice = 0
+    bruto = datos.get("pregunta")
+    indice = 0
+    if isinstance(bruto, int) and not isinstance(bruto, bool):
+        indice = bruto
+    elif isinstance(bruto, float) and math.isfinite(bruto) and bruto.is_integer():
+        indice = int(bruto)
+    elif isinstance(bruto, str):
+        # Solo cifras ASCII: «²» pasa isdigit() pero int() lo rechaza y cortaba classify
+        # (revisión de Astra a 1d6e054). La conversión sigue protegida.
+        limpio = bruto.strip()
+        if limpio.isascii() and limpio.isdecimal():
+            try:
+                indice = int(limpio)
+            except ValueError:
+                indice = 0
     if 1 <= indice <= len(preguntas):
         elegida = preguntas[indice - 1]
         # Y que vaya de lo MISMO. Medido en la simulacion del 2-sep: a "quiero
