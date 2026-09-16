@@ -33,6 +33,17 @@ mensajero.
 
 ## En curso
 
+### Comparación documental — 16-sep-2026 22:08 Europe/Madrid
+
+- Astra: auditoría de prácticas publicadas por Rasa, Anthropic, Intercom y Langfuse
+  frente al código local; [COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE.md](COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE.md).
+- Se aprovechan trazas, estado CAS, banco y paso a persona existentes. Prioridad
+  propuesta: reproducir salida no validada al agotar vueltas, contratos JSON y
+  consumo completo; después piloto de selección estructurada de servicios.
+- Solo investigación y planificación: riesgos de lectura estática pendientes de
+  reproducción, sin tests nuevos, cambio de código o modelo real. Sin procesos de
+  implementación ni despliegue iniciados. Repartir bloques con Claude antes de editar.
+
 ### Relevo vigente — 16-sep-2026 21:55 Europe/Madrid
 
 - Despliegue confirmado por registro y buzón de Claude: `c110bd9`, código

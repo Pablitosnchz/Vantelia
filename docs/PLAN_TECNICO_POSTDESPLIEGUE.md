@@ -4,6 +4,12 @@
 equipo sin depender de nuevas respuestas, catálogo o conexión de Alicia.
 Planificación, no implementación iniciada ni autorización de despliegue.
 
+Actualización tras comparación documental del 16-sep:
+[COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE.md](COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE.md).
+Antes del piloto de selección se priorizan verificar la salida al agotar vueltas,
+contratos JSON y cobertura de consumo. No se necesita otra plataforma de trazas:
+ya existen `Traza` y `resumen_del_dia`. Se conserva el alcance de los bloques de abajo.
+
 ## Referencia estable
 
 Registro y buzón de Claude confirman despliegue de `c110bd9` a las 21:35, código
