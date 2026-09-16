@@ -917,12 +917,13 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             estado.hora_del_codigo = False
         # Si le faltaban apellidos y los ha dado, el nombre mas completo manda: el
         # resumen tiene que salir con ellos (dos apellidos a clientas nuevas).
-        nombre_nuevo = str(argumentos.get("nombre") or "").strip()
+        # Un nombre que ella no ha escrito no entra (`nombre_no_dicho`, cierre de Alicia, 16-sep-2026).
+        nombre_nuevo = "" if resultado.get("nombre_no_dicho") else str(argumentos.get("nombre") or "").strip()
         if nombre_nuevo and estado.nombre and _amplia_el_nombre(estado.nombre, nombre_nuevo):
             estado.nombre = nombre_nuevo
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
-            if clave == "nombre" and _es_nombre_de_relleno(valor):
+            if clave == "nombre" and (_es_nombre_de_relleno(valor) or resultado.get("nombre_no_dicho")):
                 continue
             if valor and not getattr(estado, clave, ""):
                 setattr(estado, clave, valor)

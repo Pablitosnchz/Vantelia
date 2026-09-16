@@ -100,6 +100,34 @@ def test_el_freno_de_apellidos_marca_el_nombre_que_ella_no_dijo(api_module, monk
     assert dicho.get("conserva_los_datos") and dicho.get("nombre_no_dicho") is False, dicho
 
 
+def test_un_nombre_que_no_ha_escrito_no_es_el_titular_de_la_clienta_conocida(api_module):  # noqa: F811
+    """Bloque 2 del cierre de Alicia (16-sep-2026). A una clienta conocida no se le aplica el freno de
+    apellidos, así que un nombre que se inventaba el modelo llegaba al resumen como titular de la
+    cita. Solo un nombre que ella ha escrito («es para mi hija Laura Ruiz Gomez») lo es."""
+    from backend import agent, reserva
+
+    conocida = {"nombre": "Ana Ruiz Perez"}
+    inventado = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia Lopez"), telefono="34600111998",
+        quien=conocida, remate_manual=True, dicho="Quiero un grey blending el jueves a las 10:30"))
+    assert inventado.get("pendiente_de_confirmacion") and inventado.get("nombre_no_dicho") is True, inventado
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Maria Garcia Lopez"), inventado)
+    assert estado.nombre == "", "la cita iba a salir a nombre de alguien que nadie ha nombrado"
+
+    hija = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Laura Ruiz Gomez"), telefono="34600111998",
+        quien=conocida, remate_manual=True, dicho="Es para mi hija Laura Ruiz Gomez, un grey blending"))
+    assert hija.get("pendiente_de_confirmacion") and not hija.get("nombre_no_dicho"), hija
+    reserva.anotar_resultado(estado, "crear_cita", dict(ARGUMENTOS, nombre="Laura Ruiz Gomez"), hija)
+    assert estado.nombre == "Laura Ruiz Gomez"
+
+    propia = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita", dict(ARGUMENTOS, nombre="Ana Ruiz Perez"), telefono="34600111998",
+        quien=conocida, remate_manual=True, dicho="Quiero un grey blending el jueves"))
+    assert not propia.get("nombre_no_dicho"), "su propio nombre de la ficha no hace falta que lo escriba"
+
+
 @pytest.fixture
 def turno_whatsapp(api_module, monkeypatch):  # noqa: F811
     from backend import agent, appstate, messaging, reserva, whatsapp

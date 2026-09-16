@@ -607,9 +607,16 @@ async def _ejecutar(
         # El canal quiere que la cita la confirme la clienta con un boton. No basta
         # con no forzar la herramienta: el modelo la llamaba igual y la cita nacia
         # antes de que ella confirmase nada. Aqui se le impide de verdad.
+        dado = str(argumentos.get("nombre") or "").strip()
         return {
             "ok": False,
             "pendiente_de_confirmacion": True,
+            # A una clienta conocida no le salta el freno de apellidos: un nombre que no ha
+            # escrito (inventado por el modelo) no pasa a ser el titular de la cita. Su nombre
+            # de la ficha no hace falta que lo escriba (cierre de Alicia, bloque 2, 16-sep-2026).
+            "nombre_no_dicho": bool(
+                dicho and dado and textnorm.normalizar(dado) != textnorm.normalizar(conocida)
+                and not _nombre_aparece_en(dicho, dado)),
             "error": "Todavia no se puede crear: lo confirma la clienta.",
             # OJO a como se le pide: con "dile que se lo pasas para confirmar"
             # contestaba "voy a pasar esto para que lo confirmen", que suena a que
