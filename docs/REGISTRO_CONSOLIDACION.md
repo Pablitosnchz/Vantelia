@@ -1701,3 +1701,21 @@ a fin en todas.
 - Siguiente: Claude incorpora el protocolo y sus resultados del SHA definitivo;
   prueba operativa cuando estén conectados y autorizados entorno y destinatarios.
 - Sin código, push, despliegue, acceso a producción ni mensajes a clientas.
+
+## 2026-09-16 21:30–21:40 Europe/Madrid — OK de Astra, integración y despliegue de c110bd9 (Claude)
+
+- Astra: «VEREDICTO: OK al codigo del SHA exacto 30c5e15», con las excepciones aplazadas por Pablo; 56 dirigidos verdes
+  sobre ese SHA, sin hallazgos nuevos. No acredita la prueba con Meta ni los recordatorios reales.
+- Integrado en `main`: `claude/servicio-y-titular` (30c5e15) y `astra/aceptacion-operativa-alicia` (43d0ea6, docs). Dos
+  conflictos solo en este registro, resueltos conservando las entradas de los dos en orden. Código de `main` idéntico al
+  de 30c5e15 (`git diff 30c5e15 main` sobre backend, tests, evals, scripts, UIs, api y deploy: 0 ficheros).
+- Decisión de Pablo (AskUserQuestion): «Desplegar ya». `main` subido (c110bd9) y `deploy/deploy.ps1 -SkipLocalChecks`
+  (suite completa ya verde sobre el mismo código): copia `/srv/vantelia-backups/pre-deploy-20260916-193453.db`, health ok
+  y humo 5/5.
+- Comprobado en la app viva: VERSION.json c110bd9 sin cambios pendientes; funciones nuevas presentes (rechazo persistente,
+  aviso de precio, ficha, ordinales); Alicia con un apellido, sin precios en la agenda y con precios ocultos; Pack
+  maquillaje y recogido 90 min; metareview sin familia «primera»; «en vez del corte quiero un elumen» no frena; health ok
+  (28 clientes).
+- Siguiente, según `docs/ENTREGA_ALICIA.md`: Alicia conecta su número y añade un método de pago en Meta, prueba corta
+  (`docs/QA_WHATSAPP_ALICIA.md`) y 48 h de observación. Pendiente de Alicia: lista de precios, Pack elumen largo y pasos
+  de los alisados.
