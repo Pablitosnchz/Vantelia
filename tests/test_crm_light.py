@@ -63,7 +63,8 @@ def test_crm_deduplicates_email_and_phone(api_module):
             "SELECT entity_type FROM crm_contact_links WHERE contact_id = ? ORDER BY entity_type",
             (first_id,),
         ).fetchall()
-    assert row["name"] == "Contacto actualizado"
+    # Decisión de Pablo (16-sep-2026): una cita a otro nombre no renombra la ficha de ese teléfono.
+    assert row["name"] == "Contacto inicial"
     assert row["status"] == "confirmado"
     assert [item["entity_type"] for item in links] == ["booking", "lead"]
 
@@ -82,6 +83,37 @@ def test_sin_email_ni_telefono_el_mismo_nombre_es_el_mismo_contacto(api_module):
                                    (nombre,)).fetchone()[0]
         enlaces = connection.execute("SELECT COUNT(*) FROM crm_contact_links WHERE contact_id=?", (primero,)).fetchone()[0]
     assert total == 1 and enlaces == 2
+
+
+def test_una_cita_para_otra_persona_no_renombra_la_ficha_del_telefono(api_module):
+    """Decisión de Pablo, 16-sep-2026 («ficha intacta»). Una clienta conocida pide por WhatsApp cita
+    para su hija desde su teléfono: la cita va a nombre de la hija y la ficha de la madre seguía
+    tomando el nombre de la última cita, así que el asistente la saludaba como a su hija."""
+    telefono = "+34622%06d" % (uuid.uuid4().int % 10**6)
+    madre = api_module._crm_upsert_contact("demo", name="Ana Ruiz Perez", phone=telefono, source="whatsapp",
+                                           entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    hija = api_module._crm_upsert_contact("demo", name="Laura Ruiz Gomez", phone=telefono, source="whatsapp",
+                                          entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    assert hija == madre, "la cita tiene que quedar en la ficha de ese teléfono"
+    with api_module._get_db_connection() as connection:
+        nombre = connection.execute("SELECT name FROM crm_contacts WHERE id=?", (madre,)).fetchone()[0]
+    assert nombre == "Ana Ruiz Perez", "la ficha de la madre ha pasado a llamarse como su hija"
+
+
+@pytest.mark.parametrize("antes, despues", [
+    ("", "Ana Ruiz Perez"),
+    ("Ana", "Ana Ruiz Perez"),
+    ("Ana Ruiz", "ana ruíz pérez"),
+    ("ana ruiz perez", "Ana Ruiz Pérez"),
+])
+def test_un_nombre_que_completa_el_de_la_ficha_si_la_actualiza(api_module, antes, despues):
+    telefono = "+34633%06d" % (uuid.uuid4().int % 10**6)
+    ficha = api_module._crm_upsert_contact("demo", name=antes, phone=telefono, source="whatsapp")
+    api_module._crm_upsert_contact("demo", name=despues, phone=telefono, source="whatsapp",
+                                   entity_type="booking", entity_id="bk_" + uuid.uuid4().hex[:8])
+    with api_module._get_db_connection() as connection:
+        nombre = connection.execute("SELECT name FROM crm_contacts WHERE id=?", (ficha,)).fetchone()[0]
+    assert nombre == despues
 
 
 def test_un_nombre_sin_datos_no_se_junta_con_alguien_que_tiene_telefono(api_module):
