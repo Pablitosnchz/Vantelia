@@ -3312,6 +3312,26 @@ def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
     return any(familia and familia in hablando_de for familia in familias)
 
 
+def _aviso_del_precio_que_no_se_da(cliente_id: str, lo_que_ha_escrito) -> str:
+    """Qué se le pide al modelo al quitar una cifra de dinero de su respuesta.
+
+    Pedía siempre reescribir «ofreciéndole esa cita» de valoración, también a quien acababa
+    de rechazarla: con los precios ocultos, la fianza de las mechas en el borrador bastaba
+    para que el propio código le hiciera insistir en el diagnóstico (cierre de Alicia,
+    16-sep-2026, caso crítico `no-quiero-diagnostico-quiero-cita`). Si ya lo ha rechazado
+    -y la valoración no es obligatoria para lo que pide-, se quita la cifra y se sigue.
+    """
+    from backend import booking
+
+    if booking.renuncio_al_diagnostico_en_mensajes(cliente_id, lo_que_ha_escrito):
+        return ("NO puedes dar cifras de dinero: este negocio no las da por mensaje. Reescribe tu "
+                "respuesta sin ninguna cifra. Ella YA ha dicho que no quiere la cita de valoracion: "
+                "no se la vuelvas a ofrecer ni le hables del diagnostico; sigue con lo que pide.")
+    return ("NO tienes ese precio y no puedes inventartelo ni dar un rango aproximado: este "
+            "negocio lo dice en la cita de valoracion. Reescribe tu respuesta sin ninguna cifra, "
+            "explicandole por que y ofreciendole esa cita.")
+
+
 PREGUNTA_EL_PRECIO = ("precio", "precios", "cuanto cuesta", "cuanto vale",
                       "cuanto me costaria", "cuanto seria", "tarifa", "tarifas",
                       "presupuesto", "cuanto sale", "que vale", "coste",
@@ -4233,11 +4253,8 @@ async def responder(
                     traza.freno("precio_que_no_se_da")
                     mensajes.append({
                         "role": "system",
-                        "content": ("NO tienes ese precio y no puedes inventartelo ni "
-                                    "dar un rango aproximado: este negocio lo dice en "
-                                    "la cita de valoracion. Reescribe tu respuesta sin "
-                                    "ninguna cifra, explicandole por que y ofreciendole "
-                                    "esa cita."),
+                        "content": _aviso_del_precio_que_no_se_da(cliente_id, [str(mensaje)] + [
+                            str(m.get("content") or "") for m in historial if m.get("role") == "user"]),
                     })
                     continue
                 # 3 bis) Los minutos que nadie ha pedido. Queja literal de la
