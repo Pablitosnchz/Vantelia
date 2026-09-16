@@ -441,3 +441,65 @@ def test_pedir_algo_mas_sigue_contando_lo_anterior(salon, api_module):
         freno = agent._freno_de_varios_servicios(
             CLIENTE, _mensajes(*conversacion), {"servicio": "Corte senora"})
         assert freno is not None, "dejó pasar una cita que se come otro servicio: %r" % (conversacion,)
+
+
+# ─── Sustituir dentro del mismo mensaje (bloque 2 del cierre de Alicia, 16-sep-2026) ──
+
+@pytest.mark.parametrize("cambio", [
+    "en vez del corte quiero un elumen",
+    "en lugar del corte, un elumen",
+    "no quiero el corte, quiero un elumen",
+])
+def test_quitar_lo_pedido_en_el_mismo_mensaje_no_lo_sigue_contando(salon, api_module, cambio):
+    """«En vez de X quiero Y» nombra X para quitarlo. Contarlo como pedido frenaba la cita
+    del elumen preguntándole por un corte que acababa de descartar (limitación de 18248f2)."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora", cambio), {"servicio": "Elumen corto-medio"})
+    assert freno is None, "quitó el corte y se le frena como si lo quisiera: %r" % cambio
+
+
+def test_quitar_uno_no_borra_lo_demas_que_pidio(salon, api_module):
+    """Tras corte y elumen, «en vez del elumen quiero un secado» deja corte y secado: la cita
+    de solo el secado sigue frenada y el aviso no le vuelve a hablar del elumen."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora y un elumen", "en vez del elumen quiero un secado"),
+        {"servicio": "Secado al aire medio"})
+    assert freno is not None, "se come el corte que no ha quitado"
+    assert "elumen" not in freno["error"].lower(), freno["error"]
+
+
+def test_sustituir_por_dos_servicios_no_arrastra_el_anterior(salon, api_module):
+    """«Mejor quiero un corte y un secado» tras pedir el elumen: el «y un» une lo nuevo, no lo
+    suma a lo anterior. Se frena por corte y secado, sin el elumen."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un elumen", "mejor quiero un corte y un secado"),
+        {"servicio": "Corte senora"})
+    assert freno is not None, "corte y secado en una cita de solo corte"
+    assert "elumen" not in freno["error"].lower(), freno["error"]
+
+
+def test_quitar_una_profesional_no_quita_servicios(salon, api_module):
+    """«en vez de Lorena quiero a Conchi» no nombra servicios: no quita nada."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora y un elumen", "en vez de Lorena quiero a Conchi"),
+        {"servicio": "Corte senora"})
+    assert freno is not None
+
+
+def test_describir_con_no_quiero_no_quita_el_servicio(salon, api_module):
+    """«no quiero que me cortéis mucho» describe el corte, no lo quita: en la duda, se frena."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora y un elumen",
+                           "no quiero que me corteis mucho, quiero el elumen"),
+        {"servicio": "Elumen corto-medio"})
+    assert freno is not None, "tomó una descripción del corte por quitarlo"

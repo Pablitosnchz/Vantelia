@@ -2081,8 +2081,51 @@ _ELIGE_LO_PEDIDO = re.compile(
 _SUSTITUYE_LO_PEDIDO = re.compile(
     r"\b(pues quiero|mejor quiero|ahora quiero|no,? quiero|en vez de|en lugar de|lo que quiero es|"
     r"he cambiado de idea|cambio de idea)\b")
+# Suman a lo anterior. «y un» no está: une lo que pide en ese mismo mensaje («mejor quiero un
+# corte y un secado», tras el elumen, no es sumar el corte y el secado al elumen).
 _ANYADE_A_LO_PEDIDO = re.compile(
-    r"\b(tambien|ademas|aparte|junto con|a la vez|y (un|una|unas|unos|el|la|los|las))\b")
+    r"\b(tambien|ademas|aparte|junto con|a la vez)\b")
+# Lo que va detrás se nombra para QUITARLO («en vez del corte quiero un elumen», «no quiero el
+# corte, quiero un elumen»), y llega hasta una pausa o hasta lo que pide en su lugar.
+_QUITA_LO_PEDIDO = re.compile(r"\b(en vez del?|en lugar del?|no quiero)\b")
+_FIN_DE_LO_QUITADO = re.compile(r"[,.;:!?]|\b(quiero|prefiero)\b")
+
+
+def _lo_que_quita(cliente_id: str, texto: str):
+    """(mensaje sin lo que quita, raíces de familia quitadas) de «en vez de X quiero Y».
+
+    Solo cuenta si lo quitado y lo que pide en su lugar son familias del catálogo distintas.
+    «en vez de Lorena quiero a Conchi» no quita servicios, y «no quiero que me cortéis mucho»
+    describe, no quita: en la duda no se quita nada y el freno pregunta.
+    """
+    plano = catalog_pick._norm(texto)
+    trozos, quitadas, desde = [], set(), 0
+    for marca in _QUITA_LO_PEDIDO.finditer(plano):
+        if marca.start() < desde:
+            continue
+        fin = _FIN_DE_LO_QUITADO.search(plano, marca.end())
+        hasta = fin.start() if fin else len(plano)
+        clausula = plano[marca.end():hasta]
+        if clausula.strip().startswith("que "):
+            continue
+        raices = set(catalog_pick._raices_pedidas(cliente_id, clausula))
+        if raices:
+            trozos.append(plano[desde:marca.start()])
+            quitadas |= raices
+            desde = hasta
+    resto = " ".join(trozos + [plano[desde:]])
+    if not quitadas:
+        return texto, set()
+    piden = set(catalog_pick._raices_pedidas(cliente_id, resto))
+    if not piden or piden & quitadas:
+        return texto, set()
+    return resto, quitadas
+
+
+def _sin_lo_quitado(texto: str, quitadas) -> str:
+    """Lo que dijo antes, sin las palabras de las familias que acaba de quitar."""
+    return " ".join(palabra for palabra in texto.split()
+                    if not (catalog_pick._raices(palabra) & quitadas))
 
 
 def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
@@ -2095,12 +2138,20 @@ def _lo_que_pide_ahora(cliente_id: str, mensajes: List[Dict[str, Any]]) -> str:
     habia dicho. Sustituir no es sumar: cuenta desde el ultimo mensaje que nombra un
     servicio con una forma de cambiar de idea y sin «tambien/ademas». Lo que se suma
     («y tambien un corte», «he pensado que quiero un alisado») sigue contando entero.
+    Quitar uno («en vez del elumen quiero un secado») solo quita ese: lo demás sigue.
     """
     textos = [str(m.get("content") or "").strip() for m in mensajes
               if str(m.get("role") or "") == "user" and isinstance(m.get("content"), str)
               and str(m.get("content") or "").strip()]
     desde = 0
     for indice, texto in enumerate(textos):
+        resto, quitadas = _lo_que_quita(cliente_id, texto)
+        if quitadas:
+            # Cierre de Alicia, bloque 2 (16-sep-2026): nombrar algo para quitarlo no es pedirlo.
+            textos[indice] = resto
+            for anterior in range(desde, indice):
+                textos[anterior] = _sin_lo_quitado(textos[anterior], quitadas)
+            continue
         plano = catalog_pick._norm(texto)
         elige = bool(_ELIGE_LO_PEDIDO.search(plano))
         if not (elige or _SUSTITUYE_LO_PEDIDO.search(plano)) or _ANYADE_A_LO_PEDIDO.search(plano):
