@@ -94,6 +94,22 @@ CASOS = [
         "debe": ["Resumen de tu cita"],
         "no_debe": ["cual de los dos", "o las mechas", "Jose", "Lucia"],
     },
+    {
+        "id": "en-vez-de-mechas-grey-blending",
+        "gravedad": "critico",
+        "solo_si": ["tiene_servicio:mechas", "tiene_servicio:grey blending"],
+        "por_que": ("Cierre de Alicia, bloque 2 (16-sep-2026): «en vez de las mechas quiero un grey "
+                    "blending» nombra las mechas para quitarlas y el freno de varios servicios las "
+                    "contaba como pedidas: le preguntaba por algo que acababa de descartar."),
+        "servicio_calendario": "Pack grey blending medio",
+        "horas_calendario": ["10:30"],
+        "mensajes": ["Quiero coger una cita para hacerme unas mechas",
+                     "Pues tengo el cabello por los hombros yo creo que medio",
+                     "En vez de las mechas quiero un grey blending", "Medio",
+                     "el {dia_abierto_nombre} a las 10:30", "me llamo Ana Ruiz Perez"],
+        "debe": ["Resumen de tu cita"],
+        "no_debe": ["cual de los dos", "o las mechas", "Jose", "Lucia"],
+    },
     # ─── La demo del 8-sep-2026, delante de la duenya ──────────────────────
     {
         "id": "palabra-suelta-no-es-un-servicio",
