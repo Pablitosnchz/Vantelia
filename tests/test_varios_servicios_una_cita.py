@@ -448,7 +448,6 @@ def test_pedir_algo_mas_sigue_contando_lo_anterior(salon, api_module):
 @pytest.mark.parametrize("cambio", [
     "en vez del corte quiero un elumen",
     "en lugar del corte, un elumen",
-    "no quiero el corte, quiero un elumen",
 ])
 def test_quitar_lo_pedido_en_el_mismo_mensaje_no_lo_sigue_contando(salon, api_module, cambio):
     """«En vez de X quiero Y» nombra X para quitarlo. Contarlo como pedido frenaba la cita
@@ -549,3 +548,18 @@ def test_no_quiero_perder_algo_no_es_quitarlo(salon, api_module):
         CLIENTE, _mensajes("Quiero un corte de senora", "no quiero perder el corte, quiero tambien un elumen"),
         {"servicio": "Elumen corto-medio"})
     assert freno is not None, "se ha comido el corte"
+
+
+@pytest.mark.parametrize("texto", [
+    "No quiero el corte demasiado corto, quiero un elumen",
+    "No quiero el corte con Lorena, quiero el elumen con Conchi",
+])
+def test_matizar_con_no_quiero_no_quita_el_servicio(salon, api_module, texto):
+    """Revisión de Astra a e81f010: «no quiero el corte demasiado corto» matiza el corte, no lo quita.
+    Quitarlo dejaba reservar solo el elumen. Una negación parcial no acredita sustituir el servicio:
+    con «no quiero» se pregunta; quitar solo lo hace «en vez de/en lugar de»."""
+    from backend import agent
+
+    freno = agent._freno_de_varios_servicios(
+        CLIENTE, _mensajes("Quiero un corte de senora", texto), {"servicio": "Elumen corto-medio"})
+    assert freno is not None, "se ha comido el corte: %r" % texto

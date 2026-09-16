@@ -2095,9 +2095,10 @@ _ANYADE_A_LO_PEDIDO = re.compile(
 # secado», revisión de Codex a 78d931e), y une lo nuevo cuando trae varias («mejor quiero un
 # corte y un secado», tras el elumen, es cambiar el elumen por las dos).
 _UNE_LO_PEDIDO = re.compile(r"\by (un|una|unas|unos|el|la|los|las)\b")
-# Lo que va detrás se nombra para QUITARLO («en vez del corte quiero un elumen», «no quiero el
-# corte, quiero un elumen»), y llega hasta una pausa o hasta lo que pide en su lugar.
-_QUITA_LO_PEDIDO = re.compile(r"\b(en vez del?|en lugar del?|no quiero)\b")
+# Lo que va detrás se nombra para QUITARLO («en vez del corte quiero un elumen»), y llega hasta
+# una pausa o hasta lo que pide en su lugar. «no quiero» no está: «no quiero el corte demasiado
+# corto» o «no quiero el corte con Lorena» matizan, no quitan (revisión de Astra a e81f010).
+_QUITA_LO_PEDIDO = re.compile(r"\b(en vez del?|en lugar del?)\b")
 _FIN_DE_LO_QUITADO = re.compile(r"[,.;:!?]|\b(quiero|prefiero)\b")
 _ARTICULOS = {"el", "la", "los", "las", "un", "una", "unos", "unas", "lo"}
 
