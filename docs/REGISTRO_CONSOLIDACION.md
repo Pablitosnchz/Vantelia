@@ -1635,3 +1635,27 @@ a fin en todas.
   declara lo que quita y el resumen muestra «No incluye»); «es para mi hija» sin nombre; las apuntadas arriba.
 - Datos: todas las copias de BD de producción y configs de medición borradas del scratchpad y del servidor.
 - Siguiente: revisión de Astra de e81f010 (encargo entregado en su sesión); con su OK, decisión de Pablo sobre desplegar.
+
+## 2026-09-16 17:40–23:15 Europe/Madrid — revisión de Astra y candidata 30c5e15 (Claude)
+
+- Revisión de Astra a e81f010: CAMBIOS (nota en el buzón de su árbol `E:/Vantelia-astra-revision-e81`, 17:45).
+  Crítico: «No quiero el corte demasiado corto, quiero un elumen» y «No quiero el corte con Lorena, quiero el elumen con
+  Conchi» quitaban el corte. Además, el fallo crítico del diagnóstico impide aceptar.
+- 3820552: «no quiero X» deja de quitar el servicio; solo lo hacen «en vez de/en lugar de» (tests de Astra en rojo antes,
+  verdes después).
+- 30c5e15: causa del fallo del diagnóstico en el código. Leído en agent_turns: el borrador llevaba la fianza en euros y,
+  con los precios ocultos, `precio_que_no_se_da` mandaba reescribir «ofreciéndole esa cita» de valoración aunque la
+  clienta la acabara de rechazar. Ahora, si ya renunció (`renuncio_al_diagnostico_en_mensajes`), se quita la cifra sin
+  volver a ofrecerla. Test con modelo simulado en rojo antes y verde después, con su control.
+- Medición de **30c5e15** con copia nueva de producción snap11 (16-sep, 19:5x) y cfg11, todas las tiradas con sucio=0:
+  suite completa 2874 passed, 1 skipped, 0 fallos. Banco de Alicia 45 medidos: 45 al primer intento, 0 tras reintento,
+  0 fallos, 0 no medidos, 1 no aplica. Metareview 16/16 al primer intento. Críticos ×6: 36/36 al primer intento.
+  `no-quiero-diagnostico-quiero-cita` ×10: 10/10 al primer intento.
+- Referencia 311b58e con la misma copia: Alicia 44 al primer intento + 1 fallo crítico (`en-vez-de-mechas-grey-blending`);
+  metareview 16/16 (el fallo `horario-escrito-manda` de snap10 no se repite).
+- Documentos: `docs/ENTREGA_ALICIA.md` (pasos hasta el uso real) y `docs/QA_WHATSAPP_ALICIA.md` reescrito como prueba
+  corta de la candidata. Astra entregó en paralelo `docs/ACEPTACION_OPERATIVA_ALICIA.md` (43d0ea6, rama propia), pendiente
+  de integrar.
+- Datos: snap11, cfg11, copias de metareview y todas las BD de medición borradas; nada en /tmp del servidor.
+- Siguiente: veredicto de Astra sobre el código de 30c5e15 (pedido); con OK, orden de Pablo para desplegar. Sin push ni
+  despliegue.
