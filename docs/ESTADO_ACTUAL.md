@@ -33,6 +33,19 @@ mensajero.
 
 ## En curso
 
+### Relevo de aceptación operativa — 16-sep-2026 20:10 Europe/Madrid
+
+- Claude implementa y mide `30c5e15` en `claude/servicio-y-titular`, según su
+  relevo de las 19:59. No se duplican sus suites ni bancos.
+- Astra revisó `3820552` y `30c5e15`: OK acotado, 56 dirigidos verdes; no equivale
+  a aceptación del candidato completo ni medición con modelo real.
+- Entrega independiente en `astra/aceptacion-operativa-alicia`:
+  [ACEPTACION_OPERATIVA_ALICIA.md](ACEPTACION_OPERATIVA_ALICIA.md), protocolo del
+  bloque 5 y acta vacía. Ninguna prueba operativa se afirma ejecutada.
+- Siguiente: resultados de Claude y completar acta. Meta requiere conexión y
+  destinatarios/entorno autorizados. Excepciones aplazadas por Pablo según relevo.
+- Sin cambios de código, pruebas nuevas en esta entrega, push ni despliegue.
+
 ### Relevo vigente — 16-sep-2026 11:20 Europe/Madrid
 
 - **Testigo:** Astra, implementación del bloque 1 de CIERRE_ALICIA_16SEP.
