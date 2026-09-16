@@ -7,6 +7,7 @@ invalida (contrato historico del monolito).
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from datetime import date, datetime, timedelta
@@ -647,6 +648,35 @@ def _parse_duration_minutes_text(text: str) -> int:
     return total if total > 0 else 0
 
 
+def _sin_constantes_no_finitas(nombre: str):
+    raise ValueError("JSON con %s" % nombre)
+
+
+def objeto_json(crudo: Any) -> Optional[Dict[str, Any]]:
+    """Un objeto JSON, o None si lo que llega es otra cosa.
+
+    JSON válido no es JSON con la forma esperada: el modelo puede devolver una lista, `null`,
+    un texto o `NaN` (que Python acepta y que `min(1.0, nan)` convierte en 1.0). Bloque B de
+    COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE (16-sep-2026).
+    """
+    if not isinstance(crudo, (str, bytes)):
+        return None
+    try:
+        datos = json.loads(crudo, parse_constant=_sin_constantes_no_finitas)
+    except (ValueError, TypeError):
+        return None
+    return datos if isinstance(datos, dict) else None
+
+
+def texto_de_json(valor: Any) -> str:
+    """El texto de un campo que tiene que ser texto: números finitos se aceptan, lo demás no."""
+    if isinstance(valor, bool) or valor is None:
+        return ""
+    if isinstance(valor, str):
+        return valor
+    if isinstance(valor, int) or (isinstance(valor, float) and math.isfinite(valor)):
+        return str(valor)
+    return ""
 
 
 def normalizar(texto: str) -> str:

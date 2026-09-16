@@ -38,10 +38,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from typing import Any, Dict, List, Optional
 
-from backend import agenda, appstate, clients, db, rag, settings
+from backend import agenda, appstate, clients, db, rag, settings, textnorm
 
 # Lo que un cliente puede querer. Cerrada a proposito: una lista abierta hace que
 # el modelo invente etiquetas y que las reglas del negocio no casen nunca.
@@ -415,22 +416,30 @@ def extraer_datos_servicio(
             max_tokens=120,
             response_format={"type": "json_object"},
         )
-        datos = json.loads((respuesta.choices[0].message.content or "").strip())
+        datos = textnorm.objeto_json((respuesta.choices[0].message.content or "").strip())
     except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
         settings.logger.warning("[servicio] no se pudo extraer (%s): %s", cliente_id, exc)
+        return None
+    if datos is None:
+        # Una lista, `null` o un texto no son los datos pedidos (bloque B, 16-sep-2026).
+        settings.logger.warning("[servicio] respuesta sin forma de objeto (%s)", cliente_id)
         return None
 
     from backend import catalog_pick
 
+    def campo(nombre: str) -> str:
+        return _norm(textnorm.texto_de_json(datos.get(nombre)))
+
     # La talla se comprueba tambien sobre el texto: si el modelo no la ve pero ella
     # dijo "por los hombros", el catalogo sabe que eso es "medio".
-    talla = _norm(datos.get("talla")) or catalog_pick.talla_de(texto)
+    talla = campo("talla") or catalog_pick.talla_de(texto)
+    edad = datos.get("edad")
     return {
-        "familia": _norm(datos.get("familia"))[:40],
-        "tecnica": _norm(datos.get("tecnica"))[:60],
+        "familia": campo("familia")[:40],
+        "tecnica": campo("tecnica")[:60],
         "talla": talla[:20],
-        "para_quien": _norm(datos.get("para_quien"))[:20],
-        "edad": datos.get("edad"),
+        "para_quien": campo("para_quien")[:20],
+        "edad": edad if (textnorm.texto_de_json(edad) or edad is None) and not isinstance(edad, bool) else None,
         "texto": texto[:400],
     }
 
@@ -656,18 +665,24 @@ def classify(
             response_format={"type": "json_object"},
         )
         crudo = (respuesta.choices[0].message.content or "").strip()
-        datos = json.loads(crudo)
+        datos = textnorm.objeto_json(crudo)
     except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
         settings.logger.warning("[intents] no se pudo clasificar (%s): %s", cliente_id, exc)
         return None
+    if datos is None:
+        # Una lista, `null` o un texto no son una clasificación (bloque B, 16-sep-2026).
+        settings.logger.warning("[intents] respuesta sin forma de objeto (%s)", cliente_id)
+        return None
 
-    intencion = _norm(datos.get("intencion"))
+    intencion = _norm(textnorm.texto_de_json(datos.get("intencion")))
     if intencion not in INTENCIONES:
         return None
     try:
-        confianza = max(0.0, min(1.0, float(datos.get("confianza") or 0)))
+        confianza = float(datos.get("confianza") or 0)
     except (TypeError, ValueError):
         confianza = 0.0
+    # NaN o infinito no son una confianza: `min(1.0, nan)` la daba por segura.
+    confianza = max(0.0, min(1.0, confianza)) if math.isfinite(confianza) else 0.0
     if confianza < CONFIANZA_MINIMA:
         settings.logger.info(
             "[intents] descartada por poca confianza (%.2f) en %s: %s",
@@ -676,7 +691,7 @@ def classify(
         return None
     resultado = {
         "intencion": intencion,
-        "familia": _norm(datos.get("familia"))[:60],
+        "familia": _norm(textnorm.texto_de_json(datos.get("familia")))[:60],
         "confianza": confianza,
         "fuente": "modelo",
         "qa_id": "",
