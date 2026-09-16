@@ -1601,7 +1601,7 @@ a fin en todas.
 - Siguiente: terminar metareview y críticos ×6 de d444647, leer cualquier no OK, y pasar el SHA exacto a revisión de
   Astra. Sin push ni despliegue.
 
-## 2026-09-16 13:45–19:30 Europe/Madrid — candidata e81f010 del cierre de Alicia (Claude)
+## 2026-09-16 13:45–17:40 Europe/Madrid — candidata e81f010 del cierre de Alicia (Claude)
 
 - Rama `claude/servicio-y-titular`, candidata congelada **e81f010** (141f6e9..e81f010: bloque 1 de Astra 9bade14/952ae99
   y lo de Claude). Sin push ni despliegue. Producción sigue en 311b58e.
