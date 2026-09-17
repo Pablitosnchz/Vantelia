@@ -3156,6 +3156,12 @@ async def _update_booking_details(
     duracion_pedida = int(getattr(data, "duracion_minutos", 0) or 0)
     if duracion_pedida > 0:
         service_duration = max(5, min(720, duracion_pedida))
+    elif mismo_servicio or not data.servicio:
+        # Mover una cita NO puede encogerla. Una cita rápida de tres horas sin servicio -o una ya
+        # estirada a mano- volvía a la duración del catálogo (30 min por defecto) solo por
+        # cambiarla de hora, y ese rato quedaba libre para el asistente (revisión de Astra a
+        # 19b5dfb). Si cambia el servicio, manda el del servicio nuevo.
+        service_duration = _minutos_que_ocupa_ahora(booking_row) or service_duration
     service_id = service_row["slug"] if service_row else ""
     service_price = int(service_row["price_cents"]) if service_row else 0
     employee_changed = (target_employee["id"] or "") != (booking_row["employee_id"] or "")

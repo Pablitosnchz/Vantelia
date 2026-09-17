@@ -117,6 +117,30 @@ def test_la_duracion_consultada_acota_los_huecos(client: TestClient, api_module)
     assert largas < cortas, "la duración no cambia los huecos que se ofrecen"
 
 
+def test_mover_la_cita_rapida_no_la_encoge(client: TestClient, api_module):
+    """Revisión de Astra a 19b5dfb: al cambiarla de hora, una cita rápida volvía a los
+    30 min del catálogo (que no tiene) y ese rato quedaba libre para el asistente."""
+    cookies = _portal_admin_cookies(api_module)
+    # 60 min: en la agenda de pruebas no cabe una de tres horas, y 60 ya distingue de los 30 por defecto.
+    creada = _crear(client, cookies, duration_minutes=60, hora="09:00", notas="Carmen elumen y secado")
+    assert creada.status_code == 200, creada.text
+    bid = creada.json()["booking_id"]
+    empleado = creada.json().get("employee_id", "")
+    try:
+        # Lo que manda el arrastre de la agenda: profesional, día y hora.
+        movida = client.post(f"/auth/bookings/{bid}/reschedule", cookies=cookies,
+                             json={"employee_id": empleado, "fecha": _dia_habil(20), "hora": "09:00"})
+        assert movida.status_code == 200, movida.text
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            inicio, fin, notas = conn.execute(
+                "SELECT start_at, end_at, notas FROM bookings WHERE id=?", (bid,)).fetchone()
+        ocupa = datetime.strptime(fin, "%Y-%m-%dT%H:%M:%SZ") - datetime.strptime(inicio, "%Y-%m-%dT%H:%M:%SZ")
+        assert ocupa == timedelta(minutes=60), "mover la cita la ha encogido a %s" % ocupa
+        assert "Carmen elumen y secado" in (notas or ""), "al moverla se ha perdido lo que escribió"
+    finally:
+        _borrar(api_module, bid)
+
+
 @pytest.mark.parametrize("duracion", [7, 3, 601])
 def test_una_duracion_rara_se_rechaza(client: TestClient, api_module, duracion):
     cookies = _portal_admin_cookies(api_module)
