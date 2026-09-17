@@ -775,7 +775,8 @@
       background:var(--panel-2); border:1px solid var(--line); border-radius:10px; overflow:hidden;
       box-shadow:0 12px 30px rgba(0,0,0,.35);
     }
-    .nb-ac.open { display:block; }
+    .nb-ac.open { display:block; max-height:320px; overflow-y:auto; }
+    .nb-ac-mas { padding:8px 12px; font-size:0.76rem; color:var(--soft); border-top:1px solid var(--line); }
     .nb-ac-item { padding:8px 12px; cursor:pointer; }
     .nb-ac-item:hover, .nb-ac-item.sel { background:var(--accent-soft); }
     .nb-ac-item b { display:block; font-size:0.88rem; }
@@ -7681,7 +7682,9 @@ async function openNewBookingDrawer(opts = {}) {
     : '<option value="">Agenda general</option>';
   if (opts.employeeId && emps.some(e => e.id === opts.employeeId)) profSel.value = opts.employeeId;
   await loadNbServices();
-  ['nbNombre','nbEmail','nbTelefono','nbNotas'].forEach(id => { document.getElementById(id).value = ''; });
+  // El servicio va en la lista: se quedaba el de la cita anterior y había que borrarlo a mano
+  // en cada cita (vídeo de Alicia, 17-sep-2026).
+  ['nbNombre','nbEmail','nbTelefono','nbNotas','nbServicio'].forEach(id => { document.getElementById(id).value = ''; });
   nbCloseAc();
   // Prefill opcional (rebooking / ficha de cliente).
   if (opts.nombre) document.getElementById('nbNombre').value = opts.nombre;
@@ -7702,11 +7705,8 @@ async function openNewBookingDrawer(opts = {}) {
   campoFecha.value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
   document.getElementById('newBookingDrawer').classList.add('open');
   document.getElementById('newBookingOverlay').classList.add('open');
-  // A escribir directamente: quien coge citas todo el dia no quiere ir al raton
-  // para empezar (peticion del salon). Si venia con servicio prefijado se
-  // selecciona, asi que teclear lo sustituye.
-  const campoSvc = document.getElementById('nbServicio');
-  if (campoSvc) { campoSvc.focus(); campoSvc.select(); }
+  // NO se roba el foco: abrir la ficha y que el cursor saltara al servicio con la lista
+  // desplegada molestaba más que ayudaba (Alicia, 17-sep-2026). Se escribe donde ella pinche.
   await loadNbSlots(opts.time || '');
   // Vino de pinchar la franja de fuera de horario: esa hora no esta entre los
   // huecos ofrecidos -por eso se pincho ahi-, asi que se deja puesta a mano en
@@ -7763,7 +7763,7 @@ function nbSvcCerrar() {
 // "Mechas o balayage-largo"), y prioriza lo que EMPIEZA por lo escrito.
 function nbSvcSugerencias(q) {
   const n = nbSvcNorm(q).trim();
-  if (!n) return nbServicios.slice(0, 8);
+  if (!n) return nbServicios.slice();
   const palabras = n.split(/\s+/);
   const empieza = [], dentro = [];
   nbServicios.forEach(s => {
@@ -7771,13 +7771,19 @@ function nbSvcSugerencias(q) {
     if (!palabras.every(p => heno.includes(p))) return;
     (nbSvcNorm(s.nombre).startsWith(palabras[0]) ? empieza : dentro).push(s);
   });
-  return empieza.concat(dentro).slice(0, 8);
+  return empieza.concat(dentro);
 }
 
-function nbSvcPintar(lista) {
+// Cuantas caben en la lista sin convertirla en un muro. Las demas siguen ahi: la lista
+// tiene scroll y el pie dice cuantas quedan (Alicia: «no me salen todos», con 169 servicios).
+const NB_SVC_VISIBLES = 25;
+
+function nbSvcPintar(todas) {
   const ac = document.getElementById('nbSvcAc');
   if (!ac) return;
-  if (!lista.length) { nbSvcCerrar(); return; }
+  if (!todas.length) { nbSvcCerrar(); return; }
+  const lista = todas.slice(0, NB_SVC_VISIBLES);
+  const restantes = todas.length - lista.length;
   ac.innerHTML = lista.map((s, i) => {
     const bits = [];
     if (s.dur) bits.push(`${s.dur} min`);
@@ -7785,7 +7791,8 @@ function nbSvcPintar(lista) {
     if (s.cat) bits.push(s.cat);
     return `<div class="nb-ac-item${i === nbSvcIdx ? ' sel' : ''}" data-nbsvc="${i}">`
       + `<b>${escapeHtml(s.nombre)}</b><span>${escapeHtml(bits.join(' · ') || 'sin duración configurada')}</span></div>`;
-  }).join('');
+  }).join('')
+    + (restantes ? `<div class="nb-ac-mas">y ${restantes} más: escribe alguna letra para acotar</div>` : '');
   ac.classList.add('open');
   ac.querySelectorAll('[data-nbsvc]').forEach(el => {
     el.addEventListener('mousedown', (e) => {   // mousedown: antes del blur del input
@@ -7813,12 +7820,19 @@ function nbSvcBuscar() {
 // nombre. Si coincide entero se acepta; si solo hay una sugerencia, esa; si hay
 // varias, se le pide que elija en vez de mandar algo que no existe.
 function nbSvcResuelto() {
+  return nbSvcEstado().resuelto;
+}
+
+// Qué hay escrito en el campo de servicio: resuelto (nombre exacto del catálogo), ambiguo
+// (encaja con varios) o desconocido. Sin esto, «elumen» -que encaja con seis- se mandaba como
+// servicio VACÍO y la cita se creaba de 30 min sin avisar (visto al revisar el vídeo de Alicia).
+function nbSvcEstado() {
   const escrito = (document.getElementById('nbServicio')?.value || '').trim();
-  if (!escrito) return '';
+  if (!escrito) return { escrito: '', resuelto: '', coincidencias: 0 };
   const exacto = nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito));
-  if (exacto) return exacto.nombre;
+  if (exacto) return { escrito, resuelto: exacto.nombre, coincidencias: 1 };
   const sug = nbSvcSugerencias(escrito);
-  return sug.length === 1 ? sug[0].nombre : '';
+  return { escrito, resuelto: sug.length === 1 ? sug[0].nombre : '', coincidencias: sug.length };
 }
 
 function nbCloseAc() {
@@ -7899,15 +7913,25 @@ function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
   const completo = !!nombre && (!state.exigirDosApellidos || tieneDosApellidos(nombre));
-  document.getElementById('nbConfirmBtn').disabled = !(completo && hora);
+  const svc = nbSvcEstado();
+  const servicioAMedias = !!svc.escrito && !svc.resuelto;
+  document.getElementById('nbConfirmBtn').disabled = !(completo && hora && !servicioAMedias);
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
-  if (hint) {
-    hint.textContent = !hora
-      ? 'Elige una hora libre.'
-      : (!nombre ? 'Falta el nombre del cliente.'
-        : (!completo ? 'Escribe el nombre y los dos apellidos.' : ''));
+  if (hint) hint.textContent = nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc });
+}
+
+// Qué falta para poder crear la cita, dicho con la verdad.
+function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc }) {
+  if (svc.escrito && !svc.resuelto) {
+    return svc.coincidencias
+      ? `Hay ${svc.coincidencias} servicios que encajan con «${svc.escrito}»: elige uno en la lista.`
+      : `No hay ningún servicio que se llame «${svc.escrito}». Elígelo en la lista, o déjalo vacío para apuntarla sin servicio.`;
   }
+  if (!hora) return 'Elige una hora libre.';
+  if (!nombre) return 'Falta el nombre del cliente.';
+  if (!completo) return 'Escribe el nombre y los dos apellidos.';
+  return '';
 }
 
 function nbMinutos(hhmm) {
@@ -8087,7 +8111,7 @@ document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots(
 (() => {
   const svc = document.getElementById('nbServicio');
   if (!svc) return;
-  svc.addEventListener('input', nbSvcBuscar);
+  svc.addEventListener('input', () => { nbSvcBuscar(); nbSyncConfirm(); });
   svc.addEventListener('focus', nbSvcBuscar);
   svc.addEventListener('blur', () => setTimeout(nbSvcCerrar, 120));
   svc.addEventListener('keydown', (e) => {
