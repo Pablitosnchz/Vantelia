@@ -1806,3 +1806,25 @@ a fin en todas.
   440→430.
 - **Siguiente:** OK de Astra a `b417618` y orden de Pablo para desplegar (con la retirada del webhook de Make);
   preparar la revisión de packs para noviembre; Stripe de Alicia sin conectar; bloque D sigue aparcado.
+
+## 2026-09-17 23:45 – 2026-09-18 00:05 Europe/Madrid — despliegue de 70e1445 (portal del mostrador) (Claude)
+
+- Orden de Pablo: desplegar sin esperar el OK de Astra, que no estaba, dejándole el aviso en el buzón.
+- `main` 70e1445 = merge de `claude/cita-manual`: aviso real cuando el servicio no cabe (`9c58ec1`),
+  los tres fallos del vídeo de Alicia (`56336a6`), cita rápida del mostrador con duración explícita
+  y 30 min por defecto (`19b5dfb`, `ad4ca7f`, decisión de Pablo), mover una cita ya no la encoge a
+  la duración del catálogo (`a1dc38f`), sugerencia explícita y texto conservado (`7fba7e4`,
+  `8086879`), teclado acotado a lo pintado (`b417618`) y fianza en el email de confirmación
+  (`0c0838c`). Revisión de Astra a todo salvo los dos últimos.
+- Suite completa sobre el candidato: **2949 passed, 1 skipped, 0 fallos**. Despliegue con
+  `deploy.ps1 -SkipLocalChecks`: copia de la BD, health ok, acceso público ok y humo 5/5.
+- **`WEBHOOK_DEFAULT` vaciado en el `.env` del VPS** (copia `/srv/vantelia-backups/pre-webhook-20260917-214739.env`).
+  No era config de Alicia: era la variable global que heredaban los 25 negocios, con destino de Make
+  borrado (410) y 7 intentos fallidos en 7 días, todos de citas de Alicia.
+- Verificado en la app viva: `VERSION.json` 70e1445 sin cambios pendientes, `WEBHOOK_DEFAULT` vacío,
+  `_aviso_fianza` en `_booking_email_bodies`, `_update_booking_details` conserva la ocupación real y
+  el portal servido trae `nbRapQue` y `nbPorQueNoSePuedeCrear`.
+- **Pendiente:** revisión de Astra a `b417618` y `0c0838c` sobre lo desplegado; hallazgo F4 (el
+  contador cuenta recordatorios que no salen por ningún canal); cargar los datos de Alicia ya
+  confirmados (elumen 20, flash repair 15+15 → 3 packs de mechas: 195→230, 360→350, 440→430);
+  arranque de Alicia congelado hasta noviembre, con Stripe y WhatsApp sin conectar.
