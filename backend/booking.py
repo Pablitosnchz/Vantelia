@@ -3481,6 +3481,7 @@ def _booking_stored_creation_terms(row):
 async def _prepare_booking_creation(
     cliente_id: str, *, employee_row: sqlite3.Row, servicio: str, telefono: str,
     booking_date: str, booking_time: str, source: str, fuera_de_horario: bool = False,
+    duracion_manual: int = 0,
 ) -> Dict[str, Any]:
     """Prepara sin escribir ni llamar al proveedor; el núcleo revalida al ejecutar.
 
@@ -3488,7 +3489,8 @@ async def _prepare_booking_creation(
     disponibilidad que la creación. No reclama una operación ni acepta la cita.
     """
     service_row = agenda._find_service_by_name(cliente_id, servicio)
-    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
+    # La duracion la manda quien apunta la cita SOLO si la ha dicho (cita rapida del mostrador).
+    service_duration = int(duracion_manual) or agenda._service_duration_minutes(cliente_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
     location_id = str(employee_row["location_id"] or agenda._default_location_id(cliente_id))
     service_price = agenda._service_price_cents_resolved(cliente_id, service_row, location_id)
@@ -3573,6 +3575,7 @@ async def _create_booking_core(
     # a las diez y ese dia entran a las ocho por un evento). Solo lo pasa el portal:
     # los canales publicos no lo tocan y la IA sigue sin poder salirse del horario.
     fuera_de_horario: bool = False,
+    duracion_manual: int = 0,
     request: Optional[Request] = None,
     audit_extra: Optional[Dict[str, Any]] = None,
     operation_key: str = "",
@@ -3601,7 +3604,7 @@ async def _create_booking_core(
             return recuperada
     config = clients._get_client_config(cliente_id)
     preparada = await _prepare_booking_creation(
-        cliente_id, employee_row=employee_row, servicio=servicio, telefono=telefono,
+        cliente_id, employee_row=employee_row, servicio=servicio, telefono=telefono, duracion_manual=duracion_manual,
         booking_date=booking_date, booking_time=booking_time, source=source,
         fuera_de_horario=fuera_de_horario)
     if expected_terms is not None and not booking_creation_terms_match(expected_terms, preparada["terms"]):

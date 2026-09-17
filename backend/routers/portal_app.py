@@ -3225,7 +3225,12 @@ async def auth_create_booking(
     )
 
     employee_row = agenda._resolve_employee_for_booking(target_client_id, data.employee_id, require_active=False)
-    service_duration = agenda._service_duration_minutes(target_client_id, servicio, employee_row)
+    # Cita rapida: el mostrador apunta lo que dura. Sin servicio, la duracion del catalogo seria
+    # la de por defecto (30 min) y la agenda se quedaria corta para un trabajo de tres horas.
+    duracion_manual = int(data.duration_minutes or 0)
+    if duracion_manual and (duracion_manual < 5 or duracion_manual % 5):
+        raise HTTPException(status_code=400, detail="La duracion va en minutos, de 5 en 5.")
+    service_duration = duracion_manual or agenda._service_duration_minutes(target_client_id, servicio, employee_row)
 
     # Limites de plan (salvo override admin del portal).
     if not portal._is_admin_client_portal_override(user, cliente_id):
@@ -3267,6 +3272,7 @@ async def auth_create_booking(
         request=request,
         audit_extra={"role": user["role"], "user_id": user["id"]},
         fuera_de_horario=True,
+        duracion_manual=duracion_manual,
     )
     booking_id = booking_row["id"]
     if missing_reminder_contact:

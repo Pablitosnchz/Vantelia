@@ -776,6 +776,15 @@
       box-shadow:0 12px 30px rgba(0,0,0,.35);
     }
     .nb-ac.open { display:block; max-height:320px; overflow-y:auto; }
+    .nb-modo { display:flex; gap:6px; margin-bottom:14px; }
+    .nb-modo-btn {
+      flex:1; padding:8px 10px; border-radius:10px; border:1px solid var(--line);
+      background:transparent; color:var(--soft); cursor:pointer; font-size:0.85rem;
+    }
+    .nb-modo-btn.active { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
+    #newBookingDrawer.modo-rapida .nb-solo-completa,
+    #newBookingDrawer.modo-completa .nb-solo-rapida { display:none; }
+    #newBookingDrawer.modo-rapida .nb-solo-datos { display:none; }
     .nb-ac-mas { padding:8px 12px; font-size:0.76rem; color:var(--soft); border-top:1px solid var(--line); }
     .nb-ac-item { padding:8px 12px; cursor:pointer; }
     .nb-ac-item:hover, .nb-ac-item.sel { background:var(--accent-soft); }
@@ -4092,8 +4101,27 @@
     <b>Nueva cita</b>
     <button id="newBookingClose">×</button>
   </div>
-  <div style="padding:18px; overflow-y:auto; flex:1;">
-    <div class="nb-step">
+  <div style="padding:18px; overflow-y:auto; flex:1;" id="nbCuerpo">
+    <!-- Dos formas de apuntar: rápida (como en su programa de siempre: quién, qué y cuánto dura)
+         y con todos los datos. Lo pidió el salón piloto el 17-sep-2026. -->
+    <div class="nb-modo" id="nbModo">
+      <button type="button" class="nb-modo-btn active" data-modo="rapida">Cita rápida</button>
+      <button type="button" class="nb-modo-btn" data-modo="completa">Con todos los datos</button>
+    </div>
+
+    <div class="nb-step nb-solo-rapida">
+      <span class="nb-num">1</span>
+      <div class="nb-body">
+        <label class="field-label" for="nbRapQue">Qué se hace</label>
+        <input type="text" class="field-input" id="nbRapQue" autocomplete="off"
+               placeholder="Elumen y secado" />
+        <p class="panel-sub" id="nbRapQueAviso" style="margin:6px 0 0; font-size:0.78rem;"></p>
+        <label class="field-label" style="margin-top:12px;">Cuánto dura</label>
+        <div class="nb-chips" id="nbRapDur"></div>
+      </div>
+    </div>
+
+    <div class="nb-step nb-solo-completa">
       <span class="nb-num">1</span>
       <div class="nb-body">
         <label class="field-label">Servicio</label>
@@ -7666,6 +7694,74 @@ document.getElementById('reschedClose').addEventListener('click', () => { resche
 document.getElementById('reschedOverlay').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 
 // ── Nueva cita (alta manual desde el portal) ──────────────────────────
+// ── Cita rápida ────────────────────────────────────────────────────────
+// Como en su programa de siempre: pinchar en la agenda, escribir qué se hace y decir cuánto dura.
+// La duración NO se presupone: una cita de tres horas guardada como media hora deja al asistente
+// ofreciendo un hueco que no existe (Alicia, 17-sep-2026). Si lo escrito es un servicio del
+// catálogo se usa ese servicio, con su duración y sus pasos.
+const NB_DURACIONES = [15, 30, 45, 60, 90, 120, 180, 240];
+let nbModo = 'rapida';
+let nbRapDuracion = 0;
+let nbRapServicio = '';
+
+function nbSetModo(modo) {
+  nbModo = modo === 'completa' ? 'completa' : 'rapida';
+  const drawer = document.getElementById('newBookingDrawer');
+  drawer.classList.toggle('modo-rapida', nbModo === 'rapida');
+  drawer.classList.toggle('modo-completa', nbModo === 'completa');
+  document.querySelectorAll('#nbModo .nb-modo-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.modo === nbModo);
+  });
+  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+  nbSyncConfirm();
+}
+
+function nbPintarDuraciones() {
+  const cont = document.getElementById('nbRapDur');
+  if (!cont) return;
+  cont.innerHTML = '';
+  NB_DURACIONES.forEach(min => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-chip' + (nbRapDuracion === min ? ' active' : '');
+    btn.textContent = nbDuracionTexto(min);
+    btn.addEventListener('click', () => {
+      nbRapDuracion = nbRapDuracion === min ? 0 : min;
+      nbPintarDuraciones();
+      loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+      nbSyncConfirm();
+    });
+    cont.appendChild(btn);
+  });
+}
+
+// Lo que escribe en «Qué se hace»: si es un servicio del catálogo se reserva como tal (con sus
+// pasos); si no, se guarda tal cual como nota y la duración la elige ella.
+function nbRapRevisarQue() {
+  const campo = document.getElementById('nbRapQue');
+  const aviso = document.getElementById('nbRapQueAviso');
+  const escrito = (campo?.value || '').trim();
+  const sug = escrito ? nbSvcSugerencias(escrito) : [];
+  const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
+  const elegido = exacto || (sug.length === 1 ? sug[0] : null);
+  nbRapServicio = elegido ? elegido.nombre : '';
+  if (aviso) {
+    aviso.textContent = elegido
+      ? `Se apunta como «${elegido.nombre}»${elegido.dur ? ` · ${nbDuracionTexto(elegido.dur)}` : ''}, con sus tiempos de espera.`
+      : (escrito ? 'No es un servicio del catálogo: se guarda como nota y hace falta decir cuánto dura.' : '');
+  }
+  const chips = document.getElementById('nbRapDur');
+  if (chips) chips.style.display = elegido ? 'none' : '';
+  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+  nbSyncConfirm();
+}
+
+function nbRapDuracionEfectiva() {
+  if (nbModo !== 'rapida') return 0;
+  if (nbRapServicio) return 0;            // manda el catálogo
+  return nbRapDuracion;
+}
+
 async function openNewBookingDrawer(opts = {}) {
   if (!citasState.employees) {
     try { const r = await api('/auth/employees'); citasState.employees = (Array.isArray(r) ? r : (r?.items || [])).map(e => ({ ...e, id: e.employee_id || e.id })); }
@@ -7692,6 +7788,13 @@ async function openNewBookingDrawer(opts = {}) {
   if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
   document.getElementById('nbSlotSelected').value = '';
+  const rapQue = document.getElementById('nbRapQue');
+  if (rapQue) rapQue.value = '';
+  nbRapDuracion = 0;
+  nbRapServicio = '';
+  nbPintarDuraciones();
+  nbRapRevisarQue();
+  nbSetModo(opts.servicio ? 'completa' : nbModo);
   nbHoraPedida = opts.time || '';
   const libre = document.getElementById('nbHoraLibre');
   if (libre) libre.value = opts.time || '';
@@ -7913,16 +8016,22 @@ function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
   const completo = !!nombre && (!state.exigirDosApellidos || tieneDosApellidos(nombre));
-  const svc = nbSvcEstado();
-  const servicioAMedias = !!svc.escrito && !svc.resuelto;
-  document.getElementById('nbConfirmBtn').disabled = !(completo && hora && !servicioAMedias);
+  const svc = nbModo === 'rapida'
+    ? { escrito: '', resuelto: nbRapServicio, coincidencias: nbRapServicio ? 1 : 0 }
+    : nbSvcEstado();
+  const falta = nbPorQueNoSePuedeCrear({
+    hora, nombre, completo, svc,
+    rapida: nbModo === 'rapida', duracion: nbRapDuracion, servicioRapido: nbRapServicio,
+  });
+  document.getElementById('nbConfirmBtn').disabled = !!falta;
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
-  if (hint) hint.textContent = nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc });
+  if (hint) hint.textContent = falta;
 }
 
 // Qué falta para poder crear la cita, dicho con la verdad.
-function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc }) {
+function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc, rapida, duracion, servicioRapido }) {
+  if (rapida && !servicioRapido && !duracion) return 'Dime cuánto dura para no ocupar de menos la agenda.';
   if (svc.escrito && !svc.resuelto) {
     return svc.coincidencias
       ? `Hay ${svc.coincidencias} servicios que encajan con «${svc.escrito}»: elige uno en la lista.`
@@ -8004,10 +8113,12 @@ async function loadNbSlots(preselect = '') {
 
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Cargando huecos…</span>';
   try {
-    const servicio = nbSvcResuelto();
+    const servicio = nbModo === 'rapida' ? nbRapServicio : nbSvcResuelto();
+    const duracion = nbRapDuracionEfectiva();
     const qs = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(fecha)}`
       + (empId ? `&employee_id=${encodeURIComponent(empId)}` : '')
-      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '');
+      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '')
+      + (duracion && empId ? `&duracion=${duracion}` : '');
     const data = await api(`/disponibilidad?${qs}`);
     const all = data.slots || data || [];
     const slots = all.filter(s => s.disponible !== false);
@@ -8015,10 +8126,11 @@ async function loadNbSlots(preselect = '') {
     if (!slots.length) {
       const ahora = new Date();
       const svc = nbServicios.find(s => s.nombre === servicio);
+      const durElegida = Number(svc && svc.dur) || duracion || 0;
       nbAvisoDia(cont, nbPorQueNoHayHuecos({
         fecha, hoy: hoyKey, ahoraMin: ahora.getHours() * 60 + ahora.getMinutes(),
         ventana: cdWeekdayWindow(empSel || citasState.daySchedule || {}, diaSemana),
-        dur: Number(svc && svc.dur) || 0, servicio,
+        dur: durElegida, servicio: servicio || 'Esta cita',
         quien: empSel && !empSel.is_default ? (empSel.name || '') : '',
         sinTramos: !all.length,
       }), true);
@@ -8106,6 +8218,11 @@ document.getElementById('nbHoraLibreBtn')?.addEventListener('click', () => {
   nbSyncConfirm();
 });
 
+document.getElementById('nbModo')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.nb-modo-btn');
+  if (btn) nbSetModo(btn.dataset.modo);
+});
+document.getElementById('nbRapQue')?.addEventListener('input', nbRapRevisarQue);
 document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
 (() => {
@@ -8138,15 +8255,20 @@ document.getElementById('nbNombre').addEventListener('input', () => { nbSyncConf
 document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nbCloseAc, 180));
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   const btn = document.getElementById('nbConfirmBtn');
+  const rapQue = (document.getElementById('nbRapQue')?.value || '').trim();
+  const notas = [document.getElementById('nbNotas').value.trim(),
+                 (nbModo === 'rapida' && rapQue && !nbRapServicio) ? rapQue : '']
+    .filter(Boolean).join(' · ');
   const payload = {
     nombre: document.getElementById('nbNombre').value.trim(),
     email: document.getElementById('nbEmail').value.trim(),
     telefono: document.getElementById('nbTelefono').value.trim(),
-    servicio: nbSvcResuelto(),
+    servicio: nbModo === 'rapida' ? nbRapServicio : nbSvcResuelto(),
     employee_id: document.getElementById('nbProf').value || '',
     fecha: document.getElementById('nbFecha').value,
     hora: document.getElementById('nbSlotSelected').value,
-    notas: document.getElementById('nbNotas').value.trim(),
+    notas,
+    duration_minutes: nbRapDuracionEfectiva(),
   };
   if (!payload.nombre || !payload.fecha || !payload.hora) { toast('Completa nombre, fecha y hora.', 'error'); return; }
   if (!payload.email && !payload.telefono) {

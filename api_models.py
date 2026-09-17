@@ -428,6 +428,11 @@ class StaffBookingCreatePayload(BaseModel):
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
     notas: str = Field(default="", max_length=1000)
+    # Cuanto ocupa en la agenda cuando lo apunta el mostrador. 0 = la del catalogo, que es lo de
+    # siempre. Existe para la cita rapida: se apunta sin servicio y la duracion la dice quien la
+    # coge, porque una cita de dos horas guardada como media hora deja al asistente ofreciendo un
+    # hueco que no existe (peticion del salon piloto, 17-sep-2026).
+    duration_minutes: int = Field(default=0, ge=0, le=600)
 
 
 class BookingUpdatePayload(BaseModel):
