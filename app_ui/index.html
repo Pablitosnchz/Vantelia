@@ -8298,7 +8298,10 @@ document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots(
   svc.addEventListener('keydown', (e) => {
     const ac = document.getElementById('nbSvcAc');
     const abierto = ac && ac.classList.contains('open');
-    const lista = nbSvcSugerencias(svc.value);
+    // Solo se recorre lo que está PINTADO: con un catálogo enorme, las flechas llegaban a una
+    // fila que no existía en pantalla y Enter elegía un servicio invisible (revisión de Astra
+    // a 8086879). El resto se alcanza escribiendo, que es lo que acota la lista.
+    const lista = nbSvcSugerencias(svc.value).slice(0, NB_SVC_VISIBLES);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!abierto) { nbSvcBuscar(); return; }

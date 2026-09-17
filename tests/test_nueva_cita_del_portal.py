@@ -117,6 +117,10 @@ def test_el_servicio_numero_26_se_puede_elegir_con_el_teclado():
     assert veinteseis == "Elumen 25", veinteseis
     teclado = fuente.split("svc.addEventListener('keydown'", 1)[1].split("});", 1)[0]
     assert "nbSvcVerElegido()" in teclado, "lo elegido con las flechas puede quedar fuera de la vista"
+    # Y con un catálogo enorme, las flechas no pueden salirse de lo pintado: Enter elegiría un
+    # servicio invisible (revisión de Astra a 8086879).
+    assert "nbSvcSugerencias(svc.value).slice(0, NB_SVC_VISIBLES)" in teclado, (
+        "el teclado recorre más de lo que se pinta")
 
 
 def test_con_el_servicio_a_medias_no_se_crea_una_cita_de_media_hora():
