@@ -169,6 +169,30 @@ def test_la_confirmacion_tambien_la_recuerda(catalogo):
     assert "como_se_paga_la_fianza" in fuente
 
 
+def test_el_email_de_confirmacion_tambien_la_dice(catalogo, api_module):  # noqa: F811
+    """Auditoría del 17-sep-2026: el resumen de WhatsApp avisaba de la fianza y el email de
+    confirmación no. Quien reserva por la web, o a quien la apunta el mostrador, se enteraba el
+    día de la cita. Si ya está pagada no se repite."""
+    from backend import booking
+
+    fila = {"cliente_id": "demo", "servicio": CON_FIANZA, "service_price_cents": 26000,
+            "start_at": "", "booking_code": "R-1234", "timezone": "Europe/Madrid",
+            "booking_date": "2099-01-08", "booking_time": "10:00", "manage_token": "t" * 32,
+            "payment_status": "not_required"}
+    # El servicio de prueba se llama «Alisado con fianza»: lo que se busca es el AVISO, no la palabra.
+    aviso = booking.aviso_de_fianza("demo", CON_FIANZA)
+    assert aviso, "sin aviso que comprobar"
+    texto, html = booking._booking_email_bodies(fila, "Salón", "confirmed", "", "", "")
+    assert aviso in texto and "50" in texto, texto
+    assert "50" in html and "descuenta" in html
+    pagada = booking._booking_email_bodies(dict(fila, payment_status="paid"), "Salón", "confirmed", "", "", "")[0]
+    assert aviso not in pagada, "ya pagada: no se le vuelve a pedir"
+    sin_fianza = booking._booking_email_bodies(dict(fila, servicio=SIN_FIANZA), "Salón", "confirmed", "", "", "")[0]
+    assert "se abona una fianza" not in sin_fianza, "servicio sin fianza: no se inventa ninguna"
+    cancelada = booking._booking_email_bodies(fila, "Salón", "cancelled", "", "", "")[0]
+    assert aviso not in cancelada, "en una cancelación no pinta nada"
+
+
 def test_con_pasarela_activa_no_se_repite_el_aviso(catalogo):
     """Cuando Stripe esta conectado la cita nace "pendiente de pago" y se le manda
     un boton "Pagar 50 €". Ahi el aviso de texto sobra: repetir lo mismo dos veces

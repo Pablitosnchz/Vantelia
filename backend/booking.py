@@ -636,6 +636,22 @@ def _booking_email_bodies(
     )
     if _nota_servicio:
         text_body += f"\n{_nota_servicio}\n"
+    # La fianza, también por email. El resumen de WhatsApp la avisa desde el 26-ago-2026, pero
+    # quien reserva por la web o a quien la apunta el mostrador recibía una confirmación que no la
+    # mencionaba y se enteraba el día de la cita (auditoría del 17-sep-2026: 53 servicios del salón
+    # piloto la piden). Si ya está pagada no se repite.
+    _aviso_fianza = ""
+    try:
+        _ya_pagada = str(booking_row["payment_status"] or "") == "paid"
+    except (KeyError, IndexError):
+        _ya_pagada = False
+    if status_key == "confirmed" and not _ya_pagada:
+        try:
+            _aviso_fianza = aviso_de_fianza(booking_row["cliente_id"], service_name)
+        except Exception as exc:  # noqa: BLE001 - el email vale mas que la linea de la fianza
+            settings.logger.debug("No se pudo calcular la fianza para el email: %s", exc)
+    if _aviso_fianza:
+        text_body += f"\n{_aviso_fianza}\n"
     if status_key == "pending_payment":
         _pago_url = build_booking_payment_url(booking_row["manage_token"])
         # Senal, pago completo o retencion: el mismo helper que usa WhatsApp explica
@@ -689,6 +705,12 @@ def _booking_email_bodies(
             f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
             f'background:#f2f7f4;border:1px solid #cfe3d8;line-height:1.6;white-space:pre-line;">'
             f'{escape(_nota_servicio)}</div>'
+        )
+    if _aviso_fianza:
+        html_body += (
+            f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
+            f'background:#fdf4e3;border:1px solid #e8d6b0;line-height:1.6;white-space:pre-line;">'
+            f'{escape(_aviso_fianza)}</div>'
         )
     if status_key == "pending_payment" and _pago_nota:
         html_body += f'<p style="line-height:1.6;">{escape(_pago_nota)}</p>'
@@ -3156,6 +3178,12 @@ async def _update_booking_details(
     duracion_pedida = int(getattr(data, "duracion_minutos", 0) or 0)
     if duracion_pedida > 0:
         service_duration = max(5, min(720, duracion_pedida))
+    elif mismo_servicio or not data.servicio:
+        # Mover una cita NO puede encogerla. Una cita rápida de tres horas sin servicio -o una ya
+        # estirada a mano- volvía a la duración del catálogo (30 min por defecto) solo por
+        # cambiarla de hora, y ese rato quedaba libre para el asistente (revisión de Astra a
+        # 19b5dfb). Si cambia el servicio, manda el del servicio nuevo.
+        service_duration = _minutos_que_ocupa_ahora(booking_row) or service_duration
     service_id = service_row["slug"] if service_row else ""
     service_price = int(service_row["price_cents"]) if service_row else 0
     employee_changed = (target_employee["id"] or "") != (booking_row["employee_id"] or "")
@@ -3481,6 +3509,7 @@ def _booking_stored_creation_terms(row):
 async def _prepare_booking_creation(
     cliente_id: str, *, employee_row: sqlite3.Row, servicio: str, telefono: str,
     booking_date: str, booking_time: str, source: str, fuera_de_horario: bool = False,
+    duracion_manual: int = 0,
 ) -> Dict[str, Any]:
     """Prepara sin escribir ni llamar al proveedor; el núcleo revalida al ejecutar.
 
@@ -3488,7 +3517,8 @@ async def _prepare_booking_creation(
     disponibilidad que la creación. No reclama una operación ni acepta la cita.
     """
     service_row = agenda._find_service_by_name(cliente_id, servicio)
-    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
+    # La duracion la manda quien apunta la cita SOLO si la ha dicho (cita rapida del mostrador).
+    service_duration = int(duracion_manual) or agenda._service_duration_minutes(cliente_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
     location_id = str(employee_row["location_id"] or agenda._default_location_id(cliente_id))
     service_price = agenda._service_price_cents_resolved(cliente_id, service_row, location_id)
@@ -3573,6 +3603,7 @@ async def _create_booking_core(
     # a las diez y ese dia entran a las ocho por un evento). Solo lo pasa el portal:
     # los canales publicos no lo tocan y la IA sigue sin poder salirse del horario.
     fuera_de_horario: bool = False,
+    duracion_manual: int = 0,
     request: Optional[Request] = None,
     audit_extra: Optional[Dict[str, Any]] = None,
     operation_key: str = "",
@@ -3601,7 +3632,7 @@ async def _create_booking_core(
             return recuperada
     config = clients._get_client_config(cliente_id)
     preparada = await _prepare_booking_creation(
-        cliente_id, employee_row=employee_row, servicio=servicio, telefono=telefono,
+        cliente_id, employee_row=employee_row, servicio=servicio, telefono=telefono, duracion_manual=duracion_manual,
         booking_date=booking_date, booking_time=booking_time, source=source,
         fuera_de_horario=fuera_de_horario)
     if expected_terms is not None and not booking_creation_terms_match(expected_terms, preparada["terms"]):

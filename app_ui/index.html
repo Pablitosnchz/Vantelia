@@ -775,7 +775,17 @@
       background:var(--panel-2); border:1px solid var(--line); border-radius:10px; overflow:hidden;
       box-shadow:0 12px 30px rgba(0,0,0,.35);
     }
-    .nb-ac.open { display:block; }
+    .nb-ac.open { display:block; max-height:320px; overflow-y:auto; }
+    .nb-modo { display:flex; gap:6px; margin-bottom:14px; }
+    .nb-modo-btn {
+      flex:1; padding:8px 10px; border-radius:10px; border:1px solid var(--line);
+      background:transparent; color:var(--soft); cursor:pointer; font-size:0.85rem;
+    }
+    .nb-modo-btn.active { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
+    #newBookingDrawer.modo-rapida .nb-solo-completa,
+    #newBookingDrawer.modo-completa .nb-solo-rapida { display:none; }
+    #newBookingDrawer.modo-rapida .nb-solo-datos { display:none; }
+    .nb-ac-mas { padding:8px 12px; font-size:0.76rem; color:var(--soft); border-top:1px solid var(--line); }
     .nb-ac-item { padding:8px 12px; cursor:pointer; }
     .nb-ac-item:hover, .nb-ac-item.sel { background:var(--accent-soft); }
     .nb-ac-item b { display:block; font-size:0.88rem; }
@@ -4091,8 +4101,27 @@
     <b>Nueva cita</b>
     <button id="newBookingClose">×</button>
   </div>
-  <div style="padding:18px; overflow-y:auto; flex:1;">
-    <div class="nb-step">
+  <div style="padding:18px; overflow-y:auto; flex:1;" id="nbCuerpo">
+    <!-- Dos formas de apuntar: rápida (como en su programa de siempre: quién, qué y cuánto dura)
+         y con todos los datos. Lo pidió el salón piloto el 17-sep-2026. -->
+    <div class="nb-modo" id="nbModo">
+      <button type="button" class="nb-modo-btn active" data-modo="rapida">Cita rápida</button>
+      <button type="button" class="nb-modo-btn" data-modo="completa">Con todos los datos</button>
+    </div>
+
+    <div class="nb-step nb-solo-rapida">
+      <span class="nb-num">1</span>
+      <div class="nb-body">
+        <label class="field-label" for="nbRapQue">Qué se hace</label>
+        <input type="text" class="field-input" id="nbRapQue" autocomplete="off"
+               placeholder="Elumen y secado" />
+        <p class="panel-sub" id="nbRapQueAviso" style="margin:6px 0 0; font-size:0.78rem;"></p>
+        <label class="field-label" style="margin-top:12px;">Cuánto dura</label>
+        <div class="nb-chips" id="nbRapDur"></div>
+      </div>
+    </div>
+
+    <div class="nb-step nb-solo-completa">
       <span class="nb-num">1</span>
       <div class="nb-body">
         <label class="field-label">Servicio</label>
@@ -7665,6 +7694,128 @@ document.getElementById('reschedClose').addEventListener('click', () => { resche
 document.getElementById('reschedOverlay').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 
 // ── Nueva cita (alta manual desde el portal) ──────────────────────────
+// ── Cita rápida ────────────────────────────────────────────────────────
+// Como en su programa de siempre: pinchar en la agenda, escribir qué se hace y decir cuánto dura.
+// La duración NO se presupone: una cita de tres horas guardada como media hora deja al asistente
+// ofreciendo un hueco que no existe (Alicia, 17-sep-2026). Si lo escrito es un servicio del
+// catálogo se usa ese servicio, con su duración y sus pasos.
+const NB_DURACIONES = [15, 30, 45, 60, 90, 120, 180, 240];
+// Media hora puesta de salida y a un toque de cambiarla (decisión de Pablo, 17-sep-2026: que no
+// le pregunte nada y estire en la agenda si hace falta). OJO: si el trabajo dura más y nadie la
+// estira, el asistente ve libre ese rato y puede dar la hora a otra clienta.
+const NB_DURACION_POR_DEFECTO = 30;
+let nbModo = 'rapida';
+let nbRapDuracion = NB_DURACION_POR_DEFECTO;
+let nbRapServicio = '';
+
+function nbSetModo(modo) {
+  nbModo = modo === 'completa' ? 'completa' : 'rapida';
+  const drawer = document.getElementById('newBookingDrawer');
+  drawer.classList.toggle('modo-rapida', nbModo === 'rapida');
+  drawer.classList.toggle('modo-completa', nbModo === 'completa');
+  document.querySelectorAll('#nbModo .nb-modo-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.modo === nbModo);
+  });
+  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+  nbSyncConfirm();
+}
+
+function nbPintarDuraciones() {
+  const cont = document.getElementById('nbRapDur');
+  if (!cont) return;
+  const delCatalogo = nbRapServicio
+    ? (nbServicios.find(s => s.nombre === nbRapServicio)?.dur || 0)
+    : 0;
+  const minutos = delCatalogo || nbRapDuracion;
+  cont.innerHTML = '';
+  NB_DURACIONES.forEach(min => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-chip' + (minutos === min ? ' active' : '');
+    btn.textContent = nbDuracionTexto(min);
+    btn.disabled = !!delCatalogo;   // con servicio del catálogo mandan sus minutos y sus pasos
+    btn.addEventListener('click', () => {
+      nbRapDuracion = min;
+      nbPintarDuraciones();
+      loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+      nbSyncConfirm();
+    });
+    cont.appendChild(btn);
+  });
+  const hora = document.getElementById('nbSlotSelected')?.value || '';
+  const fin = nbFinDeLaCita(hora, minutos);
+  const pie = document.createElement('p');
+  pie.className = 'panel-sub';
+  pie.style.cssText = 'margin:8px 0 0; font-size:0.78rem;';
+  pie.textContent = fin
+    ? `Se reservan ${nbDuracionTexto(minutos)}: de ${hora} a ${fin}.`
+    : `Se reservan ${nbDuracionTexto(minutos)} en cuanto elijas la hora.`;
+  cont.appendChild(pie);
+}
+
+// Lo que escribe en «Qué se hace»: si es un servicio del catálogo se reserva como tal (con sus
+// pasos); si no, se guarda tal cual como nota y la duración la elige ella.
+function nbRapRevisarQue() {
+  const campo = document.getElementById('nbRapQue');
+  const escrito = (campo?.value || '').trim();
+  const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
+  nbRapServicio = exacto ? exacto.nombre : '';
+  nbRapPintarAviso();
+  nbPintarDuraciones();
+  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+  nbSyncConfirm();
+}
+
+// Lo que se le dice debajo del texto: qué servicio ha quedado vinculado (si alguno) y la
+// sugerencia del catálogo, que se toca a propósito.
+function nbRapPintarAviso() {
+  const campo = document.getElementById('nbRapQue');
+  const aviso = document.getElementById('nbRapQueAviso');
+  const escrito = (campo?.value || '').trim();
+  const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
+  const vinculado = nbRapServicio ? nbServicios.find(s => s.nombre === nbRapServicio) : null;
+  // La coincidencia parcial NO engancha un servicio por su cuenta: se ofrece y lo elige ella
+  // (revisión de Astra a 19b5dfb). «Elumen» son catorce servicios distintos y cada uno dura lo suyo.
+  const sugerencia = (!vinculado && escrito) ? (nbSvcSugerencias(escrito)[0] || null) : null;
+  if (aviso) {
+    aviso.innerHTML = '';
+    if (vinculado) {
+      aviso.textContent = `Se apunta como «${vinculado.nombre}»${vinculado.dur ? ` · ${nbDuracionTexto(vinculado.dur)}` : ''}, con sus tiempos de espera. Lo que has escrito se guarda igual.`;
+    } else if (escrito) {
+      aviso.append('Se guarda tal cual. ');
+      if (sugerencia) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-ghost';
+        btn.style.cssText = 'padding:2px 8px; font-size:0.76rem;';
+        btn.textContent = `¿Es «${sugerencia.nombre}»?`;
+        btn.addEventListener('click', () => {
+          nbRapServicio = sugerencia.nombre;   // lo que escribió ella se queda como está
+          nbPintarDuraciones();
+          loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+          nbSyncConfirm();
+          nbRapPintarAviso();
+        });
+        aviso.appendChild(btn);
+      }
+    }
+  }
+}
+
+// A qué hora termina lo que se está apuntando, con la duración que va a ocupar de verdad.
+function nbFinDeLaCita(hora, minutos) {
+  if (!hora || !minutos) return '';
+  const total = nbMinutos(hora) + minutos;
+  const h = Math.floor(total / 60) % 24, m = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function nbRapDuracionEfectiva() {
+  if (nbModo !== 'rapida') return 0;
+  if (nbRapServicio) return 0;            // manda el catálogo
+  return nbRapDuracion;
+}
+
 async function openNewBookingDrawer(opts = {}) {
   if (!citasState.employees) {
     try { const r = await api('/auth/employees'); citasState.employees = (Array.isArray(r) ? r : (r?.items || [])).map(e => ({ ...e, id: e.employee_id || e.id })); }
@@ -7681,7 +7832,9 @@ async function openNewBookingDrawer(opts = {}) {
     : '<option value="">Agenda general</option>';
   if (opts.employeeId && emps.some(e => e.id === opts.employeeId)) profSel.value = opts.employeeId;
   await loadNbServices();
-  ['nbNombre','nbEmail','nbTelefono','nbNotas'].forEach(id => { document.getElementById(id).value = ''; });
+  // El servicio va en la lista: se quedaba el de la cita anterior y había que borrarlo a mano
+  // en cada cita (vídeo de Alicia, 17-sep-2026).
+  ['nbNombre','nbEmail','nbTelefono','nbNotas','nbServicio'].forEach(id => { document.getElementById(id).value = ''; });
   nbCloseAc();
   // Prefill opcional (rebooking / ficha de cliente).
   if (opts.nombre) document.getElementById('nbNombre').value = opts.nombre;
@@ -7689,6 +7842,13 @@ async function openNewBookingDrawer(opts = {}) {
   if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
   document.getElementById('nbSlotSelected').value = '';
+  const rapQue = document.getElementById('nbRapQue');
+  if (rapQue) rapQue.value = '';
+  nbRapDuracion = NB_DURACION_POR_DEFECTO;
+  nbRapServicio = '';
+  nbPintarDuraciones();
+  nbRapRevisarQue();
+  nbSetModo(opts.servicio ? 'completa' : nbModo);
   nbHoraPedida = opts.time || '';
   const libre = document.getElementById('nbHoraLibre');
   if (libre) libre.value = opts.time || '';
@@ -7702,11 +7862,8 @@ async function openNewBookingDrawer(opts = {}) {
   campoFecha.value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
   document.getElementById('newBookingDrawer').classList.add('open');
   document.getElementById('newBookingOverlay').classList.add('open');
-  // A escribir directamente: quien coge citas todo el dia no quiere ir al raton
-  // para empezar (peticion del salon). Si venia con servicio prefijado se
-  // selecciona, asi que teclear lo sustituye.
-  const campoSvc = document.getElementById('nbServicio');
-  if (campoSvc) { campoSvc.focus(); campoSvc.select(); }
+  // NO se roba el foco: abrir la ficha y que el cursor saltara al servicio con la lista
+  // desplegada molestaba más que ayudaba (Alicia, 17-sep-2026). Se escribe donde ella pinche.
   await loadNbSlots(opts.time || '');
   // Vino de pinchar la franja de fuera de horario: esa hora no esta entre los
   // huecos ofrecidos -por eso se pincho ahi-, asi que se deja puesta a mano en
@@ -7763,7 +7920,7 @@ function nbSvcCerrar() {
 // "Mechas o balayage-largo"), y prioriza lo que EMPIEZA por lo escrito.
 function nbSvcSugerencias(q) {
   const n = nbSvcNorm(q).trim();
-  if (!n) return nbServicios.slice(0, 8);
+  if (!n) return nbServicios.slice();
   const palabras = n.split(/\s+/);
   const empieza = [], dentro = [];
   nbServicios.forEach(s => {
@@ -7771,13 +7928,20 @@ function nbSvcSugerencias(q) {
     if (!palabras.every(p => heno.includes(p))) return;
     (nbSvcNorm(s.nombre).startsWith(palabras[0]) ? empieza : dentro).push(s);
   });
-  return empieza.concat(dentro).slice(0, 8);
+  return empieza.concat(dentro);
 }
 
-function nbSvcPintar(lista) {
+// Tope de guardia: la lista se pinta ENTERA y se recorre con scroll o con el teclado. Con un
+// tope de 25, el servicio 26 no se alcanzaba de ninguna forma (revisión de Astra a 7fba7e4);
+// este número solo evita pintar miles si algún día hay un catálogo enorme.
+const NB_SVC_VISIBLES = 300;
+
+function nbSvcPintar(todas) {
   const ac = document.getElementById('nbSvcAc');
   if (!ac) return;
-  if (!lista.length) { nbSvcCerrar(); return; }
+  if (!todas.length) { nbSvcCerrar(); return; }
+  const lista = todas.slice(0, NB_SVC_VISIBLES);
+  const restantes = todas.length - lista.length;
   ac.innerHTML = lista.map((s, i) => {
     const bits = [];
     if (s.dur) bits.push(`${s.dur} min`);
@@ -7785,7 +7949,8 @@ function nbSvcPintar(lista) {
     if (s.cat) bits.push(s.cat);
     return `<div class="nb-ac-item${i === nbSvcIdx ? ' sel' : ''}" data-nbsvc="${i}">`
       + `<b>${escapeHtml(s.nombre)}</b><span>${escapeHtml(bits.join(' · ') || 'sin duración configurada')}</span></div>`;
-  }).join('');
+  }).join('')
+    + (restantes ? `<div class="nb-ac-mas">y ${restantes} más: escribe alguna letra para acotar</div>` : '');
   ac.classList.add('open');
   ac.querySelectorAll('[data-nbsvc]').forEach(el => {
     el.addEventListener('mousedown', (e) => {   // mousedown: antes del blur del input
@@ -7809,16 +7974,31 @@ function nbSvcBuscar() {
   nbSvcPintar(nbSvcSugerencias(input.value));
 }
 
+// Lo que se recorre con las flechas tiene que verse: con la lista larga, el elegido quedaba
+// fuera de la parte visible (revisión de Astra a 7fba7e4).
+function nbSvcVerElegido() {
+  const ac = document.getElementById('nbSvcAc');
+  const sel = ac && ac.querySelector('.nb-ac-item.sel');
+  if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+}
+
 // Lo escrito tiene que ser un servicio DEL CATALOGO: el backend reserva por
 // nombre. Si coincide entero se acepta; si solo hay una sugerencia, esa; si hay
 // varias, se le pide que elija en vez de mandar algo que no existe.
 function nbSvcResuelto() {
+  return nbSvcEstado().resuelto;
+}
+
+// Qué hay escrito en el campo de servicio: resuelto (nombre exacto del catálogo), ambiguo
+// (encaja con varios) o desconocido. Sin esto, «elumen» -que encaja con seis- se mandaba como
+// servicio VACÍO y la cita se creaba de 30 min sin avisar (visto al revisar el vídeo de Alicia).
+function nbSvcEstado() {
   const escrito = (document.getElementById('nbServicio')?.value || '').trim();
-  if (!escrito) return '';
+  if (!escrito) return { escrito: '', resuelto: '', coincidencias: 0 };
   const exacto = nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito));
-  if (exacto) return exacto.nombre;
+  if (exacto) return { escrito, resuelto: exacto.nombre, coincidencias: 1 };
   const sug = nbSvcSugerencias(escrito);
-  return sug.length === 1 ? sug[0].nombre : '';
+  return { escrito, resuelto: sug.length === 1 ? sug[0].nombre : '', coincidencias: sug.length };
 }
 
 function nbCloseAc() {
@@ -7899,15 +8079,63 @@ function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
   const completo = !!nombre && (!state.exigirDosApellidos || tieneDosApellidos(nombre));
-  document.getElementById('nbConfirmBtn').disabled = !(completo && hora);
+  const svc = nbModo === 'rapida'
+    ? { escrito: '', resuelto: nbRapServicio, coincidencias: nbRapServicio ? 1 : 0 }
+    : nbSvcEstado();
+  const falta = nbPorQueNoSePuedeCrear({
+    hora, nombre, completo, svc,
+    rapida: nbModo === 'rapida', duracion: nbRapDuracion, servicioRapido: nbRapServicio,
+  });
+  document.getElementById('nbConfirmBtn').disabled = !!falta;
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
-  if (hint) {
-    hint.textContent = !hora
-      ? 'Elige una hora libre.'
-      : (!nombre ? 'Falta el nombre del cliente.'
-        : (!completo ? 'Escribe el nombre y los dos apellidos.' : ''));
+  if (hint) hint.textContent = falta;
+}
+
+// Qué falta para poder crear la cita, dicho con la verdad.
+function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc, rapida, duracion, servicioRapido }) {
+  if (rapida && !servicioRapido && !duracion) return 'Toca cuánto dura: la agenda aparta ese rato.';
+  if (svc.escrito && !svc.resuelto) {
+    return svc.coincidencias
+      ? `Hay ${svc.coincidencias} servicios que encajan con «${svc.escrito}»: elige uno en la lista.`
+      : `No hay ningún servicio que se llame «${svc.escrito}». Elígelo en la lista, o déjalo vacío para apuntarla sin servicio.`;
   }
+  if (!hora) return 'Elige una hora libre.';
+  if (!nombre) return 'Falta el nombre del cliente.';
+  if (!completo) return 'Escribe el nombre y los dos apellidos.';
+  return '';
+}
+
+function nbMinutos(hhmm) {
+  const [h, m] = String(hhmm || '').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function nbDuracionTexto(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+}
+
+// Por qué no sale ningún hueco, dicho con la verdad. Alicia, 17-sep-2026: «Pack grey blending
+// medio» (7 h 20 min) a las 13:20, con la agenda de Lorena vacía hasta las 20:30, decía «La
+// jornada de hoy ya ha terminado»: no había terminado, es que ese servicio ya no cabía. Pura para
+// poder probarla (tests/test_por_que_no_hay_huecos.py).
+function nbPorQueNoHayHuecos({ fecha, hoy, ahoraMin, ventana, dur, servicio, quien, sinTramos }) {
+  const esHoy = fecha === hoy;
+  if (ventana) {
+    const fin = nbMinutos(ventana.end);
+    const desde = esHoy ? Math.max(nbMinutos(ventana.start), ahoraMin) : nbMinutos(ventana.start);
+    if (esHoy && desde >= fin) return 'La jornada de hoy ya ha terminado.';
+    if (dur && dur > fin - desde) {
+      const de = quien ? ` de ${quien}` : '';
+      return esHoy
+        ? `${servicio} dura ${nbDuracionTexto(dur)} y hoy ya no cabe antes del cierre${de} (${ventana.end}).`
+        : `${servicio} dura ${nbDuracionTexto(dur)} y no cabe en la jornada${de} de ese día (${ventana.start} a ${ventana.end}).`;
+    }
+  }
+  const que = dur ? `de ${nbDuracionTexto(dur)} ` : '';
+  if (sinTramos) return esHoy ? `Hoy ya no queda ningún hueco ${que}para este servicio.` : `Ese día no queda ningún hueco ${que}para este servicio.`;
+  return `No queda ningún hueco ${que}ese día.`;
 }
 
 // Aviso del dia con salida: sin el atajo, el usuario se queda probando fechas.
@@ -7948,19 +8176,27 @@ async function loadNbSlots(preselect = '') {
 
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Cargando huecos…</span>';
   try {
-    const servicio = nbSvcResuelto();
+    const servicio = nbModo === 'rapida' ? nbRapServicio : nbSvcResuelto();
+    const duracion = nbRapDuracionEfectiva();
     const qs = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(fecha)}`
       + (empId ? `&employee_id=${encodeURIComponent(empId)}` : '')
-      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '');
+      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '')
+      + (duracion && empId ? `&duracion=${duracion}` : '');
     const data = await api(`/disponibilidad?${qs}`);
     const all = data.slots || data || [];
     const slots = all.filter(s => s.disponible !== false);
     cont.innerHTML = '';
     if (!slots.length) {
-      const cerrado = !all.length;   // el dia no tiene ni tramos: jornada terminada
-      nbAvisoDia(cont, cerrado
-        ? (fecha === cdDateKey(new Date()) ? 'La jornada de hoy ya ha terminado.' : 'Ese día no hay agenda.')
-        : 'No queda ningún hueco ese día.', true);
+      const ahora = new Date();
+      const svc = nbServicios.find(s => s.nombre === servicio);
+      const durElegida = Number(svc && svc.dur) || duracion || 0;
+      nbAvisoDia(cont, nbPorQueNoHayHuecos({
+        fecha, hoy: hoyKey, ahoraMin: ahora.getHours() * 60 + ahora.getMinutes(),
+        ventana: cdWeekdayWindow(empSel || citasState.daySchedule || {}, diaSemana),
+        dur: durElegida, servicio: servicio || 'Esta cita',
+        quien: empSel && !empSel.is_default ? (empSel.name || '') : '',
+        sinTramos: !all.length,
+      }), true);
       return;
     }
     // Agrupados por franja y con la altura acotada: sueltos eran 44 fichas
@@ -7992,6 +8228,7 @@ async function loadNbSlots(preselect = '') {
           btn.classList.add('active');
           document.getElementById('nbSlotSelected').value = hora;
           nbHoraPedida = hora;
+          nbPintarDuraciones();
           nbSyncConfirm();
         });
         fila.appendChild(btn);
@@ -8045,18 +8282,26 @@ document.getElementById('nbHoraLibreBtn')?.addEventListener('click', () => {
   nbSyncConfirm();
 });
 
+document.getElementById('nbModo')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.nb-modo-btn');
+  if (btn) nbSetModo(btn.dataset.modo);
+});
+document.getElementById('nbRapQue')?.addEventListener('input', nbRapRevisarQue);
 document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
 (() => {
   const svc = document.getElementById('nbServicio');
   if (!svc) return;
-  svc.addEventListener('input', nbSvcBuscar);
+  svc.addEventListener('input', () => { nbSvcBuscar(); nbSyncConfirm(); });
   svc.addEventListener('focus', nbSvcBuscar);
   svc.addEventListener('blur', () => setTimeout(nbSvcCerrar, 120));
   svc.addEventListener('keydown', (e) => {
     const ac = document.getElementById('nbSvcAc');
     const abierto = ac && ac.classList.contains('open');
-    const lista = nbSvcSugerencias(svc.value);
+    // Solo se recorre lo que está PINTADO: con un catálogo enorme, las flechas llegaban a una
+    // fila que no existía en pantalla y Enter elegía un servicio invisible (revisión de Astra
+    // a 8086879). El resto se alcanza escribiendo, que es lo que acota la lista.
+    const lista = nbSvcSugerencias(svc.value).slice(0, NB_SVC_VISIBLES);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!abierto) { nbSvcBuscar(); return; }
@@ -8064,6 +8309,7 @@ document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots(
         ? Math.min(lista.length - 1, nbSvcIdx + 1)
         : Math.max(0, nbSvcIdx - 1);
       nbSvcPintar(lista);
+      nbSvcVerElegido();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const elegido = nbSvcIdx >= 0 && lista[nbSvcIdx] ? lista[nbSvcIdx].nombre : nbSvcResuelto();
@@ -8077,15 +8323,22 @@ document.getElementById('nbNombre').addEventListener('input', () => { nbSyncConf
 document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nbCloseAc, 180));
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   const btn = document.getElementById('nbConfirmBtn');
+  const rapQue = (document.getElementById('nbRapQue')?.value || '').trim();
+  // Lo que escribió se guarda TAL CUAL, también cuando se ha vinculado un servicio: son dos
+  // cosas distintas y la suya es la que dice qué hay que hacerle (revisión de Astra a 7fba7e4).
+  const notas = [document.getElementById('nbNotas').value.trim(),
+                 (nbModo === 'rapida' && rapQue) ? rapQue : '']
+    .filter(Boolean).join(' · ');
   const payload = {
     nombre: document.getElementById('nbNombre').value.trim(),
     email: document.getElementById('nbEmail').value.trim(),
     telefono: document.getElementById('nbTelefono').value.trim(),
-    servicio: nbSvcResuelto(),
+    servicio: nbModo === 'rapida' ? nbRapServicio : nbSvcResuelto(),
     employee_id: document.getElementById('nbProf').value || '',
     fecha: document.getElementById('nbFecha').value,
     hora: document.getElementById('nbSlotSelected').value,
-    notas: document.getElementById('nbNotas').value.trim(),
+    notas,
+    duration_minutes: nbRapDuracionEfectiva(),
   };
   if (!payload.nombre || !payload.fecha || !payload.hora) { toast('Completa nombre, fecha y hora.', 'error'); return; }
   if (!payload.email && !payload.telefono) {

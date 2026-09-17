@@ -335,6 +335,7 @@ async def disponibilidad(
     employee_id: str = "",
     servicio: str = "",
     location_id: str = "",
+    duracion: int = 0,
 ) -> RespuestaDisponibilidad:
     textnorm._assert_valid_client_id(cliente_id)
     security._enforce_allowed_origin(request, cliente_id)
@@ -347,6 +348,12 @@ async def disponibilidad(
 
     selected_day = textnorm._parse_date(fecha)
     agenda._validate_booking_window(cliente_id, selected_day)
+    # La cita rápida del mostrador se apunta sin servicio y con la duración que dice quien la coge:
+    # los huecos que se le ofrecen tienen que caber de verdad (17-sep-2026, salón piloto).
+    if duracion and (duracion < 5 or duracion > 600 or duracion % 5):
+        raise HTTPException(status_code=400, detail="La duracion va en minutos, de 5 en 5 (maximo 600).")
+    if duracion and not employee_id:
+        raise HTTPException(status_code=400, detail="Para consultar por duracion hace falta el profesional.")
     location_filter = agenda._resolve_location_id(cliente_id, location_id) if location_id else ""
 
     try:
@@ -362,6 +369,7 @@ async def disponibilidad(
                 fecha,
                 employee_row=employee_row,
                 servicio=servicio,
+                duration_minutes=duracion or None,
             )
 
             return RespuestaDisponibilidad(
