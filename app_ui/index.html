@@ -7700,8 +7700,12 @@ document.getElementById('reschedOverlay').addEventListener('click', () => { resc
 // ofreciendo un hueco que no existe (Alicia, 17-sep-2026). Si lo escrito es un servicio del
 // catálogo se usa ese servicio, con su duración y sus pasos.
 const NB_DURACIONES = [15, 30, 45, 60, 90, 120, 180, 240];
+// Media hora puesta de salida y a un toque de cambiarla (decisión de Pablo, 17-sep-2026: que no
+// le pregunte nada y estire en la agenda si hace falta). OJO: si el trabajo dura más y nadie la
+// estira, el asistente ve libre ese rato y puede dar la hora a otra clienta.
+const NB_DURACION_POR_DEFECTO = 30;
 let nbModo = 'rapida';
-let nbRapDuracion = 0;
+let nbRapDuracion = NB_DURACION_POR_DEFECTO;
 let nbRapServicio = '';
 
 function nbSetModo(modo) {
@@ -7726,7 +7730,7 @@ function nbPintarDuraciones() {
     btn.className = 'filter-chip' + (nbRapDuracion === min ? ' active' : '');
     btn.textContent = nbDuracionTexto(min);
     btn.addEventListener('click', () => {
-      nbRapDuracion = nbRapDuracion === min ? 0 : min;
+      nbRapDuracion = min;
       nbPintarDuraciones();
       loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
       nbSyncConfirm();
@@ -7748,7 +7752,7 @@ function nbRapRevisarQue() {
   if (aviso) {
     aviso.textContent = elegido
       ? `Se apunta como «${elegido.nombre}»${elegido.dur ? ` · ${nbDuracionTexto(elegido.dur)}` : ''}, con sus tiempos de espera.`
-      : (escrito ? 'No es un servicio del catálogo: se guarda como nota y hace falta decir cuánto dura.' : '');
+      : (escrito ? 'No es un servicio del catálogo: se guarda como nota. Si dura más de lo puesto, toca otra duración o estira la cita en la agenda.' : '');
   }
   const chips = document.getElementById('nbRapDur');
   if (chips) chips.style.display = elegido ? 'none' : '';
@@ -7790,7 +7794,7 @@ async function openNewBookingDrawer(opts = {}) {
   document.getElementById('nbSlotSelected').value = '';
   const rapQue = document.getElementById('nbRapQue');
   if (rapQue) rapQue.value = '';
-  nbRapDuracion = 0;
+  nbRapDuracion = NB_DURACION_POR_DEFECTO;
   nbRapServicio = '';
   nbPintarDuraciones();
   nbRapRevisarQue();
@@ -8031,7 +8035,7 @@ function nbSyncConfirm() {
 
 // Qué falta para poder crear la cita, dicho con la verdad.
 function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc, rapida, duracion, servicioRapido }) {
-  if (rapida && !servicioRapido && !duracion) return 'Dime cuánto dura para no ocupar de menos la agenda.';
+  if (rapida && !servicioRapido && !duracion) return 'Toca cuánto dura: la agenda aparta ese rato.';
   if (svc.escrito && !svc.resuelto) {
     return svc.coincidencias
       ? `Hay ${svc.coincidencias} servicios que encajan con «${svc.escrito}»: elige uno en la lista.`

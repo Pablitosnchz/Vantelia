@@ -101,6 +101,14 @@ def test_dice_por_que_no_se_puede_crear(caso, espera):
 
 
 def test_con_el_servicio_a_medias_no_se_crea_una_cita_de_media_hora():
+    """«elumen» encaja con catorce servicios: antes se mandaba servicio vacío y la cita salía de
+    30 min sin avisar. El botón espera a que elija uno."""
     sync = _funcion(_panel(), "nbSyncConfirm")
-    assert "servicioAMedias" in sync and "disabled = !(completo && hora && !servicioAMedias)" in sync, (
-        "con un servicio escrito a medias el botón sigue activo y la cita se crearía sin servicio")
+    assert "nbPorQueNoSePuedeCrear(" in sync and "disabled = !!falta" in sync, (
+        "el botón no depende de lo que falta: con un servicio a medias se crearía la cita")
+    caso = {"hora": "10:00", "nombre": "Ana Ruiz Perez", "completo": True,
+            "svc": {"escrito": "elumen", "resuelto": "", "coincidencias": 14},
+            "rapida": False, "duracion": 0, "servicioRapido": ""}
+    salida = _node([_funcion(_panel(), "nbPorQueNoSePuedeCrear")],
+                   "process.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(caso, ensure_ascii=False))
+    assert salida.startswith("Hay 14 servicios que encajan"), salida

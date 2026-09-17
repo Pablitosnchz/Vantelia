@@ -147,25 +147,31 @@ def _funcion(fuente, nombre):
     return encontrada.group()
 
 
-def test_el_portal_abre_en_cita_rapida_y_pide_la_duracion():
+def test_el_portal_abre_en_cita_rapida_con_media_hora_puesta():
+    """Decisión de Pablo (17-sep-2026): que no le pregunte nada. Media hora de salida, a un toque
+    de cambiarla, y si el trabajo dura más se estira la cita en la agenda."""
     fuente = _panel()
     assert 'id="nbRapQue"' in fuente and 'id="nbRapDur"' in fuente, "no existe la cita rápida"
     assert "let nbModo = 'rapida'" in fuente, "el portal no abre en cita rápida"
+    assert "const NB_DURACION_POR_DEFECTO = 30;" in fuente, "no hay duración de salida"
+    assert "let nbRapDuracion = NB_DURACION_POR_DEFECTO;" in fuente, "la duración no viene puesta"
+    abrir = fuente.split("async function openNewBookingDrawer", 1)[1].split("\n}\n", 1)[0]
+    assert "nbRapDuracion = NB_DURACION_POR_DEFECTO;" in abrir, "al abrir otra cita no vuelve a media hora"
     node = shutil.which("node")
     if not node:
         pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
     caso = {"hora": "10:00", "nombre": "Carmen Prueba Rapida", "completo": True,
             "svc": {"escrito": "", "resuelto": "", "coincidencias": 0},
-            "rapida": True, "duracion": 0, "servicioRapido": ""}
+            "rapida": True, "duracion": 30, "servicioRapido": ""}
     salida = subprocess.run([node, "-e", _funcion(fuente, "nbPorQueNoSePuedeCrear")
                              + "\nprocess.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(caso)],
                             check=True, capture_output=True, text=True, encoding="utf-8").stdout
-    assert salida == "Dime cuánto dura para no ocupar de menos la agenda."
-    con_duracion = dict(caso, duracion=180)
+    assert salida == "", "con la duración puesta no falta nada"
+    sin_duracion = dict(caso, duracion=0)
     salida2 = subprocess.run([node, "-e", _funcion(fuente, "nbPorQueNoSePuedeCrear")
-                              + "\nprocess.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(con_duracion)],
+                              + "\nprocess.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(sin_duracion)],
                              check=True, capture_output=True, text=True, encoding="utf-8").stdout
-    assert salida2 == ""
+    assert salida2 == "Toca cuánto dura: la agenda aparta ese rato.", salida2
 
 
 def test_el_portal_manda_la_duracion_y_guarda_lo_escrito():
