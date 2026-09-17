@@ -1748,3 +1748,18 @@ a fin en todas.
 - Trazas de la medición: columnas nuevas presentes, 0 llamadas sin uso, 0 coste desconocido; `sin_vueltas:*` 2 veces y
   `se_acabaron_las_vueltas` 3 veces en el banco de Alicia.
 - Siguiente: decisión de Pablo sobre desplegar 2a7e7a8. Sin push ni despliegue.
+
+## 2026-09-17 05:40–05:55 Europe/Madrid — despliegue de 293ff23 (plan de bajo coste A/B/C) (Claude)
+
+- Decisión de Pablo (AskUserQuestion): «Desplegar ya». `claude/bajo-coste-candidato` integrado en `main` (293ff23), código
+  idéntico a 2a7e7a8 (`git diff` sobre backend, tests, evals, scripts, UIs, api y deploy: 0 ficheros). `main` subido y
+  `deploy/deploy.ps1 -SkipLocalChecks` (suite completa ya verde sobre el mismo código): copia
+  `/srv/vantelia-backups/pre-deploy-20260917-034955.db`, health ok y humo 5/5.
+- Comprobado en la app viva: VERSION.json 293ff23 sin cambios pendientes; `_corregir_sin_vueltas`, `_argumentos_validos`,
+  `textnorm.objeto_json` y `trazas.anotar_llamada` presentes; columnas `llamadas_modelo`, `llamadas_sin_uso` y
+  `coste_desconocido` creadas en agent_turns; `resumen_del_dia` con los campos nuevos; `objeto_json` rechaza `[]` y `1e309`.
+  Health ok con 27 clientes: la diferencia con los 28 de snap12 es una demo automática caducada (3 → 2), todos los
+  negocios reales siguen.
+- Datos: snap12, cfg12, copias de metareview y todas las BD de medición borradas; nada en /tmp del servidor.
+- Siguiente: vigilar en el informe (`/admin/informe`) la cobertura de consumo y los frenos `sin_vueltas:*` y
+  `argumentos_con_otra_forma` con tráfico real; bloque D (selección de servicios por estado) según el diseño de Astra 3819d60.
