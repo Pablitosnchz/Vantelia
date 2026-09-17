@@ -636,6 +636,22 @@ def _booking_email_bodies(
     )
     if _nota_servicio:
         text_body += f"\n{_nota_servicio}\n"
+    # La fianza, también por email. El resumen de WhatsApp la avisa desde el 26-ago-2026, pero
+    # quien reserva por la web o a quien la apunta el mostrador recibía una confirmación que no la
+    # mencionaba y se enteraba el día de la cita (auditoría del 17-sep-2026: 53 servicios del salón
+    # piloto la piden). Si ya está pagada no se repite.
+    _aviso_fianza = ""
+    try:
+        _ya_pagada = str(booking_row["payment_status"] or "") == "paid"
+    except (KeyError, IndexError):
+        _ya_pagada = False
+    if status_key == "confirmed" and not _ya_pagada:
+        try:
+            _aviso_fianza = aviso_de_fianza(booking_row["cliente_id"], service_name)
+        except Exception as exc:  # noqa: BLE001 - el email vale mas que la linea de la fianza
+            settings.logger.debug("No se pudo calcular la fianza para el email: %s", exc)
+    if _aviso_fianza:
+        text_body += f"\n{_aviso_fianza}\n"
     if status_key == "pending_payment":
         _pago_url = build_booking_payment_url(booking_row["manage_token"])
         # Senal, pago completo o retencion: el mismo helper que usa WhatsApp explica
@@ -689,6 +705,12 @@ def _booking_email_bodies(
             f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
             f'background:#f2f7f4;border:1px solid #cfe3d8;line-height:1.6;white-space:pre-line;">'
             f'{escape(_nota_servicio)}</div>'
+        )
+    if _aviso_fianza:
+        html_body += (
+            f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
+            f'background:#fdf4e3;border:1px solid #e8d6b0;line-height:1.6;white-space:pre-line;">'
+            f'{escape(_aviso_fianza)}</div>'
         )
     if status_key == "pending_payment" and _pago_nota:
         html_body += f'<p style="line-height:1.6;">{escape(_pago_nota)}</p>'
