@@ -1719,3 +1719,32 @@ a fin en todas.
 - Siguiente, según `docs/ENTREGA_ALICIA.md`: Alicia conecta su número y añade un método de pago en Meta, prueba corta
   (`docs/QA_WHATSAPP_ALICIA.md`) y 48 h de observación. Pendiente de Alicia: lista de precios, Pack elumen largo y pasos
   de los alisados.
+
+## 2026-09-16 22:45 – 2026-09-17 02:40 Europe/Madrid — plan de bajo coste A/B/C, candidato 2a7e7a8 (Claude)
+
+- Pablo aprueba COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE y PLAN_TECNICO_POSTDESPLIEGUE («vamos a ello»). Reparto con Astra:
+  Claude implementa A/B/C, Astra diseña D (3819d60) y revisa. Integrados en main los docs de Astra (2cf31d1).
+- A `claude/validacion-final`: 437325d validación de hechos en la última vuelta y en el cierre (repro con modelo simulado);
+  revisión de Astra CAMBIOS (precio + cita falsa combinados) → 8f0d6f6 corrige todas las infracciones y revalida (OK).
+- B `claude/contratos-json`: cb46dae contratos de argumentos de tools e intents; CAMBIOS (confianza `true`, 1e309) →
+  1d6e054; CAMBIOS (índice «²») → a41a2e9 (OK).
+- C `claude/consumo-trazas` / `claude/consumo-trazas-rev`: c057e3b consumo del cierre e intents, coste desconocido y columnas
+  nuevas con migración; CAMBIOS (del_turno no lo mostraba) → 877c795 (OK).
+- Suites completas: A 2882, B 2893 y C 2879 passed (1 skipped, 0 fallos). Integrado `claude/bajo-coste-candidato`
+  f2a9696 (conflicto de imports en intents resuelto conservando ambos): 2918 passed, OK de Astra al código integrado.
+- Medición con modelo real sobre snap12 (producción 17-sep ~00:25) y cfg12, sucio=0. Referencia c110bd9: Alicia 45/45 al
+  primer intento; metareview 15 + 1 tras reintento. Candidato f2a9696: críticos ×6 36/36, metareview 16/16, Alicia 44 + 1
+  **fallo crítico** `digresion-fianza-a-media-reserva` (2/2). Causa leída en agent_turns: explicación de la fianza con
+  «la cita queda confirmada automáticamente» (condicional) → `dijo_que_hay_cita_sin_haberla`; sin vueltas, la salida segura
+  de A sustituía la respuesta entera y se perdían Bizum, transferencia y teléfono. Regresión de A.
+- 9306fd9: la salida segura quita solo las frases que incumplen (texto neutro solo si no queda nada); test con la
+  respuesta real de producción en rojo antes y verde después. OK de Astra al diff.
+- Candidato **2a7e7a8** (f2a9696 + 9306fd9): suite 2920 passed, 1 skipped, 0 fallos. Con snap12: Alicia 45/45 al primer
+  intento, 0 fallos/no medidos; críticos ×6 36/36; `digresion-fianza-a-media-reserva` ×10: 9 al primer intento + 1 tras
+  reintento (intento fallido por la regla de orientación del alisado → diagnóstico, sin freno de A; el reintento conserva
+  Bizum/transferencia tras quitar la frase condicional); metareview 15 al primer intento + 1 fallo importante
+  `horario-escrito-manda` (2/2, 02:24 Madrid, turno de 6 vueltas sin freno de A/B/C; mismo caso intermitente que falló
+  también con la referencia en snap10 y pasó en snap11/snap12).
+- Trazas de la medición: columnas nuevas presentes, 0 llamadas sin uso, 0 coste desconocido; `sin_vueltas:*` 2 veces y
+  `se_acabaron_las_vueltas` 3 veces en el banco de Alicia.
+- Siguiente: decisión de Pablo sobre desplegar 2a7e7a8. Sin push ni despliegue.
