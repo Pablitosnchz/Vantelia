@@ -1763,3 +1763,46 @@ a fin en todas.
 - Datos: snap12, cfg12, copias de metareview y todas las BD de medición borradas; nada en /tmp del servidor.
 - Siguiente: vigilar en el informe (`/admin/informe`) la cobertura de consumo y los frenos `sin_vueltas:*` y
   `argumentos_con_otra_forma` con tráfico real; bloque D (selección de servicios por estado) según el diseño de Astra 3819d60.
+
+## 2026-09-17 11:00–22:30 Europe/Madrid — bloque D aparcado, prueba real de Alicia y cierre operativo (Claude)
+
+- **Bloque D (piloto de selección), ramas sin integrar.** D2b `9bbec49`: el servicio anotado por el modelo
+  pasa las mismas comprobaciones de largo y técnica (OK de Astra; suite 2975 passed, 1 skipped).
+  D2c `72ed470`: resumen de WhatsApp con «No incluye: …» marcado como mostrado solo si el resumen se entrega,
+  `Aclaracion.enviada` + identidad única, e id del mensaje de WhatsApp como evento (suite 2988 passed).
+  `102a0ee`: 5 casos del banco con la matriz del contrato. `ec1d234`: la evidencia vale desde el último cambio
+  (el modelo registraba un turno tarde y `crear_cita` quedaba bloqueada para siempre). `e59394d`: herramienta
+  plana, servicio como pista y pregunta enviada tal cual (suite 2997 passed).
+- **Medición con modelo real sobre snap13** (copia de producción del 17-sep 13:54, borrada al acabar).
+  Con el interruptor APAGADO: Alicia 50/50 al primer intento (incluidos los 5 casos nuevos), metareview 15/16.
+  Con el interruptor ENCENDIDO: `ec1d234` 2 críticos + 2 importantes en 27 casos; `e59394d` 43 al primer intento
+  + 1 tras reintento, 6 fallos (3 críticos). Causas leídas en trazas: el modelo rellena «lo que se quita» con el
+  servicio nuevo, manda argumentos que no son JSON y anota servicios incoherentes. **Bloque D APARCADO** por
+  orden de Pablo: el interruptor sigue apagado y el camino actual es el que se pondría en marcha.
+- **Prueba real de Alicia en su portal (13:19–13:33).** Creó 6 citas a mano y desactivó «Citas» (13:33, su propia
+  sesión; reactivado a las 15:49). Hallazgos con sus capturas y datos: (1) «La jornada de hoy ya ha terminado»
+  cuando lo que pasaba es que el Pack grey blending medio (7 h 20) ya no cabía → `9c58ec1`; (2) 12-13 packs con
+  pasos o esperas incoherentes (tabla de revisión publicada); (3) el Excel actualizado del 17-sep NO corrige los
+  alisados y contradice 3 packs; **no usar `importar_catalogo_excel --aplicar`** (borra y recrea el catálogo).
+- **Auditoría en solo lectura (bloques 1-4 del plan de Astra `ce72270`).** Recorrido E2E en copia con envíos
+  interceptados: pasos y esperas ocupan bien, otra cita entra en la espera y no encima del trabajo, mover
+  conserva pasos, cancelar avisa, fianza con Stripe incapaz no deja la cita pendiente de pago, recordatorio por
+  email y motivo registrado cuando no hay canal. **Hallazgos:** F1 la Q&A de la fianza promete un enlace de
+  tarjeta que hoy no existe (Pablo decide: activar Stripe antes de arrancar; Alicia **no tiene cuenta conectada**);
+  F2 el email de confirmación no menciona la fianza; F3 `booking.webhook_url` apunta a un webhook de Make muerto
+  (410) y cada cita lo intenta (Pablo: quitar en el próximo despliegue, con copia); F4 el contador de
+  recordatorios cuenta los que no salen por ningún canal.
+- **Rama `claude/cita-manual` (sin desplegar), 8 commits.** Fallos del vídeo de Alicia: el formulario arrastraba
+  el servicio anterior, ofrecía 8 de 169 servicios y el foco saltaba al desplegable (`56336a6`); un servicio
+  escrito a medias creaba una cita de 30 min en silencio. Cita rápida del mostrador (`19b5dfb`, `ad4ca7f`):
+  texto libre + duración (30 min por defecto, decisión de Pablo), `duration_minutes` en el alta manual y
+  `duracion` en `/disponibilidad`. Revisiones de Astra: mover una cita ya no la encoge a la duración del
+  catálogo (`a1dc38f`, afectaba también a citas estiradas a mano), la sugerencia no pisa el texto ni se engancha
+  sola (`7fba7e4`, `8086879`) y el teclado no se sale de lo pintado (`b417618`). Suite completa 2948 passed,
+  1 skipped sobre `8086879` y sobre `b417618`.
+- **Decisión de Alicia (21:07):** arranque congelado hasta primeros de noviembre. Datos que sí confirmó: elumen
+  20 min de espera, flash repair 15 de trabajo + 15 de espera, alisados «45 min según cuál» (sin decir cuál).
+  Parche preparado (sin aplicar) para los 3 packs de mechas afectados: corto 195→230, medio 360→350, largo
+  440→430.
+- **Siguiente:** OK de Astra a `b417618` y orden de Pablo para desplegar (con la retirada del webhook de Make);
+  preparar la revisión de packs para noviembre; Stripe de Alicia sin conectar; bloque D sigue aparcado.
