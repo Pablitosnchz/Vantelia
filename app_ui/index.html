@@ -7757,17 +7757,30 @@ function nbPintarDuraciones() {
 // pasos); si no, se guarda tal cual como nota y la duración la elige ella.
 function nbRapRevisarQue() {
   const campo = document.getElementById('nbRapQue');
+  const escrito = (campo?.value || '').trim();
+  const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
+  nbRapServicio = exacto ? exacto.nombre : '';
+  nbRapPintarAviso();
+  nbPintarDuraciones();
+  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+  nbSyncConfirm();
+}
+
+// Lo que se le dice debajo del texto: qué servicio ha quedado vinculado (si alguno) y la
+// sugerencia del catálogo, que se toca a propósito.
+function nbRapPintarAviso() {
+  const campo = document.getElementById('nbRapQue');
   const aviso = document.getElementById('nbRapQueAviso');
   const escrito = (campo?.value || '').trim();
   const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
+  const vinculado = nbRapServicio ? nbServicios.find(s => s.nombre === nbRapServicio) : null;
   // La coincidencia parcial NO engancha un servicio por su cuenta: se ofrece y lo elige ella
   // (revisión de Astra a 19b5dfb). «Elumen» son catorce servicios distintos y cada uno dura lo suyo.
-  const sugerencia = (!exacto && escrito) ? (nbSvcSugerencias(escrito)[0] || null) : null;
-  nbRapServicio = exacto ? exacto.nombre : '';
+  const sugerencia = (!vinculado && escrito) ? (nbSvcSugerencias(escrito)[0] || null) : null;
   if (aviso) {
     aviso.innerHTML = '';
-    if (exacto) {
-      aviso.textContent = `Se apunta como «${exacto.nombre}»${exacto.dur ? ` · ${nbDuracionTexto(exacto.dur)}` : ''}, con sus tiempos de espera.`;
+    if (vinculado) {
+      aviso.textContent = `Se apunta como «${vinculado.nombre}»${vinculado.dur ? ` · ${nbDuracionTexto(vinculado.dur)}` : ''}, con sus tiempos de espera. Lo que has escrito se guarda igual.`;
     } else if (escrito) {
       aviso.append('Se guarda tal cual. ');
       if (sugerencia) {
@@ -7776,14 +7789,17 @@ function nbRapRevisarQue() {
         btn.className = 'btn btn-ghost';
         btn.style.cssText = 'padding:2px 8px; font-size:0.76rem;';
         btn.textContent = `¿Es «${sugerencia.nombre}»?`;
-        btn.addEventListener('click', () => { campo.value = sugerencia.nombre; nbRapRevisarQue(); });
+        btn.addEventListener('click', () => {
+          nbRapServicio = sugerencia.nombre;   // lo que escribió ella se queda como está
+          nbPintarDuraciones();
+          loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
+          nbSyncConfirm();
+          nbRapPintarAviso();
+        });
         aviso.appendChild(btn);
       }
     }
   }
-  nbPintarDuraciones();
-  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
-  nbSyncConfirm();
 }
 
 // A qué hora termina lo que se está apuntando, con la duración que va a ocupar de verdad.
@@ -7915,9 +7931,10 @@ function nbSvcSugerencias(q) {
   return empieza.concat(dentro);
 }
 
-// Cuantas caben en la lista sin convertirla en un muro. Las demas siguen ahi: la lista
-// tiene scroll y el pie dice cuantas quedan (Alicia: «no me salen todos», con 169 servicios).
-const NB_SVC_VISIBLES = 25;
+// Tope de guardia: la lista se pinta ENTERA y se recorre con scroll o con el teclado. Con un
+// tope de 25, el servicio 26 no se alcanzaba de ninguna forma (revisión de Astra a 7fba7e4);
+// este número solo evita pintar miles si algún día hay un catálogo enorme.
+const NB_SVC_VISIBLES = 300;
 
 function nbSvcPintar(todas) {
   const ac = document.getElementById('nbSvcAc');
@@ -7955,6 +7972,14 @@ function nbSvcBuscar() {
   if (!input) return;
   nbSvcIdx = -1;
   nbSvcPintar(nbSvcSugerencias(input.value));
+}
+
+// Lo que se recorre con las flechas tiene que verse: con la lista larga, el elegido quedaba
+// fuera de la parte visible (revisión de Astra a 7fba7e4).
+function nbSvcVerElegido() {
+  const ac = document.getElementById('nbSvcAc');
+  const sel = ac && ac.querySelector('.nb-ac-item.sel');
+  if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
 }
 
 // Lo escrito tiene que ser un servicio DEL CATALOGO: el backend reserva por
@@ -8281,6 +8306,7 @@ document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots(
         ? Math.min(lista.length - 1, nbSvcIdx + 1)
         : Math.max(0, nbSvcIdx - 1);
       nbSvcPintar(lista);
+      nbSvcVerElegido();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const elegido = nbSvcIdx >= 0 && lista[nbSvcIdx] ? lista[nbSvcIdx].nombre : nbSvcResuelto();
@@ -8295,8 +8321,10 @@ document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nb
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   const btn = document.getElementById('nbConfirmBtn');
   const rapQue = (document.getElementById('nbRapQue')?.value || '').trim();
+  // Lo que escribió se guarda TAL CUAL, también cuando se ha vinculado un servicio: son dos
+  // cosas distintas y la suya es la que dice qué hay que hacerle (revisión de Astra a 7fba7e4).
   const notas = [document.getElementById('nbNotas').value.trim(),
-                 (nbModo === 'rapida' && rapQue && !nbRapServicio) ? rapQue : '']
+                 (nbModo === 'rapida' && rapQue) ? rapQue : '']
     .filter(Boolean).join(' · ');
   const payload = {
     nombre: document.getElementById('nbNombre').value.trim(),

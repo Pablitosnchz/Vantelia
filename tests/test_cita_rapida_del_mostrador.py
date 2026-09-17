@@ -198,12 +198,23 @@ def test_el_portal_abre_en_cita_rapida_con_media_hora_puesta():
     assert salida2 == "Toca cuánto dura: la agenda aparta ese rato.", salida2
 
 
+def test_lo_que_escribe_se_guarda_aunque_se_reconozca_el_servicio():
+    """Revisión de Astra a 7fba7e4: con «Pack elumen largo» reconocido, la nota se iba vacía y se
+    perdía lo que ella había escrito. Son dos cosas distintas y las dos importan."""
+    fuente = _panel()
+    boton = fuente.split("document.getElementById('nbConfirmBtn').addEventListener", 1)[1].split("});", 1)[0]
+    assert "(nbModo === 'rapida' && rapQue) ? rapQue : ''" in boton, "el texto se pierde al reconocer servicio"
+    revisar = _funcion(fuente, "nbRapPintarAviso")
+    assert "Lo que has escrito se guarda igual" in revisar, "no se le dice que su texto se conserva"
+    assert "campo.value = sugerencia.nombre" not in fuente, "la sugerencia pisa lo que escribió"
+
+
 def test_una_coincidencia_a_medias_se_ofrece_pero_no_se_engancha_sola():
     """Revisión de Astra a 19b5dfb: «elumen» encaja con catorce servicios de duraciones distintas;
     el código lo sugiere y lo elige quien coge la cita."""
     revisar = _funcion(_panel(), "nbRapRevisarQue")
     assert "nbRapServicio = exacto ? exacto.nombre : '';" in revisar, "una coincidencia parcial engancha servicio"
-    assert "¿Es «" in revisar, "no se ofrece la sugerencia para elegirla"
+    assert "¿Es «" in _funcion(_panel(), "nbRapPintarAviso"), "no se ofrece la sugerencia para elegirla"
 
 
 def test_se_ve_a_que_hora_termina_la_cita():

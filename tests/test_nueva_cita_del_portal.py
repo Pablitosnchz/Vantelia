@@ -76,7 +76,8 @@ def test_la_lista_ofrece_todo_el_catalogo_y_dice_cuantos_quedan():
     elumen, vacio = json.loads(salida)
     assert len(elumen) == 14, "se pierden servicios que encajan (%d de 14): %s" % (len(elumen), elumen)
     assert vacio == len(catalogo), "con el campo vacío no se ofrece el catálogo entero"
-    assert "NB_SVC_VISIBLES" in fuente and "más: escribe alguna letra" in fuente, "no dice cuántos quedan"
+    assert "NB_SVC_VISIBLES" in fuente, "no hay tope de guardia para catálogos enormes"
+    assert re.search(r"const NB_SVC_VISIBLES = (\d+);", fuente).group(1) == "300", "el tope deja servicios fuera"
     assert re.search(r"\.nb-ac\.open \{[^}]*overflow-y:auto", fuente), "la lista larga no se puede recorrer"
 
 
@@ -98,6 +99,24 @@ def test_dice_por_que_no_se_puede_crear(caso, espera):
     trozos = [_funcion(_panel(), "nbPorQueNoSePuedeCrear")]
     salida = _node(trozos, "process.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(caso, ensure_ascii=False))
     assert salida == espera
+
+
+def test_el_servicio_numero_26_se_puede_elegir_con_el_teclado():
+    """Revisión de Astra a 7fba7e4: con la lista cortada en 25, el 26 no se alcanzaba de ninguna
+    forma, ni con el ratón ni con las flechas."""
+    fuente = _panel()
+    catalogo = [{"nombre": "Elumen %02d" % i, "cat": "Trabajos de color", "dur": 15} for i in range(30)]
+    trozos = ["const nbServicios = %s;" % json.dumps(catalogo, ensure_ascii=False),
+              _funcion(fuente, "nbSvcNorm"), _funcion(fuente, "nbSvcSugerencias"),
+              re.search(r"^const NB_SVC_VISIBLES = \d+;", fuente, re.M).group()]
+    salida = _node(trozos, "const l = nbSvcSugerencias('elumen');"
+                           "process.stdout.write(JSON.stringify([l.length, l.slice(0, NB_SVC_VISIBLES).length,"
+                           " (l[25] || {}).nombre]));")
+    total, pintados, veinteseis = json.loads(salida)
+    assert total == 30 and pintados == 30, "la lista no se pinta entera (%s de %s)" % (pintados, total)
+    assert veinteseis == "Elumen 25", veinteseis
+    teclado = fuente.split("svc.addEventListener('keydown'", 1)[1].split("});", 1)[0]
+    assert "nbSvcVerElegido()" in teclado, "lo elegido con las flechas puede quedar fuera de la vista"
 
 
 def test_con_el_servicio_a_medias_no_se_crea_una_cita_de_media_hora():
