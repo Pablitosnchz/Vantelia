@@ -7910,6 +7910,38 @@ function nbSyncConfirm() {
   }
 }
 
+function nbMinutos(hhmm) {
+  const [h, m] = String(hhmm || '').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function nbDuracionTexto(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+}
+
+// Por qué no sale ningún hueco, dicho con la verdad. Alicia, 17-sep-2026: «Pack grey blending
+// medio» (7 h 20 min) a las 13:20, con la agenda de Lorena vacía hasta las 20:30, decía «La
+// jornada de hoy ya ha terminado»: no había terminado, es que ese servicio ya no cabía. Pura para
+// poder probarla (tests/test_por_que_no_hay_huecos.py).
+function nbPorQueNoHayHuecos({ fecha, hoy, ahoraMin, ventana, dur, servicio, quien, sinTramos }) {
+  const esHoy = fecha === hoy;
+  if (ventana) {
+    const fin = nbMinutos(ventana.end);
+    const desde = esHoy ? Math.max(nbMinutos(ventana.start), ahoraMin) : nbMinutos(ventana.start);
+    if (esHoy && desde >= fin) return 'La jornada de hoy ya ha terminado.';
+    if (dur && dur > fin - desde) {
+      const de = quien ? ` de ${quien}` : '';
+      return esHoy
+        ? `${servicio} dura ${nbDuracionTexto(dur)} y hoy ya no cabe antes del cierre${de} (${ventana.end}).`
+        : `${servicio} dura ${nbDuracionTexto(dur)} y no cabe en la jornada${de} de ese día (${ventana.start} a ${ventana.end}).`;
+    }
+  }
+  const que = dur ? `de ${nbDuracionTexto(dur)} ` : '';
+  if (sinTramos) return esHoy ? `Hoy ya no queda ningún hueco ${que}para este servicio.` : `Ese día no queda ningún hueco ${que}para este servicio.`;
+  return `No queda ningún hueco ${que}ese día.`;
+}
+
 // Aviso del dia con salida: sin el atajo, el usuario se queda probando fechas.
 function nbAvisoDia(cont, texto, conAtajo) {
   cont.innerHTML = `<span class="panel-sub" style="margin:0;">${escapeHtml(texto)}</span>`;
@@ -7957,10 +7989,15 @@ async function loadNbSlots(preselect = '') {
     const slots = all.filter(s => s.disponible !== false);
     cont.innerHTML = '';
     if (!slots.length) {
-      const cerrado = !all.length;   // el dia no tiene ni tramos: jornada terminada
-      nbAvisoDia(cont, cerrado
-        ? (fecha === cdDateKey(new Date()) ? 'La jornada de hoy ya ha terminado.' : 'Ese día no hay agenda.')
-        : 'No queda ningún hueco ese día.', true);
+      const ahora = new Date();
+      const svc = nbServicios.find(s => s.nombre === servicio);
+      nbAvisoDia(cont, nbPorQueNoHayHuecos({
+        fecha, hoy: hoyKey, ahoraMin: ahora.getHours() * 60 + ahora.getMinutes(),
+        ventana: cdWeekdayWindow(empSel || citasState.daySchedule || {}, diaSemana),
+        dur: Number(svc && svc.dur) || 0, servicio,
+        quien: empSel && !empSel.is_default ? (empSel.name || '') : '',
+        sinTramos: !all.length,
+      }), true);
       return;
     }
     // Agrupados por franja y con la altura acotada: sueltos eran 44 fichas
