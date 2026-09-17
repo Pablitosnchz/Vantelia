@@ -33,6 +33,7 @@ numero de reserva solo existe si `crear_cita` lo devuelve.
 from __future__ import annotations
 
 import json
+import math
 import re
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
@@ -516,6 +517,46 @@ _ALIAS_DE_ARGUMENTO = {
     "telefono_contacto": "telefono",
     "nombre_cliente": "nombre",
 }
+
+
+_TIPOS_JSON = {
+    "string": lambda v: isinstance(v, str) or (not isinstance(v, bool) and isinstance(v, (int, float))
+                                               and math.isfinite(v)),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v),
+    "boolean": lambda v: isinstance(v, bool),
+    "array": lambda v: isinstance(v, list),
+}
+
+
+def _argumentos_validos(nombre: str, crudo: Any, herramientas) -> Tuple[Optional[Dict[str, Any]], str]:
+    """(argumentos, error) de una llamada, comprobados contra el esquema que se le ofreció.
+
+    Bloque B de COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE (16-sep-2026): una lista, `null` o un campo
+    con otro tipo llegaban a `argumentos.get` y tumbaban el turno entero. Solo se comprueba la
+    FORMA: la autorización sigue en el núcleo. Los campos que el esquema no declara no se
+    rechazan (pueden ser alias que resuelve `_normalizar_argumentos`); un `null` es no decirlo.
+    """
+    datos = textnorm.objeto_json(crudo if crudo not in (None, "") else "{}")
+    if datos is None:
+        return None, "Los argumentos tienen que ser un objeto JSON."
+    esquema = next((h["function"].get("parameters") or {} for h in herramientas or []
+                    if h.get("function", {}).get("name") == nombre), {})
+    propiedades = esquema.get("properties") or {}
+    limpios = {}
+    for campo, valor in datos.items():
+        if valor is None:
+            continue
+        declarado = propiedades.get(campo) or {}
+        tipo = declarado.get("type")
+        if tipo in _TIPOS_JSON and not _TIPOS_JSON[tipo](valor):
+            return None, "El campo «%s» tiene que ser %s." % (campo, tipo)
+        if declarado.get("enum") and valor not in declarado["enum"]:
+            return None, "El campo «%s» no admite ese valor." % campo
+        if not tipo and isinstance(valor, (dict, list)):
+            return None, "El campo «%s» no puede ser una lista ni un objeto." % campo
+        limpios[campo] = valor
+    return limpios, ""
 
 
 def _normalizar_argumentos(argumentos: Dict[str, Any]) -> Dict[str, Any]:
@@ -3312,6 +3353,88 @@ def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
     return any(familia and familia in hablando_de for familia in familias)
 
 
+def _infraccion_sin_vueltas(cliente_id: str, texto: str, *, dicho_de_ella: str, telefono: str,
+                            estado: Any, mutada: bool, creada: bool, mirada_la_cita: bool,
+                            ofrecidas) -> Tuple[str, str]:
+    """(motivo, hora real) de la primera comprobación de HECHOS que incumple una respuesta final.
+
+    Son las mismas comprobaciones y condiciones del bucle de `responder`, que allí solo actúan
+    si queda otra vuelta para que el modelo corrija. Cuando no queda -última vuelta o llamada
+    de cierre- la respuesta salía sin comprobar (bloque A de COMPARATIVA_IA_Y_PLAN_DE_BAJO_COSTE,
+    16-sep-2026): un precio que el negocio no da o una cita que no existe.
+    """
+    if _da_un_precio_prohibido(cliente_id, texto, dicho_de_ella):
+        return "precio_que_no_se_da", ""
+    if (_afirma_que_hay_cita_confirmada(texto) and not mutada and not mirada_la_cita
+            and not _la_cita_que_afirma_existe(cliente_id, telefono, texto)):
+        return "dijo_que_hay_cita_sin_haberla", ""
+    hora_real = _le_dice_una_hora_que_no_es_la_suya(
+        cliente_id, telefono, texto, mutada, pedidas=set(ofrecidas) | _horas_que_ha_dicho(dicho_de_ella))
+    if hora_real:
+        return "hora_que_no_es_la_suya", hora_real
+    if _dice_que_acaba_de_hacerlo(texto) and not mutada:
+        return "dijo_haberlo_hecho_sin_hacerlo", ""
+    if estado.cancelada and not mutada and _da_la_cita_por_hecha(texto):
+        return "daba_por_viva_una_cita_cancelada", ""
+    if (_da_la_cita_por_hecha(texto)
+            and not (creada or mirada_la_cita or (estado.hecho and not estado.cancelada))):
+        return "daba_la_cita_por_hecha", ""
+    return "", ""
+
+
+def _sin_las_frases_que(texto: str, incumple) -> str:
+    """El texto sin las frases en las que `incumple(frase)`; vacío si no queda nada."""
+    frases = re.findall(r"[^.!?\n]+[.!?]*[ \t]*|\n", texto or "")
+    return "".join(f for f in frases if not incumple(f)).strip()
+
+
+def _salida_segura(texto: str, motivo: str, hora_real: str = "") -> str:
+    """Lo que sale cuando la respuesta final incumple y ya no hay vuelta para corregirla.
+
+    Sin otra llamada al modelo. Se quitan SOLO las frases que incumplen y se conserva el resto:
+    sustituir la respuesta entera tiraba, por ejemplo, cómo se paga la fianza por una frase
+    condicional («la cita queda confirmada al pagar») que se leía como cita dada por hecha
+    (banco de Alicia con modelo real, 17-sep-2026). Si no queda nada, sale lo que dice el estado.
+    `_corregir_sin_vueltas` vuelve a comprobar el resultado entero.
+    """
+    if motivo == "precio_que_no_se_da":
+        limpio = _sin_las_frases_que(texto, _UNA_CIFRA_DE_DINERO.search)
+        return limpio or "Ese precio no te lo puedo dar por mensaje: te lo dicen en el salón."
+    if motivo == "hora_que_no_es_la_suya":
+        return "Tu cita es a las %s." % hora_real
+    if motivo == "daba_por_viva_una_cita_cancelada":
+        return ("Tu cita está cancelada. Si quieres, miramos si ese hueco sigue libre y te "
+                "cojo una nueva.")
+    comprobacion = {
+        "dijo_que_hay_cita_sin_haberla": _afirma_que_hay_cita_confirmada,
+        "daba_la_cita_por_hecha": _da_la_cita_por_hecha,
+        "dijo_haberlo_hecho_sin_hacerlo": _dice_que_acaba_de_hacerlo,
+    }.get(motivo)
+    limpio = _sin_las_frases_que(texto, comprobacion) if comprobacion else ""
+    return limpio or "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
+
+
+def _corregir_sin_vueltas(cliente_id: str, texto: str, traza: Any, **contexto: Any) -> str:
+    """Corrige TODAS las infracciones de una respuesta final sin vueltas, no solo la primera.
+
+    Revisión de Astra a 437325d: «Las mechas son 80 €. Tu cita está confirmada para el jueves»
+    perdía la cifra y salía con la confirmación falsa, porque solo se corregía la primera
+    infracción y no se volvía a comprobar. Se comprueba de nuevo tras cada corrección; si una
+    misma infracción no desaparece, sale el texto neutro, que no incumple ninguna.
+    """
+    vistas = []
+    for _ in range(6):
+        motivo, hora_real = _infraccion_sin_vueltas(cliente_id, texto, **contexto)
+        if not motivo:
+            return texto
+        traza.freno("sin_vueltas:" + motivo)
+        if motivo in vistas:
+            break
+        vistas.append(motivo)
+        texto = _salida_segura(texto, motivo, hora_real)
+    return "Todavía no tienes la cita cogida. ¿Seguimos para dejarla reservada?"
+
+
 def _aviso_del_precio_que_no_se_da(cliente_id: str, lo_que_ha_escrito) -> str:
     """Qué se le pide al modelo al quitar una cifra de dinero de su respuesta.
 
@@ -3951,6 +4074,8 @@ async def responder(
     # El cuaderno de bitacora del turno. Nunca puede tumbar la conversacion: todo
     # lo suyo esta envuelto, y si falla se registra y se sigue.
     traza = trazas.Traza(cliente_id, session_id, canal="whatsapp" if telefono else "chat")
+    # Lo que `intents` llame al modelo durante este turno también se apunta aquí.
+    traza.activar()
 
     quien = _quien_escribe(cliente_id, telefono)
     historial = _historial(session_id, cliente_id)
@@ -4149,23 +4274,17 @@ async def responder(
             # Los hechos ya validados sobreviven también si el proveedor falla
             # o el proceso cae mientras espera la respuesta del modelo.
             reserva.guardar(cliente_id, clave_estado, estado, pedido=reserva.que_falta(estado, conocido))
+            herramientas_ofrecidas = _herramientas(estado)
             respuesta = cliente.chat.completions.create(
                 model=_modelo_del_negocio(cfg),
                 messages=turno,
-                tools=_herramientas(estado),
+                tools=herramientas_ofrecidas,
                 tool_choice=eleccion,
                 temperature=_temperatura_del_negocio(cfg),
                 max_tokens=400,
             )
             traza.vuelta()
-            try:
-                uso = getattr(respuesta, "usage", None)
-                if uso is not None:
-                    traza.modelo(_modelo_del_negocio(cfg),
-                                 prompt=getattr(uso, "prompt_tokens", 0) or 0,
-                                 salida=getattr(uso, "completion_tokens", 0) or 0)
-            except Exception:  # noqa: BLE001 - una metrica no frena nada
-                pass
+            traza.respuesta_del_modelo(_modelo_del_negocio(cfg), respuesta)
             elegido = respuesta.choices[0].message
             if not getattr(elegido, "tool_calls", None):
                 texto_final = (elegido.content or "").strip()
@@ -4501,6 +4620,13 @@ async def responder(
                                     "una propuesta y pregunta si le viene bien."),
                     })
                     continue
+                # Sin otra vuelta, las comprobaciones de hechos de arriba no han podido pedir
+                # que se corrija: lo que incumpla no sale tal cual.
+                if vuelta + 1 >= MAX_VUELTAS:
+                    texto_final = _corregir_sin_vueltas(
+                        cliente_id, texto_final, traza, dicho_de_ella=dicho_de_ella, telefono=telefono,
+                        estado=estado, mutada=mutada, creada=creada,
+                        mirada_la_cita=mirada_la_cita, ofrecidas=ofrecidas)
                 # Solo cuenta como dicho si de verdad ha salido en su respuesta.
                 if aviso and "25" in texto_final:
                     estado.recargo_dicho = True
@@ -4531,10 +4657,17 @@ async def responder(
                 ],
             })
             for llamada in elegido.tool_calls:
-                try:
-                    argumentos = json.loads(llamada.function.arguments or "{}")
-                except (ValueError, TypeError):
-                    argumentos = {}
+                argumentos, error_de_forma = _argumentos_validos(
+                    llamada.function.name, llamada.function.arguments, herramientas_ofrecidas)
+                if argumentos is None:
+                    # No se ejecuta ni se anota nada: se le devuelve el error para que corrija.
+                    traza.tool(llamada.function.name, {}, ok=False, nota=error_de_forma)
+                    traza.freno("argumentos_con_otra_forma")
+                    mensajes.append({"role": "tool", "tool_call_id": llamada.id, "content": json.dumps({
+                        "ok": False, "error": error_de_forma,
+                        "que_hacer": "Vuelve a llamar a la herramienta con los argumentos del esquema."},
+                        ensure_ascii=False)})
+                    continue
                 if llamada.function.name == "responder_propuesta":
                     hora_dicha, hora_del_codigo = estado.hora, estado.hora_del_codigo
                     ok = booking.contestar_alternativa_de_precio(
@@ -4977,10 +5110,17 @@ async def responder(
             temperature=_temperatura_del_negocio(cfg),
             max_tokens=300,
         )
+        # El cierre también gasta: antes no se apuntaba (bloque C, 16-sep-2026).
+        traza.respuesta_del_modelo(_modelo_del_negocio(cfg), cierre)
         reserva.guardar(cliente_id, clave_estado, estado,
                         pedido=reserva.que_falta(estado, conocido))
-        remate_final = _fechas_en_humano((cierre.choices[0].message.content or "").strip())
+        remate_final = (cierre.choices[0].message.content or "").strip()
         traza.freno("se_acabaron_las_vueltas")
+        # El cierre no pasaba por ninguna comprobación de hechos (bloque A, 16-sep-2026).
+        remate_final = _corregir_sin_vueltas(
+            cliente_id, remate_final, traza, dicho_de_ella=dicho_de_ella, telefono=telefono, estado=estado,
+            mutada=mutada, creada=creada, mirada_la_cita=mirada_la_cita, ofrecidas=ofrecidas)
+        remate_final = _fechas_en_humano(remate_final)
         traza.guardar(mensaje=mensaje, respuesta=remate_final)
         return remate_final, cita_creada
     except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
