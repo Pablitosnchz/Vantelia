@@ -198,6 +198,31 @@ def test_el_portal_abre_en_cita_rapida_con_media_hora_puesta():
     assert salida2 == "Toca cuánto dura: la agenda aparta ese rato.", salida2
 
 
+def test_una_coincidencia_a_medias_se_ofrece_pero_no_se_engancha_sola():
+    """Revisión de Astra a 19b5dfb: «elumen» encaja con catorce servicios de duraciones distintas;
+    el código lo sugiere y lo elige quien coge la cita."""
+    revisar = _funcion(_panel(), "nbRapRevisarQue")
+    assert "nbRapServicio = exacto ? exacto.nombre : '';" in revisar, "una coincidencia parcial engancha servicio"
+    assert "¿Es «" in revisar, "no se ofrece la sugerencia para elegirla"
+
+
+def test_se_ve_a_que_hora_termina_la_cita():
+    fuente = _panel()
+    pintar = _funcion(fuente, "nbPintarDuraciones")
+    assert "nbFinDeLaCita(" in pintar and "Se reservan" in pintar, "no se dice cuánto ocupa ni hasta cuándo"
+    assert "btn.disabled = !!delCatalogo" in pintar, "con servicio del catálogo los chips podrían alterar el pack"
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
+    trozos = [_funcion(fuente, "nbMinutos"), _funcion(fuente, "nbFinDeLaCita")]
+    guion = "\n".join(trozos) + (
+        "\nprocess.stdout.write([nbFinDeLaCita('10:00', 95), nbFinDeLaCita('23:30', 60),"
+        " nbFinDeLaCita('', 30)].join('|'));")
+    salida = subprocess.run([node, "-e", guion], check=True, capture_output=True, text=True,
+                            encoding="utf-8").stdout
+    assert salida == "11:35|00:30|", salida
+
+
 def test_el_portal_manda_la_duracion_y_guarda_lo_escrito():
     fuente = _panel()
     boton = fuente.split("document.getElementById('nbConfirmBtn').addEventListener", 1)[1].split("});", 1)[0]

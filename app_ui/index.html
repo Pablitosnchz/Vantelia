@@ -7723,12 +7723,17 @@ function nbSetModo(modo) {
 function nbPintarDuraciones() {
   const cont = document.getElementById('nbRapDur');
   if (!cont) return;
+  const delCatalogo = nbRapServicio
+    ? (nbServicios.find(s => s.nombre === nbRapServicio)?.dur || 0)
+    : 0;
+  const minutos = delCatalogo || nbRapDuracion;
   cont.innerHTML = '';
   NB_DURACIONES.forEach(min => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'filter-chip' + (nbRapDuracion === min ? ' active' : '');
+    btn.className = 'filter-chip' + (minutos === min ? ' active' : '');
     btn.textContent = nbDuracionTexto(min);
+    btn.disabled = !!delCatalogo;   // con servicio del catálogo mandan sus minutos y sus pasos
     btn.addEventListener('click', () => {
       nbRapDuracion = min;
       nbPintarDuraciones();
@@ -7737,6 +7742,15 @@ function nbPintarDuraciones() {
     });
     cont.appendChild(btn);
   });
+  const hora = document.getElementById('nbSlotSelected')?.value || '';
+  const fin = nbFinDeLaCita(hora, minutos);
+  const pie = document.createElement('p');
+  pie.className = 'panel-sub';
+  pie.style.cssText = 'margin:8px 0 0; font-size:0.78rem;';
+  pie.textContent = fin
+    ? `Se reservan ${nbDuracionTexto(minutos)}: de ${hora} a ${fin}.`
+    : `Se reservan ${nbDuracionTexto(minutos)} en cuanto elijas la hora.`;
+  cont.appendChild(pie);
 }
 
 // Lo que escribe en «Qué se hace»: si es un servicio del catálogo se reserva como tal (con sus
@@ -7745,19 +7759,39 @@ function nbRapRevisarQue() {
   const campo = document.getElementById('nbRapQue');
   const aviso = document.getElementById('nbRapQueAviso');
   const escrito = (campo?.value || '').trim();
-  const sug = escrito ? nbSvcSugerencias(escrito) : [];
   const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
-  const elegido = exacto || (sug.length === 1 ? sug[0] : null);
-  nbRapServicio = elegido ? elegido.nombre : '';
+  // La coincidencia parcial NO engancha un servicio por su cuenta: se ofrece y lo elige ella
+  // (revisión de Astra a 19b5dfb). «Elumen» son catorce servicios distintos y cada uno dura lo suyo.
+  const sugerencia = (!exacto && escrito) ? (nbSvcSugerencias(escrito)[0] || null) : null;
+  nbRapServicio = exacto ? exacto.nombre : '';
   if (aviso) {
-    aviso.textContent = elegido
-      ? `Se apunta como «${elegido.nombre}»${elegido.dur ? ` · ${nbDuracionTexto(elegido.dur)}` : ''}, con sus tiempos de espera.`
-      : (escrito ? 'No es un servicio del catálogo: se guarda como nota. Si dura más de lo puesto, toca otra duración o estira la cita en la agenda.' : '');
+    aviso.innerHTML = '';
+    if (exacto) {
+      aviso.textContent = `Se apunta como «${exacto.nombre}»${exacto.dur ? ` · ${nbDuracionTexto(exacto.dur)}` : ''}, con sus tiempos de espera.`;
+    } else if (escrito) {
+      aviso.append('Se guarda tal cual. ');
+      if (sugerencia) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-ghost';
+        btn.style.cssText = 'padding:2px 8px; font-size:0.76rem;';
+        btn.textContent = `¿Es «${sugerencia.nombre}»?`;
+        btn.addEventListener('click', () => { campo.value = sugerencia.nombre; nbRapRevisarQue(); });
+        aviso.appendChild(btn);
+      }
+    }
   }
-  const chips = document.getElementById('nbRapDur');
-  if (chips) chips.style.display = elegido ? 'none' : '';
+  nbPintarDuraciones();
   loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
   nbSyncConfirm();
+}
+
+// A qué hora termina lo que se está apuntando, con la duración que va a ocupar de verdad.
+function nbFinDeLaCita(hora, minutos) {
+  if (!hora || !minutos) return '';
+  const total = nbMinutos(hora) + minutos;
+  const h = Math.floor(total / 60) % 24, m = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function nbRapDuracionEfectiva() {
@@ -8169,6 +8203,7 @@ async function loadNbSlots(preselect = '') {
           btn.classList.add('active');
           document.getElementById('nbSlotSelected').value = hora;
           nbHoraPedida = hora;
+          nbPintarDuraciones();
           nbSyncConfirm();
         });
         fila.appendChild(btn);
