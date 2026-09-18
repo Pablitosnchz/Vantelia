@@ -1854,3 +1854,27 @@ a fin en todas.
   pendiente el parche confirmado de los 3 packs de mechas (necesita orden de Pablo
   + copia de la BD), el hallazgo F4 (contador de recordatorios) y que ella conecte
   Stripe y WhatsApp. Astra debe aún revisión de b417618, 0c0838c, 3bdc47b y 4548645.
+
+## 2026-09-18 17:22 +02:00 — el cuadro de la agenda entiende el apunte
+
+- Qué: «Nueva cita» vuelve a ser una ficha sola (fuera el selector «Cita rápida /
+  Con todos los datos», ab4c215) y el cuadro de la agenda entiende lo escrito
+  (478ae58): «Carmen Calvo, pack mechas corto» -> nombre + servicio del catálogo
+  con su duración. La coma es la única regla; sin coma se apunta como hasta ahora.
+- Sin modelo: decide `catalog_pick` vía `backend/apuntes.py` y
+  `POST /auth/app/interpretar-apunte` (sesión + `agenda.create`, no crea nada).
+- Tres guardias medidas sobre el catálogo real (186 servicios): sin largo escrito
+  no se elige largo; si otro servicio que encaja dura ≥1,5× se pregunta («Mechas
+  medio» 75 min frente al pack de 360); técnica no nombrada se ofrece, no se aplica.
+- Integrado en main como d99ed6b y desplegado. Decisión de Pablo: desplegar sin
+  esperar la revisión de Astra (encargada, pendiente).
+- Evidencia: suite 2962 passed, 1 skipped (33 min); 10 tests nuevos incluido uno
+  que ata lo enseñado con lo apartado en la agenda; 7 mutaciones causales en rojo.
+  Despliegue: health ok, acceso público ok, humo 5/5. Comprobado en el contenedor
+  contra el catálogo real de Alicia (solo lectura) que responde igual que en local
+  y que el interruptor sigue solo en su negocio.
+- Observado: en producción «Pack keratina premium largo» dura 140 min y en la copia
+  local 280. Es dato del catálogo, no del cuadro; va con la revisión de packs.
+- Siguiente: que Alicia lo pruebe con la coma; F2 (modelo para lo que el catálogo
+  no reconoce, p. ej. «tinte raiz») y F3 (enganchar el nombre con su ficha de
+  clienta) quedan sin hacer; revisión de Astra de 478ae58.
