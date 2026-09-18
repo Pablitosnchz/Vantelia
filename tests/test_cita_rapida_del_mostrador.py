@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
-"""La cita rápida del mostrador: apuntar como en su programa de siempre, sin descuadrar la agenda.
+"""La duración que dice el mostrador: apuntar sin servicio sin descuadrar la agenda.
 
 POR QUE EXISTE
 --------------
 Alicia (salón piloto) compara nuestro portal con PeluGest: allí pincha en la agenda y escribe
-«CARMEN ELUMEN Y…» como una nota. Aquí se le pedía servicio del catálogo, y eso la frenaba.
-Apuntarla sin servicio ya se podía, pero la cita se guardaba con la duración POR DEFECTO (30 min):
-un trabajo de tres horas ocupando media hora deja al asistente ofreciendo un hueco que no existe,
-que es justo el incidente que este producto no se puede permitir.
+«CARMEN ELUMEN Y…» como una nota. Apuntarla sin servicio ya se podía, pero la cita se guardaba
+con la duración POR DEFECTO (30 min): un trabajo de tres horas ocupando media hora deja al
+asistente ofreciendo un hueco que no existe, que es justo el incidente que este producto no se
+puede permitir.
 
-Por eso el mostrador puede decir CUÁNTO DURA (`duration_minutes` en el alta manual y `duracion` al
-consultar huecos), y esa duración es la que se guarda, la que bloquea la agenda y la que se
-comprueba contra las demás citas.
+Por eso quien coge la cita puede decir CUÁNTO DURA (`duration_minutes` en el alta manual y
+`duracion` al consultar huecos), y esa duración es la que se guarda, la que bloquea la agenda y la
+que se comprueba contra las demás citas. Hoy la usa el cuadro que sale al pinchar en la agenda
+(ver `test_cita_en_la_agenda.py`); antes hubo además un modo «Cita rápida» dentro de la ficha de
+Nueva cita, que se retiró el 18-sep-2026 por sobrar.
 """
 from __future__ import annotations
 
@@ -171,75 +173,46 @@ def _funcion(fuente, nombre):
     return encontrada.group()
 
 
-def test_el_portal_abre_en_cita_rapida_con_media_hora_puesta():
-    """Decisión de Pablo (17-sep-2026): que no le pregunte nada. Media hora de salida, a un toque
-    de cambiarla, y si el trabajo dura más se estira la cita en la agenda."""
+def test_la_ficha_de_nueva_cita_es_una_sola():
+    """Hubo un selector «Cita rápida / Con todos los datos» dentro de la ficha y sobraba (Pablo,
+    18-sep-2026): lo rápido se apunta en la propia agenda, así que la ficha sirve para una cosa
+    sola y no esconde medio formulario detrás de un botón."""
     fuente = _panel()
-    assert 'id="nbRapQue"' in fuente and 'id="nbRapDur"' in fuente, "no existe la cita rápida"
-    assert "let nbModo = 'rapida'" in fuente, "el portal no abre en cita rápida"
-    assert "const NB_DURACION_POR_DEFECTO = 30;" in fuente, "no hay duración de salida"
-    assert "let nbRapDuracion = NB_DURACION_POR_DEFECTO;" in fuente, "la duración no viene puesta"
+    for rastro in ('id="nbModo"', 'class="nb-modo"', 'id="nbRapQue"', 'id="nbRapDur"',
+                   "nbSetModo(", "nbRapDuracionEfectiva(", "nb-solo-rapida", "nb-solo-completa"):
+        assert rastro not in fuente, "la ficha vuelve a tener dos modos: %s" % rastro
     abrir = fuente.split("async function openNewBookingDrawer", 1)[1].split("\n}\n", 1)[0]
-    assert "nbRapDuracion = NB_DURACION_POR_DEFECTO;" in abrir, "al abrir otra cita no vuelve a media hora"
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
-    caso = {"hora": "10:00", "nombre": "Carmen Prueba Rapida", "completo": True,
-            "svc": {"escrito": "", "resuelto": "", "coincidencias": 0},
-            "rapida": True, "duracion": 30, "servicioRapido": ""}
-    salida = subprocess.run([node, "-e", _funcion(fuente, "nbPorQueNoSePuedeCrear")
-                             + "\nprocess.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(caso)],
-                            check=True, capture_output=True, text=True, encoding="utf-8").stdout
-    assert salida == "", "con la duración puesta no falta nada"
-    sin_duracion = dict(caso, duracion=0)
-    salida2 = subprocess.run([node, "-e", _funcion(fuente, "nbPorQueNoSePuedeCrear")
-                              + "\nprocess.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(sin_duracion)],
-                             check=True, capture_output=True, text=True, encoding="utf-8").stdout
-    assert salida2 == "Toca cuánto dura: la agenda aparta ese rato.", salida2
+    assert "nbServicio" in abrir, "la ficha ya no prepara el campo de servicio"
 
 
-def test_lo_que_escribe_se_guarda_aunque_se_reconozca_el_servicio():
-    """Revisión de Astra a 7fba7e4: con «Pack elumen largo» reconocido, la nota se iba vacía y se
-    perdía lo que ella había escrito. Son dos cosas distintas y las dos importan."""
+def test_la_ficha_crea_la_cita_con_el_servicio_del_catalogo():
+    """Sin modos, el servicio sale de la lista y la duración la pone el catálogo: la ficha no
+    manda duraciones a mano (eso es cosa del cuadro de la agenda)."""
     fuente = _panel()
     boton = fuente.split("document.getElementById('nbConfirmBtn').addEventListener", 1)[1].split("});", 1)[0]
-    assert "(nbModo === 'rapida' && rapQue) ? rapQue : ''" in boton, "el texto se pierde al reconocer servicio"
-    revisar = _funcion(fuente, "nbRapPintarAviso")
-    assert "Lo que has escrito se guarda igual" in revisar, "no se le dice que su texto se conserva"
-    assert "campo.value = sugerencia.nombre" not in fuente, "la sugerencia pisa lo que escribió"
-
-
-def test_una_coincidencia_a_medias_se_ofrece_pero_no_se_engancha_sola():
-    """Revisión de Astra a 19b5dfb: «elumen» encaja con catorce servicios de duraciones distintas;
-    el código lo sugiere y lo elige quien coge la cita."""
-    revisar = _funcion(_panel(), "nbRapRevisarQue")
-    assert "nbRapServicio = exacto ? exacto.nombre : '';" in revisar, "una coincidencia parcial engancha servicio"
-    assert "¿Es «" in _funcion(_panel(), "nbRapPintarAviso"), "no se ofrece la sugerencia para elegirla"
-
-
-def test_se_ve_a_que_hora_termina_la_cita():
-    fuente = _panel()
-    pintar = _funcion(fuente, "nbPintarDuraciones")
-    assert "nbFinDeLaCita(" in pintar and "Se reservan" in pintar, "no se dice cuánto ocupa ni hasta cuándo"
-    assert "btn.disabled = !!delCatalogo" in pintar, "con servicio del catálogo los chips podrían alterar el pack"
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
-    trozos = [_funcion(fuente, "nbMinutos"), _funcion(fuente, "nbFinDeLaCita")]
-    guion = "\n".join(trozos) + (
-        "\nprocess.stdout.write([nbFinDeLaCita('10:00', 95), nbFinDeLaCita('23:30', 60),"
-        " nbFinDeLaCita('', 30)].join('|'));")
-    salida = subprocess.run([node, "-e", guion], check=True, capture_output=True, text=True,
-                            encoding="utf-8").stdout
-    assert salida == "11:35|00:30|", salida
-
-
-def test_el_portal_manda_la_duracion_y_guarda_lo_escrito():
-    fuente = _panel()
-    boton = fuente.split("document.getElementById('nbConfirmBtn').addEventListener", 1)[1].split("});", 1)[0]
-    assert "duration_minutes: nbRapDuracionEfectiva()" in boton, "el alta no manda la duración"
-    assert "rapQue" in boton and "notas," in boton, "lo escrito no viaja como nota"
+    assert "servicio: nbSvcResuelto()" in boton, "la ficha no coge el servicio elegido en la lista"
+    assert "duration_minutes" not in boton, "la ficha sigue mandando una duración a mano"
     huecos = fuente.split("async function loadNbSlots(", 1)[1].split("\nfunction closeNewBookingDrawer", 1)[0]
-    assert "&duracion=${duracion}" in huecos, "los huecos no se piden con la duración elegida"
-    efectiva = _funcion(fuente, "nbRapDuracionEfectiva")
-    assert "if (nbRapServicio) return 0;" in efectiva, "con servicio del catálogo manda el catálogo"
+    assert "&duracion=" not in huecos, "la ficha pide los huecos con una duración que ya no elige"
+
+
+def test_el_boton_dice_que_falta_sin_hablar_de_duraciones():
+    fuente = _panel()
+    faltan = _funcion(fuente, "nbPorQueNoSePuedeCrear")
+    assert "Toca cuánto dura" not in faltan, "sigue pidiendo una duración que la ficha ya no tiene"
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
+    casos = [
+        ({"hora": "10:00", "nombre": "Carmen Prueba Rapida", "completo": True,
+          "svc": {"escrito": "", "resuelto": "", "coincidencias": 0}}, ""),
+        ({"hora": "", "nombre": "Carmen Prueba Rapida", "completo": True,
+          "svc": {"escrito": "", "resuelto": "", "coincidencias": 0}}, "Elige una hora libre."),
+        ({"hora": "10:00", "nombre": "", "completo": False,
+          "svc": {"escrito": "", "resuelto": "", "coincidencias": 0}}, "Falta el nombre del cliente."),
+    ]
+    for caso, esperado in casos:
+        salida = subprocess.run([node, "-e", faltan
+                                 + "\nprocess.stdout.write(nbPorQueNoSePuedeCrear(%s));" % json.dumps(caso)],
+                                check=True, capture_output=True, text=True, encoding="utf-8").stdout
+        assert salida == esperado, (caso, salida)
