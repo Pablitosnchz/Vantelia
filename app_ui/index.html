@@ -3784,6 +3784,16 @@
     <div class="field" id="equipoCentroField" style="margin-bottom:12px;"><label class="field-label">Centro</label><select class="field-input" id="equipoCentro"></select></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Color</label><div class="color-row"><input type="color" id="equipoColor" /><input class="field-input" id="equipoColorText" maxlength="7" /></div></div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="equipoActivo" checked /> Activo</label>
+    <!-- A quién le cae la cita cuando la clienta no pide a nadie. Lo pidió el salón piloto
+         (18-sep-2026): primero Lorena o Conchi, luego Lucía o José y, si no hay más hueco, Alicia. -->
+    <div class="field" id="equipoRepartoField" style="margin-bottom:12px;">
+      <label class="field-label" for="equipoReparto">Cuando la clienta no pide a nadie</label>
+      <select class="field-input" id="equipoReparto">
+        <option value="1">Primera opción</option>
+        <option value="2">Segunda opción</option>
+        <option value="3">Última opción · solo si no hay hueco con nadie más</option>
+      </select>
+    </div>
     <div class="field" style="margin-bottom:12px;">
       <label class="field-label">Servicios asignados</label>
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:0.84rem; color:var(--soft);"><input type="checkbox" id="equipoAllServices" /> Puede atender todos los servicios</label>
@@ -7707,7 +7717,9 @@ async function openNewBookingDrawer(opts = {}) {
   // Con equipo real, la "agenda general" no se ofrece: una cita creada ahi no
   // aparece en la columna de nadie y el negocio no la ve.
   const reales = activos.filter(e => !e.is_default);
-  const emps = reales.length ? reales : activos;
+  // En el orden en que el negocio da las citas: quien va primero en el reparto sale primero, y
+  // la que es «última opción» la última (Alicia, 18-sep-2026).
+  const emps = (reales.length ? reales : activos).slice().sort(cdOrdenDeReparto);
   profSel.innerHTML = emps.length
     ? emps.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name || 'Profesional')}</option>`).join('')
     : '<option value="">Agenda general</option>';
@@ -9208,6 +9220,13 @@ function renderCitasDay(){
 // La cita se aparta media hora; si el trabajo es más largo se estira el cuadro, como siempre.
 const CD_NUEVA_MINUTOS = 30;
 
+// El orden del reparto de citas: nivel (1 primera opción … 3 última), y a igualdad el de siempre.
+function cdOrdenDeReparto(a, b) {
+  return (Number(a.reparto) || 1) - (Number(b.reparto) || 1)
+    || (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0)
+    || String(a.name || '').localeCompare(String(b.name || ''), 'es');
+}
+
 // Qué hacer al pulsar Enter en el cuadro. Pura para poder probarla sin navegador.
 // Existe por lo que pasó en la agenda real (18-sep-2026): se escribió «paula miranda, quitar
 // extensiones», se pulsó Enter antes de que llegara la respuesta, y se guardó lo entendido de
@@ -9298,11 +9317,21 @@ function cdNuevaEnLaAgenda(body, opciones) {
       btn.type = 'button';
       btn.innerHTML = '<b>' + escapeHtml(op.etiqueta) + '</b> · ' + escapeHtml(nbDuracionTexto(op.duracion));
       btn.title = op.servicio;
-      btn.addEventListener('mousedown', (e) => {
+      // Tocar la opción ES apuntar la cita: nada de volver a pulsar Enter (Pablo, 18-sep-2026).
+      btn.addEventListener('mousedown', async (e) => {
         e.preventDefault();
-        elegido = op;
-        pintar();
-        campo.focus();
+        if (guardando) return;
+        let opcion = op;
+        const texto = campo.value.trim();
+        if (entendido.de !== texto) {
+          // Ha seguido escribiendo después de salir las opciones: se entiende ESTE texto, y si
+          // la que ha tocado ya no está entre las nuevas, se enseñan las nuevas y no se apunta.
+          await entenderAhora(texto);
+          opcion = entendido.candidatos.find(c => c.servicio === op.servicio);
+          if (!opcion) return;
+        }
+        elegido = opcion;
+        guardar();
       });
       opsCont.appendChild(btn);
     });
@@ -10465,6 +10494,8 @@ function openEquipoPanel(emp) {
   document.getElementById('equipoColor').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
   document.getElementById('equipoColorText').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
   document.getElementById('equipoActivo').checked = emp ? !!emp.active : true;
+  document.getElementById('equipoReparto').value = String((emp && emp.raw && emp.raw.reparto) || 1);
+  document.getElementById('equipoRepartoField').style.display = isDefault ? 'none' : '';
 
   // Centro: selector solo si hay más de un centro y no es la agenda general
   const centroSel = document.getElementById('equipoCentro');
@@ -10544,6 +10575,7 @@ document.getElementById('equipoSaveBtn').addEventListener('click', async () => {
         role_label: document.getElementById('equipoRol').value.trim(),
         color: document.getElementById('equipoColor').value,
         is_active: document.getElementById('equipoActivo').checked,
+        reparto: Number(document.getElementById('equipoReparto').value) || 1,
         service_ids: [...document.querySelectorAll('#equipoServicesCheck input:checked')].map(c => c.value),
       };
   if (!isDefault && allLocations.length > 1) {

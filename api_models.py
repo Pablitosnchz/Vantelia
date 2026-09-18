@@ -1912,6 +1912,9 @@ class PortalEmployeePayload(BaseModel):
     location_id: str = Field(default="", max_length=64)
     # Orden en que el negocio quiere ver a su equipo. 0 = alfabetico (default).
     sort_order: int = Field(default=0, ge=0, le=999)
+    # A quien se le da la cita cuando la clienta no pide a nadie: 1 = primera opcion, 2 = segunda,
+    # 3 = ultima (solo si no hay hueco con nadie mas). Dentro del mismo nivel, a cualquiera.
+    reparto: int = Field(default=1, ge=1, le=3)
 
 
 class PortalEmployeePublic(BaseModel):
@@ -1934,6 +1937,7 @@ class PortalEmployeePublic(BaseModel):
     service_ids: List[str] = Field(default_factory=list)
     location_id: str = ""
     sort_order: int = 0
+    reparto: int = 1
     allows_all_services: bool = True
     bookings_today: int = 0
     bookings_upcoming: int = 0

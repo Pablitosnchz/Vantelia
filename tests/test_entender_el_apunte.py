@@ -160,7 +160,7 @@ def test_el_cuadro_guarda_el_servicio_entendido_y_lo_escrito():
 
 def test_lo_que_toca_ella_manda_sobre_lo_que_adivina_el_codigo():
     caja = _funcion(_panel(), "cdNuevaEnLaAgenda")
-    assert "elegido = op;" in caja, "no se puede tocar una de las opciones ofrecidas"
+    assert "elegido = opcion;" in caja, "no se puede tocar una de las opciones ofrecidas"
     assert "(elegido ? elegido.servicio : entendido.servicio)" in caja, (
         "lo tocado no manda sobre lo adivinado")
     assert "if (elegido || !entendido.candidatos.length) return;" in caja, (

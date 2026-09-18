@@ -1386,6 +1386,7 @@ def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
         service_ids=service_ids,
         location_id=row["location_id"] or "",
         sort_order=int((row["sort_order"] if "sort_order" in row.keys() else 0) or 0),
+        reparto=nivel_de_reparto(row),
         allows_all_services=not service_ids,
         bookings_today=counters["today"],
         bookings_upcoming=counters["upcoming"],
@@ -1550,6 +1551,8 @@ def _create_portal_employee(
             ),
         )
         connection.commit()
+    if "reparto" in (getattr(data, "model_fields_set", None) or set()):
+        _guardar_nivel_de_reparto(cliente_id, employee_id, data.reparto)
     row = _get_employee_row(employee_id, cliente_id=cliente_id)
     if not row:
         raise HTTPException(status_code=500, detail="No se ha podido crear el profesional.")
@@ -1716,10 +1719,23 @@ def _update_portal_employee(
                 (new_location, cliente_id, employee_id),
             )
         connection.commit()
+    if "reparto" in (getattr(data, "model_fields_set", None) or set()):
+        _guardar_nivel_de_reparto(cliente_id, employee_id, data.reparto)
     refreshed = _get_employee_row(employee_id, cliente_id=cliente_id)
     if not refreshed:
         raise HTTPException(status_code=404, detail="Profesional no encontrado.")
     return _serialize_portal_employee(refreshed)
+
+
+def _guardar_nivel_de_reparto(cliente_id: str, employee_id: str, nivel: int) -> None:
+    """Guarda el nivel y deja `auto_assign_last` a juego, que es lo que ya existia para «ultima»."""
+    nivel = min(REPARTO_ULTIMA, max(1, int(nivel or 1)))
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE employees SET reparto_nivel = ?, auto_assign_last = ? WHERE id = ? AND cliente_id = ?",
+            (nivel, 1 if nivel == REPARTO_ULTIMA else 0, employee_id, cliente_id),
+        )
+        connection.commit()
 
 
 def _delete_portal_employee(cliente_id: str, employee_id: str) -> None:
@@ -3566,21 +3582,37 @@ async def _resolve_public_booking_employee(
             detail="Ese horario ya no esta disponible. Elige otro tramo.",
         )
 
-    # Quien esta marcado como ULTIMA OPCION solo entra si no queda nadie mas. Lo
-    # pidio la duenya de un salon: que su agenda se llene la ultima, y que a ella
-    # se le apunte solo cuando no hay hueco con el equipo o cuando la piden por su
-    # nombre (eso ultimo va por `employee_id`, que ni llega hasta aqui).
-    preferentes = [row for row in available_candidates if not _es_ultima_opcion(row)]
-    return secrets.choice(preferentes or available_candidates)
+    # Por NIVELES: se da la cita al nivel mas alto que tenga hueco, y dentro de el a cualquiera.
+    # Lo pidio la duenya de un salon (18-sep-2026): «primero Lorena o Conchi, luego Lucia o Jose
+    # y por ultimo, si no hay mas hueco, Alicia». A ella se le apunta tambien cuando la piden por
+    # su nombre, pero eso va por `employee_id` y ni llega hasta aqui.
+    mejor = min(nivel_de_reparto(row) for row in available_candidates)
+    preferentes = [row for row in available_candidates if nivel_de_reparto(row) == mejor]
+    return secrets.choice(preferentes)
+
+
+# Niveles del reparto automatico. La ULTIMA opcion solo entra si no queda nadie mas.
+REPARTO_ULTIMA = 3
+
+
+def nivel_de_reparto(employee_row) -> int:
+    """1 = primera opcion, 2 = segunda, 3 = ultima. Sin decir, primera.
+
+    `auto_assign_last` manda: es como se marcaba la ultima antes de haber niveles, y una fila
+    con ese dato y sin nivel sigue siendo la ultima.
+    """
+    try:
+        claves = employee_row.keys()
+        if "auto_assign_last" in claves and employee_row["auto_assign_last"]:
+            return REPARTO_ULTIMA
+        nivel = int(employee_row["reparto_nivel"] or 0) if "reparto_nivel" in claves else 0
+    except Exception:  # noqa: BLE001
+        return 1
+    return min(REPARTO_ULTIMA, nivel) if nivel > 0 else 1
 
 
 def _es_ultima_opcion(employee_row: sqlite3.Row) -> bool:
-    try:
-        if "auto_assign_last" not in employee_row.keys():
-            return False
-        return bool(employee_row["auto_assign_last"])
-    except Exception:  # noqa: BLE001
-        return False
+    return nivel_de_reparto(employee_row) == REPARTO_ULTIMA
 
 
 def _agenda_block_reasons_for_day(cliente_id: str, fecha: str) -> List[str]:
