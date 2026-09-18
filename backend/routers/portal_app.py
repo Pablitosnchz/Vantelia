@@ -582,6 +582,7 @@ async def app_overview(
     )
     return AppOverviewResponse(
         exigir_dos_apellidos=clients.exige_dos_apellidos(cliente_id),
+        cita_en_la_agenda=bool((cfg.get("booking") or {}).get("cita_en_la_agenda") is True),
         cliente_id=cliente_id,
         nombre=cfg.get("nombre", cliente_id),
         color=cfg.get("color", "#00b1d9"),

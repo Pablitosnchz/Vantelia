@@ -703,6 +703,10 @@ class AppOverviewChannels(BaseModel):
 
 class AppOverviewResponse(BaseModel):
     exigir_dos_apellidos: bool = False
+    # Apuntar la cita EN la agenda (pinchar el hueco y escribir encima) en vez de abrir el panel
+    # lateral. Opt-in por negocio (`booking.cita_en_la_agenda`): lo pidió el salón piloto, que
+    # viene de un programa que trabaja así; los demás siguen con el panel de siempre.
+    cita_en_la_agenda: bool = False
     cliente_id: str
     nombre: str
     color: str = "#00b1d9"

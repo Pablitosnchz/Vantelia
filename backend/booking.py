@@ -2525,16 +2525,24 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False, prepar
     if not skip_payment:
         _booking_payment_after_store(record["id"])
     booking_status = "confirmado" if record.get("status") == "confirmed" else "cita_pendiente"
-    crm._crm_upsert_contact(
-        record["cliente_id"],
-        name=record.get("nombre", ""),
-        email=record.get("email", ""),
-        phone=record.get("telefono", ""),
-        source=record.get("source", "booking"),
-        status=booking_status,
-        entity_type="booking",
-        entity_id=record["id"],
-    )
+    # Una cita apuntada a mano sin email ni teléfono NO crea ficha de clienta: lo que se escribe
+    # en la agenda del mostrador es una nota («Carmen elumen y secado»), no una identidad, y una
+    # ficha por cada nota deja la lista de clientas inservible (17-sep-2026, salón piloto). Con
+    # email o teléfono sí: ahí hay con qué reconocerla y a dónde escribirle.
+    nota_del_mostrador = (record.get("source", "") == "portal_manual"
+                          and not (record.get("email") or "").strip()
+                          and not (record.get("telefono") or "").strip())
+    if not nota_del_mostrador:
+        crm._crm_upsert_contact(
+            record["cliente_id"],
+            name=record.get("nombre", ""),
+            email=record.get("email", ""),
+            phone=record.get("telefono", ""),
+            source=record.get("source", "booking"),
+            status=booking_status,
+            entity_type="booking",
+            entity_id=record["id"],
+        )
 
 
 async def _send_booking_to_webhook(cliente_id: str, payload: Dict[str, Any]) -> Tuple[bool, str]:
