@@ -116,9 +116,12 @@ def test_el_interruptor_sale_del_negocio_y_viene_apagado():
 
 def test_el_cuadro_guarda_lo_escrito_con_media_hora_y_sin_datos():
     caja = _funcion(_panel(), "cdNuevaEnLaAgenda")
-    assert "'/auth/bookings'" in caja and "duration_minutes: CD_NUEVA_MINUTOS" in caja, (
-        "el cuadro no crea la cita con la duración de la agenda")
-    assert "nombre: texto" in caja and "email: ''" in caja and "telefono: ''" in caja, (
+    assert "'/auth/bookings'" in caja, "el cuadro no crea la cita"
+    # Sin servicio reconocido, media hora: lo de siempre. Con servicio manda el catálogo
+    # (ver tests/test_entender_el_apunte.py).
+    assert "duration_minutes: servicio ? 0 : CD_NUEVA_MINUTOS," in caja, (
+        "el cuadro no aparta media hora cuando no se reconoce el servicio")
+    assert "notas: texto" in caja and "email: ''" in caja and "telefono: ''" in caja, (
         "el cuadro no guarda lo escrito tal cual, o inventa datos de contacto")
     assert "const CD_NUEVA_MINUTOS = 30;" in _panel(), "la cita rápida de la agenda no aparta media hora"
     assert "e.key === 'Enter'" in caja and "e.key === 'Escape'" in caja, "no se guarda con Enter ni se sale con Esc"
