@@ -60,9 +60,20 @@ def _minutos_del_catalogo(servicios: List[Dict[str, Any]]) -> Dict[str, int]:
     return {catalog_pick._nombre(s): int(s.get("duration_minutes") or 0) for s in servicios}
 
 
+def _forma(texto: str) -> str:
+    """Como se compara: sin tildes ni mayusculas y por como SUENA.
+
+    El catalogo del salon dice «Kitar extensiones» y en el mostrador se escribe «quitar
+    extensiones». Sin igualar el sonido no casaba nada, y encima se ofrecia «Brusing-extensiones»
+    por largo, que no tiene que ver (probado en la agenda real el 18-sep-2026). Se aplica a los
+    DOS lados, asi que igualar de mas no descoloca nada.
+    """
+    return catalog_pick._mismo_sonido(catalog_pick._norm(texto))
+
+
 def _tokens(texto: str) -> List[str]:
     """Las palabras que de verdad distinguen, ya normalizadas."""
-    return [p for p in catalog_pick._norm(texto).split() if len(p) >= 3 and p not in _VACIAS]
+    return [p for p in _forma(texto).split() if len(p) >= 3 and p not in _VACIAS]
 
 
 def partir(texto: str) -> Dict[str, str]:
@@ -85,17 +96,17 @@ def _catalogo(cliente_id: str, location_id: str = "") -> List[Dict[str, Any]]:
 
 
 def _por_nombre_exacto(servicios: List[Dict[str, Any]], texto: str) -> str:
-    objetivo = catalog_pick._norm(texto)
+    objetivo = _forma(texto)
     if not objetivo:
         return ""
     for servicio in servicios:
-        if catalog_pick._norm(catalog_pick._nombre(servicio)) == objetivo:
+        if _forma(catalog_pick._nombre(servicio)) == objetivo:
             return catalog_pick._nombre(servicio)
     return ""
 
 
 def _palabras_del_nombre(nombre: str) -> List[str]:
-    return [p for p in catalog_pick._norm(nombre).replace("-", " ").replace("(", " ").replace(")", " ").split()
+    return [p for p in _forma(nombre).replace("-", " ").replace("(", " ").replace(")", " ").split()
             if p]
 
 
@@ -132,7 +143,7 @@ def _comparte_con_lo_escrito(servicio: str, texto: str) -> bool:
     peinado» acababa en «Pack maquillaje y medio recogido». Compartir una palabra no prueba que
     sea el correcto, pero no compartir NINGUNA prueba que es una apuesta.
     """
-    partes = catalog_pick._norm(servicio).replace("-", " ").split()
+    partes = _palabras_del_nombre(servicio)
     # El largo NO es evidencia de la tecnica: «alisado largo» acababa aplicando «Pack keratina
     # premium largo» solo porque compartian la palabra «largo», y la keratina no la dijo nadie.
     tallas = catalog_pick._palabras_de_talla()
