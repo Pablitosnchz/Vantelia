@@ -359,6 +359,7 @@ async def app_keyword_rule_create(
             label=data.label,
             keywords=data.keywords,
             reply=data.reply,
+            reply_en=data.reply_en,
             match_mode=data.match_mode,
             active=data.active,
             created_by_user_id=user["id"],

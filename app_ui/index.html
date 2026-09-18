@@ -3994,6 +3994,13 @@
       <label class="field-label">Respuesta automática (se envía tal cual)</label>
       <textarea class="field-textarea" id="kwrReply" maxlength="2000" style="min-height:150px;" placeholder="Para reservas o información sobre el Spa, por favor llame al 971 747 878."></textarea>
     </div>
+    <!-- La misma respuesta en inglés: sale tal cual a quien escribe en inglés. Si se deja vacía se
+         traduce la de arriba, igual que para cualquier otro idioma (Cap Rocat, 18-sep-2026). -->
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label" for="kwrReplyEn">Respuesta en inglés (opcional)</label>
+      <textarea class="field-textarea" id="kwrReplyEn" maxlength="2000" style="min-height:110px;" placeholder="For Spa bookings or information, please call +34 971 747 878."></textarea>
+      <p class="panel-sub" style="margin:6px 0 0; font-size:0.78rem;">Se contesta en el idioma en que escribe el cliente. Si la dejas vacía, o si escribe en otro idioma (alemán, francés…), se traduce tu respuesta.</p>
+    </div>
     <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-bottom:18px;">
       <input type="checkbox" id="kwrActive" checked />
       <span>Regla activa</span>
@@ -5601,6 +5608,7 @@ async function loadKeywordRules() {
       document.getElementById('kwrLabel').value = rule.label || '';
       document.getElementById('kwrKeywords').value = (rule.keywords || []).join(', ');
       document.getElementById('kwrReply').value = rule.reply || '';
+      document.getElementById('kwrReplyEn').value = rule.reply_en || '';
       document.getElementById('kwrMatchMode').value = rule.match_mode || 'any';
       document.getElementById('kwrActive').checked = !!rule.active;
       document.getElementById('kwrFormCard').classList.add('open');
@@ -5630,7 +5638,7 @@ document.getElementById('kwrEnabled')?.addEventListener('change', async (ev) => 
 });
 document.getElementById('kwrAddBtn')?.addEventListener('click', () => {
   document.getElementById('kwrFormTitle').textContent = 'Nueva regla';
-  ['kwrEditingId','kwrLabel','kwrKeywords','kwrReply'].forEach(id => { document.getElementById(id).value = ''; });
+  ['kwrEditingId','kwrLabel','kwrKeywords','kwrReply','kwrReplyEn'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('kwrMatchMode').value = 'any';
   document.getElementById('kwrActive').checked = true;
   document.getElementById('kwrFormCard').classList.add('open');
@@ -5644,6 +5652,7 @@ document.getElementById('kwrSaveBtn')?.addEventListener('click', async () => {
     label: document.getElementById('kwrLabel').value.trim(),
     keywords: document.getElementById('kwrKeywords').value.split(',').map(s => s.trim()).filter(Boolean),
     reply: document.getElementById('kwrReply').value.trim(),
+    reply_en: document.getElementById('kwrReplyEn').value.trim(),
     match_mode: document.getElementById('kwrMatchMode').value,
     active: document.getElementById('kwrActive').checked,
   };
