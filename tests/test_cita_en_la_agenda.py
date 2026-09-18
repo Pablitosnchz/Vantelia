@@ -89,13 +89,29 @@ def test_con_telefono_si_se_guarda_la_clienta(client: TestClient, api_module):
             conn.commit()
 
 
-def test_pinchar_un_hueco_deja_el_cuadro_en_la_agenda_y_no_abre_el_panel():
+def test_pinchar_un_hueco_deja_el_cuadro_solo_si_el_negocio_lo_quiere():
+    """Opt-in por negocio: el salón piloto viene de un programa que trabaja así; los demás siguen
+    con el panel lateral de siempre."""
     fuente = _panel()
     assert "function cdNuevaEnLaAgenda(" in fuente, "no existe el cuadro en la agenda"
     dia = fuente.split("function renderCitasDay(", 1)[1].split("\nfunction cdSelect(", 1)[0]
-    hueco = dia.split("body.addEventListener('click'", 1)[1].split("});", 1)[0]
-    assert "cdNuevaEnLaAgenda(" in hueco, "pinchar un hueco no deja el cuadro"
-    assert "openNewBookingDrawer(" not in hueco, "pinchar un hueco sigue abriendo el panel lateral"
+    hueco = dia.split("body.addEventListener('click'", 1)[1].split("\n      });", 1)[0]
+    assert "if (state.citaEnLaAgenda)" in hueco, "el cuadro no está detrás del interruptor del negocio"
+    assert "cdNuevaEnLaAgenda(" in hueco, "con el interruptor puesto no deja el cuadro"
+    assert "openNewBookingDrawer(" in hueco, "sin el interruptor tiene que seguir el panel de siempre"
+    assert "state.citaEnLaAgenda = data.cita_en_la_agenda === true;" in fuente, "el portal no lee el interruptor"
+
+
+def test_el_interruptor_sale_del_negocio_y_viene_apagado():
+    """`booking.cita_en_la_agenda`: opt-in. Sin él, el portal se comporta como siempre."""
+    from api_models import AppOverviewResponse
+    from pathlib import Path as _P
+
+    assert AppOverviewResponse.model_fields["cita_en_la_agenda"].default is False, (
+        "el interruptor viene encendido de serie")
+    router = (_P(__file__).resolve().parents[1] / "backend" / "routers" / "portal_app.py").read_text(encoding="utf-8")
+    assert 'cita_en_la_agenda=bool((cfg.get("booking") or {}).get("cita_en_la_agenda") is True)' in router, (
+        "el portal no lee el interruptor del negocio")
 
 
 def test_el_cuadro_guarda_lo_escrito_con_media_hora_y_sin_datos():

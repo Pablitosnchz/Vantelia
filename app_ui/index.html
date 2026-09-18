@@ -4631,6 +4631,7 @@ async function loadOverview() {
     const data = await api('/auth/app/overview');
     state.cliente_id = data.cliente_id;
     state.exigirDosApellidos = data.exigir_dos_apellidos === true;
+    state.citaEnLaAgenda = data.cita_en_la_agenda === true;
     document.getElementById("nbNombre").placeholder = state.exigirDosApellidos
       ? "Nombre y dos apellidos" : "Nombre del cliente";
     state.nombre = data.nombre;
@@ -9237,7 +9238,14 @@ function renderCitasDay(){
         if (e.target !== body) return;
         const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
         const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (prof || '');
-        cdNuevaEnLaAgenda(body, { dateKey: c.dateKey, empId, mins, startMin, slotMin });
+        // Con el interruptor del negocio, la cita se escribe en la agenda; si no, el panel de
+        // siempre (`booking.cita_en_la_agenda`, opt-in: hoy solo el salón piloto).
+        if (state.citaEnLaAgenda) {
+          cdNuevaEnLaAgenda(body, { dateKey: c.dateKey, empId, mins, startMin, slotMin });
+        } else {
+          openNewBookingDrawer({ date: c.dateKey, time: cdMinsToHora(mins), employeeId: empId })
+            .catch(err => toast(err.message, 'error'));
+        }
       });
     }
 
@@ -9260,9 +9268,15 @@ function renderCitasDay(){
             || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
           const mins = cdSnapMins(body, e.clientY, startMin, Math.min(paso, 15));
           const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (prof || '');
-          cdNuevaEnLaAgenda(body, {
-            dateKey: c.dateKey, empId, mins, startMin, slotMin: paso, fueraDeHorario: true,
-          });
+          if (state.citaEnLaAgenda) {
+            cdNuevaEnLaAgenda(body, {
+              dateKey: c.dateKey, empId, mins, startMin, slotMin: paso, fueraDeHorario: true,
+            });
+          } else {
+            openNewBookingDrawer({
+              date: c.dateKey, time: cdMinsToHora(mins), employeeId: empId, fueraDeHorario: true,
+            }).catch(err => toast(err.message, 'error'));
+          }
         });
       }
       body.appendChild(d);
