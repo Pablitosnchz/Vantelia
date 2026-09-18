@@ -66,14 +66,15 @@ Datos para la transferencia: se indican en cada factura.
 
 - **10 días naturales de prueba sin coste** desde la puesta en vivo. Si el Cliente avisa por email antes de que terminen, el servicio se detiene y **no se emite ninguna cuota**. La puesta en marcha ya facturada no se reembolsa.
 - **Sin permanencia.** Baja por email, con efecto al final del periodo ya facturado.
+- **Pausa de temporada.** El Cliente puede pausar el servicio durante el cierre de temporada del hotel, hasta cinco meses por año natural, avisando por email con 15 días de antelación. Durante la pausa **no se emite cuota** y el asistente **no responde** a los mensajes, que atiende directamente el equipo del hotel desde su aplicación. Se conservan la configuración y la conexión del número, y la reactivación **no tiene coste de puesta en marcha**. Si el Cliente prefiere mantener el asistente activo durante el cierre -por ejemplo, para informar de las fechas de reapertura o atender consultas de la temporada siguiente-, se mantiene la cuota ordinaria.
 
 ---
 
-## 6. Autorización de Meta
+## 6. Conexión del número
 
-La conexión del número del hotel a WhatsApp Cloud API requiere una autorización de **Meta Platforms Ireland Ltd.** ajena al control de Vantelia.
+La autorización de **Meta Platforms Ireland Ltd.** que Vantelia necesita para conectar números de sus clientes a WhatsApp Cloud API está concedida. La conexión del número del hotel se hace junto con el Cliente, que conserva su número y su aplicación.
 
-La configuración y las pruebas empiezan desde la firma sobre un número de pruebas. Si transcurridos **60 días naturales** desde la firma no se hubiera obtenido la autorización, el Cliente podrá resolver sin coste y Vantelia **reembolsará íntegramente** la puesta en marcha. Los 10 días de prueba se cuentan desde la puesta en vivo, nunca desde la firma.
+La configuración y las pruebas empiezan desde la firma sobre un número de pruebas. Si por causas ajenas a Vantelia no pudiera conectarse el número del hotel en **60 días naturales** desde la firma, el Cliente podrá resolver sin coste y Vantelia **reembolsará íntegramente** la puesta en marcha. Los 10 días de prueba se cuentan desde la puesta en vivo, nunca desde la firma.
 
 ---
 

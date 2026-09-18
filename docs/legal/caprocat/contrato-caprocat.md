@@ -66,13 +66,13 @@ Cubre el trabajo de implantación:
 
 Se factura al inicio de los trabajos de configuración. **No es reembolsable** una vez ejecutado el trabajo, incluida la finalización durante el periodo de prueba de la cláusula 4.
 
-### 3 bis. Dependencia de la autorización de Meta
+### 3 bis. Conexión del número del hotel
 
-La conexión del número del hotel a WhatsApp Cloud API requiere una autorización de **Meta Platforms Ireland Ltd.** que no está bajo el control de Vantelia.
+La autorización de **Meta Platforms Ireland Ltd.** que Vantelia necesita para conectar números de sus clientes a WhatsApp Cloud API está concedida. La conexión del número del hotel se realiza junto con el Cliente.
 
 - Vantelia iniciará la configuración y las pruebas en cuanto se firme este contrato, empleando entretanto un número de pruebas propio.
-- La **puesta en vivo sobre el número del hotel** se producirá en cuanto Meta conceda esa autorización. Vantelia informará al Cliente de su estado cuando este lo solicite.
-- Si transcurridos **60 días naturales** desde la firma no se hubiera obtenido, el Cliente podrá resolver el contrato sin coste y Vantelia **reembolsará íntegramente** el importe de puesta en marcha.
+- La **puesta en vivo sobre el número del hotel** se producirá una vez completadas las pruebas con el equipo del hotel.
+- Si por causas ajenas a Vantelia no pudiera conectarse el número del hotel en **60 días naturales** desde la firma, el Cliente podrá resolver el contrato sin coste y Vantelia **reembolsará íntegramente** el importe de puesta en marcha.
 - Los plazos de la cláusula 4 se cuentan desde la puesta en vivo, nunca desde la firma.
 
 ---
@@ -133,6 +133,7 @@ Vantelia podrá suspender el servicio de forma inmediata ante un incumplimiento 
 - Duración: mensual, con renovación automática. **Sin permanencia**.
 - Cancelación por el Cliente: por email, con efecto al final del periodo ya facturado y sin penalización.
 - Cancelación por Vantelia: con preaviso de 30 días, salvo incumplimiento grave del Cliente.
+- **Pausa de temporada.** El Cliente puede pausar el servicio durante el cierre de temporada del hotel, hasta cinco meses por año natural, avisando por email con 15 días de antelación. Durante la pausa **no se emite cuota** y el asistente **no responde** a los mensajes, que atiende directamente el equipo del hotel desde su aplicación. Se conservan la configuración y la conexión del número, y la reactivación **no tiene coste de puesta en marcha**. Si el Cliente prefiere mantener el asistente activo durante el cierre -por ejemplo, para informar de las fechas de reapertura o atender consultas de la temporada siguiente-, se mantiene la cuota ordinaria.
 - Tras la cancelación se aplica la cláusula 11 del Anexo DPA (devolución o supresión de los datos).
 
 ---
