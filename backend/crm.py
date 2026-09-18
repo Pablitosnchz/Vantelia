@@ -148,6 +148,22 @@ def _nombre_para_la_ficha(anterior: str, nuevo: str) -> str:
     return nuevo if despues[:len(antes)] == antes else anterior
 
 
+def _es_nota_del_mostrador(cliente_id: str, booking_id: str) -> bool:
+    """¿Esta cita la apunto el mostrador a mano, sin email ni telefono?
+
+    Eso es una NOTA («Carmen - ELUMEN Y SECADOS»), no una clienta: sin con que reconocerla ni a
+    donde escribirle, cada una acababa como ficha en Clientes y la lista dejaba de servir. Quien
+    llama ya ha comprobado que no trae email ni telefono; aqui solo falta saber de donde salio.
+    """
+    if not booking_id:
+        return False
+    with db._get_db_connection() as connection:
+        fila = connection.execute(
+            "SELECT source FROM bookings WHERE cliente_id = ? AND id = ?", (cliente_id, booking_id),
+        ).fetchone()
+    return bool(fila) and (fila["source"] or "") == "portal_manual"
+
+
 def _crm_upsert_contact(
     cliente_id: str,
     *,
@@ -167,6 +183,13 @@ def _crm_upsert_contact(
     email_norm = _normalize_crm_email(email)
     phone_norm = _normalize_crm_phone(phone)
     if not (name or email_norm or phone_norm):
+        return ""
+    # Aqui y no en cada canal: el guardia de crear la cita (17-sep-2026) se quedaba corto y la
+    # nota entraba igual en Clientes al moverla, cancelarla, marcar la asistencia, cerrarse sola
+    # al pasar la hora o en el relleno del CRM tras cada reinicio. Todos esos caminos pasan por
+    # aqui con `entity_type="booking"`, asi que un solo guardia los cubre, tambien a los que vengan.
+    if (entity_type == "booking" and not email_norm and not phone_norm
+            and _es_nota_del_mostrador(cliente_id, entity_id)):
         return ""
     now_iso = timeutils._utc_now_iso()
     with db._get_db_connection() as connection:
