@@ -8628,7 +8628,7 @@ function renderCalendar() {
       pill.className = 'gcal-event-pill';
       pill.style.background = view.color;
       pill.textContent = label;
-      pill.title = `${b.nombre || b.client_name || 'Cita'} - ${b.servicio || 'Consulta'} ${hora} - ${view.label}`;
+      pill.title = `${b.nombre || b.client_name || 'Cita'} - ${cdQueSeHace(b)} ${hora} - ${view.label}`;
       pill.addEventListener('click', (event) => {
         event.stopPropagation();
         openManageBookingModal(b);
@@ -9149,8 +9149,8 @@ function renderCitasDay(){
       const hora = ev.paso ? cdFmtMin(ev.paso.inicio) : horaCita;
       // Cada paso de un pack se lee como un servicio: «Paso 2/3 · Lavado». Sin nombre, el del pack.
       const sub = ev.paso
-        ? `${ev.paso.hasta > ev.paso.n ? `Pasos ${ev.paso.n}–${ev.paso.hasta}` : `Paso ${ev.paso.n}`}/${ev.paso.total} · ${ev.paso.paso || b.servicio || 'Consulta'}`
-        : (c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta'));
+        ? `${ev.paso.hasta > ev.paso.n ? `Pasos ${ev.paso.n}–${ev.paso.hasta}` : `Paso ${ev.paso.n}`}/${ev.paso.total} · ${ev.paso.paso || cdQueSeHace(b)}`
+        : (c.type === 'day' ? (b.employee_name || cdQueSeHace(b)) : cdQueSeHace(b));
       // En las citas CORTAS (un tinte de 15 min) no cabe la segunda linea y el
       // servicio desaparecia: se veia el nombre y nada mas. El salon lo pidio el
       // 9-sep-2026 -"aunque sea de 15 minutos tengo que ver el nombre y el
@@ -9208,6 +9208,32 @@ function renderCitasDay(){
 // La cita se aparta media hora; si el trabajo es más largo se estira el cuadro, como siempre.
 const CD_NUEVA_MINUTOS = 30;
 
+// Qué hacer al pulsar Enter en el cuadro. Pura para poder probarla sin navegador.
+// Existe por lo que pasó en la agenda real (18-sep-2026): se escribió «paula miranda, quitar
+// extensiones», se pulsó Enter antes de que llegara la respuesta, y se guardó lo entendido de
+// cuando solo ponía «pau». Con el nombre molesta; con el servicio (cambiar «corto» por «largo» y
+// darle rápido) apartaría 195 minutos para un trabajo de 440.
+function cdQueHacerAlGuardar({ texto, entendidoDe, preguntas, elegido, avisado }) {
+  if (!texto) return 'nada';
+  if (entendidoDe !== texto) return 'entender';        // lo entendido es de otro texto
+  if (!elegido && preguntas > 0 && !avisado) return 'preguntar';
+  return 'guardar';
+}
+
+// Qué se lee en la agenda de una cita. Una apuntada a mano sin servicio reconocido enseña lo que
+// se escribió detrás del nombre, no «Consulta»: esa palabra no la puso nadie.
+function cdQueSeHace(b) {
+  if (b && b.servicio) return b.servicio;
+  const notas = String((b && b.notas) || '').trim();
+  const coma = notas.indexOf(',');
+  if (coma > 0) {
+    const antes = notas.slice(0, coma).trim().toLowerCase();
+    const despues = notas.slice(coma + 1).trim();
+    if (despues && antes === String((b && b.nombre) || '').trim().toLowerCase()) return despues;
+  }
+  return 'Consulta';
+}
+
 function cdCerrarNueva() {
   document.querySelectorAll('.cd-nueva').forEach(el => el.remove());
 }
@@ -9241,9 +9267,10 @@ function cdNuevaEnLaAgenda(body, opciones) {
 
   // Lo entendido de lo escrito. Mientras no haya servicio claro, la cita es una nota de media
   // hora: lo de siempre, que nunca se rompe.
-  let entendido = { nombre: '', servicio: '', duracion: 0, pregunta: '', candidatos: [] };
+  let entendido = { de: '', nombre: '', servicio: '', duracion: 0, pregunta: '', candidatos: [] };
   let elegido = null;       // la opción que ha tocado ella: manda sobre lo que adivine el código
   let consulta = 0;         // para tirar respuestas viejas que lleguen tarde
+  let avisado = false;      // ya se le han enseñado las opciones: el siguiente Enter la apunta
 
   const servicioActual = () => (elegido ? elegido.servicio : entendido.servicio) || '';
   const minutosActuales = () => {
@@ -9283,36 +9310,35 @@ function cdNuevaEnLaAgenda(body, opciones) {
 
   // Lo que se entiende lo decide el servidor, con el MISMO catálogo con el que se reserva.
   // Aquí no se adivina nada: si no está claro, se ofrece y ella toca.
-  let temporizador = 0;
-  const interpretar = () => {
-    const texto = campo.value.trim();
-    clearTimeout(temporizador);
-    temporizador = setTimeout(async () => {
-      const mio = ++consulta;
-      if (!texto) {
-        entendido = { nombre: '', servicio: '', duracion: 0, pregunta: '', candidatos: [] };
-        elegido = null;
-        pintar();
-        return;
-      }
+  const entenderAhora = async (texto) => {
+    const mio = ++consulta;
+    let nuevo = { de: texto, nombre: texto, servicio: '', duracion: 0, pregunta: '', candidatos: [] };
+    if (texto) {
       try {
         const data = await api('/auth/app/interpretar-apunte', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ texto }),
         });
-        if (mio !== consulta) return;   // ha seguido escribiendo: esta respuesta ya no vale
-        entendido = {
-          nombre: data.nombre || '', servicio: data.servicio || '',
+        nuevo = {
+          de: texto, nombre: data.nombre || texto, servicio: data.servicio || '',
           duracion: Number(data.duracion) || 0, pregunta: data.pregunta || '',
           candidatos: Array.isArray(data.candidatos) ? data.candidatos : [],
         };
-        elegido = null;
-        pintar();
       } catch (e) {
         // Sin interpretación se sigue pudiendo apuntar: la nota de media hora de siempre.
-        if (mio === consulta) { entendido.candidatos = []; pintar(); }
       }
-    }, 400);
+    }
+    if (mio !== consulta) return false;   // ha seguido escribiendo: esta respuesta ya no vale
+    entendido = nuevo;
+    elegido = null;
+    avisado = false;
+    pintar();
+    return true;
+  };
+  let temporizador = 0;
+  const interpretar = () => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => { entenderAhora(campo.value.trim()); }, 400);
   };
 
   const conDatos = () => {
@@ -9329,7 +9355,27 @@ function cdNuevaEnLaAgenda(body, opciones) {
   const guardar = async () => {
     const texto = campo.value.trim();
     if (!texto || guardando) return;
+    const paso = () => cdQueHacerAlGuardar({
+      texto: campo.value.trim(), entendidoDe: entendido.de,
+      preguntas: entendido.candidatos.length, elegido: !!elegido, avisado,
+    });
     guardando = true;
+    if (paso() === 'entender') {
+      // Aún no se ha entendido ESTE texto: se pregunta ya, y se guarda lo que diga.
+      clearTimeout(temporizador);
+      aviso.textContent = 'Comprobando…';
+      await entenderAhora(texto);
+    }
+    const siguiente = paso();
+    if (siguiente === 'preguntar') {
+      // Hay opciones sin tocar: se enseñan antes de apuntarla como nota de media hora.
+      guardando = false;
+      avisado = true;
+      aviso.textContent = 'Toca una opción, o Enter otra vez para apuntarla tal cual';
+      campo.focus();
+      return;
+    }
+    if (siguiente !== 'guardar') { guardando = false; pintar(); return; }
     aviso.textContent = 'Guardando…';
     const servicio = servicioActual();
     try {
@@ -9633,7 +9679,7 @@ function cdRenderDetail(b){
           ${payBadge(b)}
           ${b.payment_status === 'released' ? '<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">retención liberada</span>' : ''}
           <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
-          <span>${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</span>
+          <span>${escapeHtml(cdQueSeHace(b) + cdServiceMeta(b))}</span>
         </div>
         <div class="cd-detail-meta">
           <span>${escapeHtml(b.email || b.client_email || '–')}</span>
@@ -9886,7 +9932,7 @@ function openManageBookingModal(b){
   const clientName = b.nombre || b.client_name || b.name || 'Cliente sin nombre';
   const email = b.email || b.client_email || '';
   const phone = b.telefono || b.client_phone || '';
-  const serviceText = (b.servicio || 'Consulta') + cdServiceMeta(b);
+  const serviceText = cdQueSeHace(b) + cdServiceMeta(b);
   const dateText = [b.fecha || cdBookingDateKey(b), hora].filter(Boolean).join(' - ');
   const canReschedule = b.can_reschedule !== false && b.can_cancel !== false && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
   const canCancel = b.can_cancel !== false && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
@@ -10211,7 +10257,7 @@ function openManageBookingModalLegacy(b){
     <div class="inf-kpis" style="grid-template-columns:repeat(2,1fr); margin-bottom:14px;">
       <div class="inf-kpi"><div class="k-label">Fecha y hora</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml((b.fecha || '') + ' · ' + hora)}</div></div>
       <div class="inf-kpi"><div class="k-label">Profesional</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml(b.employee_name || 'Agenda')}</div></div>
-      <div class="inf-kpi"><div class="k-label">Servicio</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</div></div>
+      <div class="inf-kpi"><div class="k-label">Servicio</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml(cdQueSeHace(b) + cdServiceMeta(b))}</div></div>
       <div class="inf-kpi"><div class="k-label">Centro</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml(b.location_name || '—')}</div></div>
     </div>
     <div class="field" style="margin-bottom:8px;">
@@ -13131,7 +13177,7 @@ function openHorarioConflictModal(detail){
     <div class="chat-row" style="padding:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid rgba(245,158,11,0.35); border-radius:8px;">
       <div style="flex:1; min-width:180px;">
         <b>${escapeHtml(b.fecha || '')} ${escapeHtml(b.hora || '')} · ${escapeHtml(b.nombre || 'Cita')}</b>
-        <span class="panel-sub" style="margin:0; display:block;">${escapeHtml(b.servicio || 'Consulta')}${b.employee_name ? ' · ' + escapeHtml(b.employee_name) : ''}</span>
+        <span class="panel-sub" style="margin:0; display:block;">${escapeHtml(cdQueSeHace(b))}${b.employee_name ? ' · ' + escapeHtml(b.employee_name) : ''}</span>
       </div>
       <button class="btn btn-ghost" type="button" data-cf-action="day" data-cf-idx="${idx}" style="padding:5px 10px;">Ver día</button>
       <button class="btn btn-ghost" type="button" data-cf-action="cancel" data-cf-idx="${idx}" style="padding:5px 10px; color:#fca5a5;">Cancelar</button>

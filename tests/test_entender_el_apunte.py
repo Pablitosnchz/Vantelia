@@ -19,8 +19,11 @@ sería apartar hora y cuarto para seis horas de trabajo.
 """
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import sqlite3
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -39,6 +42,10 @@ CATALOGO = [
     # La aplicacion suelta al lado del pack: la misma trampa que tiene el salon de verdad.
     ("Mechas balayage corto", 75),
     ("Corte caballero", 20),
+    # Escrito asi en el catalogo del salon, con K. Y al lado, otra cosa con la misma palabra.
+    ("Kitar extensiones", 15),
+    ("Brusing-extensiones medio", 70),
+    ("Brusing-extensiones largo", 80),
 ]
 
 
@@ -140,7 +147,7 @@ def test_el_cuadro_pregunta_al_servidor_lo_que_se_escribe():
     assert "'/auth/app/interpretar-apunte'" in caja, "el cuadro no pregunta qué se ha entendido"
     assert "clearTimeout(temporizador)" in caja and "}, 400);" in caja, (
         "pregunta en cada tecla en vez de esperar a que termine de escribir")
-    assert "if (mio !== consulta) return;" in caja, "una respuesta vieja puede pisar a la nueva"
+    assert "if (mio !== consulta) return false;" in caja, "una respuesta vieja puede pisar a la nueva"
 
 
 def test_el_cuadro_guarda_el_servicio_entendido_y_lo_escrito():
@@ -189,3 +196,72 @@ def test_lo_que_se_enseña_es_lo_que_se_aparta(client: TestClient, api_module, c
             conn.execute("DELETE FROM bookings WHERE id=?", (bid,))
             conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (bid,))
             conn.commit()
+
+
+def test_quitar_encuentra_kitar_y_no_otra_cosa_con_extensiones(client: TestClient, api_module, catalogo):
+    """Probado en la agenda real (18-sep-2026): el catalogo dice «Kitar extensiones» y en el
+    mostrador se escribe «quitar». No casaba, y se ofrecia «Brusing-extensiones» por largo."""
+    cookies = _portal_admin_cookies(api_module)
+    data = _interpretar(client, cookies, "Paula Miranda, quitar extensiones").json()
+    assert data["servicio"] == "Kitar extensiones", data
+
+
+# --- Enter en el cuadro: nunca con lo entendido de OTRO texto ----------------------------
+
+def _node(fuente, llamada):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node no disponible para ejecutar el JavaScript del portal")
+    guion = fuente + "\nprocess.stdout.write(JSON.stringify(" + llamada + "));"
+    salida = subprocess.run([node, "-e", guion], check=True, capture_output=True, text=True,
+                            encoding="utf-8").stdout
+    return json.loads(salida)
+
+
+def test_enter_no_guarda_lo_entendido_de_otro_texto():
+    """Lo que paso en la agenda real: se escribio «paula miranda, quitar extensiones», se pulso
+    Enter antes de que llegara la respuesta y la cita se guardo como «pau», que era lo entendido
+    de cuando solo ponia eso. Con el servicio seria peor: cambiar «corto» por «largo» y darle
+    rapido apartaria el rato del corto."""
+    decidir = _funcion(_panel(), "cdQueHacerAlGuardar")
+    casos = [
+        ({"texto": "paula miranda, quitar extensiones", "entendidoDe": "pau",
+          "preguntas": 0, "elegido": False, "avisado": False}, "entender"),
+        ({"texto": "ana, pack mechas largo", "entendidoDe": "ana, pack mechas corto",
+          "preguntas": 0, "elegido": False, "avisado": False}, "entender"),
+        ({"texto": "ana, mechas", "entendidoDe": "ana, mechas",
+          "preguntas": 4, "elegido": False, "avisado": False}, "preguntar"),
+        ({"texto": "ana, mechas", "entendidoDe": "ana, mechas",
+          "preguntas": 4, "elegido": False, "avisado": True}, "guardar"),
+        ({"texto": "ana, mechas", "entendidoDe": "ana, mechas",
+          "preguntas": 4, "elegido": True, "avisado": False}, "guardar"),
+        ({"texto": "", "entendidoDe": "", "preguntas": 0, "elegido": False, "avisado": False}, "nada"),
+    ]
+    for caso, esperado in casos:
+        assert _node(decidir, "cdQueHacerAlGuardar(%s)" % json.dumps(caso)) == esperado, caso
+
+
+def test_el_cuadro_vuelve_a_entender_antes_de_guardar():
+    caja = _funcion(_panel(), "cdNuevaEnLaAgenda")
+    assert "cdQueHacerAlGuardar(" in caja, "Enter no decide con lo entendido de ESTE texto"
+    assert "await entenderAhora(texto);" in caja, "no vuelve a entender el texto antes de guardar"
+    assert "de: texto" in caja, "lo entendido no recuerda de que texto es"
+
+
+def test_la_agenda_lee_lo_escrito_y_no_consulta():
+    """Una cita apuntada sin servicio reconocido se leia «Consulta · 30 min»: esa palabra no la
+    puso nadie. Se lee lo escrito detras del nombre. Y SOLO eso: las notas de una cita del
+    widget («alergia al tinte») no se sacan a la agenda."""
+    fuente = _panel()
+    leer = _funcion(fuente, "cdQueSeHace")
+    casos = [
+        ({"servicio": "Corte senora", "nombre": "Ana", "notas": "Ana, corte"}, "Corte senora"),
+        ({"servicio": "", "nombre": "paula miranda", "notas": "paula miranda, quitar extensiones"},
+         "quitar extensiones"),
+        ({"servicio": "", "nombre": "Ana", "notas": "alergia al tinte"}, "Consulta"),
+        ({"servicio": "", "nombre": "Ana", "notas": "Marta, mechas"}, "Consulta"),
+        ({"servicio": "", "nombre": "Ana", "notas": ""}, "Consulta"),
+    ]
+    for cita, esperado in casos:
+        assert _node(leer, "cdQueSeHace(%s)" % json.dumps(cita)) == esperado, cita
+    assert "b.servicio || 'Consulta'" not in fuente, "queda algun sitio que pone Consulta a mano"
