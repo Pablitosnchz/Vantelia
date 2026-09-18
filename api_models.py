@@ -418,6 +418,32 @@ class PaymentRefundPayload(BaseModel):
     force: bool = False
 
 
+class ApuntePayload(BaseModel):
+    """Lo que alguien escribe encima del cuadro de la agenda: «Carmen Calvo, pack mechas corto»."""
+
+    texto: str = Field(default="", max_length=300)
+    location_id: str = Field(default="", max_length=64)
+
+
+class ApunteCandidato(BaseModel):
+    """Una opcion que se ofrece para tocar, con lo que ocupa de verdad en la agenda."""
+
+    etiqueta: str = ""
+    servicio: str = ""
+    duracion: int = 0
+
+
+class ApunteInterpretadoResponse(BaseModel):
+    nombre: str = ""
+    servicio_texto: str = ""
+    # Vacio = no esta claro. Entonces se pregunta con `candidatos`, y si tampoco, se apunta como
+    # nota: lo escrito nunca se pierde.
+    servicio: str = ""
+    duracion: int = 0
+    pregunta: str = ""
+    candidatos: List[ApunteCandidato] = Field(default_factory=list)
+
+
 class StaffBookingCreatePayload(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     email: str = Field(default="", max_length=200)

@@ -776,15 +776,6 @@
       box-shadow:0 12px 30px rgba(0,0,0,.35);
     }
     .nb-ac.open { display:block; max-height:320px; overflow-y:auto; }
-    .nb-modo { display:flex; gap:6px; margin-bottom:14px; }
-    .nb-modo-btn {
-      flex:1; padding:8px 10px; border-radius:10px; border:1px solid var(--line);
-      background:transparent; color:var(--soft); cursor:pointer; font-size:0.85rem;
-    }
-    .nb-modo-btn.active { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
-    #newBookingDrawer.modo-rapida .nb-solo-completa,
-    #newBookingDrawer.modo-completa .nb-solo-rapida { display:none; }
-    #newBookingDrawer.modo-rapida .nb-solo-datos { display:none; }
     .nb-ac-mas { padding:8px 12px; font-size:0.76rem; color:var(--soft); border-top:1px solid var(--line); }
     .nb-ac-item { padding:8px 12px; cursor:pointer; }
     .nb-ac-item:hover, .nb-ac-item.sel { background:var(--accent-soft); }
@@ -817,6 +808,13 @@
       font-size:0.68rem; font-weight:700;
     }
     .cd-nueva-error { color:#ffb4a8; font-size:0.68rem; }
+    .cd-nueva-ops { display:flex; flex-wrap:wrap; gap:4px; }
+    .cd-nueva-ops button {
+      border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer;
+      border-radius:999px; padding:2px 8px; font-size:0.68rem; white-space:nowrap;
+    }
+    .cd-nueva-ops button:hover { border-color:var(--accent); background:var(--accent-soft); }
+    .cd-nueva-ops b { font-weight:700; }
 
     /* ── Vista Día: timeline por profesional ── */
     .cd-scroll { overflow-x:auto; overflow-y:hidden; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
@@ -4122,26 +4120,10 @@
     <button id="newBookingClose">×</button>
   </div>
   <div style="padding:18px; overflow-y:auto; flex:1;" id="nbCuerpo">
-    <!-- Dos formas de apuntar: rápida (como en su programa de siempre: quién, qué y cuánto dura)
-         y con todos los datos. Lo pidió el salón piloto el 17-sep-2026. -->
-    <div class="nb-modo" id="nbModo">
-      <button type="button" class="nb-modo-btn active" data-modo="rapida">Cita rápida</button>
-      <button type="button" class="nb-modo-btn" data-modo="completa">Con todos los datos</button>
-    </div>
-
-    <div class="nb-step nb-solo-rapida">
-      <span class="nb-num">1</span>
-      <div class="nb-body">
-        <label class="field-label" for="nbRapQue">Qué se hace</label>
-        <input type="text" class="field-input" id="nbRapQue" autocomplete="off"
-               placeholder="Elumen y secado" />
-        <p class="panel-sub" id="nbRapQueAviso" style="margin:6px 0 0; font-size:0.78rem;"></p>
-        <label class="field-label" style="margin-top:12px;">Cuánto dura</label>
-        <div class="nb-chips" id="nbRapDur"></div>
-      </div>
-    </div>
-
-    <div class="nb-step nb-solo-completa">
+    <!-- UNA sola ficha, la de siempre. Hubo un selector «Cita rápida / Con todos los datos» y
+         sobraba (Pablo, 18-sep-2026): lo rápido se apunta YA en la propia agenda, pinchando el
+         hueco y escribiendo encima, así que la ficha vuelve a servir para una cosa sola. -->
+    <div class="nb-step">
       <span class="nb-num">1</span>
       <div class="nb-body">
         <label class="field-label">Servicio</label>
@@ -7715,128 +7697,6 @@ document.getElementById('reschedClose').addEventListener('click', () => { resche
 document.getElementById('reschedOverlay').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 
 // ── Nueva cita (alta manual desde el portal) ──────────────────────────
-// ── Cita rápida ────────────────────────────────────────────────────────
-// Como en su programa de siempre: pinchar en la agenda, escribir qué se hace y decir cuánto dura.
-// La duración NO se presupone: una cita de tres horas guardada como media hora deja al asistente
-// ofreciendo un hueco que no existe (Alicia, 17-sep-2026). Si lo escrito es un servicio del
-// catálogo se usa ese servicio, con su duración y sus pasos.
-const NB_DURACIONES = [15, 30, 45, 60, 90, 120, 180, 240];
-// Media hora puesta de salida y a un toque de cambiarla (decisión de Pablo, 17-sep-2026: que no
-// le pregunte nada y estire en la agenda si hace falta). OJO: si el trabajo dura más y nadie la
-// estira, el asistente ve libre ese rato y puede dar la hora a otra clienta.
-const NB_DURACION_POR_DEFECTO = 30;
-let nbModo = 'rapida';
-let nbRapDuracion = NB_DURACION_POR_DEFECTO;
-let nbRapServicio = '';
-
-function nbSetModo(modo) {
-  nbModo = modo === 'completa' ? 'completa' : 'rapida';
-  const drawer = document.getElementById('newBookingDrawer');
-  drawer.classList.toggle('modo-rapida', nbModo === 'rapida');
-  drawer.classList.toggle('modo-completa', nbModo === 'completa');
-  document.querySelectorAll('#nbModo .nb-modo-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.modo === nbModo);
-  });
-  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
-  nbSyncConfirm();
-}
-
-function nbPintarDuraciones() {
-  const cont = document.getElementById('nbRapDur');
-  if (!cont) return;
-  const delCatalogo = nbRapServicio
-    ? (nbServicios.find(s => s.nombre === nbRapServicio)?.dur || 0)
-    : 0;
-  const minutos = delCatalogo || nbRapDuracion;
-  cont.innerHTML = '';
-  NB_DURACIONES.forEach(min => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'filter-chip' + (minutos === min ? ' active' : '');
-    btn.textContent = nbDuracionTexto(min);
-    btn.disabled = !!delCatalogo;   // con servicio del catálogo mandan sus minutos y sus pasos
-    btn.addEventListener('click', () => {
-      nbRapDuracion = min;
-      nbPintarDuraciones();
-      loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
-      nbSyncConfirm();
-    });
-    cont.appendChild(btn);
-  });
-  const hora = document.getElementById('nbSlotSelected')?.value || '';
-  const fin = nbFinDeLaCita(hora, minutos);
-  const pie = document.createElement('p');
-  pie.className = 'panel-sub';
-  pie.style.cssText = 'margin:8px 0 0; font-size:0.78rem;';
-  pie.textContent = fin
-    ? `Se reservan ${nbDuracionTexto(minutos)}: de ${hora} a ${fin}.`
-    : `Se reservan ${nbDuracionTexto(minutos)} en cuanto elijas la hora.`;
-  cont.appendChild(pie);
-}
-
-// Lo que escribe en «Qué se hace»: si es un servicio del catálogo se reserva como tal (con sus
-// pasos); si no, se guarda tal cual como nota y la duración la elige ella.
-function nbRapRevisarQue() {
-  const campo = document.getElementById('nbRapQue');
-  const escrito = (campo?.value || '').trim();
-  const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
-  nbRapServicio = exacto ? exacto.nombre : '';
-  nbRapPintarAviso();
-  nbPintarDuraciones();
-  loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
-  nbSyncConfirm();
-}
-
-// Lo que se le dice debajo del texto: qué servicio ha quedado vinculado (si alguno) y la
-// sugerencia del catálogo, que se toca a propósito.
-function nbRapPintarAviso() {
-  const campo = document.getElementById('nbRapQue');
-  const aviso = document.getElementById('nbRapQueAviso');
-  const escrito = (campo?.value || '').trim();
-  const exacto = escrito ? nbServicios.find(s => nbSvcNorm(s.nombre) === nbSvcNorm(escrito)) : null;
-  const vinculado = nbRapServicio ? nbServicios.find(s => s.nombre === nbRapServicio) : null;
-  // La coincidencia parcial NO engancha un servicio por su cuenta: se ofrece y lo elige ella
-  // (revisión de Astra a 19b5dfb). «Elumen» son catorce servicios distintos y cada uno dura lo suyo.
-  const sugerencia = (!vinculado && escrito) ? (nbSvcSugerencias(escrito)[0] || null) : null;
-  if (aviso) {
-    aviso.innerHTML = '';
-    if (vinculado) {
-      aviso.textContent = `Se apunta como «${vinculado.nombre}»${vinculado.dur ? ` · ${nbDuracionTexto(vinculado.dur)}` : ''}, con sus tiempos de espera. Lo que has escrito se guarda igual.`;
-    } else if (escrito) {
-      aviso.append('Se guarda tal cual. ');
-      if (sugerencia) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-ghost';
-        btn.style.cssText = 'padding:2px 8px; font-size:0.76rem;';
-        btn.textContent = `¿Es «${sugerencia.nombre}»?`;
-        btn.addEventListener('click', () => {
-          nbRapServicio = sugerencia.nombre;   // lo que escribió ella se queda como está
-          nbPintarDuraciones();
-          loadNbSlots(document.getElementById('nbSlotSelected').value || nbHoraPedida);
-          nbSyncConfirm();
-          nbRapPintarAviso();
-        });
-        aviso.appendChild(btn);
-      }
-    }
-  }
-}
-
-// A qué hora termina lo que se está apuntando, con la duración que va a ocupar de verdad.
-function nbFinDeLaCita(hora, minutos) {
-  if (!hora || !minutos) return '';
-  const total = nbMinutos(hora) + minutos;
-  const h = Math.floor(total / 60) % 24, m = total % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-function nbRapDuracionEfectiva() {
-  if (nbModo !== 'rapida') return 0;
-  if (nbRapServicio) return 0;            // manda el catálogo
-  return nbRapDuracion;
-}
-
 async function openNewBookingDrawer(opts = {}) {
   if (!citasState.employees) {
     try { const r = await api('/auth/employees'); citasState.employees = (Array.isArray(r) ? r : (r?.items || [])).map(e => ({ ...e, id: e.employee_id || e.id })); }
@@ -7863,13 +7723,6 @@ async function openNewBookingDrawer(opts = {}) {
   if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
   document.getElementById('nbSlotSelected').value = '';
-  const rapQue = document.getElementById('nbRapQue');
-  if (rapQue) rapQue.value = '';
-  nbRapDuracion = NB_DURACION_POR_DEFECTO;
-  nbRapServicio = '';
-  nbPintarDuraciones();
-  nbRapRevisarQue();
-  nbSetModo(opts.servicio ? 'completa' : nbModo);
   nbHoraPedida = opts.time || '';
   const libre = document.getElementById('nbHoraLibre');
   if (libre) libre.value = opts.time || '';
@@ -8100,13 +7953,7 @@ function nbSyncConfirm() {
   const hora = document.getElementById('nbSlotSelected').value;
   const nombre = document.getElementById('nbNombre').value.trim();
   const completo = !!nombre && (!state.exigirDosApellidos || tieneDosApellidos(nombre));
-  const svc = nbModo === 'rapida'
-    ? { escrito: '', resuelto: nbRapServicio, coincidencias: nbRapServicio ? 1 : 0 }
-    : nbSvcEstado();
-  const falta = nbPorQueNoSePuedeCrear({
-    hora, nombre, completo, svc,
-    rapida: nbModo === 'rapida', duracion: nbRapDuracion, servicioRapido: nbRapServicio,
-  });
+  const falta = nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc: nbSvcEstado() });
   document.getElementById('nbConfirmBtn').disabled = !!falta;
   // Un boton en gris sin explicacion parece que la herramienta no funciona.
   const hint = document.getElementById('nbHint');
@@ -8114,8 +7961,7 @@ function nbSyncConfirm() {
 }
 
 // Qué falta para poder crear la cita, dicho con la verdad.
-function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc, rapida, duracion, servicioRapido }) {
-  if (rapida && !servicioRapido && !duracion) return 'Toca cuánto dura: la agenda aparta ese rato.';
+function nbPorQueNoSePuedeCrear({ hora, nombre, completo, svc }) {
   if (svc.escrito && !svc.resuelto) {
     return svc.coincidencias
       ? `Hay ${svc.coincidencias} servicios que encajan con «${svc.escrito}»: elige uno en la lista.`
@@ -8197,12 +8043,10 @@ async function loadNbSlots(preselect = '') {
 
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Cargando huecos…</span>';
   try {
-    const servicio = nbModo === 'rapida' ? nbRapServicio : nbSvcResuelto();
-    const duracion = nbRapDuracionEfectiva();
+    const servicio = nbSvcResuelto();
     const qs = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(fecha)}`
       + (empId ? `&employee_id=${encodeURIComponent(empId)}` : '')
-      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '')
-      + (duracion && empId ? `&duracion=${duracion}` : '');
+      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '');
     const data = await api(`/disponibilidad?${qs}`);
     const all = data.slots || data || [];
     const slots = all.filter(s => s.disponible !== false);
@@ -8210,7 +8054,7 @@ async function loadNbSlots(preselect = '') {
     if (!slots.length) {
       const ahora = new Date();
       const svc = nbServicios.find(s => s.nombre === servicio);
-      const durElegida = Number(svc && svc.dur) || duracion || 0;
+      const durElegida = Number(svc && svc.dur) || 0;
       nbAvisoDia(cont, nbPorQueNoHayHuecos({
         fecha, hoy: hoyKey, ahoraMin: ahora.getHours() * 60 + ahora.getMinutes(),
         ventana: cdWeekdayWindow(empSel || citasState.daySchedule || {}, diaSemana),
@@ -8303,11 +8147,6 @@ document.getElementById('nbHoraLibreBtn')?.addEventListener('click', () => {
   nbSyncConfirm();
 });
 
-document.getElementById('nbModo')?.addEventListener('click', (e) => {
-  const btn = e.target.closest('.nb-modo-btn');
-  if (btn) nbSetModo(btn.dataset.modo);
-});
-document.getElementById('nbRapQue')?.addEventListener('input', nbRapRevisarQue);
 document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
 (() => {
@@ -8344,22 +8183,15 @@ document.getElementById('nbNombre').addEventListener('input', () => { nbSyncConf
 document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nbCloseAc, 180));
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   const btn = document.getElementById('nbConfirmBtn');
-  const rapQue = (document.getElementById('nbRapQue')?.value || '').trim();
-  // Lo que escribió se guarda TAL CUAL, también cuando se ha vinculado un servicio: son dos
-  // cosas distintas y la suya es la que dice qué hay que hacerle (revisión de Astra a 7fba7e4).
-  const notas = [document.getElementById('nbNotas').value.trim(),
-                 (nbModo === 'rapida' && rapQue) ? rapQue : '']
-    .filter(Boolean).join(' · ');
   const payload = {
     nombre: document.getElementById('nbNombre').value.trim(),
     email: document.getElementById('nbEmail').value.trim(),
     telefono: document.getElementById('nbTelefono').value.trim(),
-    servicio: nbModo === 'rapida' ? nbRapServicio : nbSvcResuelto(),
+    servicio: nbSvcResuelto(),
     employee_id: document.getElementById('nbProf').value || '',
     fecha: document.getElementById('nbFecha').value,
     hora: document.getElementById('nbSlotSelected').value,
-    notas,
-    duration_minutes: nbRapDuracionEfectiva(),
+    notas: document.getElementById('nbNotas').value.trim(),
   };
   if (!payload.nombre || !payload.fecha || !payload.hora) { toast('Completa nombre, fecha y hora.', 'error'); return; }
   if (!payload.email && !payload.telefono) {
@@ -9383,19 +9215,19 @@ function cdCerrarNueva() {
 function cdNuevaEnLaAgenda(body, opciones) {
   const { dateKey, empId, mins, startMin, slotMin, fueraDeHorario } = opciones;
   cdCerrarNueva();
-  const alto = Math.max(CD_NUEVA_MINUTOS, slotMin || CD_NUEVA_MINUTOS);
   const caja = document.createElement('div');
   caja.className = 'cd-nueva';
   caja.style.top = ((mins - startMin) * CD_PX_PER_MIN) + 'px';
-  caja.style.minHeight = (alto * CD_PX_PER_MIN) + 'px';
   const campo = document.createElement('input');
   campo.type = 'text';
-  campo.placeholder = cdMinsToHora(mins) + ' · escribe la cita';
+  // La coma es la única regla: a la izquierda quién viene, a la derecha qué se le hace.
+  campo.placeholder = cdMinsToHora(mins) + ' · Carmen Calvo, pack mechas corto';
   campo.setAttribute('aria-label', 'Cita de las ' + cdMinsToHora(mins));
+  const opsCont = document.createElement('div');
+  opsCont.className = 'cd-nueva-ops';
   const pie = document.createElement('div');
   pie.className = 'cd-nueva-pie';
   const aviso = document.createElement('span');
-  aviso.textContent = CD_NUEVA_MINUTOS + ' min · Enter para guardar';
   const masDatos = document.createElement('button');
   masDatos.type = 'button';
   masDatos.textContent = 'Más datos';
@@ -9403,15 +9235,92 @@ function cdNuevaEnLaAgenda(body, opciones) {
   cerrar.type = 'button';
   cerrar.textContent = 'Cancelar';
   pie.append(aviso, masDatos, cerrar);
-  caja.append(campo, pie);
+  caja.append(campo, opsCont, pie);
   body.appendChild(caja);
   campo.focus();
+
+  // Lo entendido de lo escrito. Mientras no haya servicio claro, la cita es una nota de media
+  // hora: lo de siempre, que nunca se rompe.
+  let entendido = { nombre: '', servicio: '', duracion: 0, pregunta: '', candidatos: [] };
+  let elegido = null;       // la opción que ha tocado ella: manda sobre lo que adivine el código
+  let consulta = 0;         // para tirar respuestas viejas que lleguen tarde
+
+  const servicioActual = () => (elegido ? elegido.servicio : entendido.servicio) || '';
+  const minutosActuales = () => {
+    const dur = elegido ? elegido.duracion : entendido.duracion;
+    return Number(dur) || CD_NUEVA_MINUTOS;
+  };
+
+  function pintar() {
+    const minutos = minutosActuales();
+    caja.style.minHeight = (Math.max(minutos, slotMin || CD_NUEVA_MINUTOS) * CD_PX_PER_MIN) + 'px';
+    const servicio = servicioActual();
+    const hasta = cdMinsToHora(mins + minutos);
+    aviso.textContent = servicio
+      ? servicio + ' · ' + nbDuracionTexto(minutos) + ' · hasta las ' + hasta
+      : nbDuracionTexto(minutos) + ' · Enter para guardar';
+    opsCont.innerHTML = '';
+    // Con algo tocado ya no se pregunta más: la decisión es suya.
+    if (elegido || !entendido.candidatos.length) return;
+    const titulo = document.createElement('span');
+    titulo.textContent = entendido.pregunta || '¿Cuál de estos?';
+    titulo.style.cssText = 'font-size:0.68rem; color:var(--soft); align-self:center;';
+    opsCont.appendChild(titulo);
+    entendido.candidatos.forEach(op => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.innerHTML = '<b>' + escapeHtml(op.etiqueta) + '</b> · ' + escapeHtml(nbDuracionTexto(op.duracion));
+      btn.title = op.servicio;
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        elegido = op;
+        pintar();
+        campo.focus();
+      });
+      opsCont.appendChild(btn);
+    });
+  }
+
+  // Lo que se entiende lo decide el servidor, con el MISMO catálogo con el que se reserva.
+  // Aquí no se adivina nada: si no está claro, se ofrece y ella toca.
+  let temporizador = 0;
+  const interpretar = () => {
+    const texto = campo.value.trim();
+    clearTimeout(temporizador);
+    temporizador = setTimeout(async () => {
+      const mio = ++consulta;
+      if (!texto) {
+        entendido = { nombre: '', servicio: '', duracion: 0, pregunta: '', candidatos: [] };
+        elegido = null;
+        pintar();
+        return;
+      }
+      try {
+        const data = await api('/auth/app/interpretar-apunte', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto }),
+        });
+        if (mio !== consulta) return;   // ha seguido escribiendo: esta respuesta ya no vale
+        entendido = {
+          nombre: data.nombre || '', servicio: data.servicio || '',
+          duracion: Number(data.duracion) || 0, pregunta: data.pregunta || '',
+          candidatos: Array.isArray(data.candidatos) ? data.candidatos : [],
+        };
+        elegido = null;
+        pintar();
+      } catch (e) {
+        // Sin interpretación se sigue pudiendo apuntar: la nota de media hora de siempre.
+        if (mio === consulta) { entendido.candidatos = []; pintar(); }
+      }
+    }, 400);
+  };
 
   const conDatos = () => {
     const texto = campo.value.trim();
     cdCerrarNueva();
     openNewBookingDrawer({
-      date: dateKey, time: cdMinsToHora(mins), employeeId: empId, nombre: texto,
+      date: dateKey, time: cdMinsToHora(mins), employeeId: empId,
+      nombre: entendido.nombre || texto, servicio: servicioActual(),
       fueraDeHorario: !!fueraDeHorario,
     }).catch(err => toast(err.message, 'error'));
   };
@@ -9422,15 +9331,19 @@ function cdNuevaEnLaAgenda(body, opciones) {
     if (!texto || guardando) return;
     guardando = true;
     aviso.textContent = 'Guardando…';
+    const servicio = servicioActual();
     try {
       await api('/auth/bookings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Lo que escribe es lo que se lee en la agenda. Sin email ni teléfono no se crea ficha
-          // de clienta: es una nota del mostrador, no una identidad.
-          nombre: texto, email: '', telefono: '', servicio: '', notas: '',
+          // Lo escrito se guarda TAL CUAL en las notas, se haya entendido o no. Sin email ni
+          // teléfono no se crea ficha de clienta: es una nota del mostrador, no una identidad.
+          nombre: entendido.nombre || texto, email: '', telefono: '', notas: texto,
+          servicio,
           employee_id: empId, fecha: dateKey, hora: cdMinsToHora(mins),
-          duration_minutes: CD_NUEVA_MINUTOS,
+          // Con servicio manda el catálogo (y sus pasos de pack). Sin servicio, media hora y a
+          // estirar el cuadro si hace falta.
+          duration_minutes: servicio ? 0 : CD_NUEVA_MINUTOS,
         }),
       });
       cdCerrarNueva();
@@ -9446,6 +9359,7 @@ function cdNuevaEnLaAgenda(body, opciones) {
     }
   };
 
+  campo.addEventListener('input', interpretar);
   campo.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); guardar(); }
     else if (e.key === 'Escape') { e.preventDefault(); cdCerrarNueva(); }
@@ -9456,6 +9370,7 @@ function cdNuevaEnLaAgenda(body, opciones) {
     // Si no ha escrito nada, el cuadro se va solo; con texto se queda para no perderlo.
     setTimeout(() => { if (!campo.value.trim()) cdCerrarNueva(); }, 120);
   });
+  pintar();
   return caja;
 }
 

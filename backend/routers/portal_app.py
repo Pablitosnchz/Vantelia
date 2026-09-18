@@ -65,6 +65,7 @@ from api_models import *  # noqa: F401,F403
 from backend import (
     agenda,
     appstate,
+    apuntes,
     billing,
     booking,
     channel_requests,
@@ -3181,6 +3182,30 @@ async def auth_delete_employee_block(
     agenda._resolve_employee_for_booking(target_client_id, employee_id, require_active=False)
     agenda._delete_agenda_block(target_client_id, block_id, employee_id=employee_id)
     return AuthSimpleResponse(ok=True, message="Bloqueo del profesional eliminado correctamente.")
+
+
+@app.post("/auth/app/interpretar-apunte", response_model=ApunteInterpretadoResponse)
+async def auth_interpretar_apunte(
+    data: ApuntePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ApunteInterpretadoResponse:
+    """Que se entiende de lo que se escribe a mano en la agenda.
+
+    No crea nada ni decide nada: dice que ha entendido para que quien coge la cita lo vea ANTES
+    de guardar. Si no esta claro, devuelve las opciones reales del catalogo con su duracion.
+    """
+    security._require_portal_permission(user, "agenda.create")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    entendido = apuntes.interpretar(target_client_id, data.texto, data.location_id)
+    return ApunteInterpretadoResponse(
+        nombre=entendido["nombre"],
+        servicio_texto=entendido["servicio_texto"],
+        servicio=entendido["servicio"],
+        duracion=int(entendido["duracion"] or 0),
+        pregunta=entendido["pregunta"],
+        candidatos=[ApunteCandidato(**c) for c in entendido["candidatos"]],
+    )
 
 
 @app.post("/auth/bookings", response_model=BookingActionResponse)
