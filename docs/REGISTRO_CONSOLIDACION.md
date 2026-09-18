@@ -1828,3 +1828,29 @@ a fin en todas.
   contador cuenta recordatorios que no salen por ningún canal); cargar los datos de Alicia ya
   confirmados (elumen 20, flash repair 15+15 → 3 packs de mechas: 195→230, 360→350, 440→430);
   arranque de Alicia congelado hasta noviembre, con Stripe y WhatsApp sin conectar.
+
+## 2026-09-18 15:01 +02:00 — la cita se escribe en la propia agenda (solo Alicia)
+
+- Qué: pinchar un hueco de la vista Día deja el cuadro de la cita ahí mismo y se
+  escribe encima («CARMEN ELUMEN Y…»), como en el programa del que viene el salón
+  piloto. Aparta 30 min; si el trabajo es más largo, se estira el cuadro. Enter
+  guarda, Esc sale, «Más datos» abre el panel lateral de siempre.
+- Opt-in por negocio: `booking.cita_en_la_agenda`. Sin el interruptor, pinchar un
+  hueco sigue abriendo el panel lateral. Encendido HOY solo en
+  `alicia_rincon_estilistas` (decisión de Pablo: «demomento así solo para alicia»).
+- Además: una nota del mostrador sin email ni teléfono ya NO crea ficha en
+  Clientes (antes cada cita apuntada así metía el texto entero como nombre).
+- Rama `claude/cita-en-la-agenda`: 3bdc47b (cuadro + guarda del CRM) y 4548645
+  (interruptor por negocio). Integrado en main como 3824185 y desplegado.
+- Evidencia: suite completa en la rama 2954 passed, 1 skipped (23 min 26 s);
+  6 mutaciones causales, las 6 en rojo (quitar el guardia del CRM, quitar el
+  cuadro, quitar la duración, quitar el interruptor del portal, quitar la lectura
+  del negocio en `/auth/app/overview`, encenderlo de serie en el modelo).
+- Despliegue: healthcheck ok, acceso público ok, humo 5/5. Copia previa de la
+  config en `/srv/vantelia-backups/config-pre-cita-en-agenda-20260918-125701.json`
+  antes de encender el interruptor; comprobado en el contenedor que solo lo tiene
+  Alicia (27 tenants cargados) y que sobrevive a la normalización de config.
+- Siguiente: que Alicia lo pruebe en su agenda real y diga si le vale así; sigue
+  pendiente el parche confirmado de los 3 packs de mechas (necesita orden de Pablo
+  + copia de la BD), el hallazgo F4 (contador de recordatorios) y que ella conecte
+  Stripe y WhatsApp. Astra debe aún revisión de b417618, 0c0838c, 3bdc47b y 4548645.
