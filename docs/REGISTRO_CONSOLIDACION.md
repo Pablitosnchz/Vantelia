@@ -1878,3 +1878,35 @@ a fin en todas.
 - Siguiente: que Alicia lo pruebe con la coma; F2 (modelo para lo que el catálogo
   no reconoce, p. ej. «tinte raiz») y F3 (enganchar el nombre con su ficha de
   clienta) quedan sin hacer; revisión de Astra de 478ae58.
+
+## 2026-09-18 20:25 +02:00 — pruebas en la agenda real de Alicia: cuatro arreglos y agenda limpia
+
+- Pablo probó el cuadro en la agenda real. Salieron tres fallos:
+  - Enter guardaba lo entendido de un texto anterior: «paula miranda, quitar
+    extensiones» quedó como «pau». Arreglado en 4eb47e0 (se vuelve a entender ESE
+    texto antes de guardar; con opciones sin tocar, se enseñan antes).
+  - «quitar» no encontraba «Kitar extensiones» (así está en su catálogo) y ofrecía
+    «Brusing-extensiones». Ahora se compara por cómo suena.
+  - La agenda ponía «Consulta» a lo apuntado sin servicio. Ahora se lee lo escrito.
+- Cuarto, encontrado al mirar: cancelar, mover, marcar asistencia, cerrarse sola o
+  el relleno del CRM tras cada reinicio metían la nota del mostrador en Clientes.
+  Guardia único en `crm._crm_upsert_contact` (73f3302).
+- Pedido por Pablo: tocar una opción del cuadro apunta ya la cita; reparto por
+  niveles (Lorena/Conchi -> Lucía/José -> Alicia), editable en el editor del
+  profesional, y el selector de «Nueva cita» en ese orden (c484131).
+- Desplegado en tres veces: c9c856b, 4dbb216 y 7f24405. Suites: 2966, 2971 y 2978
+  passed (1 skipped); humo 5/5 en las tres. Mutaciones causales: 6 + 1 + 5, todas en
+  rojo.
+- Datos de producción, por decisión de Pablo y con copia previa:
+  - Borradas las 61 citas de `alicia_rincon_estilistas` (todos los canales) y lo
+    que colgaba de ellas; borradas 17 fichas de Clientes sin email ni teléfono
+    salidas de citas apuntadas a mano (quedan 29). Copia:
+    `/srv/vantelia-backups/pre-borrado-alicia-20260918-173801.db`.
+  - Niveles de reparto de su equipo: Lorena y Conchi 1, Lucía y José 2, Alicia 3.
+    Copia: `/srv/vantelia-backups/pre-reparto-alicia-20260918-182359.db`.
+- Comprobado en vivo: con hueco en todas, 80 repartos simulados caen solo en Lorena
+  y Conchi.
+- Observado: en su catálogo real «Kitar extensiones» dura 5 min y «Pack keratina
+  premium largo» 140. Dato suyo; va con la revisión de packs.
+- Siguiente: que Alicia pruebe; F2 y F3 del cuadro sin hacer; revisión de Astra
+  de 478ae58, 4eb47e0, 73f3302 y c484131.
