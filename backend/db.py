@@ -321,6 +321,14 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE employees ADD COLUMN auto_assign_last INTEGER NOT NULL DEFAULT 0"
             )
+        # El orden de reparto por NIVELES: 1 = primera opcion, 2 = segunda, 3 = ultima (y entonces
+        # `auto_assign_last` = 1, que es lo que ya habia). El salon lo pidio asi (18-sep-2026):
+        # «primero Lorena o Conchi, luego Lucia o Jose y por ultimo, si no hay mas hueco, Alicia».
+        # 0 = sin decir, que cuenta como primera opcion: nadie cambia de comportamiento solo.
+        if "reparto_nivel" not in employee_columns:
+            connection.execute(
+                "ALTER TABLE employees ADD COLUMN reparto_nivel INTEGER NOT NULL DEFAULT 0"
+            )
         # Lo que se le dice al cliente cuando pide a ESA persona y su servicio
         # cuesta mas. Dos textos porque el negocio los quiere distintos: uno para
         # los tecnicos (alisados, mechas) y otro para el resto.
