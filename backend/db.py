@@ -1801,6 +1801,13 @@ def _init_database() -> None:
             "CREATE INDEX IF NOT EXISTS idx_keyword_rules_cliente "
             "ON keyword_rules(cliente_id, active, position)"
         )
+        # La misma respuesta escrita en ingles por el negocio. Sale tal cual cuando el huesped
+        # escribe en ingles (Cap Rocat, 18-sep-2026). Vacia = se traduce la de siempre.
+        keyword_rule_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(keyword_rules)").fetchall()
+        }
+        if "reply_en" not in keyword_rule_columns:
+            connection.execute("ALTER TABLE keyword_rules ADD COLUMN reply_en TEXT NOT NULL DEFAULT ''")
 
         # Numero de WhatsApp compartido para demos comerciales (backend/wa_demo.py):
         # un codigo por prospecto ata su telefono al tenant que le toca.

@@ -1037,6 +1037,8 @@ class AppKeywordRuleItem(BaseModel):
     label: str = ""
     keywords: List[str] = Field(default_factory=list)
     reply: str
+    # La misma respuesta en ingles, escrita por el negocio. Vacia = se traduce la de arriba.
+    reply_en: str = ""
     match_mode: str = "any"
     active: bool = True
     position: int = 0
@@ -1050,6 +1052,7 @@ class AppKeywordRulePayload(BaseModel):
     label: str = Field(default="", max_length=80)
     keywords: List[str] = Field(default_factory=list, max_length=40)
     reply: str = Field(min_length=1, max_length=2000)
+    reply_en: str = Field(default="", max_length=2000)
     match_mode: str = "any"
     active: bool = True
 
@@ -1058,6 +1061,7 @@ class AppKeywordRuleUpdatePayload(BaseModel):
     label: Optional[str] = Field(default=None, max_length=80)
     keywords: Optional[List[str]] = Field(default=None, max_length=40)
     reply: Optional[str] = Field(default=None, max_length=2000)
+    reply_en: Optional[str] = Field(default=None, max_length=2000)
     match_mode: Optional[str] = None
     active: Optional[bool] = None
     position: Optional[int] = None
