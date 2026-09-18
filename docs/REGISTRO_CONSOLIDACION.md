@@ -1910,3 +1910,30 @@ a fin en todas.
   premium largo» 140. Dato suyo; va con la revisión de packs.
 - Siguiente: que Alicia pruebe; F2 y F3 del cuadro sin hacer; revisión de Astra
   de 478ae58, 4eb47e0, 73f3302 y c484131.
+
+## 2026-09-18 21:45 +02:00 — Cap Rocat: listo para el correo del lunes
+
+- Cap Rocat acepta («mi jefa dice que podemos seguir adelante»). Piden DPA y
+  documentos, respuestas en inglés a huéspedes en inglés, suspender de noviembre a
+  marzo y cómo pasar sus palabras «desencadenantes».
+- Producto (38e9698, desplegado como d1ce3fe): respuestas por palabra clave en el
+  idioma de quien pregunta. Su texto en ES y EN sale tal cual; alemán, francés,
+  italiano y holandés se traducen con el modelo desde la inglesa, con caída a la
+  inglesa y a la de siempre. Idioma decidido sin modelo. Suite 2993 passed
+  (1 skipped), humo 5/5, 6 mutaciones en rojo. Comprobado en vivo con el modelo
+  real: alemán y francés conservan teléfono y email.
+- Documentos (21b8d40): cláusula de pausa de temporada (hasta cinco meses, aviso de
+  15 días, sin cuota, el asistente no responde, se conserva todo y se reactiva sin
+  nueva puesta en marcha) y la cláusula de Meta al día (autorización concedida;
+  se mantiene la protección de 60 días y reembolso).
+- Producción, por orden de Pablo y con copias previas:
+  - `WHATSAPP_ES_TENANTS` + `caprocat` (copia del `.env` en
+    `/srv/vantelia-backups/env-pre-caprocat-20260918-185700`); vivo tras el despliegue.
+  - Sus 7 reglas: tildes en el español, versión en inglés y palabras clave en inglés
+    (copia `/srv/vantelia-backups/pre-reglas-caprocat-20260918-194253.db`).
+  - Código de demo FYEKS8 ampliado del 28-sep al 31-oct-2026.
+- Adjuntos generados (fuera de git, `outreach/caprocat_adjuntos/`): hoja de pedido,
+  contrato y DPA en PDF, y un Excel editable con sus 7 respuestas ES/EN.
+- Siguiente: Pablo envía el correo el lunes 21-sep; al volver los documentos
+  firmados, factura de puesta en marcha, cargar sus respuestas revisadas y conectar
+  su número.
