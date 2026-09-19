@@ -41,6 +41,7 @@ módulos transversales.
 | `backend/timeutils.py` | `_utc_now` (punto único de "ahora": los tests lo parchean para time-travel), conversiones ISO/UTC. |
 | `backend/textnorm.py` | Normalización de textos/orígenes/URLs/horarios/fechas-ES, parsers de precio y duración, extractores de email/teléfono/fecha. |
 | `backend/db.py` | `_init_database` (~65 tablas + migraciones; el mapa de qué guarda cada una está en su docstring), `_get_db_connection` (Row + timeout), helpers `db_*` de clientes/suscripciones. Las DBs de captación (outreach/IG/TikTok/WA) viven en sus dominios. |
+| `backend/atencion.py` | Autoridad persistida de atención por tenant en `client_attention_state`: lectura sin caché, transición activa/pausada por versión y auditoría atómica en `client_channel_audit`. Ausencia de fila significa activa v0; error o corrupción nunca dan permiso. Esta fase aún no conecta canales, admisiones de envío ni facturación y no expone escritor HTTP. |
 | `backend/clients.py` | Config multi-tenant: carga/normaliza/serializa `config.json`, validación runtime, sync con la tabla `clientes`, persistencia, planes (`_plan_limits`). Cargar este módulo puebla `appstate.CONFIG_CLIENTES`. |
 | `backend/security.py` | Usuarios, sesiones del portal, cookies, impersonación, tokens de reset, OAuth states, Fernet de canal, guards `Depends` (`_require_*`), rate limit. |
 | `backend/emailing.py` | SMTP Vantelia + Gmail OAuth por cliente (`_send_client_email`), emails transaccionales, estados del canal Gmail. |
