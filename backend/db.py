@@ -10,6 +10,7 @@ Que tabla guarda que:
 | Dominio | Tablas |
 | --- | --- |
 | Clientes y acceso | `clientes`, `users`, `auth_sessions`, `password_reset_tokens`, `user_permission_overrides`, `admin_impersonations`, `system_settings` |
+| Atención automática | `client_attention_state` (transiciones en `client_channel_audit`) |
 | Agenda | `bookings`, `booking_audit`, `booking_operations`, `booking_operation_audit`, `employees`, `agenda_blocks`, `locations`, `resources` |
 | Catalogo | `services`, `service_location_overrides`, `service_payment_policies` |
 | Conversaciones | `chat_sessions`, `chat_messages`, `chat_takeovers`, `live_chat_sessions`, `whatsapp_inbound_messages`, `voice_calls` |
@@ -57,6 +58,18 @@ def _init_database() -> None:
     _ensure_runtime_directories()
     with _get_db_connection() as connection:
         connection.execute("PRAGMA journal_mode=WAL")
+        # Ausencia de fila = activa versión 0. Solo las transiciones materializan
+        # estado; no se infiere de suscripción, agenda ni configuración de canal.
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS client_attention_state (
+                cliente_id TEXT PRIMARY KEY NOT NULL,
+                estado TEXT NOT NULL CHECK (estado IN ('activa', 'pausada')),
+                version INTEGER NOT NULL CHECK (typeof(version) = 'integer' AND version > 0),
+                fecha_efectiva TEXT NOT NULL CHECK (length(fecha_efectiva) > 0),
+                motivo TEXT NOT NULL CHECK (length(motivo) BETWEEN 1 AND 64),
+                actor TEXT NOT NULL CHECK (length(actor) BETWEEN 1 AND 128)
+            )"""
+        )
         connection.execute(
             """CREATE TABLE IF NOT EXISTS booking_operations (
                 cliente_id TEXT NOT NULL,
