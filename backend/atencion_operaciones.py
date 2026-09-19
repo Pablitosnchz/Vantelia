@@ -16,7 +16,7 @@ La consulta no recupera ese token: perder al proceso no acredita reconciliación
 automática; la operación queda conservadora hasta una intervención con evidencia.
 `puede_preparar` tampoco reclama un worker: las fronteras conservan la deduplicación
 de mensajes y coste. En el diario común, tipo=envio mantiene ticket/canal/fragmento;
-tipo=reserva usa tenant/acción/clave estable incluso al capturar otro ticket.
+tipo=reserva/pago usa tenant/tipo/acción/clave estable incluso con otro ticket.
 Solo `ejecutar_operacion=True` concede el primer efecto de esa operación.
 """
 from contextlib import closing
@@ -33,6 +33,7 @@ _ATENCION_TOKEN_RE = re.compile(r"[a-f0-9]{32}\Z")
 _ATENCION_CANAL_RE = re.compile(r"[a-z][a-z0-9_]{0,31}\Z")
 _ATENCION_HASH_RE = re.compile(r"[a-f0-9]{64}\Z")
 _ATENCION_RESULT_REF_RE = re.compile(r"bk_[A-Za-z0-9_-]{1,100}\Z")
+_ATENCION_PAYMENT_REF_RE = re.compile(r"pay_[A-Za-z0-9_-]{1,100}\Z")
 _ATENCION_SUPRESIONES = ("pausada", "version_obsoleta", "vencido", "evento_anterior")
 
 
@@ -77,6 +78,10 @@ def _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
         if canal not in ("crear", "cancelar", "mover") or fragmento != 0:
             raise ValueError("Acción de reserva no válida.")
         _validar_referencia_atencion(clave_intento, _ATENCION_EVENTO_RE, "intento")
+    elif tipo == "pago":
+        if canal != "crear_enlace" or fragmento != 0:
+            raise ValueError("Acción de pago no válida.")
+        _validar_referencia_atencion(clave_intento, _ATENCION_EVENTO_RE, "intento")
     else:
         raise ValueError("Tipo de operación de atención no válido.")
 
@@ -84,10 +89,11 @@ def _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
 def _validar_resultado_referencia_atencion(tipo, estado, referencia):
     if not isinstance(referencia, str):
         raise ValueError("La referencia de resultado debe ser texto.")
-    if tipo == "reserva" and estado == "aceptado":
-        _validar_referencia_atencion(referencia, _ATENCION_RESULT_REF_RE, "resultado")
+    if tipo in ("reserva", "pago") and estado == "aceptado":
+        patron = _ATENCION_PAYMENT_REF_RE if tipo == "pago" else _ATENCION_RESULT_REF_RE
+        _validar_referencia_atencion(referencia, patron, "resultado")
     elif referencia != "":
-        raise ValueError("Solo una reserva aceptada tiene referencia de resultado.")
+        raise ValueError("Solo una reserva o pago aceptado tiene referencia de resultado.")
 
 
 def _ticket_operacion_atencion(row):
@@ -265,39 +271,46 @@ def _compat_respuesta_envio_atencion(respuesta):
 
 def _buscar_identidad_operacion_atencion(connection, identidad):
     cliente_id, ticket_id, tipo, canal, fragmento, clave_intento = identidad
-    if tipo == "reserva":
+    if tipo in ("reserva", "pago"):
         # El intento de una mutación confirmada sobrevive a la captura de otro
         # turno. El ticket original sigue siendo su vínculo de admisión.
         return connection.execute(
-            "SELECT * FROM client_attention_operations WHERE cliente_id=? AND tipo='reserva' "
-            "AND canal=? AND clave_intento=?", (cliente_id, canal, clave_intento)).fetchone()
+            "SELECT * FROM client_attention_operations WHERE cliente_id=? AND tipo=? "
+            "AND canal=? AND clave_intento=?", (cliente_id, tipo, canal, clave_intento)).fetchone()
     return connection.execute(
         "SELECT * FROM client_attention_operations WHERE cliente_id=? AND ticket_id=? "
         "AND tipo=? AND canal=? AND fragmento=? AND clave_intento=?", identidad).fetchone()
 
 
-def consultar_intento_reserva_atencion(cliente_id, ticket_id, accion, clave_intento):
+def consultar_intento_operacion_atencion(cliente_id, ticket_id, accion, clave_intento, *, tipo):
     """Evidencia original sin permiso, incluso con otro ticket propio ya inválido."""
     atencion._validar_cliente_atencion(cliente_id)
     _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
-    _validar_identidad_operacion_atencion("reserva", accion, 0, clave_intento)
+    if tipo not in ("reserva", "pago"):
+        raise ValueError("El intento estable debe ser de reserva o pago.")
+    _validar_identidad_operacion_atencion(tipo, accion, 0, clave_intento)
     try:
         with closing(db._get_db_connection()) as connection, connection:
             connection.execute("BEGIN")
             _buscar_ticket_atencion(connection, cliente_id, ticket_id)
             row = _buscar_identidad_operacion_atencion(connection,
-                (cliente_id, ticket_id, "reserva", accion, 0, clave_intento))
+                (cliente_id, ticket_id, tipo, accion, 0, clave_intento))
             if row is None:
                 return None
             _buscar_ticket_atencion(connection, cliente_id, row["ticket_id"])
             return _respuesta_operacion_atencion(_envio_operacion_atencion(row))
     except sqlite3.Error as exc:
-        raise atencion.AtencionNoDisponible("No se puede consultar el intento de reserva.") from exc
+        raise atencion.AtencionNoDisponible("No se puede consultar el intento de operación.") from exc
+
+
+def consultar_intento_reserva_atencion(cliente_id, ticket_id, accion, clave_intento):
+    return consultar_intento_operacion_atencion(
+        cliente_id, ticket_id, accion, clave_intento, tipo="reserva")
 
 
 def admitir_operacion_atencion(cliente_id, ticket_id, *, tipo, canal, fragmento=0,
                                clave_intento="", payload, solicitud=None):
-    """Único permiso duradero para envío o reserva; solo el ganador ejecuta."""
+    """Único permiso duradero para envío, reserva o pago; solo el ganador ejecuta."""
     atencion._validar_cliente_atencion(cliente_id)
     _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
     _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
@@ -383,11 +396,11 @@ def registrar_resultado_operacion_atencion(cliente_id, ticket_id, *, tipo, canal
 
 
 def consultar_operaciones_atencion(cliente_id, *, ticket_id=None, tipo=None):
-    """Distingue reservas de entregas; diario técnico sin propietarios ni permiso."""
+    """Distingue reservas, pagos y entregas; sin propietarios ni permiso."""
     atencion._validar_cliente_atencion(cliente_id)
     if ticket_id is not None:
         _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
-    if tipo not in (None, "envio", "reserva"):
+    if tipo not in (None, "envio", "reserva", "pago"):
         raise ValueError("Tipo de operación no válido.")
     try:
         with closing(db._get_db_connection()) as connection, connection:

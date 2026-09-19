@@ -29,6 +29,7 @@ class MutacionAtencion:
     accion: str
     clave_intento: str
     owner_token: str
+    tipo: str = "reserva"
 
 
 _TURNO_ATENCION = ContextVar("turno_atencion", default=None)
@@ -54,13 +55,13 @@ def _bytes_mutacion_atencion(datos):
                       separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
-def comprobar_intento_mutacion_atencion(cliente_id, accion, solicitud):
+def comprobar_intento_mutacion_atencion(cliente_id, accion, solicitud, *, tipo="reserva"):
     turno = _turno_validado_atencion(cliente_id)
     if turno is None:
         return
     try:
-        operacion = atencion_operaciones.consultar_intento_reserva_atencion(
-            cliente_id, turno.ticket_id, accion, turno.clave_intento)
+        operacion = atencion_operaciones.consultar_intento_operacion_atencion(
+            cliente_id, turno.ticket_id, accion, turno.clave_intento, tipo=tipo)
     except (atencion.AtencionNoDisponible, atencion_operaciones.AtencionOperacionNoEncontrada) as exc:
         raise AtencionDetenida("atencion_no_verificable") from exc
     if operacion is not None:
@@ -69,6 +70,10 @@ def comprobar_intento_mutacion_atencion(cliente_id, accion, solicitud):
         raise AtencionDetenida(operacion["motivo"] or "operacion_ya_admitida",
                               operacion["estado"], operacion["result_ref"])
     verificar_turno_atencion(cliente_id)
+
+
+def comprobar_intento_pago_atencion(cliente_id, solicitud):
+    return comprobar_intento_mutacion_atencion(cliente_id, "crear_enlace", solicitud, tipo="pago")
 
 
 @contextmanager
@@ -124,7 +129,7 @@ def exigir_mutacion_atencion(cliente_id):
 
 def _terminar_mutacion_atencion(admision, resultado, result_ref=""):
     return atencion_operaciones.registrar_resultado_operacion_atencion(
-        admision.cliente_id, admision.ticket_id, tipo="reserva", canal=admision.accion,
+        admision.cliente_id, admision.ticket_id, tipo=admision.tipo, canal=admision.accion,
         clave_intento=admision.clave_intento, owner_token=admision.owner_token,
         resultado=resultado, result_ref=result_ref)
 
@@ -147,15 +152,24 @@ def registrar_mutacion_conocida(cliente_id, booking_id):
     _registrar_evidencia_mutacion_atencion(cliente_id, "aceptado", booking_id)
 
 
+def registrar_pago_conocido(cliente_id, payment_id):
+    _registrar_evidencia_mutacion_atencion(cliente_id, "aceptado", payment_id)
+
+
+def registrar_pago_rechazado(cliente_id):
+    """Solo cuando el núcleo acredita que no llegó a crear Checkout."""
+    _registrar_evidencia_mutacion_atencion(cliente_id, "rechazado")
+
+
 def registrar_mutacion_rechazada(cliente_id):
     """Solo cuando el núcleo acredita que la operación no creó una reserva."""
     _registrar_evidencia_mutacion_atencion(cliente_id, "rechazado")
 
 
 @contextmanager
-def admitir_mutacion_atencion(cliente_id, accion, datos_efectivos, *, solicitud=None):
+def admitir_mutacion_atencion(cliente_id, accion, datos_efectivos, *, solicitud=None, tipo="reserva"):
     comprobar_intento_mutacion_atencion(
-        cliente_id, accion, datos_efectivos if solicitud is None else solicitud)
+        cliente_id, accion, datos_efectivos if solicitud is None else solicitud, tipo=tipo)
     turno = verificar_turno_atencion(cliente_id)
     if turno is None:
         yield None
@@ -166,7 +180,7 @@ def admitir_mutacion_atencion(cliente_id, accion, datos_efectivos, *, solicitud=
     payload = _bytes_mutacion_atencion(datos_efectivos)
     try:
         admitida = atencion_operaciones.admitir_operacion_atencion(
-            cliente_id, turno.ticket_id, tipo="reserva", canal=accion,
+            cliente_id, turno.ticket_id, tipo=tipo, canal=accion,
             clave_intento=turno.clave_intento, payload=payload,
             solicitud=_bytes_mutacion_atencion(datos_efectivos if solicitud is None else solicitud))
     except atencion_operaciones.AtencionIdentidadEnConflicto as exc:
@@ -177,7 +191,7 @@ def admitir_mutacion_atencion(cliente_id, accion, datos_efectivos, *, solicitud=
         raise AtencionDetenida(admitida["motivo"] or "operacion_ya_admitida",
                               admitida["estado"], admitida["result_ref"])
     admision = MutacionAtencion(cliente_id, turno.ticket_id, accion,
-                               turno.clave_intento, admitida["owner_token"])
+                               turno.clave_intento, admitida["owner_token"], tipo)
     token = _MUTACION_ATENCION.set(admision)
     try:
         yield admision
@@ -190,3 +204,8 @@ def admitir_mutacion_atencion(cliente_id, accion, datos_efectivos, *, solicitud=
             atencion._ATENCION_LOG.error("atencion_mutacion_resultado_no_persistido")
         finally:
             _MUTACION_ATENCION.reset(token)
+
+
+def admitir_pago_atencion(cliente_id, datos_efectivos, *, solicitud=None):
+    return admitir_mutacion_atencion(cliente_id, "crear_enlace", datos_efectivos,
+                                    solicitud=solicitud, tipo="pago")

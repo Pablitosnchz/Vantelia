@@ -86,11 +86,20 @@ def _init_database() -> None:
                 UNIQUE (cliente_id, ticket_id)
             )"""
         )
+        esquema_operaciones = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='client_attention_operations'"
+        ).fetchone()
+        migrar_tipo_pago = esquema_operaciones is not None and "'pago'" not in esquema_operaciones[0]
+        if migrar_tipo_pago:
+            # SQLite no altera CHECK: reconstruir el MISMO diario, sin renovar
+            # identidades, propietarios ni resultados. El savepoint incluye DDL.
+            connection.execute("SAVEPOINT attention_payment_kind")
+            connection.execute("ALTER TABLE client_attention_operations RENAME TO client_attention_operations_sin_pago")
         connection.execute(
             """CREATE TABLE IF NOT EXISTS client_attention_operations (
                 cliente_id TEXT NOT NULL,
                 ticket_id TEXT NOT NULL,
-                tipo TEXT NOT NULL CHECK (tipo IN ('envio', 'reserva')),
+                tipo TEXT NOT NULL CHECK (tipo IN ('envio', 'reserva', 'pago')),
                 canal TEXT NOT NULL,
                 fragmento INTEGER NOT NULL CHECK (typeof(fragmento) = 'integer' AND fragmento >= 0),
                 clave_intento TEXT NOT NULL DEFAULT '',
@@ -108,6 +117,16 @@ def _init_database() -> None:
                     REFERENCES client_attention_tickets(cliente_id, ticket_id)
             )"""
         )
+        if migrar_tipo_pago:
+            connection.execute(
+                "INSERT INTO client_attention_operations "
+                "(cliente_id,ticket_id,tipo,canal,fragmento,clave_intento,payload_hash,request_hash,estado,"
+                "owner_token,motivo,created_at,resultado_at,result_ref) "
+                "SELECT cliente_id,ticket_id,tipo,canal,fragmento,clave_intento,payload_hash,request_hash,estado,"
+                "owner_token,motivo,created_at,resultado_at,result_ref FROM client_attention_operations_sin_pago"
+            )
+            connection.execute("DROP TABLE client_attention_operations_sin_pago")
+            connection.execute("RELEASE SAVEPOINT attention_payment_kind")
         # Fase 2a solo tenía envíos. Copiar y retirar su tabla en la MISMA
         # transacción: no quedan dos diarios de permiso ni se renuevan owners.
         if connection.execute(
@@ -128,6 +147,10 @@ def _init_database() -> None:
         connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_attention_reservation_attempt "
             "ON client_attention_operations(cliente_id, canal, clave_intento) WHERE tipo='reserva'"
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_attention_payment_attempt "
+            "ON client_attention_operations(cliente_id, canal, clave_intento) WHERE tipo='pago'"
         )
         connection.execute(
             """CREATE TABLE IF NOT EXISTS booking_operations (
