@@ -2072,3 +2072,24 @@ a fin en todas.
   el pack de 350 (ya con las duraciones nuevas), «extra largo» el suyo de 395,
   «mechas» a secas pregunta el largo, y el resto igual que antes.
 - El choque del registro al integrar se resolvió conservando las entradas de los dos.
+
+## 2026-09-19 19:56 +02:00 — autoridad de atención integrada, sin canales aún
+
+- Coordinación `astra/cierre-estable-19sep`, `E:/Vantelia-astra-cierre`: plan
+  `4b208bf` y merge `b5fd11b` de fase 1 `3fad6f2`, implementada en rama propia
+  `astra/pausa-atencion-19sep`. Solo migración, autoridad CAS, auditoría atómica,
+  pruebas y mapa de arquitectura. Ningún escritor HTTP ni canal conectado.
+- Revisión independiente de agentes propios: OK tras corregir IDs válidos que
+  empiezan por guion/guion bajo y una fecha corrupta que no debía autorizar lectura.
+  Dirigidos finales 67 passed en 56.22s. Antes de esos arreglos: 3 failed/1 passed.
+  Mutación del rechazo CAS: 2 failed; restauración con identidad de bytes: 2 passed.
+  Logs y huellas en `E:/Vantelia-astra-pausa-evidencia/FASE1.md`.
+- Siguiente entrega: fase 2a de tickets por versión y admisión persistida de cada
+  fragmento; no mantener transacciones durante red, no revivir trabajos antiguos
+  al reactivar ni tratar un resultado desconocido como permiso para reenviar.
+- Instrumento de medición en rama aparte: el criterio de cita única detecta
+  duplicadas y canceladas, pero revisión encuentra el caso cita antigua activa +
+  cita nueva cancelada. Se corrige por identidad antes de integrarlo; los 8 tests
+  iniciales no cubrían ese escenario. Un único turno de pytest entre agentes.
+- Sin suite completa, banco real, push, despliegue ni acceso a producción. La pausa
+  todavía no funciona de extremo a extremo y no se presenta como disponible.

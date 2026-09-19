@@ -1,17 +1,20 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 19:33 Europe/Madrid
+## En curso — 2026-09-19 19:56 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** ejecutar el cierre autorizado por Pablo; fase 1 de autoridad persistida de pausa en implementación, auditoría de fronteras y contrato de medición en paralelo.
+- **Tarea:** fase 1 de autoridad persistida integrada (`3fad6f2` en `b5fd11b`); fase 2a de tickets/admisión en implementación y corrección del instrumento de cita única tras revisión.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** verificar la autoridad con pruebas dirigidas y revisión independiente; después conectar admisión por versión y canales. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
-- **Espera a:** entregas de los agentes propios; Claude informado para no duplicar. No hay suite completa ni banco del modelo activo en este arranque.
+- **Siguiente:** revisar y probar tickets/admisión; después conectar canales. Integrar el instrumento cuando la única cita activa se acredite nueva por identidad. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
+- **Espera a:** entregas de los agentes propios; Claude informado para no duplicar y consultado sobre una copia saneada existente posterior a los packs actualizados. No hay suite completa ni banco del modelo activo.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
   3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.
 - Primera entrega nueva: backend/atencion.py + migración + tests de aislamiento,
-  CAS, reinicio y errores; todavía sin interruptor público ni canales conectados.
+  CAS, reinicio y errores, integrada tras revisión independiente OK y 67 dirigidos
+  aprobados. CAS: mutación 2 fallos, restauración exacta 2 aprobados. Evidencia en
+  `E:/Vantelia-astra-pausa-evidencia/FASE1.md`. Todavía sin interruptor público ni
+  canales conectados: no acredita pausa efectiva.
 - [Plan de cierre](CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md): una autoridad de atención
   por tenant; preservar configuración/cuenta/acceso humano; cobro separado.
   D aparcado y sin nuevas operaciones de producción/push/despliegue.
@@ -64,7 +67,7 @@
 - No lanzar otra implementación ni suite completa de apuntes. Reparto del
   ejecutor en NORMAS_AGENTE_IA; acta todavía sin nuevos bancos del modelo real.
 - Pausa de temporada: [diseño técnico](PAUSA_TEMPORADA_DISENO.md) integrado en
-  `6a43942`; autoridad persistida y fronteras de canales aún sin implementar.
+  `6a43942`; autoridad persistida implementada en esta rama, fronteras pendientes.
   Es trabajo interno pendiente, además de las dependencias externas.
   D aparcado; despliegue 0cb61de ejecutado por Claude, sin operaciones de Astra
   sobre producción.

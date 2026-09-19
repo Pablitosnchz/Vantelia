@@ -23,8 +23,8 @@ grupo de pruebas y la suite completa del candidato estable.
 
 | Fase | Entrega | Cómo se acepta |
 | --- | --- | --- |
-| 1 — en implementación | Autoridad persistida de atención, migración, lectura sin caché, transición CAS y auditoría. No hay control público de pausa efectiva todavía. | Aislamiento de tenants, ausencia de fila, errores de DB, reinicio, concurrencia, valores inválidos e idempotencia. Revisión independiente antes del commit. |
-| 2 — pendiente | Admisión de trabajo/envíos por versión y conexión de chat/WhatsApp; respuesta humana autenticada conservada. | Pausar antes del modelo y durante su respuesta; pausa/reactivación no revive trabajo viejo; fragmentos y callbacks cubiertos; dos tenants. |
+| 1 — integrada | Autoridad persistida de atención, migración, lectura sin caché, transición CAS y auditoría. `3fad6f2`, integrado en `b5fd11b`. No hay control público de pausa efectiva todavía. | Revisión independiente OK; 67 dirigidos aprobados, casos causales de IDs/fecha y mutación CAS acreditados. |
+| 2 — en implementación | Primero 2a: tickets y admisión persistida por versión, sin escritores en los canales. Después 2b: conexión de chat/WhatsApp; respuesta humana autenticada conservada. | Pausar antes del modelo y durante su respuesta; pausa/reactivación no revive trabajo viejo; fragmentos y callbacks cubiertos; dos tenants. |
 | 3 — pendiente | Avisos, recordatorios y otros automatismos; voz y estado de operaciones en tránsito. | No enviar por canal alternativo al suprimir; no contar una supresión como entrega; resultados conocidos/desconocidos diferenciados. No prometer silencio de una sesión que no pueda revocarse. |
 | 4 — pendiente | Operación administrativa de pausa y reactivación con estado visible y cobro separado. | Solo habilitar la operación completa cuando las fronteras de los canales estén cubiertas. Preservar acceso humano, cuenta, configuración y datos; no inventar reglas de facturación. |
 | 5 — pendiente | Candidato integrado y aceptación comparable. | Dirigidos y revisión por fase, una suite completa estable y revisión exacta; banco con modelo para Alicia y otro negocio sobre condiciones/copia comparables. |
@@ -54,3 +54,9 @@ detalle está en [PAUSA_TEMPORADA_DISENO.md](PAUSA_TEMPORADA_DISENO.md).
 19-sep 19:33 Europe/Madrid: fase 1 en implementación sobre `e43baca`; auditoría
 de fronteras y contrato de medidas en paralelo. Ninguna suite completa ni banco
 con modelo activo. Claude tiene el reparto y la consulta sobre copias existentes.
+
+19-sep 19:56 Europe/Madrid: fase 1 integrada tras revisión y pruebas dirigidas;
+evidencia en `E:/Vantelia-astra-pausa-evidencia/FASE1.md`. Fase 2a en implementación.
+El instrumento del banco pasa a exigir una sola cita nueva activa: revisión pide
+comparar la identidad con el estado anterior para no contar una cita antigua.
+No hay suite completa ni medición con modelo iniciadas. Un solo ejecutor de pytest.
