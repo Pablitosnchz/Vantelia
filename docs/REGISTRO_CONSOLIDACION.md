@@ -1937,3 +1937,18 @@ a fin en todas.
 - Siguiente: Pablo envía el correo el lunes 21-sep; al volver los documentos
   firmados, factura de puesta en marcha, cargar sus respuestas revisadas y conectar
   su número.
+
+## 2026-09-19 — Cap Rocat: situaciones típicas de hotel y documentos rellenables
+
+- En el portal de Cap Rocat salían «No dar precio sin ver al cliente», «Pedir una
+  foto» y «Derivar a valoración», con mechas y alisados de ejemplo. Esas tres ya no
+  se enseñan a un negocio con la agenda apagada, salvo que ya tenga una montada
+  (016f31f). Criterio de los datos: casi ningún negocio tiene su sector guardado.
+- Documentos como PDF rellenable (e51ff5b, `scripts/caprocat_documentos_pdf.py`):
+  campos donde escriben, forma de pago como opción única y firmas digitales;
+  el texto del contrato no se puede tocar. Comprobado con pdf.js que cada campo cae
+  en su hueco y rellenando una copia con pypdf. Dos fallos cazados al comprobarlo:
+  campos apilados cuando había varios en una línea, y valores de pago con un
+  espacio colado («SEP A») que dejaban la casilla sin efecto.
+- Desplegado como 19b64ff: suite 2994 passed (1 skipped), humo 5/5; comprobado en
+  vivo que Cap Rocat ve 3 situaciones y Alicia las 6.
