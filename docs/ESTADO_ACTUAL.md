@@ -1,12 +1,20 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 17:04 Europe/Madrid
+## En curso — 2026-09-19 18:39 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** candidato 19ad09e con revisión independiente OK de Claude y suite completa comunicada: 3025 passed, 1 skipped, 26m32s. Cierre técnico acotado documentado.
-- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; SHA exacto validado 19ad09e, seguimiento posterior solo documental.
-- **Siguiente:** implementar la autoridad persistida de pausa según PAUSA_TEMPORADA_DISENO; conservar 19ad09e como candidato revisado y resolver la evidencia real del cierre global.
-- **Espera a:** ninguna prueba o implementación activa al escribir este relevo; despliegue solo con orden de Pablo. La petición automática quedó atendida por el veredicto de Claude, sin relanzar suite.
+- **Tarea:** estabilización desplegada por Claude por orden de Pablo como 0cb61de; humo comunicado 5/5. Código idéntico al revisado 19ad09e (3025 passed, 1 skipped).
+- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; integrada en main 0cb61de, copia avanzada a ef8f2b4; este seguimiento solo cambia documentación.
+- **Siguiente:** implementar la autoridad persistida de pausa según PAUSA_TEMPORADA_DISENO y resolver la evidencia comparable del cierre global. No repetir esta suite ni este despliegue.
+- **Espera a:** ninguna prueba o implementación activa al escribir este relevo; siguiente bloque interno pendiente. No queda pendiente permiso para el despliegue ya ejecutado.
+
+- Claude registra el despliegue en `ef8f2b4`. Astra comprobó localmente que
+  `5037515` está integrado y que `19ad09e..0cb61de` solo cambia documentación;
+  conserva el registro de ambos agentes y `TIEMPOS_PACKS_ALICIA.md`.
+- Comprobación en vivo comunicada por Claude: mechas medio/media melena → pack
+  350 con las duraciones nuevas; extra largo → 395; mechas sin talla pregunta.
+  Queda resuelta la discrepancia de la sonda anterior con el catálogo actualizado.
+  Ese humo y esa sonda no equivalen al banco comparable completo de dos negocios.
 
 - Veredicto recibido a las 17:00:54, contrastado con `E:/vp-rev-19ad09e`:
   detached en `19ad09ee1bc2f261e99902be20197a9f80448415`, árbol limpio.
@@ -23,8 +31,8 @@
   elección en vez de aplicarla solas. Queda registrado, sin cambiar el candidato.
 - Main avanzó solo en documentación a `9c3e3b8`: Claude registra tres duraciones
   de packs actualizadas por orden de Pablo (corto 230, medio 350, largo 430).
-  La sonda del veredicto aún cita medio 360: no acredita el catálogo posterior.
-  Identificación de la copia solicitada; las otras diez duraciones siguen pendientes.
+  La sonda inicial citaba medio 360; la comprobación posterior al despliegue
+  acredita medio 350. Las otras diez duraciones siguen pendientes.
 
 - Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
   `astra/estabilidad-19sep`, base `60993b7`, producto integrado hasta `1caa5af`.
@@ -50,7 +58,8 @@
 - Pausa de temporada: [diseño técnico](PAUSA_TEMPORADA_DISENO.md) integrado en
   `6a43942`; autoridad persistida y fronteras de canales aún sin implementar.
   Es trabajo interno pendiente, además de las dependencias externas.
-  D aparcado; sin cambios en producción, push ni despliegue.
+  D aparcado; despliegue 0cb61de ejecutado por Claude, sin operaciones de Astra
+  sobre producción.
 
 **La memoria compartida entre los agentes que trabajan en este repo.** La lee
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el

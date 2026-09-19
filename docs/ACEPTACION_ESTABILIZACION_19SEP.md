@@ -2,8 +2,9 @@
 
 Base `60993b7`. Candidato técnico **19ad09e**, revisión independiente **OK** de
 Claude y suite completa comunicada **3025 passed, 1 skipped, 26m32s**.
-No hay orden de despliegue. Este cierre es acotado a la estabilización implementada.
-No se han modificado datos de producción ni iniciado conexiones/cobros.
+Desplegado por Claude por orden de Pablo como **0cb61de**, humo comunicado **5/5**
+(registro `ef8f2b4`). Este cierre es acotado a la estabilización implementada;
+Astra no ha operado sobre producción ni iniciado conexiones/cobros.
 
 ## Evidencia completada
 
@@ -124,3 +125,17 @@ y este acta no declara acabado el plan de consolidación completo.
   otra ejecución automática al restablecerse su cuota. No se fabrica un OK del bot.
 - Seguimiento posterior a `19ad09e`: solo documentación; no atribuir su SHA a una
   nueva suite. Sin push, despliegue, cambio de catálogo ni mensajes a clientas.
+
+## Despliegue comunicado y merge contrastado — 19-sep 18:39 Europe/Madrid
+
+- Claude comunica despliegue autorizado por Pablo de `0cb61de`, humo **5/5**;
+  registro conservado en main `ef8f2b4`. Astra no repite el despliegue ni las pruebas.
+- Comprobación local de Astra: `5037515` es antecesor de main y el diff
+  `19ad09e..0cb61de` solo contiene documentación. El código desplegado corresponde
+  al SHA de la suite y revisión independientes, sin atribuir otra suite al merge.
+- Sonda en vivo comunicada por Claude, ya con catálogo actualizado: mechas
+  medio/media melena → pack 350; extra largo → 395; mechas sin talla pregunta.
+  Resuelve la discrepancia de la sonda anterior (360 frente a 350).
+- Humo y sonda son evidencia adicional acotada, no el banco comparable completo
+  de Alicia y otro negocio. Pausa de temporada y dependencias operativas siguen
+  pendientes. No hay otro proceso de pruebas o implementación activo al registrar.
