@@ -2192,3 +2192,22 @@ a fin en todas.
   pago/crear_enlace en rama propia desde f6c16e1, mismo diario y funciones de pago
   delimitadas; integración de tests Node en CI, sin cambiar versiones. Pytest
   lo ejecuta un único agente por turno; no hay suite completa ni banco real activo.
+
+## 2026-09-19 21:20 +02:00 — CI conectado; chat dirigido verde y pago causal rojo
+
+- CI `80c52e0`, integrado como `477b286`: `npm run test:widget` ejecuta las siete
+  regresiones Node antes del build en el job existente. Sin cambiar versiones ni
+  dependencias. Revisión del diff de cuatro líneas OK; única ejecución de la
+  nueva entrada: 7 passed/339ms, log temporal `vantelia_ci_widget_atencion_20260919.log`.
+- Implementador de chat comunica 17 aprobados/36.31s (ASGI/memoria/shim), después
+  de cuatro causales rojos. No es todavía revisión ni integración: continúan sus
+  transportes/avisos. Ha cedido pytest al agente de pago y no conserva un proceso.
+- Pago comunica primer rojo 8 fallos/1 aprobado, 29.33s. Se corrige además un
+  doble de concurrencia que repetía el mismo ID de Checkout: se comprueba su
+  causal por separado antes de tocar producto, sin atribuir la colisión al núcleo.
+- WhatsApp siguiente: auditoría requiere resolución pura de tenant demo (el
+  resolver actual también hace binding) y recuperación informativa sin liberar
+  claims. No copiar a Meta los 120s de HTTP: falta justificar su vigencia frente
+  a webhooks retrasados. Payload de Flow suprimido requiere contrato preciso;
+  no devolver un éxito inventado. Investigación oficial acotada, sin activar canal.
+- Sin suite global nueva, banco real, push, despliegue ni datos de producción.
