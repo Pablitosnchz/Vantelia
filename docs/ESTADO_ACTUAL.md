@@ -1,5 +1,12 @@
 # Estado actual de Vantelia
 
+## Trabajo activo — 2026-09-19 13:47 Europe/Madrid
+
+Astra ejecuta ESTABILIZACION_19SEP.md en astra/estabilidad-19sep, base60993b7.
+Claude encargado de apuntes; Astra F4 y F2; revisiones independientes CRM/reparto
+ y pausa/aislamiento. No duplicar procesos. Siguiente dirigidos causales y
+candidato integrado; D aparcado, sin produccion/push/despliegue.
+
 **La memoria compartida entre los agentes que trabajan en este repo.** La lee
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
