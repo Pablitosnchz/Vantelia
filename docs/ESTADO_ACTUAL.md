@@ -1,25 +1,27 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 14:21 Europe/Madrid
+## En curso — 2026-09-19 14:37 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** F4 y revisiones locales validadas; integrar la corrección de apuntes de Claude y validar el conjunto.
-- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; base 60993b7, relevo 2927826.
-- **Siguiente:** recibir SHA de apuntes, revisar e integrar; una suite completa del candidato estable y revisión exacta.
-- **Espera a:** entrega de Claude en claude/encargo-0b86b3; no hay una suite de Astra activa ahora.
+- **Tarea:** candidato integrado con F4 y apuntes corregidos; dirigidos terminados, falta la suite completa y revisión exacta.
+- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; base 60993b7, código 3936c0f.
+- **Siguiente:** una suite completa del candidato congelado y revisión manual exacta de Claude sin duplicar esa suite.
+- **Espera a:** validación integrada; dirigidos terminados (29 verdes de apuntes/shim, 48 de avisos, aislamiento 5 verdes).
 
 - Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
-  `astra/estabilidad-19sep`, base `60993b7`, integrado hasta `8671178`.
+  `astra/estabilidad-19sep`, base `60993b7`, código integrado hasta `3936c0f`.
 - F4 corregido (`83e5c56`), 48 dirigidos verdes y revisión independiente OK
   acotado. F2 y teclado revisados; CRM/reparto OK con 66 dirigidos y 5 casos
   adicionales. Evidencia en [ACEPTACION_ESTABILIZACION_19SEP.md](ACEPTACION_ESTABILIZACION_19SEP.md).
-- Claude tiene el encargo de apuntes (`claude/encargo-0b86b3`), con cambios de
-  código y tests aún sin entrega. Astra terminó 5 pruebas de aislamiento ES/EN
-  entre dos negocios: verdes (45.59s). La primera ejecución se detuvo sin
-  resultado por falta de memoria; dos errores posteriores de fixture se
-  corrigieron (email y HTTPS). No fueron fallos demostrados del producto.
-- Siguiente: terminar dirigidos, revisar/integrar apuntes, congelar candidato y
-  una suite completa. Espera a: entrega de Claude y después revisión exacta.
+- Se compararon dos entregas duplicadas de apuntes, `3c646b0` y `93416aa`, y se
+  integró solo `93416aa` (mismo diseño, igualdad de talla y pruebas reales).
+  Astra cerró dos repros adicionales de alias/técnica y dos de separadores;
+  dirigidos finales 29 verdes (100.17s), revisión independiente de lectura OK.
+- Aislamiento ES/EN: 5 pruebas HTTP verdes (45.59s). La interrupción por memoria
+  y los dos errores posteriores de fixture (email/HTTPS) están documentados.
+  No se atribuyen a fallos del producto.
+- No lanzar otra implementación ni suite completa de apuntes. Reparto del
+  ejecutor en NORMAS_AGENTE_IA; acta todavía sin nuevos bancos del modelo real.
 - Pausa de temporada: borrador operativo preparado, flujo conjunto no
   implementado/verificado. No se confunde con apagar Citas o desconectar Meta.
   D aparcado; sin cambios en producción, push ni despliegue.

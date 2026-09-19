@@ -1981,3 +1981,24 @@ a fin en todas.
   modificados, sin SHA entregado aún); revisar, integrar, congelar candidato,
   una suite completa y revisión exacta. No hay nueva medición con modelo real;
   acta y límites en `ACEPTACION_ESTABILIZACION_19SEP.md`. D sigue aparcado.
+
+## 2026-09-19 14:37 +02:00 — apuntes integrados y corregidos tras revisión
+
+- Rama `astra/estabilidad-19sep`, código `3936c0f`. Se compararon las dos
+  entregas del mismo encargo (`3c646b0` de la sesión y `93416aa` automático).
+  `7534f81` integra solo la segunda: mismo diseño más igualdad de talla y
+  pruebas del resolvedor real. No se borra ni se integra duplicada la primera.
+  Norma de un ejecutor por encargo añadida a `NORMAS_AGENTE_IA.md`.
+- Revisión de Astra: dos fallos confirmados en API con catálogo sintético y
+  `preferir_packs=false`: «media melena» oculta el rival de 360 min y aplica 75;
+  pedir balayage acaba en 60 min de mechas genéricas. Rojos en base (26.47s) y
+  `93416aa` integrado (30.82s). Arreglo propio: mismos alias de talla al buscar
+  rivales, cobertura completa de lo escrito y retirada del guardia de una palabra.
+- Primera validación: 22 verdes (91.50s). Revisor independiente encontró un
+  nombre exacto con paréntesis que pedía otro toque; paréntesis y guion, 2 rojos
+  (26.39s). Ahora nombres, texto y técnica comparten separación. Dirigidos finales:
+  **29 passed**, 100.17s (apuntes + shim); lectura independiente OK provisional.
+- Sin modificaciones en prompts, selección D o datos de clientes. Siguiente:
+  congelar candidato, una suite completa y revisión manual del SHA exacto por
+  Claude, sin arrancar además otro ejecutor que repita la suite. Modelo real del
+  nuevo candidato no medido; las tablas no convierten pendientes en ceros.

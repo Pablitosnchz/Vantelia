@@ -13,6 +13,9 @@ No se han modificado datos de producción ni iniciado conexiones/cobros.
 | `73f3302` CRM y `c484131` reparto | Revisor independiente: 66 existentes y 5 nuevos verdes; caso CRM tras limpieza verde. Código base `60993b7`. | OK acotado; cobertura integrada `ff45f3a`. |
 | Supresión de aviso 2h, `d9ed572` | 1 dirigido verde; el doble devuelve ahora el contrato real de aceptación. | Conserva la regla de no recordar de nuevo a quien ya confirmó. |
 | Aislamiento del portal ES/EN | 5 casos HTTP verdes (45.59s): respuestas por negocio, edición sobre conversaciones existentes y rechazo de lectura/edición/borrado ajenos. | Dos tenants ficticios, sin modelo ni Meta. No acredita pausa de temporada. |
+| Apuntes, integración `7534f81` | Dos entregas comparadas: `3c646b0` y `93416aa`; se conserva la segunda, mismo diseño con igualdad de talla y pruebas del resolvedor real. Claude declara 20/20 y 5 mutaciones rojas. | Una implementación, no se suman ambas entregas como avances distintos. |
+| Revisión adicional de apuntes | Media melena: 75 frente a 360; balayage descartado: 60 genéricos. Ambos rojos en base (26.47s) y en `93416aa` integrado (30.82s). Tras guardia compartida, 22 verdes (91.50s). | Reusa alias de `catalog_pick`, exige conservar lo escrito y retira el guardia que bastaba con compartir una palabra. |
+| Nombres exactos con separadores | La revisión señaló paréntesis; paréntesis y guion: 2 rojos (26.39s). Texto y catálogo pasan ahora por el mismo separador. Dirigidos finales de apuntes y shim: 29 verdes (100.17s). | Revisión independiente de lectura sin nuevos hallazgos. |
 
 No sumar ejecuciones solapadas como casos únicos ni atribuir suites de antecesores
 al candidato nuevo. Los tiempos son de las ejecuciones informadas por las herramientas.
@@ -27,8 +30,7 @@ regresiones demostradas del producto ni se cuentan como casos medidos.
 
 ## Pendiente antes de aceptación técnica
 
-- Corrección de apuntes por Claude y revisión de su SHA: 3 repros de `478ae58` rojos
-  documentados, no desaparecen por el resto de pruebas verdes.
+- Congelar SHA con esta evidencia, ejecutar una suite completa y obtener revisión exacta.
 - Procedimiento de pausa documentado: conjunto de silencio, facturación y
   reactivación aún no implementado/verificado. No se cierra por el verde de aislamiento.
 - Suite completa única tras integración estable y revisión independiente del
@@ -36,6 +38,16 @@ regresiones demostradas del producto ni se cuentan como casos medidos.
 - Evaluar qué medición real comparable corresponde al cambio final: tabla separada
   Alicia/segundo negocio, primer intento/reintentos/fallos/no medidos/no aplica.
   Por ahora esta entrega no tiene nuevos resultados de modelo real.
+
+| Modelo real del candidato nuevo | Primer intento | Tras reintento | Fallos | No medidos |
+| --- | --- | --- | --- | --- |
+| Alicia | No ejecutado | No ejecutado | No ejecutado | Banco completo |
+| Segundo negocio | No ejecutado | No ejecutado | No ejecutado | Banco comparable completo |
+
+El intérprete de apuntes y las reglas ES/EN de estos tests son deterministas: no
+consumen modelo. No se relanzan bancos anteriores como si probaran el nuevo SHA,
+ni se presenta esta tabla como aceptación del agente completo. La entrega no
+cambia los prompts ni habilita el piloto D.
 
 ## Dependencias y límites externos
 

@@ -7,7 +7,7 @@ No tocar secretos, producción, datos del catálogo ni desplegar/push. D aparcad
 
 | Bloque | Dueño | Entrega y puerta |
 | --- | --- | --- |
-| Interpretación de apuntes | Claude, encargo Sincronía | Pendiente: tres repros de `478ae58`, guardias comunes, prueba causal y SHA. Rama `claude/encargo-0b86b3`. Astra revisa antes de integrar. |
+| Interpretación de apuntes | Claude entrega; Astra revisa y completa | `93416aa` integrado en `7534f81`, incluye el diseño de `3c646b0` con igualdad de talla. Astra cierra dos fallos adicionales y el caso exacto con separadores; 29 dirigidos finales verdes (100.17s). Una sola autoridad, sin modelo añadido. |
 | Recordatorios F4 y email F2 | Astra | F4 corregido en `83e5c56`, 48 dirigidos verdes y revisión independiente OK acotado. F2 revisado sin hallazgos nuevos. El contador acredita aceptación conocida, no recepción del teléfono ni llamadas nuevas al transporte. |
 | CRM y reparto | Revisión independiente coordinada por Astra | `73f3302`/`c484131`: OK acotado, 66 dirigidos y 5 casos adicionales verdes; cobertura integrada en `ff45f3a`. |
 | Pausa/aislamiento de negocios | Revisión independiente coordinada por Astra | Borrador y pruebas integrados en `8671178`; los 5 casos de aislamiento pasan tras corregir la fixture de login (45.59s). No existe una pausa conjunta verificada de cobro, silencio y reactivación. |

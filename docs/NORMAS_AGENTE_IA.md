@@ -60,3 +60,17 @@ Leer solo el contexto necesario, cerrar fases pequeñas y guardar commits con
 evidencia. No releer el repositorio ni consultar periódicamente suites en curso.
 Usar su finalización o comprobar el resultado al retomar trabajo dependiente.
 Las autorizaciones de despliegue y acceso a secretos siguen las reglas existentes.
+
+### Un encargo, un ejecutor (incidente del 19-sep)
+
+`--encargar astra claude` despierta un ejecutor automático en otra copia. Si la
+sesión principal de Claude también lee ese encargo, no debe implementarlo otra
+vez. Con una sesión principal activa y trabajo acordado, usar `--avisar` para el
+reparto directo; reservar `--encargar` para la ejecución automática. Registrar
+quién tiene el trabajo, su rama y la siguiente entrega en «En curso».
+
+El 19-sep el mismo encargo produjo `3c646b0` y `93416aa`: se compararon y se
+conservó una sola implementación, con las pruebas más completas, sin borrar la
+otra rama. No repetir esa duplicación de trabajo ni suites. Una revisión manual
+del candidato debe referirse a su SHA y a la evidencia de la suite ya terminada;
+repetir pruebas solo para verificar un hallazgo o por cambios posteriores.
