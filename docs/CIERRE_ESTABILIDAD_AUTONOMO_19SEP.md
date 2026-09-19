@@ -73,3 +73,27 @@ acta y hashes; 16 fallos causales corregidos y mutación de admisión 3 fallos �
 3 aprobados, sin repetir suite completa. Continúa fase 2c-chat: backend en rama
 de pausa, widget en rama propia y auditor de efectos auxiliares solo lectura.
 Ningún capturador de canal integrado todavía, ni proceso de banco/modelo activo.
+
+## Contrato del corte de chat — 19-sep 21:08 Europe/Madrid
+
+- Conservar validaciones de tenant, origen, límite de peticiones y mensaje.
+  Capturar el ticket antes de cuota y preparación; vigencia técnica de 120 s,
+  explícita en el adaptador, no una política configurable del negocio.
+- Comprobar la salida en ASGI antes del primer envío. Registrar respuesta y
+  consumo tras el último cuerpo emitido; esto acredita emisión del servidor,
+  nunca lectura del navegador. Una emisión incierta no se convierte en entrega.
+- HTTP 409 `ATTENTION_STOPPED` para supresión conocida y 503
+  `ATTENTION_UNAVAILABLE` si no puede verificarse. El widget presenta un estado
+  accesible fuera del historial, sin burbuja de asistente, acciones ni reintento.
+- El motor RAG del turno HTTP parte del historial persistido; no se restaura ni
+  borra memoria compartida después de un fallo. El recorrido actual de WhatsApp
+  mantiene su motor hasta su propio corte de integración.
+- Extender el mismo diario con `pago/crear_enlace`: el refresh previo de Connect
+  modifica capacidades, métodos y BD, y debe estar bajo la admisión antes de CRM
+  y Checkout. Identidad estable y referencia `pay_` conocida tras commit; perder
+  la respuesta del proveedor conserva incertidumbre, sin crear otro enlace.
+- Los avisos de la operación ganadora tienen admisiones propias. Suprimir un
+  aviso no debe interrumpir política, reembolso o CRM, ni iniciar canal alternativo.
+  El origen de una cita puede elegir SMS aunque la petición llegue por chat.
+- Estos son criterios de implementación/revisión, todavía sin veredicto ni
+  pruebas terminadas de este corte. No habilitar una operación global de pausa.

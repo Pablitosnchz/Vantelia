@@ -2158,3 +2158,20 @@ a fin en todas.
 - Siguiente asignado: entrada/emisión/historial de `/chat` y UI del widget en
   ramas separadas; auditoría de pagos/avisos auxiliares. Un solo ejecutor pytest.
   Sin suite completa nueva, mediciones reales, push ni despliegue.
+
+## 2026-09-19 21:08 +02:00 — contrato de emisión y efectos auxiliares del chat
+
+- Sobre coordinación `6173111`, auditoría solo lectura confirma que el refresh
+  Connect de `_ai_send_payment_link` ya tiene efectos antes del Checkout. Se
+  aprueba un tipo explícito `pago/crear_enlace` en el diario existente; no otra
+  autoridad. Mensajes de pago y avisos de reserva se admiten por separado.
+- Los callbacks de outreach aquí solo registran entrada/engagement; no son un
+  envío. Los avisos dentro de una reserva ganadora no pueden aprovechar su
+  excepción de tránsito para saltarse la pausa de mensajes. Supresión terminal
+  sin fallback, preservando política/reembolso/CRM del ganador.
+- Implementador verificó la API local de CondensePlusContextChatEngine: usa un
+  engine HTTP efímero por turno con historial persistido, sin rollback de memoria
+  compartida ni cambios en el motor WhatsApp. El widget implementa el contrato
+  HTTP 409/503 acordado y un aviso fuera del historial.
+- Criterios y límite de emisión frente a lectura en el plan de cierre. Es diseño
+  y trabajo en curso; aún no hay resultado dirigido de chat/widget ni suite global.
