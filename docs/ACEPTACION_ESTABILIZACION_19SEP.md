@@ -1,6 +1,8 @@
 # Acta de estabilización — 19 septiembre 2026
 
-Base `60993b7`. Candidato en `astra/estabilidad-19sep`; aún no aprobado para despliegue.
+Base `60993b7`. Candidato técnico **19ad09e**, revisión independiente **OK** de
+Claude y suite completa comunicada **3025 passed, 1 skipped, 26m32s**.
+No hay orden de despliegue. Este cierre es acotado a la estabilización implementada.
 No se han modificado datos de producción ni iniciado conexiones/cobros.
 
 ## Evidencia completada
@@ -28,10 +30,10 @@ de preparación cada una: email `.invalid` rechazado por el esquema de login y
 cookie Secure sobre HTTP. Se corrigió la fixture a `example.com` y HTTPS; no son
 regresiones demostradas del producto ni se cuentan como casos medidos.
 
-## Pendiente antes de aceptación técnica
+## Pendiente del cierre operativo completo
 
-- Congelar el candidato corregido con esta evidencia. El revisor automático
-  ejecutará su única suite completa y la revisión exacta; Astra no la duplica.
+- Revisión y suite del SHA exacto terminadas por Claude: detalle al final.
+  No ejecutar otra suite de `19ad09e` por una petición automática atrasada.
 - Procedimiento de pausa documentado: conjunto de silencio, facturación y
   reactivación aún no implementado/verificado. No se cierra por el verde de aislamiento.
 - Diseño de la siguiente entrega: [PAUSA_TEMPORADA_DISENO.md](PAUSA_TEMPORADA_DISENO.md),
@@ -61,8 +63,9 @@ cambia los prompts ni habilita el piloto D.
   externa solo con entorno y destinatario autorizados, nunca clientas reales.
 - Make: retirada ya documentada en producción; no repetir. D aparcado.
 
-El estado será «candidato técnico verificado» únicamente con su evidencia y revisión;
-«arranque operativo» exige además cumplir las dependencias del negocio y del canal.
+`19ad09e` queda como «candidato técnico verificado» para los cambios implementados;
+«arranque operativo» exige además cumplir las dependencias del negocio y del canal,
+y este acta no declara acabado el plan de consolidación completo.
 
 ## Revisión y corrección — 19-sep 15:10 Europe/Madrid
 
@@ -86,3 +89,38 @@ El estado será «candidato técnico verificado» únicamente con su evidencia y
 - El modo rápido conserva los 30 minutos aceptados por Pablo: sin elegir una
   sugerencia puede guardar una nota con ese tiempo. No se presenta esta entrega
   como eliminación de ese riesgo operativo ni como nuevo resultado con modelo real.
+
+## Aceptación independiente — 19-sep 17:04 Europe/Madrid
+
+- Claude comunicó **OK** sobre `60993b7..19ad09e`, con foco en `f2003ec..HEAD`,
+  a las 17:00:54. Fuente: mensaje
+  `20260919T150054115013-claude-7f82cc` en `E:/Vantelia/.sincronia/buzon/`.
+  Aunque el sobre procede de main `9c3e3b8`, el veredicto nombra explícitamente
+  el candidato `19ad09e`; no se atribuye la validación a ese main.
+- Suite completa informada por Claude: **3025 passed, 1 skipped, 26m32s**, en
+  `E:/vp-rev-19ad09e`. Astra comprobó que esa copia está limpia y en el SHA exacto
+  `19ad09ee1bc2f261e99902be20197a9f80448415`; no ejecutó de nuevo los tests ni
+  dispone aquí de un log bruto adicional de esa ejecución.
+- Lectura aprobada: tallas alternativas y solapes; compatibilidad de `talla_de`;
+  prohibición de aceptar una talla más corta; F4 y contrato de los dobles;
+  cobertura de los casos nuevos. No queda hallazgo bloqueante de esta revisión.
+- Sonda determinista con catálogo real en copia, comunicada por Claude:
+  mechas medio/media melena → pack 360; extra largo → 395; media cabeza largo → 60;
+  corte señora → 20; quitar extensiones → Kitar. Mechas, alisado largo, ácido
+  láctico chico y elumen y secado preguntan. No es banco con modelo ni envío real.
+- Límite de esa sonda: `9c3e3b8` documenta a las 16:35 la actualización autorizada
+  del catálogo de Alicia: packs corto 195→230, medio 360→350, largo 440→430,
+  tras ajustar Elumen y Flash Repair. Una sonda que informa pack medio 360 no
+  acredita ese catálogo posterior; falta identificar su copia. No se modifica
+  producción desde esta rama ni se atribuyen esos cambios a Astra.
+- Matiz no bloqueante: «mechas pelo largo» y «mechas cabello medio» ofrecen en vez
+  de aplicar, porque esas palabras cuentan como contenido. Se conserva como
+  mejora posterior de comodidad, sin tocar el candidato revisado.
+- Incidencia del revisor: el inicio automático de las 15:12 se observó realmente
+  (PID 30080). A las 17:02 no había pytest/revisor activos ni resultado localizado.
+  No se afirma que nunca arrancó ni se cuenta esa ejecución como aprobada.
+  Claude ejecutó después su suite independiente; solo esta tiene resultado final
+  comunicado. La petición original quedó enlazada como atendida para impedir
+  otra ejecución automática al restablecerse su cuota. No se fabrica un OK del bot.
+- Seguimiento posterior a `19ad09e`: solo documentación; no atribuir su SHA a una
+  nueva suite. Sin push, despliegue, cambio de catálogo ni mensajes a clientas.

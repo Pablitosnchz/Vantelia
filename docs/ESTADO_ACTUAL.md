@@ -1,12 +1,30 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 15:10 Europe/Madrid
+## En curso — 2026-09-19 17:04 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** hallazgo de revisión de f2003ec corregido; 41 dirigidos verdes, pendiente suite completa y revisión del candidato corregido.
-- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; base 60993b7, producto 1caa5af, control de recordatorios e057f07.
-- **Siguiente:** solicitar revisión del HEAD congelado; el revisor automático será el único dueño de su suite completa. Después, resolver hallazgos y abordar la pausa persistida diseñada.
-- **Espera a:** solicitud y resultado del revisor; ninguna suite local activa al escribir este relevo. No duplicar la ejecución automática.
+- **Tarea:** candidato 19ad09e con revisión independiente OK de Claude y suite completa comunicada: 3025 passed, 1 skipped, 26m32s. Cierre técnico acotado documentado.
+- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; SHA exacto validado 19ad09e, seguimiento posterior solo documental.
+- **Siguiente:** implementar la autoridad persistida de pausa según PAUSA_TEMPORADA_DISENO; conservar 19ad09e como candidato revisado y resolver la evidencia real del cierre global.
+- **Espera a:** ninguna prueba o implementación activa al escribir este relevo; despliegue solo con orden de Pablo. La petición automática quedó atendida por el veredicto de Claude, sin relanzar suite.
+
+- Veredicto recibido a las 17:00:54, contrastado con `E:/vp-rev-19ad09e`:
+  detached en `19ad09ee1bc2f261e99902be20197a9f80448415`, árbol limpio.
+  Suite y sonda de catálogo comunicadas por Claude; no repetidas por Astra.
+  [Acta y límites](ACEPTACION_ESTABILIZACION_19SEP.md).
+- El automático sí inició pytest a las 15:12 (PID 30080 observado entonces).
+  A las 17:02 no quedaban pytest ni revisor activos; no se localizó su resultado.
+  No se cuenta como aprobado ni se afirma que nunca arrancó. La evidencia final
+  es la ejecución independiente de Claude, no una suma de ambas.
+- La nota de Astra `20260919T150424537819-astra-1e7335` enlaza el veredicto y
+  cierra solo la petición pendiente para evitar otra suite cuando vuelva la cuota.
+  No crea una aprobación automática ni autoriza despliegue.
+- Matiz no bloqueante: «mechas pelo largo» y «mechas cabello medio» ofrecen una
+  elección en vez de aplicarla solas. Queda registrado, sin cambiar el candidato.
+- Main avanzó solo en documentación a `9c3e3b8`: Claude registra tres duraciones
+  de packs actualizadas por orden de Pablo (corto 230, medio 350, largo 430).
+  La sonda del veredicto aún cita medio 360: no acredita el catálogo posterior.
+  Identificación de la copia solicitada; las otras diez duraciones siguen pendientes.
 
 - Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
   `astra/estabilidad-19sep`, base `60993b7`, producto integrado hasta `1caa5af`.

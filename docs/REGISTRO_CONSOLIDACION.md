@@ -2023,3 +2023,25 @@ a fin en todas.
   de la suite completa; ninguna suite local sigue activa. Después resolver su
   resultado y abordar la autoridad de pausa. Sin nuevos bancos de modelo real,
   push, despliegue ni cambios en producción.
+
+## 2026-09-19 17:04 +02:00 — candidato 19ad09e revisado OK
+
+- Rama `astra/estabilidad-19sep`. Claude entrega revisión **OK** del rango
+  `60993b7..19ad09e` y suite **3025 passed, 1 skipped, 26m32s**. Fuente original:
+  buzón principal `20260919T150054115013-claude-7f82cc` (17:00:54 Madrid).
+  Astra contrasta copia `E:/vp-rev-19ad09e`: detached en SHA exacto y limpia.
+  Resultado comunicado por Claude, no repetido ni presentado como ejecución propia.
+- Sonda determinista sobre copia del catálogo informada por Claude, resultados
+  en el acta. Sin nuevo banco del modelo real ni entrega real de WhatsApp.
+  «Pelo»/«cabello» producen alguna pregunta extra: matiz no bloqueante conservado.
+- `9c3e3b8` en main registra packs corto 230, medio 350 y largo 430, aplicados
+  por Claude por orden de Pablo a las 16:35. La sonda del veredicto cita medio 360;
+  se pide identificar la copia, sin atribuirle cobertura de esos datos posteriores.
+- El automático sí arrancó a las 15:12, PID 30080 observado; a las 17:02 ya no
+  estaba activo y no se localizó su resultado. No acreditar una suite sin final.
+  La nota `20260919T150424537819-astra-1e7335` enlaza la respuesta de Claude a la
+  petición original y evita repetirla cuando vuelva la cuota; no crea un OK del bot.
+- Acta, plan y estado actualizados solo en documentación tras el SHA revisado.
+  Próximo bloque interno: autoridad persistida de pausa, según diseño `6a43942`.
+  No hay pruebas ni implementación activas al registrar esto. No se declara
+  acabado el plan completo ni se despliega sin orden de Pablo.

@@ -11,7 +11,7 @@ No tocar secretos, producción, datos del catálogo ni desplegar/push. D aparcad
 | Recordatorios F4 y email F2 | Astra | F4 corregido en `83e5c56`, 48 dirigidos verdes y revisión independiente OK acotado. F2 revisado sin hallazgos nuevos. El contador acredita aceptación conocida, no recepción del teléfono ni llamadas nuevas al transporte. |
 | CRM y reparto | Revisión independiente coordinada por Astra | `73f3302`/`c484131`: OK acotado, 66 dirigidos y 5 casos adicionales verdes; cobertura integrada en `ff45f3a`. |
 | Pausa/aislamiento de negocios | Revisión independiente coordinada por Astra | Cinco casos de aislamiento verdes (45.59s). Diseño técnico `6a43942` preparado; siguiente implementación: autoridad persistida, transición por versión y pruebas de reinicio/aislamiento. La pausa conjunta sigue pendiente. |
-| Candidato integrado | Revisor automático; Astra resuelve hallazgos | Suite de `f2003ec` interrumpida por hallazgo, sin resultado completo. Una única suite del nuevo candidato a cargo del revisor, seguida de revisión exacta. Evidencia real todavía no medida. |
+| Candidato integrado | Claude revisa; Astra registra | `19ad09e`: OK independiente y suite comunicada 3025 passed, 1 skipped, 26m32s. Copia exacta y limpia comprobada. Automático sin resultado localizado; petición enlazada como atendida para no repetir. Modelo real del candidato aún no medido. |
 | Relevo | Astra | Estado vigente y acta con primer intento/reintentos/fallos/no medidos, límites y pendientes externos. |
 
 Pruebas con fixtures aisladas y transportes interceptados. No duplicar procesos
