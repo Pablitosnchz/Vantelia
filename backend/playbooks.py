@@ -37,6 +37,9 @@ from backend import clients, rules
 CATALOGO: List[Dict[str, Any]] = [
     {
         "id": "sin_precio_sin_verlo",
+        # Solo tiene sentido si el negocio coge citas: acaba ofreciendo una o presupuestando un
+        # trabajo sobre la persona. A un hotel le salian «mechas, balayage» (Cap Rocat, 19-sep-2026).
+        "para_negocios_con_cita": True,
         "titulo": "No dar precio sin ver al cliente",
         "explicacion": (
             "Para trabajos donde el precio depende de cada persona. En vez de una "
@@ -56,6 +59,9 @@ CATALOGO: List[Dict[str, Any]] = [
     },
     {
         "id": "pedir_foto",
+        # Solo tiene sentido si el negocio coge citas: acaba ofreciendo una o presupuestando un
+        # trabajo sobre la persona. A un hotel le salian «mechas, balayage» (Cap Rocat, 19-sep-2026).
+        "para_negocios_con_cita": True,
         "titulo": "Pedir una foto para poder presupuestar",
         "explicacion": (
             "Cuando SI se puede presupuestar a distancia, pero hace falta ver algo. "
@@ -75,6 +81,9 @@ CATALOGO: List[Dict[str, Any]] = [
     },
     {
         "id": "derivar_a_valoracion",
+        # Solo tiene sentido si el negocio coge citas: acaba ofreciendo una o presupuestando un
+        # trabajo sobre la persona. A un hotel le salian «mechas, balayage» (Cap Rocat, 19-sep-2026).
+        "para_negocios_con_cita": True,
         "titulo": "Derivar un servicio a valoración",
         "explicacion": (
             "Para servicios que no se pueden cerrar por mensaje. Se explica por que y "
@@ -211,15 +220,32 @@ def aplicar(
     )
 
 
+def _coge_citas(cliente_id: str) -> bool:
+    """¿El negocio tiene la agenda encendida? Ante la duda, si: esconder de mas no ayuda."""
+    try:
+        return bool((clients._get_client_config(cliente_id).get("booking") or {}).get("enabled", True))
+    except Exception:  # noqa: BLE001 - negocio sin config: se ensena todo, como antes
+        return True
+
+
 def estado(cliente_id: str) -> List[Dict[str, Any]]:
-    """Que situaciones tiene montadas este negocio, y con que texto."""
+    """Que situaciones le sirven a este negocio, cuales tiene montadas y con que texto.
+
+    Las de presupuesto y valoracion (`para_negocios_con_cita`) no se ensenan a un negocio sin
+    agenda: a un hotel le salian «no dar precio sin ver al cliente» con mechas y balayage de
+    ejemplo. Pero una que ya este montada se ensena siempre: esconder algo que esta
+    funcionando es peor que ensenar de mas.
+    """
     reglas = rules.listar(cliente_id)
     por_situacion = {r["playbook_id"]: r for r in reglas if r.get("playbook_id")}
     por_titulo = {r["nombre"]: r for r in reglas}
+    coge_citas = _coge_citas(cliente_id)
     salida = []
     for plantilla in CATALOGO:
         # Por procedencia; por titulo solo para las de antes de guardarla.
         regla = por_situacion.get(plantilla["id"]) or por_titulo.get(plantilla["titulo"])
+        if plantilla.get("para_negocios_con_cita") and not coge_citas and not regla:
+            continue
         salida.append({
             "id": plantilla["id"],
             "titulo": plantilla["titulo"],
