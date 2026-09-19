@@ -4,7 +4,7 @@ Seguimiento del candidato `astra/cierre-estable-19sep`, desde `e43baca`.
 El código desplegado comunicado sigue siendo `0cb61de`; esta rama no se ha
 publicado ni desplegado. La suite anterior de 3025 aprobados/1 omitido y humo
 5/5 acredita aquel producto, no este bloque. Última actualización: 19-sep,
-21:40 Europe/Madrid.
+21:42 Europe/Madrid.
 
 ## Entregas comprobadas
 
@@ -17,6 +17,7 @@ publicado ni desplegado. La suite anterior de 3025 aprobados/1 omitido y humo
 | Instrumento cita única | `e8a8b6` | 13 aprobados; causales, incluida consulta SQLite | Exige una cita nueva activa por identidad; no confunde pago pendiente con cobro |
 | Widget | `fdf60e3` | 6 fallos/1 aprobado antes → 7 aprobados; build correcto | Estado HTTP 409/503 fuera del historial, sin falsa respuesta ni reintento |
 | CI widget | `80c52e0` | `npm run test:widget`: 7 aprobados | Las regresiones Node se ejecutan antes del build en CI |
+| Operaciones de pago | `997d2ef` | 129 dirigidos previos y 21 finales/44.83s; causales de Connect y prioridad manual | Misma autoridad y diario, registro de resultado antes de avisos; éstos siguen por integrar |
 
 Todas las filas tienen revisión independiente o de Astra sobre código de otro
 implementador. No se suman las tandas como casos únicos: hay pruebas compartidas.
@@ -25,10 +26,9 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
 
 ## En curso, sin atribuir aceptación
 
-- Pago: revisión independiente final OK de cinco archivos congelados; 129
-  dirigidos previos y 21 finales/44.83s. Incluye el rechazo conocido cuando
-  Connect no permite cobrar, y la prioridad manual restaurada sin cambiar su
-  fixture. Falta registrar el commit e integración. La huella acredita intención
+- Pago: cinco archivos revisados, `997d2ef` integrado en `0122e53`. Incluye el
+  rechazo conocido cuando Connect no permite cobrar y la prioridad manual
+  restaurada sin cambiar su fixture. Falta integración con avisos. La huella acredita intención
   y datos del pago, no una petición Stripe completa congelada; desconocido no
   permite repetición ni acredita reconciliación automática.
 - Chat: 17 dirigidos ASGI/memoria/shim aprobados antes de la revisión. Pendientes

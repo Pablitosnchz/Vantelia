@@ -1,11 +1,11 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 21:10 Europe/Madrid
+## En curso — 2026-09-19 21:42 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** fases 1, 2a y 2b integradas (`25b84e4`); núcleo `f6c16e1` con revisión independiente OK. Widget `fdf60e3` revisado e integrado en `e6ad008`; backend de chat y pago en implementación separada. Instrumento de cita única y contexto de hilos integrados.
+- **Tarea:** fases 1, 2a y 2b integradas; widget `fdf60e3`, CI `80c52e0` y pago `997d2ef` revisados e integrados hasta `0122e53`. Chat/transportes en causales y correcciones. WA0 prepara resolución demo sin efectos, sin conectar aún WhatsApp.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** validar `/chat` antes de preparación/emisión y su memoria por turno; implementar pago/crear_enlace en diario común, con avisos admitidos aparte. Añadir las pruebas Node del widget a CI. WhatsApp y demás canales siguen pendientes. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
+- **Siguiente:** cerrar hallazgos de chat (petición en espera, sesión ajena y errores de estado) y avisos; revisar e integrar con pago. WA0 mantiene el resolver legacy y extrae su consulta pura antes de futura admisión. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md y acta abierta ACEPTACION_ATENCION_19SEP.md.
 - **Espera a:** entregas de los agentes propios, con un único turno de pytest. Claude confirma en nota c6119d que no hay snapshot saneado actual: solo comunica metadata de catálogo local, sin lectura/copia por Astra. No hay suite completa ni banco del modelo activo.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
@@ -34,6 +34,12 @@
   humano y desactiva acciones anteriores hasta una respuesta válida. Harness DOM
   mínimo, no navegador/lector real ni formularios ya en vuelo. Acta externa
   `E:/Vantelia-astra-widget-atencion-evidencia/WIDGET_ATENCION.md`.
+- Pago `997d2ef`: mismo diario, admisión antes de Connect/CRM/Checkout y resultado
+  `pay_` registrado antes de avisos. Revisión final independiente OK; 129 dirigidos
+  previos, causal Connect no operativo y 21 finales/44.83s. Conserva prioridad
+  manual sin alterar fixtures. Acta `E:/Vantelia-astra-pago-atencion-evidencia/PAGO.md`.
+  La huella recoge intención/datos, no la petición Stripe completa; desconocido
+  no se reintenta ni se presenta como reconciliado. No habilita Stripe a un tenant.
 - Banco: `reserva-completa-de-verdad` exige una única cita activa con ID nuevo;
   incluye pending_payment sin acreditar cobro. 13 dirigidos, incluida frontera
   SQLite, con causales documentados en MEDICION_CIERRE_COMPARABLE.md. Usar el mismo

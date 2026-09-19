@@ -2211,3 +2211,25 @@ a fin en todas.
   a webhooks retrasados. Payload de Flow suprimido requiere contrato preciso;
   no devolver un éxito inventado. Investigación oficial acotada, sin activar canal.
 - Sin suite global nueva, banco real, push, despliegue ni datos de producción.
+
+## 2026-09-19 21:42 +02:00 — pago revisado e integrado; chat corrige fronteras
+
+- `997d2effa7b8ce08b55c5248dddcd4924aeeeb08`, astra/pago-atencion-19sep,
+  integrado sin conflictos como `0122e53`. Revisión final independiente OK:
+  cinco hashes, código y logs cotejados. Acta externa `PAGO.md` en su carpeta de
+  evidencia; metadatos del candidato en ACEPTACION_ATENCION_19SEP.md.
+- 129 dirigidos/179.96s antes del hallazgo de Connect; 2 causales rojos/27.35s
+  y corrección de rechazo conocido. Tanda aislada encontró prioridad manual
+  alterada (19 aprobados/2 fallos); producto corregido, fixtures intactos. Final
+  21 passed/44.83s a las 21:35:34. No sumar tandas ni repetir suite completa.
+- Tipo pago/crear_enlace comparte diario; efectos Connect/CRM/Checkout bajo
+  admisión y pay_ persistido antes de avisar. Huella lógica de intención/datos,
+  sin afirmar petición Stripe congelada ni reconciliación de desconocidos.
+- Root pide causales HTTP de petición retenida en lock durante pausa/reactiva,
+  sesión de otro tenant (deuda previa descubierta), intención conservada y asiento
+  ausente. Chat posee pytest; pago lo cedió al terminar. Avisos: omitido con razón
+  atencion_suprimida será terminal para el automatismo, sin fallback ni falsa entrega.
+- WA0 asignado en paralelo solo a wa_demo.py/tests: separar resolución consultiva
+  del binding que hoy tiene efectos, mantener wrapper legacy. No conecta WhatsApp.
+  Los límites oficiales de WA/Flow están en la nota externa WA_CONTRATO_LIMITES_19SEP.md.
+- Ninguna suite completa nueva ni banco del modelo activo; sin push/despliegue.
