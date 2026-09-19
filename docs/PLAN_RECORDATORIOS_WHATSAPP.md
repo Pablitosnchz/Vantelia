@@ -9,8 +9,10 @@ booking._send_booking_reminder_by_kind y pruebas de entregas/recordatorios.
 
 - No volver a implementar plantillas ni relanzar las mediciones históricas.
 - F4 (contador de avisos omitidos) corregido en `83e5c56`, rama
-  `astra/estabilidad-19sep`: 48 dirigidos verdes. Falta aceptación del integrado;
-  evidencia en ACEPTACION_ESTABILIZACION_19SEP.md.
+  `astra/estabilidad-19sep`: 48 dirigidos verdes. Integrado, revisado y desplegado
+  en `0cb61de`; código de `19ad09e` con 3025 passed y 1 skipped, revisión OK de
+  Claude y humo del despliegue 5/5. Esa aceptación no acredita la entrega real
+  de Meta a Alicia; evidencia y límites en ACEPTACION_ESTABILIZACION_19SEP.md.
 - Prueba real Meta para Alicia: **no acreditada**; último relevo sin conectar su
   número. Distinguir aceptación del proveedor, entrega y resultado desconocido.
 - El respaldo por email solo es posible con contacto/canal válidos y conforme al
