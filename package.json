@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "build": "npm run build:widget",
+    "test:widget": "node --experimental-vm-modules --test tests/test_widget_atencion.cjs",
     "build:widget": "esbuild widget/widget.js --bundle --minify --format=iife --target=es2018 --outfile=widget/widget.min.js"
   },
   "dependencies": {
