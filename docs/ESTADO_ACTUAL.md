@@ -1,12 +1,12 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 21:59 Europe/Madrid
+## En curso — 2026-09-19 22:19 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** fases 1, 2a y 2b integradas; widget `fdf60e3`, CI `80c52e0`, pago `997d2ef` y consulta demo WA0 `478d082` revisados e integrados hasta `23f16b3`. Chat/transportes cierra causales y revisión. WA1 diseña el aplicador atómico, sin conectar aún WhatsApp.
+- **Tarea:** candidato de chat/pago integrado hasta `83bed95`: incluye `fc8f58e` chat/transportes y `56c3f3b` referencia de pago conocido más persistencia en intérprete nuevo. Revisión exacta OK, 63 dirigidos finales. WA1 implementado en rama separada y en pruebas causales; aún no se conecta WhatsApp.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** congelar chat/avisos tras las últimas pruebas dirigidas, cotejar revisión e integrar con pago. HTTP tiene OK acotado de Astra tras sus causales; transportes recoteja Gmail y resultado conocido. WA1 define admisión y vinculación sin carrera entre negocios. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md y acta abierta ACEPTACION_ATENCION_19SEP.md.
-- **Espera a:** entregas de los agentes propios, con un único turno de pytest. Claude confirma en nota c6119d que no hay snapshot saneado actual: solo comunica metadata de catálogo local, sin lectura/copia por Astra. No hay suite completa ni banco del modelo activo.
+- **Siguiente:** una suite completa del candidato de chat, sin editar su copia durante la ejecución; WA1 espera fuera de esa integración. Antes de conectar WA/voz multiherramientas hace falta identidad por aviso: cancelar y crear en un turno pueden emitir dos correos distintos. Contrato de recordatorios actualizado sin rejuvenecer avisos de la pausa.
+- **Espera a:** WA1 ocupa pytest causal/dirigido y lo cederá para la suite única del candidato chat. La suite completa todavía no ha empezado. Claude confirma en nota c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
   3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.

@@ -2252,3 +2252,30 @@ a fin en todas.
   63 verdes y un doble RAG antiguo, ajustado sin cambiar la respuesta exigida.
 - Único ejecutor de pytest: chat. No se ha iniciado suite completa ni modelo.
   Siguiente: cerrar acta y revisión, integrar chat con pago y probar su convivencia.
+
+## 2026-09-19 22:19 +02:00 — candidato chat/pago integrado para suite única
+
+- `fc8f58e` integrado en `3f234f2`; revisión final de transportes y revisión de
+  HTTP OK: 15 hashes/14 logs/acta cotejados. Mutación SMTP/SMS/Meta 3 fallos →
+  3 aprobados, restauración exacta. Gmail admite mensaje después del getter;
+  resultado conocido de reserva se conserva aparte del aviso suprimido. Meta
+  parcial conserva IDs y no se marca omitido. Acta externa FASE2C_CHAT.md.
+- `56c3f3b` integrado limpio en `83bed95344cba345d38504460325636b20491d02`:
+  puente pay_ conocido para SMS/email, sin volver a Checkout ni fingir entrega.
+  Revisión OK de 5 archivos/4 logs/acta. Dos causales rojos/21.62s; combinación
+  final 63 passed/70.71s. Acta externa FASE2C_PAGO_AVISOS.md.
+- La combinación descubrió contaminación por reload parcial de tests: pareja
+  mínima 1 fallo/1 aprobado. Se sustituyeron tres recargas por un intérprete
+  nuevo con env mínimo, dotenv desactivado y DB temporal. Prueba lectura y corte
+  persistidos; padre conserva efecto único. No cambio de producto para ese fallo.
+- Revisor confirmó que dos avisos distintos pueden colisionar en el agente que
+  cancela y crea otra cita dentro de un turno. Ese bucle no está en /chat capturado
+  actual: no bloquea esta entrega, pero exige identidad estable por aviso antes
+  de conectar WA/voz. No añadir un contador de reintentos para ocultarlo.
+- WA1 está fuera del candidato, en su propia rama/copia. A las 22:18:59 terminó
+  sus tres causales rojos; cuatro archivos restaurados, dirigido en curso desde
+  22:19:30. Después cede pytest para la única suite completa del candidato chat.
+  Todavía ninguna suite completa nueva iniciada ni banco/modelo activo.
+- Plan/acta actualizados. Diseño de recordatorios conserva origen por generación
+  y selector único, sin usar la hora de reactivación como evento nuevo. Se mantiene
+  la decisión existente de respaldo tras 30 minutos de incertidumbre del proveedor.

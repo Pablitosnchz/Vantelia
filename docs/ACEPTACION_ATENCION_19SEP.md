@@ -26,19 +26,21 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
 
 ## En curso, sin atribuir aceptación
 
-- Pago: cinco archivos revisados, `997d2ef` integrado en `0122e53`. Incluye el
+- Pago: `997d2ef` integrado y combinado con chat/avisos hasta `83bed95`. Incluye el
   rechazo conocido cuando Connect no permite cobrar y la prioridad manual
-  restaurada sin cambiar su fixture. Falta integración con avisos. La huella acredita intención
+  restaurada sin cambiar su fixture. `56c3f3b` conserva el pay_ conocido cuando
+  se suprime su aviso, sin nueva entrega ni Checkout. La huella acredita intención
   y datos del pago, no una petición Stripe completa congelada; desconocido no
   permite repetición ni acredita reconciliación automática.
-- Chat: causales de petición en espera, sesión de otro tenant, intención del
-  mensaje y ausencia de asiento corregidos; 42 dirigidos aprobados tras siete
-  fallos causales HTTP/avisos. HTTP tiene OK acotado de Astra. En regresiones,
-  63 aprobados y un doble antiguo de RAG por actualizar a la fábrica del turno;
-  falta cierre de transportes, acta exacta e integración con pago.
-- Avisos: la supresión conocida antes de un POST debe ser terminal y no cuenta
-  como fallo del proveedor, entrega ni permiso de probar otro canal. Carrera
-  entre claim y pausa en prueba; resultado de red perdido sigue siendo incierto.
+- Chat y transportes `fc8f58e`: revisión final OK sobre 15 hashes/14 logs/acta;
+  causales HTTP, Gmail, referencia de reserva y Meta parcial corregidos. Mutación
+  final de SMTP/SMS/Meta: 3 fallos → 3 aprobados, restauración exacta. Supresión
+  de aviso tras claim queda omitida, sin fallback; parcial conserva IDs e incertidumbre.
+- Combinación final con pago `56c3f3b`: revisión OK de cinco archivos, acta y cuatro
+  logs; 2 fallos causales del puente corregidos y 63 dirigidos/70.71s aprobados.
+  Una contaminación entre tests por reload parcial se sustituyó por intérprete
+  nuevo con DB temporal, sin cambiar producto: prueba lectura/guardia persistida,
+  no reinicio E2E del servidor. Los padres siguen exigiendo Checkout/efecto único.
 - WhatsApp, Flow, automatismos sin contexto, voz, operación administrativa y
   facturación separada siguen el plan. No hay control público que prometa una
   pausa completa mientras falten esas fronteras.
@@ -46,6 +48,11 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   rutas/usos. Dos fallos causales al reintroducir la escritura, 36 dirigidos
   aprobados/24.75s y dos hashes cotejados. No conecta atención: requiere todavía
   aplicador atómico ligado al tenant y ticket, con deduplicación del evento.
+- WA1 permanece fuera de este candidato. Antes de conectar WA/voz al contexto
+  debe resolverse la identidad de avisos múltiples: el agente permite cancelar
+  y crear en un turno, con dos emails legítimos; ticket/canal/fragmento 0 no los
+  distingue. No es un fallo alcanzable del /chat capturado actual, que retorna
+  tras una gestión/pago y no usa ese bucle multiherramientas.
 
 ## Puertas que faltan
 
