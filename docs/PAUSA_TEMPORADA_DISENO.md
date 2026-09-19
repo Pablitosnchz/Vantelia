@@ -56,6 +56,23 @@ Reactivar no reproduce el histórico: los trabajos pendientes se revalidan contr
 su vigencia y generación; no reenviar mensajes vencidos de los meses de cierre.
 No mantener una transacción SQLite abierta durante una llamada de red.
 
+La admisión de envíos por sí sola no cierra la pausa durante una reserva. El chat
+web actual hace la gestión antes de llamar al motor RAG; WhatsApp usa el
+despachador de herramientas. Ambos desembocan en `_create_booking_core`,
+`_cancel_booking_core` y `_update_booking_details`. El siguiente corte debe
+propagar un contexto de turno interno y admitir la mutación antes del primer
+efecto del núcleo, incluso reclamar la operación de creación. No basta impedir
+el texto después de crear/cancelar/mover. El portal manual conserva su recorrido
+autenticado; ningún campo del mensaje o argumento del modelo concede una excepción.
+
+Si la pausa gana la admisión, no hay efecto; si la operación ya fue admitida,
+conservar su resultado o incertidumbre, sin compensación ni repetición automática.
+Una operación admitida no acredita entrega del aviso. La supresión conocida debe
+atravesar los adaptadores sin convertirse en resultado desconocido ni en una
+petición de repetir. Esta conexión y sus pruebas siguen pendientes. Antes de
+cerrar chat, cubrir también sus enlaces/avisos de pago, retornos tempranos e
+historial: no guardar como respuesta del asistente un cuerpo HTTP suprimido.
+
 ## Facturación: resultado independiente, visible
 
 Separar «atención pausada» de «cuota suspendida». Persistir una operación de cobro
