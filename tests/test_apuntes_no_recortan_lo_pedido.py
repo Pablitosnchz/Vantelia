@@ -50,3 +50,16 @@ def test_tecnica_pedida_ausente_no_se_sustituye_por_la_generica(apunte_aislado):
     assert data['servicio'] == '', (
         'El fallback ha quitado balayage de lo pedido y aplicado el generico: %s' % data)
     assert data['duracion'] == 0, data
+
+
+@pytest.mark.parametrize('servicio', ['Corte caballero (sin lavar)', 'Corte-caballero'])
+def test_nombre_exacto_con_separadores_no_pide_otro_toque(apunte_aislado, servicio):
+    client, cookies = apunte_aislado
+    _poner_servicio(client, cookies, servicio, 20)
+
+    response = _interpretar(client, cookies, 'Ana, ' + servicio)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data['servicio'] == servicio, data
+    assert data['duracion'] == 20, data
+    assert not data['pregunta'] and not data['candidatos'], data

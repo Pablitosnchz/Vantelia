@@ -25,8 +25,8 @@ La regla de cuando se atreve a elegir sola sale de dos incidentes reales:
   pregunta.
 - «alisado largo» -> «Pack keratina premium largo» y «color y peinado» -> «Pack maquillaje y medio
   recogido» (medido el 18-sep-2026 sobre el catalogo real del salon, 186 servicios): el catalogo
-  resuelve solo y acierta la familia equivocada. Por eso el servicio elegido tiene que compartir
-  algo de lo ESCRITO; si no, se ofrece en vez de aplicarse.
+  resuelve solo y acierta la familia equivocada. Por eso el servicio elegido tiene que cubrir
+  lo ESCRITO; compartir solo una palabra permitia perder «balayage» al pedir mechas balayage.
 
 Esa regla vive en UN sitio, `_por_que_no_aplicarlo`, y todo lo que se aplica solo pasa por ahi.
 """
@@ -79,7 +79,17 @@ def _forma(texto: str) -> str:
 
 def _tokens(texto: str) -> List[str]:
     """Las palabras que de verdad distinguen, ya normalizadas."""
-    return [p for p in _forma(texto).split() if len(p) >= 3 and p not in _VACIAS]
+    return [p for p in _palabras_del_nombre(texto) if len(p) >= 3 and p not in _VACIAS]
+
+
+def _texto_del_apunte_canonico(texto: str) -> str:
+    """La misma talla del catalogo tambien al buscar los rivales del apunte.
+
+    Si «media melena» no casa con «medio», el resolvedor puede elegir 75 minutos
+    mientras el guardia no ve el pack de 360. Reutiliza sus alias, sin otra lista.
+    """
+    talla = catalog_pick.talla_de(texto)
+    return (catalog_pick.tecnica_de(texto) + " " + talla) if talla else texto
 
 
 def partir(texto: str) -> Dict[str, str]:
@@ -112,16 +122,23 @@ def _por_nombre_exacto(servicios: List[Dict[str, Any]], texto: str) -> str:
 
 
 def _palabras_del_nombre(nombre: str) -> List[str]:
-    return [p for p in _forma(nombre).replace("-", " ").replace("(", " ").replace(")", " ").split()
+    return [p for p in _forma(_texto_del_apunte_canonico(nombre)).replace("-", " ").replace("(", " ").replace(")", " ").split()
             if p]
+
+
+def _palabras_del_apunte_cubiertas(palabras: List[str], partes: List[str]) -> bool:
+    """Compartir «mechas» no permite perder el «balayage» que tambien escribio."""
+    return bool(palabras) and all(
+        any(parte.startswith(palabra) for parte in partes) for palabra in palabras
+    )
 
 
 def _los_que_encajan(servicios: List[Dict[str, Any]], texto: str) -> List[str]:
     """Todos los del catalogo que contienen TODO lo escrito, del que mejor ajusta al que peor.
 
-    Mismo criterio que la lista de servicios del portal: cada palabra escrita tiene que empezar
-    una palabra del nombre. Se devuelven TODOS a proposito: quedarse con el primero es como se
-    apartaban 75 minutos para un trabajo de seis horas.
+    Cada palabra escrita tiene que empezar una palabra del nombre, con los alias de talla
+    del catalogo normalizados en ambos. Se devuelven TODOS a proposito: quedarse con el primero
+    es como se apartaban 75 minutos para un trabajo de seis horas.
 
     Ajuste = cuanto del nombre del servicio explica lo que ella ha escrito. «mechas medio» explica
     entero «Mechas medio» y solo un trozo de «Pack mechas o balayage medio», asi que ese va antes.
@@ -135,26 +152,11 @@ def _los_que_encajan(servicios: List[Dict[str, Any]], texto: str) -> List[str]:
         partes = _palabras_del_nombre(nombre)
         if not partes:
             continue
-        if all(any(parte.startswith(palabra) for parte in partes) for palabra in palabras):
+        if _palabras_del_apunte_cubiertas(palabras, partes):
             cubiertas = sum(1 for parte in partes if any(parte.startswith(p) for p in palabras))
             encajan.append((cubiertas / float(len(partes)), nombre))
     encajan.sort(key=lambda par: (-par[0], par[1]))
     return [nombre for _, nombre in encajan]
-
-
-def _comparte_con_lo_escrito(servicio: str, texto: str) -> bool:
-    """¿El servicio elegido tiene algo de lo que ella ha escrito?
-
-    Sin esto, el catalogo resuelve solo y se atreve con familias que nadie ha nombrado: «color y
-    peinado» acababa en «Pack maquillaje y medio recogido». Compartir una palabra no prueba que
-    sea el correcto, pero no compartir NINGUNA prueba que es una apuesta.
-    """
-    partes = _palabras_del_nombre(servicio)
-    # El largo NO es evidencia de la tecnica: «alisado largo» acababa aplicando «Pack keratina
-    # premium largo» solo porque compartian la palabra «largo», y la keratina no la dijo nadie.
-    tallas = catalog_pick._palabras_de_talla()
-    palabras = [p for p in _tokens(texto) if p not in tallas]
-    return any(any(parte.startswith(palabra) for parte in partes) for palabra in palabras)
 
 
 def _tecnica_escrita(servicio: str, texto: str) -> bool:
@@ -168,7 +170,7 @@ def _tecnica_escrita(servicio: str, texto: str) -> bool:
     escritas = _tokens(texto)
     grupos: List[List[str]] = []
     unir = False
-    for palabra in _forma(catalog_pick.tecnica_de(servicio)).split():
+    for palabra in _palabras_del_nombre(catalog_pick.tecnica_de(servicio)):
         if palabra == "o":
             unir = bool(grupos)
             continue
@@ -204,8 +206,8 @@ def _por_que_no_aplicarlo(servicio: str, texto: str, rivales: List[str], minutos
         return "talla"
     if not _tecnica_escrita(servicio, texto):
         return "tecnica"
-    if not _comparte_con_lo_escrito(servicio, texto):
-        return "familia"          # «color y peinado» -> «maquillaje y recogido»
+    if not _palabras_del_apunte_cubiertas(_tokens(texto), _palabras_del_nombre(servicio)):
+        return "contenido"        # no descartar tecnica, talla u otro servicio que ha escrito
     propio = minutos.get(servicio, 0)
     if any(minutos.get(otro, 0) >= propio * MARGEN_DE_DURACION for otro in rivales if otro != servicio):
         return "duracion"         # otro que encaja igual dura vez y media o mas
