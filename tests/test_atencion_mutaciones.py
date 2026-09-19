@@ -5,7 +5,6 @@ from contextlib import closing, contextmanager
 from dataclasses import FrozenInstanceError
 from datetime import timedelta
 import json
-import importlib
 import sqlite3
 import sys
 import threading
@@ -15,6 +14,7 @@ import pytest
 
 from test_atencion_operaciones import operaciones_atencion, _crear_ticket_prueba  # noqa: F401
 from test_atencion_persistida import autoridad_atencion  # noqa: F401
+from atencion_proceso_aislado import comprobar_intento_en_interprete_nuevo
 
 
 @pytest.fixture
@@ -323,6 +323,12 @@ def test_resultado_incierto_y_recarga_no_permiten_repetir(nucleo_atencion, monke
 
     a = nucleo_atencion
     ticket = _crear_ticket_prueba(a, tenant="demo")
+    solicitudes = []
+    comprobar_original = atencion_contexto.comprobar_intento_mutacion_atencion
+    def capturar_solicitud(*args, **kwargs):
+        solicitudes.append(args[2])
+        return comprobar_original(*args, **kwargs)
+    monkeypatch.setattr(atencion_contexto, "comprobar_intento_mutacion_atencion", capturar_solicitud)
     llamadas = []
     async def incierto(*args, **kwargs):
         llamadas.append(1)
@@ -332,9 +338,10 @@ def test_resultado_incierto_y_recarga_no_permiten_repetir(nucleo_atencion, monke
         with pytest.raises(HTTPException) as incierta:
             asyncio.run(a.crear())
         assert incierta.value.status_code == 503
-    importlib.reload(a.op)
-    importlib.reload(atencion_contexto)
     nuevo = _crear_ticket_prueba(a, tenant="demo", evento="nuevo")
+    recuperada = comprobar_intento_en_interprete_nuevo(a.settings.DB_PATH, nuevo["ticket_id"],
+        tipo="reserva", accion="crear", clave="intento_1", solicitud=solicitudes[0])
+    assert recuperada == {"estado": "desconocido", "result_ref": ""}
     with atencion_contexto.turno_atencion("demo", nuevo["ticket_id"], "intento_1"):
         with pytest.raises(atencion_contexto.AtencionDetenida) as repetida:
             asyncio.run(a.crear())

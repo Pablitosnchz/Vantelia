@@ -3,7 +3,6 @@ import asyncio
 import concurrent.futures
 from contextlib import closing
 from datetime import timedelta
-import importlib
 import threading
 from types import SimpleNamespace
 
@@ -12,6 +11,7 @@ import pytest
 from test_ai_payment_link import _seed_booking, _seed_full_policy
 from test_atencion_operaciones import operaciones_atencion, _crear_ticket_prueba  # noqa: F401
 from test_atencion_persistida import autoridad_atencion  # noqa: F401
+from atencion_proceso_aislado import comprobar_intento_en_interprete_nuevo
 
 
 @pytest.fixture
@@ -139,10 +139,13 @@ def test_reinicio_consulta_pago_conocido_antes_de_vigencia_y_rate_limit(pago_ate
     original = _crear_ticket_prueba(a, tenant="demo")
     with a.contexto.turno_atencion("demo", original["ticket_id"], "pago_1"):
         pago = _crear_pago(a)
-    importlib.reload(a.contexto)
     a.reloj["ahora"] += timedelta(minutes=11)
     _pausar_pago(a)
     otro = _crear_ticket_prueba(a, evento="otro_evento", tenant="demo")
+    recuperada = comprobar_intento_en_interprete_nuevo(a.settings.DB_PATH, otro["ticket_id"],
+        tipo="pago", accion="crear_enlace", clave="pago_1",
+        solicitud={"booking_id": a.booking["id"], "base_url": "https://widget.test", "override_cents": None})
+    assert recuperada == {"estado": "aceptado", "result_ref": pago["id"]}
 
     def no_avanzar(*args):
         raise AssertionError("Un intento conocido no llega a preparar canal ni rate limit")
@@ -293,8 +296,11 @@ def test_connect_no_operativo_es_rechazo_conocido_sin_checkout(pago_atencion, mo
     assert not respuesta["ok"] and respuesta["reason"] == "stripe_unavailable"
     operacion = a.op.consultar_operaciones_atencion("demo", tipo="pago")[0]
     assert operacion["estado"] == "rechazado" and operacion["result_ref"] == ""
-    importlib.reload(a.contexto)
     otro = _crear_ticket_prueba(a, evento="otro_evento", tenant="demo")
+    recuperada = comprobar_intento_en_interprete_nuevo(a.settings.DB_PATH, otro["ticket_id"],
+        tipo="pago", accion="crear_enlace", clave="pago_1",
+        solicitud={"booking_id": a.booking["id"], "base_url": "https://widget.test", "override_cents": None})
+    assert recuperada == {"estado": "rechazado", "result_ref": ""}
     with a.contexto.turno_atencion("demo", otro["ticket_id"], "pago_1"):
         with pytest.raises(a.contexto.AtencionDetenida) as exc:
             _enviar_pago(a)
