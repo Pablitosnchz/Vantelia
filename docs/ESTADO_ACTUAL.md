@@ -1,12 +1,12 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 19:56 Europe/Madrid
+## En curso — 2026-09-19 20:18 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** fase 1 de autoridad persistida integrada (`3fad6f2` en `b5fd11b`); fase 2a de tickets/admisión en implementación y corrección del instrumento de cita única tras revisión.
+- **Tarea:** fases 1 y 2a integradas (`3fad6f2`, `6458b5`); instrumento de cita única `e8a8b6` integrado en `08e541e`. Ahora fase 2b de contexto/admisión de mutaciones y propagación de contexto a hilos en implementación separada.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** revisar y probar tickets/admisión; después conectar canales. Integrar el instrumento cuando la única cita activa se acredite nueva por identidad. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
-- **Espera a:** entregas de los agentes propios; Claude informado para no duplicar y consultado sobre una copia saneada existente posterior a los packs actualizados. No hay suite completa ni banco del modelo activo.
+- **Siguiente:** probar y revisar admisión en núcleos de agenda antes de conectar canales; proteger también la recuperación que libera claims pendientes. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
+- **Espera a:** entregas de los agentes propios, con un único turno de pytest. Claude confirma en nota c6119d que no hay snapshot saneado actual: solo comunica metadata de catálogo local, sin lectura/copia por Astra. No hay suite completa ni banco del modelo activo.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
   3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.
@@ -15,6 +15,15 @@
   aprobados. CAS: mutación 2 fallos, restauración exacta 2 aprobados. Evidencia en
   `E:/Vantelia-astra-pausa-evidencia/FASE1.md`. Todavía sin interruptor público ni
   canales conectados: no acredita pausa efectiva.
+- Fase 2a: 112 dirigidos aprobados, revisión propia independiente OK; igualdad
+  del evento con la reactivación y mutación de permiso fallan causalmente antes.
+  Restauración exacta comprobada. Acta `E:/Vantelia-astra-pausa-evidencia/FASE2A.md`.
+  Admite envíos, no mutaciones todavía. No reclama el worker que prepara respuestas
+  ni reconcilia automáticamente una operación cuyo propietario perdió el proceso.
+- Banco: `reserva-completa-de-verdad` exige una única cita activa con ID nuevo;
+  incluye pending_payment sin acreditar cobro. 13 dirigidos, incluida frontera
+  SQLite, con causales documentados en MEDICION_CIERRE_COMPARABLE.md. Usar el mismo
+  instrumento sobre referencia y candidato; no recalificar históricos sin datos.
 - [Plan de cierre](CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md): una autoridad de atención
   por tenant; preservar configuración/cuenta/acceso humano; cobro separado.
   D aparcado y sin nuevas operaciones de producción/push/despliegue.

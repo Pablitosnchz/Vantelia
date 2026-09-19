@@ -2093,3 +2093,29 @@ a fin en todas.
   iniciales no cubrían ese escenario. Un único turno de pytest entre agentes.
 - Sin suite completa, banco real, push, despliegue ni acceso a producción. La pausa
   todavía no funciona de extremo a extremo y no se presenta como disponible.
+
+## 2026-09-19 20:18 +02:00 — admisión de envíos e instrumento integrados
+
+- `astra/cierre-estable-19sep`, `E:/Vantelia-astra-cierre`, HEAD `08e541e`:
+  integración de fase 2a `6458b5` mediante `dfcc62b`, y del banco `e8a8b6`.
+  Árbol limpio tras los merges; no conflicto de producto.
+- Fase 2a: tickets por evento/tenant con versión y vigencia inmutables, admisión
+  transaccional de fragmentos, resultados conservadores y diario técnico. Revisión
+  propia independiente OK; hashes del candidato cotejados con el acta FASE2A.md.
+  112 passed/85.38s. Hallazgo de igualdad temporal: 1 failed/35.95s antes de `<=`.
+  Mutación de permiso: 1 failed/18.19s; restauración exacta, 1 passed/14.54s.
+- Instrumento: una sola cita activa cuyo `bookings.id` es nuevo. Aprobación
+  anterior falsa con cita antigua viva+nueva cancelada y rechazo falso por resta
+  de filas: 2 failed/10 passed antes, 12 passed después. Quitar id del SELECT:
+  1 failed/1.72s; restaurado, 13 passed/0.90s. Logs y contrato en
+  MEDICION_CIERRE_COMPARABLE.md; ninguna medida de modelo se atribuye a estos tests.
+- Claude, nota `20260919T173955011323-claude-c6119d`: no tiene snapshot saneado
+  actual. Solo informa de catálogo local de 186 servicios con packs 230/350/430;
+  Astra no ha leído ni copiado esa BD. El artefacto de comparación sigue pendiente.
+- Auditoría ajusta el orden: antes del canal, admitir crear/cancelar/mover y
+  cubrir `recover_creation_operation`, que puede borrar una operación caducada.
+  No confundir reserva persistida con mensaje entregado. Voz necesita inventario
+  de call_id del servidor y cierre comprobado, no solo caducidad del secreto.
+- Siguiente: fase 2b en rama de pausa y helper `_to_thread` en rama separada,
+  sin duplicar escritor. Todavía sin suite completa, canales conectados, push,
+  despliegue ni producción. La versión completa no está aceptada.
