@@ -1,6 +1,12 @@
 # Estado actual de Vantelia
 
-## Trabajo activo — 2026-09-19 14:19 Europe/Madrid
+## En curso — 2026-09-19 14:21 Europe/Madrid
+
+- **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
+- **Tarea:** F4 y revisiones locales validadas; integrar la corrección de apuntes de Claude y validar el conjunto.
+- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; base 60993b7, relevo 2927826.
+- **Siguiente:** recibir SHA de apuntes, revisar e integrar; una suite completa del candidato estable y revisión exacta.
+- **Espera a:** entrega de Claude en claude/encargo-0b86b3; no hay una suite de Astra activa ahora.
 
 - Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
   `astra/estabilidad-19sep`, base `60993b7`, integrado hasta `8671178`.
@@ -22,8 +28,8 @@
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 13-sep-2026 12:58 Europe/Madrid, Astra (relevo de propuesta
-aceptada; no implica cambios en producción).
+El relevo vigente está en «En curso» al principio. Los apartados fechados de
+sesiones anteriores se conservan como histórico; no acreditan actividad actual.
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
 fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
@@ -49,7 +55,7 @@ mensajero.
   lo hace en su rama `claude/encargo-…`), y Claude a ella (`--encargar claude
   astra`). Todo llega solo a la sesión del otro.
 
-## En curso
+## Seguimiento histórico — 16-sep-2026
 
 ### Comparación documental — 16-sep-2026 22:08 Europe/Madrid
 
