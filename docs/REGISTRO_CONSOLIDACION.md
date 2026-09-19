@@ -2279,3 +2279,23 @@ a fin en todas.
 - Plan/acta actualizados. Diseño de recordatorios conserva origen por generación
   y selector único, sin usar la hora de reactivación como evento nuevo. Se mantiene
   la decisión existente de respaldo tras 30 minutos de incertidumbre del proveedor.
+
+## 2026-09-19 22:29 +02:00 — suite completa de dff4b72 realmente en marcha
+
+- La combinación WA1 había dado 157 passed/1 failed/11 errors. Causa acotada:
+  fixture PAGO sembraba con api_module antiguo tras cambiar el runtime de tests,
+  pero leía el backend actual. Repro autocontenido 1 failed/26.27s; fixture propia
+  corregida, sin producto ni pruebas históricas alterados. Combinación hub/pago/
+  puente/persistencia/shim: 103 passed/90.25s. Acta externa
+  FASE2C_FIXTURE_PAGO_RUNTIME.md, hash único y diff revisados por Astra.
+- Commit `dff4b72f59ce18b34ed2b8a204803d4df062f9e5` integrado por avance rápido;
+  una sola prueba corregida y caso causal añadido. Producto idéntico a `83bed95`.
+- Suite autorizada y lanzada de verdad a las 22:29:32.719 Europe/Madrid, copia
+  E:/Vantelia-astra-pausa limpia. `python -m pytest -q --tb=short`; pytest PID 31832,
+  registrador PID 39528, sesión 38194. Log completo suite_candidato_dff4b72.log y
+  metadata suite_candidato_dff4b72.json en E:/Vantelia-astra-pausa-evidencia.
+  Resultado pendiente; no sondeos periódicos ni edición en esa copia.
+- WA1 queda aparte, mejorando su recarga simulada por proceso nuevo, sin pruebas
+  activas. R0 prepara fecha de nacimiento de generación y selector temporal
+  compartido, sin conectar el worker ni atención. No habrá otro pytest mientras
+  la suite posea el turno. Tampoco hay medición con modelo ni operaciones reales.

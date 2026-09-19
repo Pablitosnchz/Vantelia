@@ -59,7 +59,9 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
 1. Integrar piezas revisadas y comprobar conflictos sobre el código resultante.
 2. Completar las fronteras del alcance operativo y sus casos deterministas.
 3. Congelar candidato exacto, ejecutar una suite completa y revisar ese código;
-   ninguna suite completa nueva ha empezado todavía.
+   `dff4b72` empezó su única suite el 19-sep a las 22:29:32.719 Europe/Madrid,
+   árbol limpio, pytest PID 31832. Resultado todavía pendiente. Esta copia no se
+   modifica; WA1/R0 permanecen fuera. Log/metadata en la carpeta de evidencia.
 4. Medir referencia y candidato con el mismo instrumento, calendario, catálogo,
    configuración y modelo para Alicia y un segundo negocio. No existe todavía
    un artefacto saneado actual autorizado: Claude lo confirmó; Astra no leyó ni

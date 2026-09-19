@@ -1,12 +1,12 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 22:19 Europe/Madrid
+## En curso — 2026-09-19 22:29 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** candidato de chat/pago integrado hasta `83bed95`: incluye `fc8f58e` chat/transportes y `56c3f3b` referencia de pago conocido más persistencia en intérprete nuevo. Revisión exacta OK, 63 dirigidos finales. WA1 implementado en rama separada y en pruebas causales; aún no se conecta WhatsApp.
+- **Tarea:** suite completa única de `dff4b72` activa desde 22:29:32.719: producto `83bed95`, referencia de pago conocido y prueba de persistencia; además fixture PAGO corregido tras otro runtime, causal y 103 dirigidos verdes. Revisión de código OK. WhatsApp sigue sin capturador conectado.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** una suite completa del candidato de chat, sin editar su copia durante la ejecución; WA1 espera fuera de esa integración. Antes de conectar WA/voz multiherramientas hace falta identidad por aviso: cancelar y crear en un turno pueden emitir dos correos distintos. Contrato de recordatorios actualizado sin rejuvenecer avisos de la pausa.
-- **Espera a:** WA1 ocupa pytest causal/dirigido y lo cederá para la suite única del candidato chat. La suite completa todavía no ha empezado. Claude confirma en nota c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
+- **Siguiente:** leer el resultado de esa suite sin repetirla; no editar su copia. Fuera del candidato, WA1 mejora evidencia de proceso nuevo y R0 prepara nacimiento de generación/límites de recordatorios, ambos sin pytest. Antes de WA/voz multiherramientas falta identidad por aviso.
+- **Espera a:** pytest PID 31832, registrador 39528, sesión 38194, copia E:/Vantelia-astra-pausa limpia al empezar. Log suite_candidato_dff4b72.log y metadata .json en E:/Vantelia-astra-pausa-evidencia. Sin sondeos de porcentaje. Claude confirma en c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
   3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.
