@@ -19,7 +19,7 @@ COMO SE LEE UN CASO
         "debe": ["diagnostico"],      # alguna de estas palabras
         "horario_semanal": True,      # cuenta la SEMANA, no solo hoy/mañana
         "no_debe": ["€", "euros"],    # ninguna de estas
-        "agenda": "crea",             # y que quede en la AGENDA: crea|no_crea|
+        "agenda": "crea",             # y que quede en la AGENDA: crea|crea_unica|no_crea|
                                       # cancela|cambia
         "con_cita": True,             # se le deja una cita cogida antes de empezar;
                                       # {codigo} en los mensajes es la suya
@@ -374,7 +374,7 @@ CASOS = [
     {
         "id": "reserva-completa-de-verdad",
         "gravedad": "critico",
-        "por_que": "Es a lo que viene el negocio: que la cita acabe en la agenda.",
+        "por_que": "Es a lo que viene el negocio: que quede una sola cita viva en la agenda.",
         "mensajes": [
             "hola quiero cita para {un_servicio}",
             "el primer hueco que tengas",
@@ -385,7 +385,7 @@ CASOS = [
             "me llamo Marta Ruiz Gomez",
             "si, confirmo",
         ],
-        "agenda": "crea",
+        "agenda": "crea_unica",
         "debe": [],
         "no_debe": [],
     },

@@ -168,12 +168,12 @@ def _instalar_captura():
 
 
 def _citas_del_telefono(cliente_id: str, telefono: str):
-    """Las citas vivas de ese telefono. Sirve para mirar la AGENDA, no el texto."""
+    """Las citas de ese telefono, incluidas las canceladas, con su identidad."""
     from backend import db
 
     with db._get_db_connection() as conexion:
         filas = conexion.execute(
-            "SELECT booking_code, status, booking_date, booking_time FROM bookings"
+            "SELECT id, booking_code, status, booking_date, booking_time FROM bookings"
             " WHERE cliente_id=? AND REPLACE(REPLACE(telefono,' ',''),'+','') LIKE ?"
             " ORDER BY created_at", (cliente_id, "%" + telefono[-9:]),
         ).fetchall()
@@ -380,11 +380,21 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     if exigido:
         despues = _citas_del_telefono(cliente_id, telefono)
         vivas = [c for c in despues if c["status"] in ("confirmed", "pending_review")]
-        nuevas = len(despues) - len(antes)
-        if exigido == "crea" and nuevas < 1:
-            return False, respuestas, "no ha quedado ninguna cita en la agenda"
-        if exigido == "no_crea" and nuevas > 0:
-            return False, respuestas, "ha cogido una cita que nadie confirmo"
+        if exigido == "crea_unica":
+            # Pending_payment también ocupa agenda (agenda._active_booking_rows_for_day).
+            # Este criterio no acredita cobro ni modifica los otros criterios de agenda.
+            activas = [c for c in despues
+                       if c["status"] in ("confirmed", "pending_review", "pending_payment")]
+            if len(activas) != 1:
+                return False, respuestas, "tiene que quedar UNA cita viva y hay %d" % len(activas)
+            if activas[0]["id"] in {c["id"] for c in antes}:
+                return False, respuestas, "la única cita viva ya existía antes"
+        else:
+            nuevas = len(despues) - len(antes)
+            if exigido == "crea" and nuevas < 1:
+                return False, respuestas, "no ha quedado ninguna cita en la agenda"
+            if exigido == "no_crea" and nuevas > 0:
+                return False, respuestas, "ha cogido una cita que nadie confirmo"
         if exigido == "cancela" and vivas:
             return False, respuestas, "la cita sigue viva: %s" % vivas
         if exigido == "cambia":
