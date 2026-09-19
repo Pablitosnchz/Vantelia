@@ -299,3 +299,30 @@ def test_renombrar_una_situacion_no_la_desactiva(client, limpio, api_module):  #
     suyas = [r for r in rules.listar("demo") if r["playbook_id"] == "sin_precio_sin_verlo"]
     assert len(suyas) == 1, "dos reglas para la misma situacion: %s" % [r["nombre"] for r in suyas]
     assert suyas[0]["nombre"] == "Precio de mechas: diagnóstico primero"
+
+
+def test_a_un_negocio_sin_citas_no_se_le_ofrecen_presupuestos_ni_valoraciones(limpio, api_module):  # noqa: F811
+    """Cap Rocat, 19-sep-2026: en el portal de un HOTEL salían «No dar precio sin ver al cliente»
+    con «mechas, balayage» de ejemplo. Esas tres acaban ofreciendo una cita o presupuestando un
+    trabajo sobre la persona, y un negocio sin agenda no hace ninguna de las dos cosas."""
+    from backend import playbooks
+
+    booking = api_module.CONFIG_CLIENTES["demo"].setdefault("booking", {})
+    antes = booking.get("enabled")
+    try:
+        booking["enabled"] = True
+        con_agenda = {p["id"] for p in playbooks.estado("demo")}
+        assert {"sin_precio_sin_verlo", "pedir_foto", "derivar_a_valoracion"} <= con_agenda
+
+        booking["enabled"] = False
+        sin_agenda = {p["id"] for p in playbooks.estado("demo")}
+        assert not sin_agenda & {"sin_precio_sin_verlo", "pedir_foto", "derivar_a_valoracion"}, sin_agenda
+        assert {"pasar_a_persona", "solo_informar", "medir_sin_responder"} <= sin_agenda, (
+            "las que sirven a cualquier negocio tienen que seguir saliendo")
+
+        # Una que ya está montada no se esconde nunca: esconder algo que funciona es peor.
+        playbooks.aplicar("demo", "pedir_foto", texto="Mándenos una foto, por favor.")
+        assert "pedir_foto" in {p["id"] for p in playbooks.estado("demo")}, (
+            "se ha escondido una situación que el negocio tiene montada")
+    finally:
+        booking["enabled"] = antes
