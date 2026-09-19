@@ -65,7 +65,9 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
 4. Medir referencia y candidato con el mismo instrumento, calendario, catálogo,
    configuración y modelo para Alicia y un segundo negocio. No existe todavía
    un artefacto saneado actual autorizado: Claude lo confirmó; Astra no leyó ni
-   copió storage/producción para suplirlo.
+   copió storage/producción para suplirlo. El banco actual entra directamente en
+   `_handle_whatsapp_message`: no valida el capturador del webhook ni `/chat`.
+   Contrato de cobertura y campañas adicionales en MEDICION_CIERRE_COMPARABLE.md.
 5. Pruebas de entrega y operación reales con cuentas/destinatarios autorizados;
    dobles de Meta, Stripe o ASGI no prueban lectura del teléfono/navegador ni
    silencio de una sesión de voz ya abierta.

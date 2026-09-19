@@ -44,6 +44,36 @@ reintentos. El arnés `botones-emitidos-v2` intercepta salidas, conserva IDs emi
 y no convierte texto libre en pulsaciones. Flows se simula rechazado, no entregado.
 No acredita entrega real de Meta, email o SMS; una ruta no interceptada no se mide.
 
+## Cobertura de entradas comprobada el 19-sep
+
+`evaluar_asistente.py`, `humo.py` y `medir_portal_y_reinicio.py` invocan directamente
+`whatsapp._handle_whatsapp_message`. Por tanto, el banco conserva valor para las
+reglas y la conversación, pero omite `_handle_whatsapp_webhook`: no acredita
+resolución demo, captura original del evento, firma, timestamp, deduplicación de
+entrada, audio previo ni lotes con ecos/estados. Tampoco recorre `/chat` HTTP: ese
+canal usa su propio procesador y motor RAG, no el bucle multiherramientas del agente
+que usa WhatsApp. Un resultado de esos bancos no valida el nuevo motor HTTP.
+
+Puertas adicionales antes de afirmar cierre operativo:
+
+- Adaptador de banco por el webhook real, con petición local autenticada de
+  prueba, ID completo/fecha/origen estables y transportes interceptados. Usar el
+  mismo instrumento sobre referencia y candidato; guardar qué capturador se
+  recorrió. Los casos de pausa, reentrega, cambio de tenant y reinicio deben
+  comprobar también los hechos persistidos, no solo el texto del modelo.
+- Campaña separada para HTTP con modelo real e historial persistido: preguntas
+  consecutivas, digresión y vuelta a la reserva, Q&A/precio/horario cambiado desde
+  portal y segunda sesión/tenant. Entrar por `/chat` con el middleware, sin
+  sustituirlo por una llamada directa a `_process_chat_message`. Conservar las
+  mismas fuentes/modelo/calendario para referencia y candidato.
+- Identificar reinicio de módulos o memoria frente a proceso nuevo. Las pruebas
+  nuevas de pago comprueban persistencia/guardia en otro intérprete; todavía no
+  equivalen a caída y recuperación E2E del servidor ni a entrega en Meta.
+
+Estos adaptadores/campañas están pendientes, no ejecutados. No se suman a los
+resultados históricos del banco ni a pytest; tampoco autorizan acceso a datos
+reales o mensajes a destinatarios no autorizados.
+
 ## Resultados, límites y cambio del criterio
 
 - Separar previstos, aplicables, medidos, OK primer intento, primeros intentos
