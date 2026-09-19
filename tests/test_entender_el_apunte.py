@@ -24,6 +24,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -265,3 +266,83 @@ def test_la_agenda_lee_lo_escrito_y_no_consulta():
     for cita, esperado in casos:
         assert _node(leer, "cdQueSeHace(%s)" % json.dumps(cita)) == esperado, cita
     assert "b.servicio || 'Consulta'" not in fuente, "queda algun sitio que pone Consulta a mano"
+
+
+# ─── Una sola autoridad antes de aplicar nada solo (revisión de Astra, 19-sep-2026) ────────
+# Cada camino llevaba sus propias comprobaciones y el de «solo encaja uno» no llevaba ninguna.
+
+@contextmanager
+def _catalogo_propio(client, cookies, servicios):
+    ids = [_poner_servicio(client, cookies, nombre, minutos) for nombre, minutos in servicios]
+    try:
+        yield
+    finally:
+        for sid in ids:
+            client.delete("/auth/services/%s" % sid, params={"cliente_id": "demo"}, cookies=cookies)
+
+
+@pytest.mark.parametrize("texto, unico", [
+    ("Ana, mechas", "Mechas corto"),                    # el largo no lo ha dicho nadie
+    ("Ana, alisado largo", "Alisado keratina largo"),   # la keratina tampoco
+])
+def test_el_unico_que_encaja_no_se_aplica_si_elige_talla_o_tecnica(client: TestClient, api_module, texto, unico):
+    cookies = _portal_admin_cookies(api_module)
+    with _catalogo_propio(client, cookies, [(unico, 75)]):
+        data = _interpretar(client, cookies, texto).json()
+    assert data["servicio"] == "", "ha elegido %s sin que lo dijera: %s" % (unico, data)
+    assert data["pregunta"], "no dice qué falta: %s" % data
+    assert unico in {c["servicio"] for c in data["candidatos"]}, "no se le ofrece para tocarlo: %s" % data
+
+
+def test_vez_y_media_justa_tambien_pregunta(client: TestClient, api_module):
+    """La frontera cuenta: 60 frente a 90 es ya vez y media, y apartar 60 para 90 no se hace solo."""
+    cookies = _portal_admin_cookies(api_module)
+    with _catalogo_propio(client, cookies, [("Mechas medio", 60), ("Pack mechas medio", 90)]):
+        data = _interpretar(client, cookies, "Ana, mechas medio").json()
+    assert data["servicio"] == "", "ha apartado 60 minutos pudiendo ser 90: %s" % data
+    assert {"Mechas medio", "Pack mechas medio"} <= {c["servicio"] for c in data["candidatos"]}, data
+
+
+# Mas de cuatro encajan con lo escrito: ya no se ofrecen de un toque y decide el cerebro del
+# catalogo (`catalog_pick.elegir`), el de verdad, sin sustituirlo. Su eleccion es otra salida
+# automatica y pasa por la misma autoridad.
+_MECHAS_LARGO = [
+    ("Mechas gorro largo", 60),
+    ("Mechas balayage largo", 90),
+    ("Mechas babylights largo", 90),
+    ("Mechas media cabeza largo", 90),
+    ("Mechas cabeza entera largo", 180),
+]
+
+
+def test_lo_que_elige_el_catalogo_con_mas_de_cuatro_pasa_por_la_autoridad(client: TestClient, api_module):
+    """«mechas largo» con cinco tecnicas de mechas: el catalogo se queda con la que menos anyade y
+    dura menos, el gorro de UNA hora, y se aplicaba solo aunque «gorro» no lo haya escrito nadie
+    y la cabeza entera sean tres."""
+    cookies = _portal_admin_cookies(api_module)
+    with _catalogo_propio(client, cookies, _MECHAS_LARGO):
+        data = _interpretar(client, cookies, "Ana, mechas largo").json()
+    assert data["servicio"] == "", "ha aplicado solo lo que eligio el catalogo: %s" % data
+    assert data["pregunta"] and data["candidatos"], "no ofrece nada para tocar: %s" % data
+
+
+def test_el_catalogo_no_cambia_el_largo_que_se_ha_escrito(client: TestClient, api_module):
+    """Se escribe «extra largo» y no hay extra largo: el catalogo, sin esa talla, se quedaba con
+    la mas corta (75 min) y se aplicaba porque «tambien lleva talla». El largo lo pone quien lo
+    dice, no el codigo."""
+    cookies = _portal_admin_cookies(api_module)
+    with _catalogo_propio(client, cookies, [("Mechas corto", 75), ("Mechas medio", 120),
+                                           ("Mechas largo", 150)]):
+        data = _interpretar(client, cookies, "Ana, mechas extra largo").json()
+    assert data["servicio"] == "", "ha cambiado el largo escrito por otro: %s" % data
+
+
+def test_lo_que_elige_el_catalogo_y_esta_escrito_entero_si_se_aplica(client: TestClient, api_module):
+    """El otro lado: la autoridad no puede ser un «no» a todo. Con mas de cuatro encajando, si el
+    catalogo elige exactamente lo escrito y nada de lo demas dura vez y media, se aplica."""
+    cookies = _portal_admin_cookies(api_module)
+    catalogo = [("Mechas largo", 90)] + [(n, 90) for n, _ in _MECHAS_LARGO[1:]]
+    with _catalogo_propio(client, cookies, catalogo):
+        data = _interpretar(client, cookies, "Ana, mechas largo").json()
+    assert data["servicio"] == "Mechas largo", data
+    assert data["duracion"] == 90, data
