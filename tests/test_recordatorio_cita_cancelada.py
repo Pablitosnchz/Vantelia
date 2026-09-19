@@ -59,7 +59,7 @@ def _capturar_envios(monkeypatch):
 
     async def falso(booking_row, kind, request=None, **kwargs):
         enviados.append((booking_row["id"], kind))
-        return True
+        return {"sent": ["email"], "failed": {}, "skipped": {}}
 
     monkeypatch.setattr(booking, "_send_booking_reminder_by_kind", falso)
     return enviados
@@ -97,7 +97,10 @@ def test_una_cita_confirmada_si_recibe_su_recordatorio(
     from backend import booking
 
     enviados = _capturar_envios(monkeypatch)
-    asyncio.run(booking._run_booking_reminders())
+    resultado = asyncio.run(booking._run_booking_reminders())
+
+    assert resultado.failed == 0
+    assert resultado.sent_24h == 1
 
     assert [e for e in enviados if e[0] == cita_de_manana], (
         "la cita confirmada tenia que recibir su recordatorio de 24 h: %r" % enviados
