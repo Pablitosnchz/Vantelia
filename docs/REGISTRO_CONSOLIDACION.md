@@ -2139,3 +2139,22 @@ a fin en todas.
   no exige convivencia de workers de fase 2a, que nunca se desplegó. No conectar
   canales ni mostrar una pausa completa por tener estas primitivas implementadas.
   Sin suite completa, bancos reales, push, despliegue ni acceso a producción.
+
+## 2026-09-19 21:01 +02:00 — admisión del núcleo integrada; chat siguiente
+
+- `f6c16e159ff956954b7f9e491a9f075f0607b904`, rama astra/pausa-atencion-19sep,
+  integrado en coordinación como `25b84e4`. Revisión final independiente OK;
+  diez archivos, diez logs y acta coinciden con manifiesto de hashes.
+- Evidencia: `E:/Vantelia-astra-pausa-evidencia/FASE2B.md`. 12+3+1 fallos causales,
+  108 passed/92.60s de integración, 78 passed/83.90s finales afectados y mutación
+  3 fallos → 3 aprobados con restauración exacta. No se suman como casos únicos.
+- Diario de operaciones único: identidad de reserva estable entre tickets,
+  resultados conocidos visibles tras pausa/caducidad, supresión persistente,
+  protección de claims y liberación. Un fallo del diario después de persistir la
+  cita no interrumpe pago/política/CRM del ganador. `OPERATION_RELEASED` acredita
+  rechazo después de liberar y auditar; un pendiente desconocido sigue incierto.
+- Contexto interno todavía sin capturadores de canal: conserva el recorrido
+  manual/sin contexto. No constituye una pausa completa ni un permiso de despliegue.
+- Siguiente asignado: entrada/emisión/historial de `/chat` y UI del widget en
+  ramas separadas; auditoría de pagos/avisos auxiliares. Un solo ejecutor pytest.
+  Sin suite completa nueva, mediciones reales, push ni despliegue.

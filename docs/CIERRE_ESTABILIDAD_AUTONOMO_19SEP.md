@@ -24,7 +24,7 @@ grupo de pruebas y la suite completa del candidato estable.
 | Fase | Entrega | Cómo se acepta |
 | --- | --- | --- |
 | 1 — integrada | Autoridad persistida de atención, migración, lectura sin caché, transición CAS y auditoría. `3fad6f2`, integrado en `b5fd11b`. No hay control público de pausa efectiva todavía. | Revisión independiente OK; 67 dirigidos aprobados, casos causales de IDs/fecha y mutación CAS acreditados. |
-| 2 — parcial | 2a integrada en `6458b5`: tickets y admisión persistida de envíos por versión, 112 dirigidos y revisión independiente OK. 2b en implementación: contexto y mutaciones de agenda; 2c pendiente: chat/WhatsApp e historial tras emisión. | Pausar antes del modelo y durante su respuesta; impedir efectos nuevos si gana la pausa, conservar los ya admitidos; pausa/reactivación no revive trabajo viejo; fragmentos y callbacks cubiertos; dos tenants. |
+| 2 — parcial | 2a integrada en `6458b5`: tickets y admisión de envíos, 112 dirigidos y revisión OK. 2b integrada en `f6c16e1`/`25b84e4`: diario común, contexto y mutaciones de agenda, 108 dirigidos de integración y 78 finales, revisión OK. 2c-chat en preparación; WhatsApp e historial tras emisión pendientes. | Pausar antes del modelo y durante su respuesta; impedir efectos nuevos si gana la pausa, conservar los ya admitidos; pausa/reactivación no revive trabajo viejo; fragmentos y callbacks cubiertos; dos tenants. |
 | 3 — pendiente | Avisos, recordatorios y otros automatismos; voz y estado de operaciones en tránsito. | No enviar por canal alternativo al suprimir; no contar una supresión como entrega; resultados conocidos/desconocidos diferenciados. No prometer silencio de una sesión que no pueda revocarse. |
 | 4 — pendiente | Operación administrativa de pausa y reactivación con estado visible y cobro separado. | Solo habilitar la operación completa cuando las fronteras de los canales estén cubiertas. Preservar acceso humano, cuenta, configuración y datos; no inventar reglas de facturación. |
 | 5 — pendiente | Candidato integrado y aceptación comparable. | Dirigidos y revisión por fase, una suite completa estable y revisión exacta; banco con modelo para Alicia y otro negocio sobre condiciones/copia comparables. |
@@ -67,3 +67,9 @@ Claude confirma que no existe snapshot saneado actual; el contrato comparable
 registra esa dependencia, sin acceder a storage. Fase 2b y propagación de contexto
 en hilos se ejecutan en ramas separadas. Todavía ninguna conexión de canales ni
 suite completa ni modelo real sobre estos cambios.
+
+19-sep 21:01 Europe/Madrid: fase 2b integrada tras revisión exacta de diez archivos,
+acta y hashes; 16 fallos causales corregidos y mutación de admisión 3 fallos →
+3 aprobados, sin repetir suite completa. Continúa fase 2c-chat: backend en rama
+de pausa, widget en rama propia y auditor de efectos auxiliares solo lectura.
+Ningún capturador de canal integrado todavía, ni proceso de banco/modelo activo.
