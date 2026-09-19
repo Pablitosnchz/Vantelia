@@ -87,6 +87,38 @@ se haya restablecido sin duplicados ni una puesta en marcha nueva.
 Mostrar la pausa completa solo cuando atención y cobro tengan evidencia conocida;
 conservar el acceso del equipo aunque la operación de cobro siga por reconciliar.
 
+## Recordatorios 24 h / 2 h: conservar cuándo nació el aviso
+
+Diseño del siguiente corte, todavía sin implementar. El selector actual usa una
+banda: para inicio de cita S, adelanto H y gracia G=max(45 min, dos intervalos del
+worker), abre en S−H−G y cierra en S−H. Solo un aviso ya intentado admite la
+prórroga de 30 min+G. Extraer esos límites en un helper usado por el selector y
+la captura: no introducir un segundo cálculo. Conservar sus extremos inclusivos
+al traducirlos al vencimiento exclusivo del ticket.
+
+Identidad del aviso: tenant, cita, reminder_generation y tipo. Guardar el primer
+origen y los límites de esa identidad; consultar otra vez o reiniciar no los
+renueva. Esa metadata no cuenta como intento ni permite enviar. Un ticket con
+el límite máximo tampoco permite estrenar un aviso fuera de la banda inicial:
+antes del claim y del envío sigue siendo necesario comprobar la elegibilidad.
+
+El origen no puede ser `now` de cada pasada, ni la fecha de creación de toda la
+cita. Tampoco basta S−H: en la apertura de la banda aún sería futuro. Persistir
+cuándo nace cada generación de recordatorios al crear o cambiar la cita, y usar
+max(apertura, nacimiento acreditado de generación). Así una reprogramación hecha
+después de reactivar, ya dentro de la banda, es un evento nuevo. Las generaciones
+antiguas sin fecha acreditada mantienen ese límite explícito: no rellenarlo con
+la hora de la migración ni inferirlo de `updated_at` genérico.
+
+Una supresión de atención es terminal para el aviso completo, sin marcar entrega,
+fallo de proveedor ni abrir respaldo. Una respuesta desconocida del proveedor
+conserva la decisión de Pablo de esperar 30 minutos antes de permitir el siguiente
+canal; nunca repetir el mismo. Reutilizar reloj/propietario de notice_deliveries,
+sin reiniciarlo con otro ticket. El contexto pertenece a cada aviso, no a todo el
+bucle ni a sus llamadas de voz. Probar pausa dentro de banda, reactivación,
+reprogramación posterior, reinicio, cambio de intervalo, límite exacto,
+retención del worker, desconocido con gracia y dos tenants antes de integrar.
+
 ## WhatsApp: entrada, vinculación demo y Flow son fronteras distintas
 
 Contrato acotado el 19-sep. WA0 `478d082` solo resuelve sin efectos; no acredita
