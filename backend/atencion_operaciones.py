@@ -17,6 +17,8 @@ automática; la operación queda conservadora hasta una intervención con eviden
 `puede_preparar` tampoco reclama un worker: las fronteras conservan la deduplicación
 de mensajes y coste. En el diario común, tipo=envio mantiene ticket/canal/fragmento;
 tipo=reserva/pago usa tenant/tipo/acción/clave estable incluso con otro ticket.
+tipo=wa_demo vincula una sola vez por evento del hub, incluso si cambia el tenant
+resuelto; un conflicto ajeno no devuelve datos del diario original.
 Solo `ejecutar_operacion=True` concede el primer efecto de esa operación.
 """
 from contextlib import closing
@@ -82,6 +84,10 @@ def _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
         if canal != "crear_enlace" or fragmento != 0:
             raise ValueError("Acción de pago no válida.")
         _validar_referencia_atencion(clave_intento, _ATENCION_EVENTO_RE, "intento")
+    elif tipo == "wa_demo":
+        if canal != "vincular" or fragmento != 0:
+            raise ValueError("Acción de demo WhatsApp no válida.")
+        _validar_referencia_atencion(clave_intento, _ATENCION_HASH_RE, "evento del hub")
     else:
         raise ValueError("Tipo de operación de atención no válido.")
 
@@ -159,10 +165,15 @@ def _envio_operacion_atencion(row):
     return envio
 
 
-def _buscar_ticket_atencion(connection, cliente_id, ticket_id):
-    return _ticket_operacion_atencion(connection.execute(
+def _buscar_ticket_atencion(connection, cliente_id, ticket_id, *, evento_id=None):
+    ticket = _ticket_operacion_atencion(connection.execute(
         "SELECT * FROM client_attention_tickets WHERE cliente_id=? AND ticket_id=?",
         (cliente_id, ticket_id)).fetchone())
+    if evento_id is not None:
+        _validar_referencia_atencion(evento_id, _ATENCION_EVENTO_RE, "evento")
+        if ticket["evento_id"] != evento_id:
+            raise AtencionIdentidadEnConflicto("El ticket no corresponde al evento esperado.")
+    return ticket
 
 
 def _motivo_ticket_atencion(ticket, autoridad, ahora):
@@ -237,19 +248,27 @@ def crear_ticket_atencion(cliente_id, evento_id, *, event_at, expires_at):
 
 def comprobar_ticket_atencion(cliente_id, ticket_id):
     """Foto coherente previa a preparar; nunca reclama ni renueva un intento."""
-    atencion._validar_cliente_atencion(cliente_id)
-    _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
     try:
         with closing(db._get_db_connection()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
-            autoridad = atencion._leer_atencion_en_transaccion(connection, cliente_id)
-            ticket = _buscar_ticket_atencion(connection, cliente_id, ticket_id)
-            ahora = timeutils._utc_now()
-            motivo = _motivo_ticket_atencion(ticket, autoridad, ahora)
-            _suprimir_ticket_atencion(connection, ticket, motivo, timeutils._to_utc_iso(ahora))
-        return dict(ticket, puede_preparar=not motivo, motivo_actual=motivo)
+            return comprobar_ticket_atencion_en_transaccion(connection, cliente_id, ticket_id)
     except sqlite3.Error as exc:
         raise atencion.AtencionNoDisponible("No se puede verificar el ticket de atención.") from exc
+
+
+def comprobar_ticket_atencion_en_transaccion(connection, cliente_id, ticket_id):
+    """Misma lógica en la transacción del llamador; no abre ni confirma otra."""
+    if not connection.in_transaction:
+        raise ValueError("Se requiere una transacción abierta.")
+    atencion._validar_cliente_atencion(cliente_id)
+    _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
+    autoridad = atencion._leer_atencion_en_transaccion(connection, cliente_id)
+    ticket = _buscar_ticket_atencion(connection, cliente_id, ticket_id)
+    ahora = timeutils._utc_now()
+    motivo = _motivo_ticket_atencion(ticket, autoridad, ahora)
+    _suprimir_ticket_atencion(connection, ticket, motivo, timeutils._to_utc_iso(ahora))
+
+    return dict(ticket, puede_preparar=not motivo, motivo_actual=motivo)
 
 
 def _respuesta_operacion_atencion(operacion, ejecutar=False):
@@ -271,6 +290,13 @@ def _compat_respuesta_envio_atencion(respuesta):
 
 def _buscar_identidad_operacion_atencion(connection, identidad):
     cliente_id, ticket_id, tipo, canal, fragmento, clave_intento = identidad
+    if tipo == "wa_demo":
+        row = connection.execute(
+            "SELECT * FROM client_attention_operations WHERE tipo='wa_demo' "
+            "AND canal=? AND clave_intento=?", (canal, clave_intento)).fetchone()
+        if row is not None and row["cliente_id"] != cliente_id:
+            raise AtencionIdentidadEnConflicto("La identidad del evento no coincide.")
+        return row
     if tipo in ("reserva", "pago"):
         # El intento de una mutación confirmada sobrevive a la captura de otro
         # turno. El ticket original sigue siendo su vínculo de admisión.
@@ -284,28 +310,52 @@ def _buscar_identidad_operacion_atencion(connection, identidad):
 
 def consultar_intento_operacion_atencion(cliente_id, ticket_id, accion, clave_intento, *, tipo):
     """Evidencia original sin permiso, incluso con otro ticket propio ya inválido."""
-    atencion._validar_cliente_atencion(cliente_id)
-    _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
-    if tipo not in ("reserva", "pago"):
-        raise ValueError("El intento estable debe ser de reserva o pago.")
-    _validar_identidad_operacion_atencion(tipo, accion, 0, clave_intento)
     try:
         with closing(db._get_db_connection()) as connection, connection:
             connection.execute("BEGIN")
-            _buscar_ticket_atencion(connection, cliente_id, ticket_id)
-            row = _buscar_identidad_operacion_atencion(connection,
-                (cliente_id, ticket_id, tipo, accion, 0, clave_intento))
-            if row is None:
-                return None
-            _buscar_ticket_atencion(connection, cliente_id, row["ticket_id"])
-            return _respuesta_operacion_atencion(_envio_operacion_atencion(row))
+            return consultar_intento_operacion_atencion_en_transaccion(
+                connection, cliente_id, ticket_id, accion, clave_intento, tipo=tipo)
     except sqlite3.Error as exc:
         raise atencion.AtencionNoDisponible("No se puede consultar el intento de operación.") from exc
 
 
+def consultar_intento_operacion_atencion_en_transaccion(connection, cliente_id, ticket_id, accion, clave_intento, *, tipo):
+    """Misma lógica en la transacción del llamador; no abre ni confirma otra."""
+    if not connection.in_transaction:
+        raise ValueError("Se requiere una transacción abierta.")
+    atencion._validar_cliente_atencion(cliente_id)
+    _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
+    if tipo not in ("reserva", "pago", "wa_demo"):
+        raise ValueError("El tipo no admite un intento estable.")
+    _validar_identidad_operacion_atencion(tipo, accion, 0, clave_intento)
+    _buscar_ticket_atencion(connection, cliente_id, ticket_id)
+    row = _buscar_identidad_operacion_atencion(connection,
+        (cliente_id, ticket_id, tipo, accion, 0, clave_intento))
+    if row is None:
+        return None
+    _buscar_ticket_atencion(connection, cliente_id, row["ticket_id"])
+    return _respuesta_operacion_atencion(_envio_operacion_atencion(row))
+
+
 def admitir_operacion_atencion(cliente_id, ticket_id, *, tipo, canal, fragmento=0,
                                clave_intento="", payload, solicitud=None):
-    """Único permiso duradero para envío, reserva o pago; solo el ganador ejecuta."""
+    """Único permiso duradero; solo el ganador ejecuta tras confirmar la transacción."""
+    try:
+        with closing(db._get_db_connection()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            return admitir_operacion_atencion_en_transaccion(
+                connection, cliente_id, ticket_id, tipo=tipo, canal=canal, fragmento=fragmento,
+                clave_intento=clave_intento, payload=payload, solicitud=solicitud)
+    except sqlite3.Error as exc:
+        atencion._ATENCION_LOG.error("atencion_admision_fallida tipo=%s", type(exc).__name__)
+        raise atencion.AtencionNoDisponible("No se puede admitir la operación de atención.") from exc
+
+
+def admitir_operacion_atencion_en_transaccion(connection, cliente_id, ticket_id, *, tipo, canal, fragmento=0,
+                               clave_intento="", payload, solicitud=None):
+    """Misma lógica en la transacción del llamador; no abre ni confirma otra."""
+    if not connection.in_transaction:
+        raise ValueError("Se requiere una transacción abierta.")
     atencion._validar_cliente_atencion(cliente_id)
     _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
     _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
@@ -316,44 +366,56 @@ def admitir_operacion_atencion(cliente_id, ticket_id, *, tipo, canal, fragmento=
     huella = hashlib.sha256(payload).hexdigest()
     huella_solicitud = hashlib.sha256(payload if solicitud is None else solicitud).hexdigest()
     identidad = (cliente_id, ticket_id, tipo, canal, fragmento, clave_intento)
-    try:
-        with closing(db._get_db_connection()) as connection, connection:
-            connection.execute("BEGIN IMMEDIATE")
-            autoridad = atencion._leer_atencion_en_transaccion(connection, cliente_id)
-            ticket = _buscar_ticket_atencion(connection, cliente_id, ticket_id)
-            row = _buscar_identidad_operacion_atencion(connection, identidad)
-            if row is not None:
-                operacion = _envio_operacion_atencion(row)
-                _buscar_ticket_atencion(connection, cliente_id, operacion["ticket_id"])
-                if operacion["payload_hash"] != huella or operacion["request_hash"] != huella_solicitud:
-                    raise AtencionIdentidadEnConflicto("La operación ya tiene otros datos efectivos.")
-                return _respuesta_operacion_atencion(operacion)
-            ahora = timeutils._utc_now()
-            ahora_iso = timeutils._to_utc_iso(ahora)
-            motivo = _motivo_ticket_atencion(ticket, autoridad, ahora)
-            _suprimir_ticket_atencion(connection, ticket, motivo, ahora_iso)
-            operacion = {"cliente_id": cliente_id, "ticket_id": ticket_id, "tipo": tipo,
-                "canal": canal, "fragmento": fragmento, "clave_intento": clave_intento,
-                "payload_hash": huella, "request_hash": huella_solicitud,
-                "estado": "suprimido" if motivo else "en_transito",
-                "owner_token": "" if motivo else uuid.uuid4().hex, "motivo": motivo,
-                "created_at": ahora_iso, "resultado_at": "", "result_ref": ""}
-            connection.execute(
-                "INSERT INTO client_attention_operations "
-                "(cliente_id,ticket_id,tipo,canal,fragmento,clave_intento,payload_hash,request_hash,estado,"
-                "owner_token,motivo,created_at,resultado_at,result_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                tuple(operacion[k] for k in ("cliente_id", "ticket_id", "tipo", "canal", "fragmento",
-                    "clave_intento", "payload_hash", "request_hash", "estado", "owner_token", "motivo", "created_at",
-                    "resultado_at", "result_ref")))
-        return _respuesta_operacion_atencion(operacion, ejecutar=not motivo)
-    except sqlite3.Error as exc:
-        atencion._ATENCION_LOG.error("atencion_admision_fallida tipo=%s", type(exc).__name__)
-        raise atencion.AtencionNoDisponible("No se puede admitir la operación de atención.") from exc
+    autoridad = atencion._leer_atencion_en_transaccion(connection, cliente_id)
+    ticket = _buscar_ticket_atencion(connection, cliente_id, ticket_id)
+    row = _buscar_identidad_operacion_atencion(connection, identidad)
+    if row is not None:
+        operacion = _envio_operacion_atencion(row)
+        _buscar_ticket_atencion(connection, cliente_id, operacion["ticket_id"])
+        if operacion["payload_hash"] != huella or operacion["request_hash"] != huella_solicitud:
+            raise AtencionIdentidadEnConflicto("La operación ya tiene otros datos efectivos.")
+        return _respuesta_operacion_atencion(operacion)
+    ahora = timeutils._utc_now()
+    ahora_iso = timeutils._to_utc_iso(ahora)
+    motivo = _motivo_ticket_atencion(ticket, autoridad, ahora)
+    _suprimir_ticket_atencion(connection, ticket, motivo, ahora_iso)
+    operacion = {"cliente_id": cliente_id, "ticket_id": ticket_id, "tipo": tipo,
+        "canal": canal, "fragmento": fragmento, "clave_intento": clave_intento,
+        "payload_hash": huella, "request_hash": huella_solicitud,
+        "estado": "suprimido" if motivo else "en_transito",
+        "owner_token": "" if motivo else uuid.uuid4().hex, "motivo": motivo,
+        "created_at": ahora_iso, "resultado_at": "", "result_ref": ""}
+    connection.execute(
+        "INSERT INTO client_attention_operations "
+        "(cliente_id,ticket_id,tipo,canal,fragmento,clave_intento,payload_hash,request_hash,estado,"
+        "owner_token,motivo,created_at,resultado_at,result_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        tuple(operacion[k] for k in ("cliente_id", "ticket_id", "tipo", "canal", "fragmento",
+            "clave_intento", "payload_hash", "request_hash", "estado", "owner_token", "motivo", "created_at",
+            "resultado_at", "result_ref")))
+
+    return _respuesta_operacion_atencion(operacion, ejecutar=not motivo)
 
 
 def registrar_resultado_operacion_atencion(cliente_id, ticket_id, *, tipo, canal, fragmento=0,
         clave_intento="", owner_token, resultado, result_ref=""):
     """Resultado del propietario, aun en pausa; ninguna respuesta concede permiso."""
+    try:
+        with closing(db._get_db_connection()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            return registrar_resultado_operacion_atencion_en_transaccion(
+                connection, cliente_id, ticket_id, tipo=tipo, canal=canal, fragmento=fragmento,
+                clave_intento=clave_intento, owner_token=owner_token,
+                resultado=resultado, result_ref=result_ref)
+    except sqlite3.Error as exc:
+        atencion._ATENCION_LOG.error("atencion_resultado_fallido tipo=%s", type(exc).__name__)
+        raise atencion.AtencionNoDisponible("No se puede registrar el resultado de atención.") from exc
+
+
+def registrar_resultado_operacion_atencion_en_transaccion(connection, cliente_id, ticket_id, *, tipo, canal, fragmento=0,
+        clave_intento="", owner_token, resultado, result_ref=""):
+    """Misma lógica en la transacción del llamador; no abre ni confirma otra."""
+    if not connection.in_transaction:
+        raise ValueError("Se requiere una transacción abierta.")
     atencion._validar_cliente_atencion(cliente_id)
     _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
     _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
@@ -362,32 +424,27 @@ def registrar_resultado_operacion_atencion(cliente_id, ticket_id, *, tipo, canal
         raise ValueError("Resultado de atención no válido.")
     _validar_resultado_referencia_atencion(tipo, resultado, result_ref)
     identidad = (cliente_id, ticket_id, tipo, canal, fragmento, clave_intento)
-    try:
-        with closing(db._get_db_connection()) as connection, connection:
-            connection.execute("BEGIN IMMEDIATE")
-            _buscar_ticket_atencion(connection, cliente_id, ticket_id)
-            operacion = _envio_operacion_atencion(connection.execute(
-                "SELECT * FROM client_attention_operations WHERE cliente_id=? AND ticket_id=? "
-                "AND tipo=? AND canal=? AND fragmento=? AND clave_intento=?", identidad).fetchone())
-            if operacion["estado"] == "suprimido" or operacion["owner_token"] != owner_token:
-                raise AtencionPropietarioInvalido("No es el propietario de esta admisión.")
-            if result_ref and operacion["result_ref"] and operacion["result_ref"] != result_ref:
-                raise AtencionIdentidadEnConflicto("La operación ya tiene otra referencia de resultado.")
-            if operacion["estado"] == resultado or (
-                    operacion["estado"] in ("aceptado", "rechazado") and resultado == "desconocido"):
-                return _respuesta_operacion_atencion(operacion)
-            if operacion["estado"] in ("aceptado", "rechazado"):
-                raise AtencionIdentidadEnConflicto("La operación ya tiene otro resultado conocido.")
-            ahora = timeutils._to_utc_iso(timeutils._utc_now())
-            connection.execute(
-                "UPDATE client_attention_operations SET estado=?,resultado_at=?,result_ref=? "
-                "WHERE cliente_id=? AND ticket_id=? AND tipo=? AND canal=? AND fragmento=? "
-                "AND clave_intento=? AND owner_token=?", (resultado, ahora, result_ref) + identidad + (owner_token,))
-            operacion.update(estado=resultado, resultado_at=ahora, result_ref=result_ref)
+    _buscar_ticket_atencion(connection, cliente_id, ticket_id)
+    operacion = _envio_operacion_atencion(connection.execute(
+        "SELECT * FROM client_attention_operations WHERE cliente_id=? AND ticket_id=? "
+        "AND tipo=? AND canal=? AND fragmento=? AND clave_intento=?", identidad).fetchone())
+    if operacion["estado"] == "suprimido" or operacion["owner_token"] != owner_token:
+        raise AtencionPropietarioInvalido("No es el propietario de esta admisión.")
+    if result_ref and operacion["result_ref"] and operacion["result_ref"] != result_ref:
+        raise AtencionIdentidadEnConflicto("La operación ya tiene otra referencia de resultado.")
+    if operacion["estado"] == resultado or (
+            operacion["estado"] in ("aceptado", "rechazado") and resultado == "desconocido"):
         return _respuesta_operacion_atencion(operacion)
-    except sqlite3.Error as exc:
-        atencion._ATENCION_LOG.error("atencion_resultado_fallido tipo=%s", type(exc).__name__)
-        raise atencion.AtencionNoDisponible("No se puede registrar el resultado de atención.") from exc
+    if operacion["estado"] in ("aceptado", "rechazado"):
+        raise AtencionIdentidadEnConflicto("La operación ya tiene otro resultado conocido.")
+    ahora = timeutils._to_utc_iso(timeutils._utc_now())
+    connection.execute(
+        "UPDATE client_attention_operations SET estado=?,resultado_at=?,result_ref=? "
+        "WHERE cliente_id=? AND ticket_id=? AND tipo=? AND canal=? AND fragmento=? "
+        "AND clave_intento=? AND owner_token=?", (resultado, ahora, result_ref) + identidad + (owner_token,))
+    operacion.update(estado=resultado, resultado_at=ahora, result_ref=result_ref)
+
+    return _respuesta_operacion_atencion(operacion)
 
 
 def consultar_operaciones_atencion(cliente_id, *, ticket_id=None, tipo=None):
@@ -395,7 +452,7 @@ def consultar_operaciones_atencion(cliente_id, *, ticket_id=None, tipo=None):
     atencion._validar_cliente_atencion(cliente_id)
     if ticket_id is not None:
         _validar_referencia_atencion(ticket_id, _ATENCION_TOKEN_RE, "ticket")
-    if tipo not in (None, "envio", "reserva", "pago"):
+    if tipo not in (None, "envio", "reserva", "pago", "wa_demo"):
         raise ValueError("Tipo de operación no válido.")
     try:
         with closing(db._get_db_connection()) as connection, connection:
