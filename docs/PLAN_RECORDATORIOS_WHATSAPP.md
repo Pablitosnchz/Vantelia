@@ -1,23 +1,35 @@
 # Plan: recordatorios de cita por WhatsApp (plantillas de Meta)
 
-**Estado (11-sep-2026, noche):** pasos 1-3 HECHOS (rama
-`claude/recordatorios-whatsapp`): botón de plantilla en el webhook, plantilla con
-envío fuera de ventana y email de respaldo, y alta + consulta de la aprobación
-desde el worker de recordatorios (`wa_plantillas.refrescar_pendientes`; no hace
-falta suscribirse a `message_template_status_update`). Además, las citas de demo
-ya no entran en el reparto de recordatorios ni de llamadas. **Actualización local de Astra, 12-sep:** paso 4 implementado en astra/politicas-portal; 39 pruebas dirigidas verdes, pendiente revisión. **Pendiente:** paso 5 (prueba real). Para las plantillas
-fuera de ventana, el negocio necesita un **método de pago en Meta** (WhatsApp
-Manager → pagos): sin él, Meta rechaza el envío y el aviso sigue por email.
+## Estado vigente — estabilización del 19-sep-2026
 
-Escrito para ejecutarlo tal cual (Claude o Astra): qué existe, qué falta, en qué
-orden y cómo se prueba.
+Las plantillas, consulta de aprobación y envío con registro persistente ya están
+implementados. Este documento conserva el diseño original más abajo como
+histórico, no como lista de tareas sin empezar. Fuentes: backend/wa_plantillas.py,
+booking._send_booking_reminder_by_kind y pruebas de entregas/recordatorios.
+
+- No volver a implementar plantillas ni relanzar las mediciones históricas.
+- F4 (contador de avisos omitidos) corregido en `83e5c56`, rama
+  `astra/estabilidad-19sep`: 48 dirigidos verdes. Falta aceptación del integrado;
+  evidencia en ACEPTACION_ESTABILIZACION_19SEP.md.
+- Prueba real Meta para Alicia: **no acreditada**; último relevo sin conectar su
+  número. Distinguir aceptación del proveedor, entrega y resultado desconocido.
+- El respaldo por email solo es posible con contacto/canal válidos y conforme al
+  control de entrega incierta. No repetir WhatsApp a ciegas. Un aviso sin ningún
+  canal puede cerrarse como omitido y debe quedar auditado, sin contarse enviado.
+- El contador mide avisos con aceptación conocida, incluida una aceptación
+  persistida que se recupera tras una interrupción. No mide llamadas nuevas al
+  transporte ni acredita recepción en el teléfono.
+- Antes de una prueba externa, confirmar entorno/destinatario autorizados,
+  plantilla y capacidad de la cuenta; los tests usan transportes interceptados.
+
+## Diseño original del 11-sep (histórico)
 
 ## Por qué hace falta
 
 - Por WhatsApp solo se puede escribir **texto libre dentro de las 24 h** siguientes
   al último mensaje de la clienta (`inbox.window_open`). Un recordatorio 24 h antes
   de la cita cae casi siempre fuera de esa ventana: hace falta una **plantilla
-  aprobada por Meta**. Hoy no soportamos plantillas.
+  aprobada por Meta**. En el estado inicial del 11-sep aún no se soportaban plantillas.
 - Por eso los avisos de Alicia van por email: el 11-sep se le quitó WhatsApp de
   `message_template_channels` (los dos bloques) y de `reminders.delivery_priority`,
   porque el +31 que la atiende no es su número.
@@ -95,7 +107,7 @@ orden y cómo se prueba.
 - **Reglas que no pueden romperse**:
   - El recordatorio no sale dos veces.
   - No sale por WhatsApp sin plantilla aprobada.
-  - Si no puede salir por WhatsApp, acaba saliendo por email.
+  - Si no puede salir por WhatsApp, se usa email cuando sea entregable y la política de reintento lo permita.
 - **Prueba real**:
   - Primero con el número de demo (+1 803…, WABA de Vantelia): crear la plantilla, esperar la aprobación, mandar un recordatorio al móvil de Pablo y pulsar los dos botones.
   - Después, Alicia con su número.

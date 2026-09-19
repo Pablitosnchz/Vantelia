@@ -1,11 +1,63 @@
 # Estado actual de Vantelia
 
+## En curso — 2026-09-19 17:04 Europe/Madrid
+
+- **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
+- **Tarea:** candidato 19ad09e con revisión independiente OK de Claude y suite completa comunicada: 3025 passed, 1 skipped, 26m32s. Cierre técnico acotado documentado.
+- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; SHA exacto validado 19ad09e, seguimiento posterior solo documental.
+- **Siguiente:** implementar la autoridad persistida de pausa según PAUSA_TEMPORADA_DISENO; conservar 19ad09e como candidato revisado y resolver la evidencia real del cierre global.
+- **Espera a:** ninguna prueba o implementación activa al escribir este relevo; despliegue solo con orden de Pablo. La petición automática quedó atendida por el veredicto de Claude, sin relanzar suite.
+
+- Veredicto recibido a las 17:00:54, contrastado con `E:/vp-rev-19ad09e`:
+  detached en `19ad09ee1bc2f261e99902be20197a9f80448415`, árbol limpio.
+  Suite y sonda de catálogo comunicadas por Claude; no repetidas por Astra.
+  [Acta y límites](ACEPTACION_ESTABILIZACION_19SEP.md).
+- El automático sí inició pytest a las 15:12 (PID 30080 observado entonces).
+  A las 17:02 no quedaban pytest ni revisor activos; no se localizó su resultado.
+  No se cuenta como aprobado ni se afirma que nunca arrancó. La evidencia final
+  es la ejecución independiente de Claude, no una suma de ambas.
+- La nota de Astra `20260919T150424537819-astra-1e7335` enlaza el veredicto y
+  cierra solo la petición pendiente para evitar otra suite cuando vuelva la cuota.
+  No crea una aprobación automática ni autoriza despliegue.
+- Matiz no bloqueante: «mechas pelo largo» y «mechas cabello medio» ofrecen una
+  elección en vez de aplicarla solas. Queda registrado, sin cambiar el candidato.
+- Main avanzó solo en documentación a `9c3e3b8`: Claude registra tres duraciones
+  de packs actualizadas por orden de Pablo (corto 230, medio 350, largo 430).
+  La sonda del veredicto aún cita medio 360: no acredita el catálogo posterior.
+  Identificación de la copia solicitada; las otras diez duraciones siguen pendientes.
+
+- Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
+  `astra/estabilidad-19sep`, base `60993b7`, producto integrado hasta `1caa5af`.
+- F4 corregido (`83e5c56`), 48 dirigidos verdes y revisión independiente OK
+  acotado. F2 y teclado revisados; CRM/reparto OK con 66 dirigidos y 5 casos
+  adicionales. Evidencia en [ACEPTACION_ESTABILIZACION_19SEP.md](ACEPTACION_ESTABILIZACION_19SEP.md).
+- Se compararon dos entregas duplicadas de apuntes, `3c646b0` y `93416aa`, y se
+  integró solo `93416aa` (mismo diseño, igualdad de talla y pruebas reales).
+  Astra cerró repros adicionales de alias/técnica y separadores. La revisión
+  exacta de `f2003ec` encontró después que «corto o medio» perdía una talla:
+  cuatro casos rojos antes; `1caa5af` conserva todas las alternativas sin cambiar
+  el criterio anterior de `talla_de`. Lectura independiente del diff corregido OK.
+  Dirigidos finales: **41 passed**, 131.32s, incluidos shim y recordatorios.
+  `e057f07` corrige otro doble de recordatorios que ocultaba un fallo del contador.
+- Aislamiento ES/EN: 5 pruebas HTTP verdes (45.59s). La interrupción por memoria
+  y los dos errores posteriores de fixture (email/HTTPS) están documentados.
+  No se atribuyen a fallos del producto.
+- La suite local de `f2003ec` fue interrumpida a las 14:56 al invalidarse el
+  candidato por revisión; había alcanzado aproximadamente el 45%, sin resultado
+  completo. Evidencia fuera del repo: `E:/Vantelia-astra-estabilidad-evidencia/`.
+- No lanzar otra implementación ni suite completa de apuntes. Reparto del
+  ejecutor en NORMAS_AGENTE_IA; acta todavía sin nuevos bancos del modelo real.
+- Pausa de temporada: [diseño técnico](PAUSA_TEMPORADA_DISENO.md) integrado en
+  `6a43942`; autoridad persistida y fronteras de canales aún sin implementar.
+  Es trabajo interno pendiente, además de las dependencias externas.
+  D aparcado; sin cambios en producción, push ni despliegue.
+
 **La memoria compartida entre los agentes que trabajan en este repo.** La lee
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el
 otro agente no lo sabe: cada uno tiene su propia memoria y no se ven entre sí.
 
-Última actualización: 13-sep-2026 12:58 Europe/Madrid, Astra (relevo de propuesta
-aceptada; no implica cambios en producción).
+El relevo vigente está en «En curso» al principio. Los apartados fechados de
+sesiones anteriores se conservan como histórico; no acreditan actividad actual.
 
 Los dos agentes no comparten memoria. Lo que uno sabe del otro sale de este
 fichero, de `git log` y del buzón de `scripts/sincronia.py` (peticiones de
@@ -31,7 +83,7 @@ mensajero.
   lo hace en su rama `claude/encargo-…`), y Claude a ella (`--encargar claude
   astra`). Todo llega solo a la sesión del otro.
 
-## En curso
+## Seguimiento histórico — 16-sep-2026
 
 ### Comparación documental — 16-sep-2026 22:08 Europe/Madrid
 

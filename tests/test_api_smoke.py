@@ -1896,6 +1896,7 @@ def test_followup_suppress_2h_if_confirmed(client: TestClient, api_module, monke
 
     async def _rec(row, kind, *a, **k):
         sent.append((row["id"], kind))
+        return {"sent": ["email"], "failed": {}, "skipped": {}}
 
     monkeypatch.setattr("backend.booking._send_booking_reminder_by_kind", _rec)
     now = api_module._utc_now()

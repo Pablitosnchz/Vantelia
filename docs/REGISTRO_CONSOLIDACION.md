@@ -1964,3 +1964,96 @@ a fin en todas.
 - Verificado en el contenedor: ficha, resolutor de duración y suma de los pasos
   coinciden, y la espera sigue quedando libre para otra clienta (110, 155 y 185 min).
 - Pendiente de Alicia: las otras diez duraciones, que dejó para noviembre.
+
+## 2026-09-19 14:19 +02:00 — estabilización independiente de los clientes
+
+- Rama `astra/estabilidad-19sep`, base `60993b7`, integrada hasta `a22eb36`.
+  Plan `155aaf2`: recordatorios, interpretación de apuntes, revisión de CRM y
+  reparto, aislamiento y límites de la pausa de temporada. Sin producción/push.
+- F4 (`83e5c56`): omitidos sin canales dejaban `sent_24h`/`sent_2h` en uno.
+  Repro causal: 2 rojos y 2 positivos verdes antes; tras arreglo, 48 dirigidos
+  verdes (247.57s). Revisión independiente: OK acotado. `sent` mide aceptación
+  conocida, incluida recuperada; no entrega al teléfono ni nuevos transportes.
+- `b417618`: revisión OK acotada con una prueba del manejador de teclado y
+  301 servicios (`eb74dc7`, 1 verde, 4.03s). F2 `0c0838c`: sin nuevo hallazgo
+  concreto, tests de fianza incluidos en los 48; no equivale a cobro real.
+- `73f3302` CRM y `c484131` reparto: revisor independiente, 66 dirigidos y
+  5 casos adicionales verdes. Cobertura integrada en `ff45f3a`.
+- Aislamiento ES/EN (`8671178`, fixture corregida `a22eb36`): 5 casos HTTP
+  verdes (45.59s), dos tenants y sesiones separadas; edición durante la
+  conversación, lectura propia y rechazo de cambios/borrado ajenos.
+- Incidencias de pruebas: se identificó y detuvo solo el pytest propio PID
+  30168 a las 14:05:12 por saturación de memoria, sin resultado. Después se
+  corrigieron dos errores de fixture (email `.invalid` y cookie Secure sobre
+  HTTP); no se modificó producto para que el aislamiento pasara. Pruebas en serie.
+  El doble de envío del smoke devuelve su contrato real en `d9ed572` (1 verde).
+- `PAUSA_TEMPORADA_OPERACION.md`: borrador, no operación ejecutada. No hay pausa
+  conjunta verificada de cuota, silencio y reactivación. No se cambian condiciones.
+- Siguiente: Claude termina apuntes en `claude/encargo-0b86b3` (código/tests
+  modificados, sin SHA entregado aún); revisar, integrar, congelar candidato,
+  una suite completa y revisión exacta. No hay nueva medición con modelo real;
+  acta y límites en `ACEPTACION_ESTABILIZACION_19SEP.md`. D sigue aparcado.
+
+## 2026-09-19 14:37 +02:00 — apuntes integrados y corregidos tras revisión
+
+- Rama `astra/estabilidad-19sep`, código `3936c0f`. Se compararon las dos
+  entregas del mismo encargo (`3c646b0` de la sesión y `93416aa` automático).
+  `7534f81` integra solo la segunda: mismo diseño más igualdad de talla y
+  pruebas del resolvedor real. No se borra ni se integra duplicada la primera.
+  Norma de un ejecutor por encargo añadida a `NORMAS_AGENTE_IA.md`.
+- Revisión de Astra: dos fallos confirmados en API con catálogo sintético y
+  `preferir_packs=false`: «media melena» oculta el rival de 360 min y aplica 75;
+  pedir balayage acaba en 60 min de mechas genéricas. Rojos en base (26.47s) y
+  `93416aa` integrado (30.82s). Arreglo propio: mismos alias de talla al buscar
+  rivales, cobertura completa de lo escrito y retirada del guardia de una palabra.
+- Primera validación: 22 verdes (91.50s). Revisor independiente encontró un
+  nombre exacto con paréntesis que pedía otro toque; paréntesis y guion, 2 rojos
+  (26.39s). Ahora nombres, texto y técnica comparten separación. Dirigidos finales:
+  **29 passed**, 100.17s (apuntes + shim); lectura independiente OK provisional.
+- Sin modificaciones en prompts, selección D o datos de clientes. Siguiente:
+  congelar candidato, una suite completa y revisión manual del SHA exacto por
+  Claude, sin arrancar además otro ejecutor que repita la suite. Modelo real del
+  nuevo candidato no medido; las tablas no convierten pendientes en ceros.
+
+## 2026-09-19 15:10 +02:00 — tallas alternativas y control de recordatorios
+
+- Rama `astra/estabilidad-19sep`, producto `1caa5af`, prueba de control `e057f07`.
+  Claude devolvió CAMBIOS sobre `f2003ec`: una talla alternativa perdida ocultaba
+  el pack largo. Cuatro reproducciones locales rojas (38.57s); ahora se conservan
+  todas las tallas no solapadas con el vocabulario existente. Lectura independiente
+  del diff corregido sin nuevos hallazgos.
+- Control de recordatorios rojo (1 failed y 8 passed, 58.03s) al comprobar que el
+  doble antiguo terminaba contado como fallo. Contrato corregido y aserciones de
+  aceptación. Dirigidos conjuntos finales: **41 passed**, 131.32s.
+- Suite local del candidato rechazado `f2003ec`: 14:39:41 a 14:56:37, detenida
+  solo la ejecución propia PID 35480. Aproximadamente 45%; no resultado completo.
+  Manifest/log en `E:/Vantelia-astra-estabilidad-evidencia/`, estado interrupted_for_review.
+- Diseño de pausa `6a43942`: autoridad persistida por tenant, fronteras de todos
+  los canales y admisión de envíos, operación de cobro separada. Diseño entregado,
+  no implementación. Es trabajo interno aún pendiente; D continúa aparcado.
+- Próximo paso: congelar este candidato y pedir revisión automática, único dueño
+  de la suite completa; ninguna suite local sigue activa. Después resolver su
+  resultado y abordar la autoridad de pausa. Sin nuevos bancos de modelo real,
+  push, despliegue ni cambios en producción.
+
+## 2026-09-19 17:04 +02:00 — candidato 19ad09e revisado OK
+
+- Rama `astra/estabilidad-19sep`. Claude entrega revisión **OK** del rango
+  `60993b7..19ad09e` y suite **3025 passed, 1 skipped, 26m32s**. Fuente original:
+  buzón principal `20260919T150054115013-claude-7f82cc` (17:00:54 Madrid).
+  Astra contrasta copia `E:/vp-rev-19ad09e`: detached en SHA exacto y limpia.
+  Resultado comunicado por Claude, no repetido ni presentado como ejecución propia.
+- Sonda determinista sobre copia del catálogo informada por Claude, resultados
+  en el acta. Sin nuevo banco del modelo real ni entrega real de WhatsApp.
+  «Pelo»/«cabello» producen alguna pregunta extra: matiz no bloqueante conservado.
+- `9c3e3b8` en main registra packs corto 230, medio 350 y largo 430, aplicados
+  por Claude por orden de Pablo a las 16:35. La sonda del veredicto cita medio 360;
+  se pide identificar la copia, sin atribuirle cobertura de esos datos posteriores.
+- El automático sí arrancó a las 15:12, PID 30080 observado; a las 17:02 ya no
+  estaba activo y no se localizó su resultado. No acreditar una suite sin final.
+  La nota `20260919T150424537819-astra-1e7335` enlaza la respuesta de Claude a la
+  petición original y evita repetirla cuando vuelva la cuota; no crea un OK del bot.
+- Acta, plan y estado actualizados solo en documentación tras el SHA revisado.
+  Próximo bloque interno: autoridad persistida de pausa, según diseño `6a43942`.
+  No hay pruebas ni implementación activas al registrar esto. No se declara
+  acabado el plan completo ni se despliega sin orden de Pablo.
