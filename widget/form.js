@@ -1,4 +1,5 @@
 import { agregarMensaje } from "./chat.js";
+import { attentionAllows, attentionRevision, showAttentionError } from "./atencion.js";
 import {
   escapeHtml,
   fetchJson,
@@ -20,6 +21,18 @@ let effectiveLocationId = "";
 let slotsDisponibles = [];
 let slotsRequestSeq = 0;
 let loadedSlotsKey = "";
+let catalogRequestSeq = 0;
+
+function catalogPreparation() {
+  const preparedAt = attentionRevision();
+  const requestId = ++catalogRequestSeq;
+  return () => attentionAllows(preparedAt) && requestId === catalogRequestSeq;
+}
+
+function selectedCenterReady() {
+  const select = document.getElementById("ia-f-centro");
+  return !select || select.value === effectiveLocationId;
+}
 
 function bringFormIntoView(form, behavior = "smooth") {
   const msgs = document.getElementById("ia-w-msgs");
@@ -52,18 +65,22 @@ function resetState() {
   slotsDisponibles = [];
 }
 
-async function cargarCentros() {
+async function cargarCentros(stillCurrent) {
+  if (!stillCurrent()) return false;
   // Solo necesitamos elegir centro si el negocio tiene >1 y el snippet no fija uno.
-  if (WIDGET_CONFIG.locationId) { locations = []; return; }
+  if (WIDGET_CONFIG.locationId) { locations = []; return true; }
   try {
     const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/centros/${WIDGET_CONFIG.clienteId}`);
+    if (!stillCurrent()) return false;
     locations = Array.isArray(data.items) ? data.items : [];
-  } catch (_) {
+  } catch (error) {
+    if (!stillCurrent() || showAttentionError(error)) return false;
     locations = [];
   }
   if (locations.length > 1 && !effectiveLocationId) {
     effectiveLocationId = locations[0].location_id; // por defecto el primero; el cliente puede cambiarlo
   }
+  return true;
 }
 
 const validaciones = {
@@ -146,24 +163,33 @@ function validateField(inputId, validatorName) {
   return true;
 }
 
-async function cargarServicios() {
-  const qs = effectiveLocationId
-    ? `?location_id=${encodeURIComponent(effectiveLocationId)}`
+async function cargarServicios(stillCurrent, locationId) {
+  if (!stillCurrent()) return null;
+  const qs = locationId
+    ? `?location_id=${encodeURIComponent(locationId)}`
     : "";
   const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/servicios/${WIDGET_CONFIG.clienteId}${qs}`);
-  services = Array.isArray(data.servicios) ? data.servicios : [];
-
-  if (!services.length) {
-    services = [{ id: "consulta_general", nombre: "Consulta general" }];
-  }
+  if (!stillCurrent()) return null;
+  const result = Array.isArray(data.servicios) ? data.servicios : [];
+  return result.length ? result : [{ id: "consulta_general", nombre: "Consulta general" }];
 }
 
-async function cargarProfesionales() {
-  const qs = effectiveLocationId
-    ? `?location_id=${encodeURIComponent(effectiveLocationId)}`
+async function cargarProfesionales(stillCurrent, locationId) {
+  if (!stillCurrent()) return null;
+  const qs = locationId
+    ? `?location_id=${encodeURIComponent(locationId)}`
     : "";
   const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}${qs}`);
-  employees = (Array.isArray(data.items) ? data.items : []).filter(e => !e.is_default);
+  if (!stillCurrent()) return null;
+  return (Array.isArray(data.items) ? data.items : []).filter(e => !e.is_default);
+}
+
+async function cargarCatalogo(stillCurrent, locationId) {
+  const preparedServices = await cargarServicios(stillCurrent, locationId);
+  if (!preparedServices) return null;
+  const preparedEmployees = await cargarProfesionales(stillCurrent, locationId);
+  if (!preparedEmployees || !stillCurrent()) return null;
+  return { services: preparedServices, employees: preparedEmployees };
 }
 
 function fillServiceOptions(select) {
@@ -288,6 +314,7 @@ function fillEmployeeOptions(select, wrap) {
 }
 
 function toggleStep(step) {
+  if (!attentionAllows()) return;
   currentStep = step;
   const form = document.getElementById("ia-form-cita");
   if (!form) return;
@@ -309,6 +336,8 @@ function toggleStep(step) {
 }
 
 async function cargarSlots(fecha) {
+  if (!attentionAllows() || !selectedCenterReady()) return;
+  const preparedAt = attentionRevision();
   const container = document.getElementById("ia-time-slots");
   const nextButton = document.getElementById("ia-f-next2");
   if (!container || !nextButton) return;
@@ -335,6 +364,7 @@ async function cargarSlots(fecha) {
     if (effectiveLocationId) params.set("location_id", effectiveLocationId);
     const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/disponibilidad?${params.toString()}`);
     if (
+      !attentionAllows(preparedAt) ||
       requestId !== slotsRequestSeq ||
       requestKey !== _slotsKey(citaData.fecha, citaData.servicio, citaData.employeeId)
     ) {
@@ -345,11 +375,13 @@ async function cargarSlots(fecha) {
     renderSlots();
   } catch (error) {
     if (
+      !attentionAllows(preparedAt) ||
       requestId !== slotsRequestSeq ||
       requestKey !== _slotsKey(citaData.fecha, citaData.servicio, citaData.employeeId)
     ) {
       return;
     }
+    if (showAttentionError(error)) return;
     slotsDisponibles = [];
     container.innerHTML = `<div class="ia-slot-error">${escapeHtml(
       humanizeErrorMessage(error, "No se ha podido cargar la disponibilidad.")
@@ -358,6 +390,7 @@ async function cargarSlots(fecha) {
 }
 
 function renderSlots() {
+  if (!attentionAllows()) return;
   const container = document.getElementById("ia-time-slots");
   const nextButton = document.getElementById("ia-f-next2");
   if (!container || !nextButton) return;
@@ -393,6 +426,7 @@ function renderSlots() {
 
     if (slot.disponible) {
       button.addEventListener("click", () => {
+        if (!attentionAllows()) return;
         grid.querySelectorAll(".ia-time-slot").forEach((item) => item.classList.remove("selected"));
         button.classList.add("selected");
         citaData.hora = slot.hora;
@@ -450,6 +484,8 @@ function fallbackContacto() {
 }
 
 async function confirmarCita() {
+  if (!attentionAllows() || !selectedCenterReady()) return;
+  const preparedAt = attentionRevision();
   const confirmButton = document.getElementById("ia-f-confirm");
   if (!confirmButton) return;
 
@@ -540,12 +576,21 @@ async function confirmarCita() {
     // caracteres) solo estorbaba.
     if (!pendingPayment) agregarMensaje(successText, "bot");
   } catch (error) {
-    confirmButton.disabled = false;
-    confirmButton.textContent = "Confirmar solicitud";
     trackWidgetEvent("booking_submit_error", {
       service: citaData.servicio,
       error_message: error?.message || "unknown",
     });
+    // El POST ya estaba en vuelo: una pausa no lo deshace. Sin respuesta conocida
+    // no lo convertimos en fallo confirmado ni habilitamos un segundo envío.
+    if (showAttentionError(error)) return;
+    if (!attentionAllows(preparedAt)) {
+      confirmButton.textContent = "Consultar solicitud";
+      agregarMensaje(humanizeErrorMessage(error,
+        "No se ha podido comprobar el resultado de esta solicitud.") + fallbackContacto(), "bot");
+      return;
+    }
+    confirmButton.disabled = false;
+    confirmButton.textContent = "Confirmar solicitud";
     const form = document.getElementById("ia-form-cita");
     const message = `${humanizeErrorMessage(
       error,
@@ -569,6 +614,7 @@ async function confirmarCita() {
 }
 
 export async function mostrarFormulario() {
+  if (!attentionAllows()) return;
   if (!WIDGET_CONFIG.bookingEnabled) {
     agregarMensaje("La reserva online no está habilitada para este cliente.", "bot");
     return;
@@ -580,13 +626,17 @@ export async function mostrarFormulario() {
   }
 
   resetState();
+  const stillCurrent = catalogPreparation();
   trackWidgetEvent("booking_form_opened");
 
   try {
-    await cargarCentros();
-    await cargarServicios();
-    await cargarProfesionales();
+    if (!await cargarCentros(stillCurrent)) return;
+    const catalog = await cargarCatalogo(stillCurrent, effectiveLocationId);
+    if (!catalog) return;
+    services = catalog.services;
+    employees = catalog.employees;
   } catch (error) {
+    if (!stillCurrent() || showAttentionError(error)) return;
     trackWidgetEvent("booking_form_error", {
       error_message: error?.message || "unknown",
     });
@@ -597,6 +647,7 @@ export async function mostrarFormulario() {
     return;
   }
 
+  if (!stillCurrent()) return;
   const msgs = document.getElementById("ia-w-msgs");
   if (!msgs) return;
 
@@ -609,7 +660,11 @@ export async function mostrarFormulario() {
     ? `<label class="ia-form-label" for="ia-f-centro">Centro</label>
         <select id="ia-f-centro">${locations
           .map((loc) => `<option value="${escapeHtml(loc.location_id)}"${loc.location_id === effectiveLocationId ? " selected" : ""}>${escapeHtml(loc.name)}</option>`)
-          .join("")}</select>`
+          .join("")}</select>
+        <div id="ia-f-center-recovery" class="hidden">
+          <p>Completa la carga del centro seleccionado antes de continuar.</p>
+          <button id="ia-f-reload-center" class="ia-form-btn secondary" type="button">Cargar centro</button>
+        </div>`
     : "";
   form.innerHTML = `
     <div class="ia-form-header">
@@ -699,19 +754,37 @@ export async function mostrarFormulario() {
 
   // Cambiar de centro recarga profesionales y servicios de ESE centro.
   if (showCenters) {
-    document.getElementById("ia-f-centro")?.addEventListener("change", async (event) => {
-      effectiveLocationId = event.target.value || "";
+    const centerSelect = document.getElementById("ia-f-centro");
+    const recovery = document.getElementById("ia-f-center-recovery");
+    centerSelect.value = effectiveLocationId;
+    const reloadCenter = async () => {
+      if (!attentionAllows()) return;
+      const stillCurrent = catalogPreparation();
+      const selectedLocationId = centerSelect.value || "";
+      recovery.classList.remove("hidden");
+      invalidateSlots();
       try {
-        await cargarServicios();
-        await cargarProfesionales();
-      } catch (_) {}
+        const catalog = await cargarCatalogo(stillCurrent, selectedLocationId);
+        if (!catalog || !stillCurrent()) return;
+        // Centro efectivo y ambos catálogos se aplican juntos. Si la preparación
+        // se corta, conservamos los datos anteriores y la recarga explícita de B.
+        effectiveLocationId = selectedLocationId;
+        services = catalog.services;
+        employees = catalog.employees;
+      } catch (error) {
+        if (stillCurrent()) showAttentionError(error);
+        return;
+      }
       fillEmployeeOptions(employeeSelect, employeeWrap);
       fillServiceOptions(serviceSelect);
       citaData.servicio = serviceSelect && !serviceSelect.disabled
         ? (_selectedServiceName(serviceSelect, serviceSelect.selectedIndex >= 0 ? serviceSelect.selectedIndex : 0) || "")
         : "";
       invalidateSlots();
-    });
+      recovery.classList.add("hidden");
+    };
+    centerSelect.addEventListener("change", reloadCenter);
+    document.getElementById("ia-f-reload-center")?.addEventListener("click", reloadCenter);
   }
 
   const dateInput = document.getElementById("ia-f-fecha");
@@ -728,6 +801,7 @@ export async function mostrarFormulario() {
   });
 
   document.getElementById("ia-f-next0")?.addEventListener("click", () => {
+    if (!attentionAllows()) return;
     const isValid =
       validateField("ia-f-nombre", "nombre") &&
       validateReminderContact("ia-f-email", "ia-f-tel");
@@ -741,6 +815,7 @@ export async function mostrarFormulario() {
   });
 
   document.getElementById("ia-f-next1")?.addEventListener("click", async () => {
+    if (!attentionAllows() || !selectedCenterReady()) return;
     const previousSlotsKey = loadedSlotsKey;
     if (employees.length > 1) {
       const selectedEmployee = employees.find((employee) => employee.employee_id === employeeSelect?.value);
@@ -776,6 +851,7 @@ export async function mostrarFormulario() {
   });
 
   employeeSelect?.addEventListener("change", () => {
+    if (!attentionAllows() || !selectedCenterReady()) return;
     const selectedEmployee = employees.find((employee) => employee.employee_id === employeeSelect.value);
     citaData.employeeId = selectedEmployee?.employee_id || "";
     citaData.employeeName = selectedEmployee?.name || "Aleatorio";
@@ -789,6 +865,7 @@ export async function mostrarFormulario() {
   });
 
   dateInput?.addEventListener("change", async (event) => {
+    if (!attentionAllows()) return;
     const fecha = event.target.value;
     const error = validaciones.fecha(fecha);
     if (error) {
@@ -803,6 +880,7 @@ export async function mostrarFormulario() {
   });
 
   serviceSelect?.addEventListener("change", () => {
+    if (!attentionAllows() || !selectedCenterReady()) return;
     const nextService = _selectedServiceName(serviceSelect);
     if (nextService !== citaData.servicio) {
       citaData.servicio = nextService;
@@ -811,6 +889,7 @@ export async function mostrarFormulario() {
   });
 
   document.getElementById("ia-f-next2")?.addEventListener("click", () => {
+    if (!attentionAllows()) return;
     const error = validaciones.hora(citaData.hora);
     if (error) {
       agregarMensaje(error, "bot");
