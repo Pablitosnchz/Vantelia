@@ -1104,16 +1104,21 @@ def _ensure_chat_session_record(
     *,
     origin_override: str = "",
     user_agent_override: str = "",
+    validar_propietario: bool = False,
 ) -> None:
     now_iso = timeutils._utc_now_iso()
     origin = origin_override or textnorm._request_origin(request)
     user_agent = user_agent_override or textnorm._sanitize_text(request.headers.get("user-agent", ""), allow_multiline=False)[:500]
     with db._get_db_connection() as connection:
+        if validar_propietario:
+            connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT id FROM chat_sessions WHERE id = ?",
+            "SELECT id,cliente_id FROM chat_sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
         if row:
+            if validar_propietario and row["cliente_id"] != cliente_id:
+                raise HTTPException(status_code=403, detail="La sesión no está disponible para este asistente.")
             return
         connection.execute(
             """
@@ -1134,6 +1139,7 @@ def _record_chat_message(
     role: str,
     content: str,
     intent: str = "",
+    validar_propietario: bool = False,
 ) -> None:
     cleaned_content = textnorm._sanitize_text(content, allow_multiline=True)
     if not cleaned_content:
@@ -1141,10 +1147,14 @@ def _record_chat_message(
     now_iso = timeutils._utc_now_iso()
     normalized_intent = str(intent or "").strip()
     with db._get_db_connection() as connection:
+        if validar_propietario:
+            connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT intents_json FROM chat_sessions WHERE id = ?",
+            "SELECT cliente_id,intents_json FROM chat_sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
+        if validar_propietario and (row is None or row["cliente_id"] != cliente_id):
+            raise HTTPException(status_code=403, detail="La sesión no está disponible para este asistente.")
         intents = textnorm._safe_json_list(row["intents_json"] if row else "[]")
         if normalized_intent and normalized_intent not in intents:
             intents.append(normalized_intent)
@@ -1375,6 +1385,17 @@ def _get_or_create_session(session_id: str, cliente_id: str) -> appstate.Session
     with appstate.state_lock:
         appstate.sesiones[session_id] = session
     return session
+
+
+def _crear_motor_chat_aislado(cliente_id, historial):
+    """Motor efímero HTTP: solo parte de mensajes persistidos, nunca de borradores."""
+    from llama_index.core.llms import ChatMessage
+
+    config = clients._get_client_config(cliente_id)
+    indice = cargar_indice(cliente_id)
+    return indice.as_chat_engine(chat_mode="condense_plus_context", similarity_top_k=8,
+        system_prompt=_build_system_prompt(cliente_id, config),
+        chat_history=[ChatMessage(role=role, content=content) for role, content in historial])
 
 
 def _qa_row_to_public(row: sqlite3.Row) -> AppQAItem:

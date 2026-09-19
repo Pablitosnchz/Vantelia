@@ -869,31 +869,42 @@ async def _process_chat_message(
     trusted_phone: str = "",
     on_user_message_persisted: Optional[Callable[[str], None]] = None,
     contexto_flujo: str = "",
+    user_message_persisted: bool = False,
+    on_assistant_message_prepared=None,
+    rag_engine_factory=None,
 ) -> RespuestaChat:
     commercial_intent = _detect_commercial_intent(message)
-    rag._ensure_chat_session_record(
-        session_id,
-        cliente_id,
-        request,
-        origin_override=origin_override,
-        user_agent_override=user_agent_override,
-    )
-    rag._record_chat_message(
-        session_id=session_id,
-        cliente_id=cliente_id,
-        role="user",
-        content=message,
-        intent=commercial_intent,
-    )
-    if on_user_message_persisted is not None:
-        try:
-            on_user_message_persisted(session_id)
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.debug(
-                "Callback posterior a persistencia de chat fallo para %s: %s",
-                cliente_id,
-                exc,
-            )
+    if not user_message_persisted:
+        rag._ensure_chat_session_record(
+            session_id,
+            cliente_id,
+            request,
+            origin_override=origin_override,
+            user_agent_override=user_agent_override,
+        )
+        rag._record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="user",
+            content=message,
+            intent=commercial_intent,
+        )
+        if on_user_message_persisted is not None:
+            try:
+                on_user_message_persisted(session_id)
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.debug(
+                    "Callback posterior a persistencia de chat fallo para %s: %s",
+                    cliente_id,
+                    exc,
+                )
+
+    def registrar_asistente_http_o_canal(**datos):
+        if on_assistant_message_prepared is None:
+            rag._record_chat_message(**datos)
+        else:
+            on_assistant_message_prepared(**datos)
+
     client_config = clients._get_client_config(cliente_id)
     booking_enabled = bool(client_config["booking"]["enabled"]) and clients._client_booking_plan_enabled(cliente_id)
     # Identidad de Apariencia: "empresa" = negocio (el menu se presenta en su nombre);
@@ -928,7 +939,7 @@ async def _process_chat_message(
                 else []
             ),
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -950,7 +961,7 @@ async def _process_chat_message(
             session_id=session_id,
             intent="keyword_rule",
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -978,7 +989,7 @@ async def _process_chat_message(
                     cliente_id, client_config, hay_vuelta=False))
             else:
                 inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id, cliente_id=cliente_id, role="assistant",
             content=decision["texto"], intent=decision["intent"],
         )
@@ -994,7 +1005,7 @@ async def _process_chat_message(
     # que interpretar. Va aqui, despues de las Q&A y las reglas del negocio, para
     # que su configuracion siga mandando.
     if _es_solo_agradecimiento(message):
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id, cliente_id=cliente_id, role="assistant",
             content=TEXTO_SOLO_GRACIAS, intent="agradecimiento",
         )
@@ -1010,7 +1021,7 @@ async def _process_chat_message(
         texto_disp = textnorm._normalize_chat_response_text(
             await rag._build_chat_availability_answer(cliente_id, message, client_config)
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id, cliente_id=cliente_id, role="assistant",
             content=texto_disp, intent="availability",
         )
@@ -1024,7 +1035,7 @@ async def _process_chat_message(
         texto_form = textnorm._normalize_chat_response_text(
             client_config.get("booking", {}).get("form_intro") or BOOKING_START_TEXT
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id, cliente_id=cliente_id, role="assistant",
             content=texto_form, intent="booking_form",
         )
@@ -1043,7 +1054,7 @@ async def _process_chat_message(
             session_id=session_id,
             intent="availability",
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1061,7 +1072,7 @@ async def _process_chat_message(
             mostrar_formulario=True,
             session_id=session_id,
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1078,7 +1089,7 @@ async def _process_chat_message(
             session_id=session_id,
             intent="faq",
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1100,7 +1111,7 @@ async def _process_chat_message(
             session_id=session_id,
             intent="gift_card",
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1126,7 +1137,7 @@ async def _process_chat_message(
             session_id=session_id,
             intent=payment_intent,
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1151,7 +1162,7 @@ async def _process_chat_message(
             session_id=session_id,
             intent=management_intent,
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1166,7 +1177,7 @@ async def _process_chat_message(
             mostrar_formulario=True,
             session_id=session_id,
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1186,7 +1197,7 @@ async def _process_chat_message(
             mostrar_formulario=booking_enabled,
             session_id=session_id,
         )
-        rag._record_chat_message(
+        registrar_asistente_http_o_canal(
             session_id=session_id,
             cliente_id=cliente_id,
             role="assistant",
@@ -1243,7 +1254,8 @@ async def _process_chat_message(
                 f"{joined}\n\n{_build_intent_enhanced_message(message, commercial_intent)}"
             )
 
-    response = session.engine.chat(enhanced_message)
+    engine = rag_engine_factory() if rag_engine_factory is not None else session.engine
+    response = engine.chat(enhanced_message)
     raw_text = response.response.strip()
     mostrar_formulario = settings.BOOKING_SENTINEL in raw_text
     if policy_info:
@@ -1278,7 +1290,7 @@ async def _process_chat_message(
         mostrar_formulario=mostrar_formulario and booking_enabled,
         session_id=session_id,
     )
-    rag._record_chat_message(
+    registrar_asistente_http_o_canal(
         session_id=session_id,
         cliente_id=cliente_id,
         role="assistant",

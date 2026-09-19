@@ -280,6 +280,14 @@ def test_ganadora_termina_y_conserva_evidencia_tras_pausa_o_fallo_auxiliar(
         if fallo_auxiliar:
             with pytest.raises(RuntimeError, match="fallo auxiliar"):
                 asyncio.run(ejecutar())
+        elif accion in ("cancelar", "mover"):
+            # Fase 2c: el ganador termina, pero su aviso requiere un permiso
+            # independiente. El control terminal de ese aviso llega al adaptador.
+            with pytest.raises(atencion_contexto.AtencionDetenida) as aviso:
+                asyncio.run(ejecutar())
+            assert aviso.value.estado == "suprimido"
+            assert aviso.value.operacion_conocida == {
+                "tipo": "reserva", "estado": "aceptado", "result_ref": fila["id"]}
         else:
             asyncio.run(ejecutar())
         diario = a.op.consultar_operaciones_atencion("demo")[0]

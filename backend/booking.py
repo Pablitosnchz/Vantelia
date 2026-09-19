@@ -58,7 +58,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, atencion_contexto, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
+from backend import agenda, appstate, atencion_contexto, atencion_salidas, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -3347,6 +3347,9 @@ async def _update_booking_details(
         if not solo_cambia_la_duracion:
             try:
                 await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
+            except atencion_contexto.AtencionDetenida as exc:
+                atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "reserva", refreshed["id"])
+                raise
             except Exception as exc:  # noqa: BLE001
                 settings.logger.error("No se ha podido enviar el aviso de actualizacion %s: %s", refreshed["id"], exc)
 
@@ -3823,6 +3826,9 @@ async def _create_booking_core(
                 await _send_booking_reminder_by_kind(
                     stored, aviso, request, sent_column="confirmation_email_sent_at",
                 )
+            except atencion_contexto.AtencionDetenida as exc:
+                atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "reserva", stored["id"])
+                raise
             except Exception as exc:  # noqa: BLE001
                 settings.logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)
                 _mark_booking_email_result(booking_id, status="failed", error=str(exc))
@@ -3895,6 +3901,9 @@ async def _cancel_booking_core(
         )
         try:
             await _send_booking_reminder_by_kind(refreshed, "cancelled", request)
+        except atencion_contexto.AtencionDetenida as exc:
+            atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "reserva", refreshed["id"])
+            raise
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("No se pudo enviar aviso de cancelación %s: %s", booking_id, exc)
         return refreshed
@@ -4403,6 +4412,7 @@ async def _send_booking_email_by_kind(
     sent_column: str = "",
     respect_enabled: bool = True,
 ) -> None:
+    atencion_salidas.comprobar_salida_atencion(booking_row["cliente_id"])
     if kind == "confirmed" and booking_row["status"] == "pending_payment":
         _record_booking_audit(
             booking_row["id"],
@@ -4461,6 +4471,7 @@ async def _send_booking_reminder_by_kind(
     entrega por ningún canal y ``raise_on_failure`` es True (comportamiento historico
     de los flujos automaticos) se lanza ``RuntimeError``; con False se devuelve el
     resultado con los errores en ``failed`` para que el caller los muestre."""
+    atencion_salidas.comprobar_salida_atencion(booking_row["cliente_id"])
     from backend import notice_deliveries
 
     generation = None
@@ -4557,6 +4568,8 @@ async def _send_booking_reminder_by_kind(
             try:
                 _send_booking_email(booking_row, kind, request)
                 sent_channels.append("email")
+            except atencion_contexto.AtencionDetenida:
+                raise
             except Exception as exc:  # noqa: BLE001
                 failed_channels["email"] = str(exc)
             return
@@ -4583,6 +4596,8 @@ async def _send_booking_reminder_by_kind(
                     skipped_channels["whatsapp"] = getattr(resultado, "motivo", "No emitido")
                 else:
                     failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta teléfono válido."
+            except atencion_contexto.AtencionDetenida:
+                raise
             except Exception as exc:  # noqa: BLE001
                 failed_channels["whatsapp"] = str(exc)
                 resultado = getattr(exc, "resultado", None)
@@ -4603,6 +4618,8 @@ async def _send_booking_reminder_by_kind(
                     sent_channels.append("sms")
                 else:
                     failed_channels["sms"] = "No se pudo entregar SMS o falta teléfono válido."
+            except atencion_contexto.AtencionDetenida:
+                raise
             except Exception as exc:  # noqa: BLE001
                 failed_channels["sms"] = str(exc)
 
@@ -4612,7 +4629,11 @@ async def _send_booking_reminder_by_kind(
             await _send_unclaimed_channel(channel_name)
             return
         identidad = (booking_row["cliente_id"], booking_row["id"], generation, kind, channel_name)
-        claim = notice_deliveries.claim_notice_delivery(*identidad, single_delivery=prefer_single_delivery)
+        automatica = atencion_contexto.contexto_atencion_actual() is not None
+        claim = notice_deliveries.claim_notice_delivery(*identidad, single_delivery=prefer_single_delivery,
+            **({"atencion_automatica": True} if automatica else {}))
+        if automatica and claim.get("motivo") == "atencion_suprimida":
+            raise atencion_contexto.AtencionDetenida("aviso_suprimido")
         if claim["estado"] == "aceptado":
             sent_channels.append(claim["canal"])
             return
@@ -4633,8 +4654,24 @@ async def _send_booking_reminder_by_kind(
             notice_blocked = True
             failed_channels[channel_name] = "La cita cambio antes del envio"
             return
-        await _send_unclaimed_channel(channel_name, lambda: notice_deliveries.notice_claim_still_owned(
-            *identidad, claim["owner_token"]))
+        try:
+            await _send_unclaimed_channel(channel_name, lambda: notice_deliveries.notice_claim_still_owned(
+                *identidad, claim["owner_token"]))
+        except atencion_contexto.AtencionDetenida as exc:
+            resultado_parcial = getattr(exc, "resultado", None)
+            if isinstance(exc, atencion_salidas.SalidaAtencionNoEmitida):
+                estado_atencion, motivo_atencion = "omitido", "atencion_suprimida"
+            else:
+                estado_atencion = exc.estado if exc.estado in ("aceptado", "rechazado", "desconocido") else "desconocido"
+                motivo_atencion = "aceptacion_parcial" if resultado_parcial is not None else "resultado_atencion"
+            try:
+                notice_deliveries.finish_notice_delivery(*identidad, claim["owner_token"], estado_atencion,
+                    reason=motivo_atencion,
+                    provider_message_id=getattr(resultado_parcial, "provider_message_id", ""),
+                    provider_message_ids=getattr(resultado_parcial, "message_ids", ()))
+            except Exception:
+                settings.logger.error("atencion_aviso_resultado_no_persistido")
+            raise
         if channel_name in perdidos:
             # Sin turno no se escribe el resultado (el CAS fallaría) ni se sigue: el
             # ejecutor que lo retiró es quien atiende el aviso.

@@ -269,6 +269,11 @@ async def dynamic_cors_middleware(request: Request, call_next: Any) -> Response:
     return response
 
 
+from backend import atencion_chat
+
+# Último middleware añadido = exterior a los adaptadores HTTP que hacen buffering.
+app.add_middleware(atencion_chat.AtencionChatASGI)
+
 security._ensure_default_portal_admin()
 
 
