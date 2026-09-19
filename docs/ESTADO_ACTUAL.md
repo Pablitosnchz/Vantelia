@@ -1,12 +1,20 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 18:39 Europe/Madrid
+## En curso — 2026-09-19 19:33 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** estabilización desplegada por Claude por orden de Pablo como 0cb61de; humo comunicado 5/5. Código idéntico al revisado 19ad09e (3025 passed, 1 skipped).
-- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; integrada en main 0cb61de, copia avanzada a ef8f2b4; este seguimiento solo cambia documentación.
-- **Siguiente:** implementar la autoridad persistida de pausa según PAUSA_TEMPORADA_DISENO y resolver la evidencia comparable del cierre global. No repetir esta suite ni este despliegue.
-- **Espera a:** ninguna prueba o implementación activa al escribir este relevo; siguiente bloque interno pendiente. No queda pendiente permiso para el despliegue ya ejecutado.
+- **Tarea:** ejecutar el cierre autorizado por Pablo; fase 1 de autoridad persistida de pausa en implementación, auditoría de fronteras y contrato de medición en paralelo.
+- **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
+- **Siguiente:** verificar la autoridad con pruebas dirigidas y revisión independiente; después conectar admisión por versión y canales. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
+- **Espera a:** entregas de los agentes propios; Claude informado para no duplicar. No hay suite completa ni banco del modelo activo en este arranque.
+
+- El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
+  3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.
+- Primera entrega nueva: backend/atencion.py + migración + tests de aislamiento,
+  CAS, reinicio y errores; todavía sin interruptor público ni canales conectados.
+- [Plan de cierre](CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md): una autoridad de atención
+  por tenant; preservar configuración/cuenta/acceso humano; cobro separado.
+  D aparcado y sin nuevas operaciones de producción/push/despliegue.
 
 - Claude registra el despliegue en `ef8f2b4`. Astra comprobó localmente que
   `5037515` está integrado y que `19ad09e..0cb61de` solo cambia documentación;
