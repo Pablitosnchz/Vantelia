@@ -183,6 +183,55 @@ de terminación con nuestro recorrido. No atribuir a Realtime los eventos de cie
 de otra API. Las sesiones antiguas cuyo ID no conocemos siguen siendo un límite
 explícito, no una pausa verificada. Esta integración de voz sigue pendiente.
 
+## Recepción durable de WhatsApp: siguiente corte, todavía sin conectar
+
+Reutilizar `whatsapp_inbound_messages`. Su marca actual trunca el ID a 160
+caracteres, no conserva fecha Meta ni contenido, y no acredita procesamiento
+terminado. Las filas existentes siguen siendo marcas legacy, sin completar sus
+datos con `now` o con el tenant resuelto hoy.
+
+- Captura nueva: versión, clave SHA256 de hub e ID completos, ID original,
+  huella y contenido canónico del mensaje individual, fecha Meta validada,
+  resolución inicial inmutable y ticket. Primera recepción y fecha del evento
+  son datos diferentes. El diario de operaciones no guarda contenido ni teléfonos.
+- Firma sobre bytes originales primero. Buscar un replay antes de resolver el
+  tenant actual; repetir la comprobación bajo `BEGIN IMMEDIATE`. Crear captura y
+  ticket con la autoridad común en un único commit, sin binding, CRM, audio,
+  Flow o modelo. El tenant original permite consultar el resultado conocido de WA1.
+- Misma identidad con contenido distinto es conflicto. Marca legacy coincidente
+  es una barrera conservadora, nunca permiso para reprocesar. Sin ID/hub válidos
+  no inventar identidad. Fecha ausente, inválida o futura no autoriza automatizar;
+  conservar el contenido identificable para tratamiento humano.
+- Captura y reclamación del worker son contratos distintos. Un mensaje marcado
+  antes de una caída no acredita que se haya atendido, ni autoriza repetir efectos.
+  La vigencia técnica se fija una vez por política explícita del adaptador;
+  no se deduce de las 24 horas de respuesta libre ni se renueva en cada entrega.
+- Proyectar al inbox de forma idempotente y con la fecha Meta: si la proyección
+  usa recepción local, falsearía la ventana de respuesta. Guardar payload por sí
+  solo no acredita visibilidad en el panel. Estados/plantillas/ecos del lote siguen
+  independientes de que una entrada conversacional resulte suprimida.
+
+Diseño revisado; migración y adaptador aún no implementados. Al conectar, sustituir
+el marcador anterior, no ejecutar dos mecanismos de captura en paralelo.
+
+## Identidad de avisos antes de WhatsApp o voz multiherramientas
+
+El agente permite cancelar A y crear B en un turno. Con contexto de atención, dos
+emails distintos colisionarían hoy en `smtp_cliente/fragmento 0`. El recorrido
+HTTP actual termina tras una gestión y no alcanza esa combinación; WhatsApp y voz
+todavía no instalan el contexto. Corregir antes de conectar esos capturadores.
+
+Usar identidad del aviso persistido (cita + generación + tipo; pago + tipo) en el
+diario común. Dos avisos distintos pueden compartir canal y número de fragmento;
+el mismo aviso conserva su identidad entre tickets. Mantener huella de bytes y
+MIME estable, y revalidar cada emisión física. El ámbito interno solo transporta
+identidad, sin permiso ni owner de otra operación. Conservar las decisiones del
+registro de entregas y su respaldo tras incertidumbre; no improvisar contadores
+ni confundir la admisión de la reserva con autorización de todos sus avisos.
+
+Este corte se prepara en rama aparte mientras corre la suite del candidato HTTP.
+No está integrado ni probado todavía.
+
 ## Primera entrega pequeña y cierre posterior
 
 Primer commit completado: migración, autoridad persistida y transición por versión;

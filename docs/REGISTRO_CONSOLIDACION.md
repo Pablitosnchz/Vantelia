@@ -2299,3 +2299,22 @@ a fin en todas.
   activas. R0 prepara fecha de nacimiento de generación y selector temporal
   compartido, sin conectar el worker ni atención. No habrá otro pytest mientras
   la suite posea el turno. Tampoco hay medición con modelo ni operaciones reales.
+
+## 2026-09-19 22:47 +02:00 — recepción y avisos delimitados antes de conectar WhatsApp
+
+- Coordinación `astra/cierre-estable-19sep`, base documental `317513a`, código del
+  candidato de suite `dff4b72` intacto. WA1 revisado estáticamente, sin hallazgo
+  concreto; su nueva prueba de hijo Python y combinación con fixture corregido
+  siguen pendientes. R0 también conserva sus archivos sin ejecutar pruebas.
+- Diseño WA2a contrastado con el marcador real: reutilizar tabla de entradas,
+  distinguir legacy, fijar tenant/fecha/identidad originales y crear ticket/captura
+  en una transacción común. Proyección al inbox también conserva fecha Meta.
+  Sin capturador conectado ni afirmación de procesamiento/entrega tras una caída.
+- Encargada en rama independiente la identidad de avisos: cancelar A y confirmar
+  B en un turno no deben colisionar como un único email. Es una puerta previa a
+  WA/voz multiherramientas, no un fallo alcanzable en el HTTP actual. Sin pruebas
+  concurrentes con la suite. Contrato guardado en PAUSA_TEMPORADA_DISENO.
+- Detectado y documentado el límite del banco existente: entra directamente al
+  manejador de mensajes; no valida webhook completo ni el middleware de /chat.
+  Se prepara diseño de adaptadores reutilizando el instrumento e interceptores.
+  No se ha iniciado campaña con modelo ni se han atribuido resultados nuevos.
