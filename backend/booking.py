@@ -5762,13 +5762,15 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
         try:
             if not row["reminder_24h_sent_at"] and _reminder_due_or_pending(
                     row, now_utc, "reminder_24h", settings.REMINDER_24H_HOURS):
-                await _send_booking_reminder_by_kind(
+                resultado = await _send_booking_reminder_by_kind(
                     row,
                     "reminder_24h",
                     request,
                     sent_column="reminder_24h_sent_at",
                 )
-                sent_24h += 1
+                # Un aviso omitido se cierra para no repetirlo, pero no es un envío.
+                if resultado["sent"]:
+                    sent_24h += 1
             elif not row["reminder_2h_sent_at"] and _reminder_due_or_pending(
                     row, now_utc, "reminder_2h", settings.REMINDER_2H_HOURS):
                 # Escalera: no molestar con el 2h a quien ya confirmo (opt-in).
@@ -5781,13 +5783,14 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
                         {"kind": "reminder_2h", "reason": "already_confirmed"},
                     )
                 else:
-                    await _send_booking_reminder_by_kind(
+                    resultado = await _send_booking_reminder_by_kind(
                         row,
                         "reminder_2h",
                         request,
                         sent_column="reminder_2h_sent_at",
                     )
-                    sent_2h += 1
+                    if resultado["sent"]:
+                        sent_2h += 1
 
             # Llamada IA como ULTIMO escalon (T-call_hours_before), independiente de los
             # recordatorios y SOLO si el cliente sigue sin confirmar. Opt-in + Business.
