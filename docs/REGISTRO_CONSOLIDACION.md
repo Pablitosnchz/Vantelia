@@ -1952,3 +1952,15 @@ a fin en todas.
   espacio colado («SEP A») que dejaban la casilla sin efecto.
 - Desplegado como 19b64ff: suite 2994 passed (1 skipped), humo 5/5; comprobado en
   vivo que Cap Rocat ve 3 situaciones y Alicia las 6.
+
+## 2026-09-19 16:35 +02:00 — las tres duraciones de packs que confirmó Alicia
+
+- Aplicado en su catálogo, por orden de Pablo y con copia previa
+  (`/srv/vantelia-backups/pre-packs-alicia-20260919-143114.db`): espera de 20 min
+  después del elumen y Flash Repair 15+15, como dijo ella el 17-sep.
+  Pack mechas o balayage corto 195 → 230, medio 360 → 350, largo 440 → 430.
+- Antes de tocar nada se comprobó que la ficha y los pasos seguían como cuando se
+  preparó el parche (18-sep) y que no había ninguna cita viva con esos packs.
+- Verificado en el contenedor: ficha, resolutor de duración y suma de los pasos
+  coinciden, y la espera sigue quedando libre para otra clienta (110, 155 y 185 min).
+- Pendiente de Alicia: las otras diez duraciones, que dejó para noviembre.
