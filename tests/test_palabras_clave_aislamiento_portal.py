@@ -37,10 +37,12 @@ def negocios(api_module):
          "The hotel spa opens from nine to six."),
     ):
         cid = tipo + "_prueba"
-        email = tipo + "-" + uuid.uuid4().hex[:10] + "@example.invalid"
+        # EmailStr rechaza .invalid incluso con los transportes interceptados.
+        email = tipo + "-" + uuid.uuid4().hex[:10] + "@example.com"
         api_module._create_user(email=email, password="prueba-aislamiento-123",
                                 role="client", display_name=tipo, cliente_id=cid)
-        portal = TestClient(api_module.app)
+        # La cookie del portal es Secure; reproducimos el acceso HTTPS real.
+        portal = TestClient(api_module.app, base_url="https://testserver")
         login = portal.post("/auth/login", json={
             "email": email, "password": "prueba-aislamiento-123"})
         assert login.status_code == 200, login.text
