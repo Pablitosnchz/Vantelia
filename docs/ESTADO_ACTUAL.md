@@ -1,12 +1,23 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 23:08 Europe/Madrid
+## En curso — 2026-09-19 23:31 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** suite única de `dff4b72` terminada: 3267 passed, 1 skipped y 2 failed, 2317.92s. Copia limpia antes/después. Corregir prueba de conversión anclada al callback antiguo y retirar wrapper sin consumidores. No verde global. WhatsApp sigue sin capturador conectado.
+- **Tarea:** los dos hallazgos de la suite `dff4b72` corregidos en `2ec42a5` (45 dirigidos); widget asíncrono `00d628a` revisado e integrado (16 Node y repro Chrome); WA1 `fd833b4` integrado (172 dirigidos). Candidato de coordinación `f4ffd2c`, todavía sin verde global ni capturador WhatsApp conectado.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** corregir esos dos hallazgos y dirigidos, sin relanzar completa todavía. Después WA1 preparado en E:/Vantelia-astra-wa1-integracion-19sep, R0 y avisos con identidad. Widget resuelve el repro original en Chrome; revisión pidió comprobar recuperación A→B de centro, aún sin commit. Antes de WA/voz falta también identidad de mutación por objetivo autorizado.
-- **Espera a:** pausa_autoridad_impl tiene el turno exclusivo para corregir y probar los dos fallos; la suite/PID31832 ya terminó, sesión38194 cerrada. Log/meta y acta SUITE_CANDIDATO_DFF4B72.md externos preservados. Claude confirma en c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
+- **Siguiente:** revisar acta final R0 (44 dirigidos aprobados y 16 fallos causales) e integrarlo; validar avisos con identidad sobre la base combinada. WA2a se implementa aparte: captura durable y ticket atómicos, sin conexión viva todavía. No relanzar completa hasta estabilizar el siguiente candidato.
+- **Espera a:** revision_pausa_tenants_19sep tiene el turno exclusivo de pytest para avisos; pausa_fronteras_revision prepara acta R0, sin procesos de pruebas; pausa_autoridad_impl implementa WA2a sin pytest. La suite anterior terminó y no se repite. Claude confirma en c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
+
+- La suite única de `dff4b72` conserva su resultado: 3267 passed, 1 skipped y
+  2 failed; las correcciones posteriores no lo convierten en una suite verde.
+  Actas externas CIERRE_FALLOS_SUITE_DFF4B72.md, WIDGET_ASYNC_ATENCION.md y
+  WA1_INTEGRACION.md, con logs y hashes cotejados. Chrome acredita la recuperación
+  del formulario local interceptado; WA1 acredita la aplicación demo transaccional
+  y relectura en otro intérprete, no una entrega real ni el webhook completo.
+- No ampliar a ciegas la clave de mutación por ID de cita: el recorrido libre
+  todavía no acredita por separado todos los objetivos autorizados. Permitir A+B
+  requiere aceptación persistida de cada objetivo; una tool adicional del modelo
+  no es autorización. Los avisos distintos sí tienen identidad propia sin permiso.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
   3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.

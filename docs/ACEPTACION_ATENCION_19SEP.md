@@ -4,7 +4,7 @@ Seguimiento del candidato `astra/cierre-estable-19sep`, desde `e43baca`.
 El código desplegado comunicado sigue siendo `0cb61de`; esta rama no se ha
 publicado ni desplegado. La suite anterior de 3025 aprobados/1 omitido y humo
 5/5 acredita aquel producto, no este bloque. Última actualización: 19-sep,
-23:08 Europe/Madrid.
+23:31 Europe/Madrid.
 
 ## Entregas comprobadas
 
@@ -48,11 +48,15 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   rutas/usos. Dos fallos causales al reintroducir la escritura, 36 dirigidos
   aprobados/24.75s y dos hashes cotejados. No conecta atención: requiere todavía
   aplicador atómico ligado al tenant y ticket, con deduplicación del evento.
-- WA1 permanece fuera de este candidato. Antes de conectar WA/voz al contexto
-  debe resolverse la identidad de avisos múltiples: el agente permite cancelar
-  y crear en un turno, con dos emails legítimos; ticket/canal/fragmento 0 no los
-  distingue. No es un fallo alcanzable del /chat capturado actual, que retorna
-  tras una gestión/pago y no usa ese bucle multiherramientas.
+- WA1 `fd833b4` integrado en `f4ffd2c`: 172 dirigidos/161.86s, incluidos tres
+  replays en intérprete nuevo. Sin capturador vivo ni atribución de efecto a un
+  replay conocido. Los avisos múltiples siguen en validación separada.
+- Widget `00d628a`: 16 pruebas Node y build; repro causal original de Chrome
+  pasa sin cambiar el script. Cubre pausa durante la carga y recuperación del
+  centro B sin reutilizar catálogo A. Entorno local interceptado, sin proveedor.
+- `2ec42a5` corrige ambos hallazgos de la suite: persistencia real antes de
+  interacción comercial y eliminación de wrapper sin consumidores. 45 dirigidos;
+  mutaciones de orden/omisión rojas y restauración comprobada.
 
 ## Puertas que faltan
 
@@ -63,8 +67,8 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
    3267 passed, 1 skipped y 2 failed, 2317.92s. Árbol y SHA iguales antes/después.
    Fallan el doble antiguo de persistencia en demo_conversion y el vigilante de
    código sin consumidores por un wrapper ya sustituido. Se corrigen con dirigidos;
-   no hay aceptación global ni repetición de completa por cada pieza. WA1/R0 y
-   arreglo widget permanecen fuera. Log/metadata/acta en la carpeta de evidencia.
+   no hay aceptación global ni repetición de completa por cada pieza. WA1 y
+   widget se integraron después; R0/avisos aún no. Log/metadata/acta preservados.
 4. Medir referencia y candidato con el mismo instrumento, calendario, catálogo,
    configuración y modelo para Alicia y un segundo negocio. No existe todavía
    un artefacto saneado actual autorizado: Claude lo confirmó; Astra no leyó ni

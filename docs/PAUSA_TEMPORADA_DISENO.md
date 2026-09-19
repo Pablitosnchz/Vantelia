@@ -234,6 +234,21 @@ No está integrado ni probado todavía.
 
 ## Primera entrega pequeña y cierre posterior
 
+Límite confirmado por lectura del recorrido libre: su guardia de cancelación
+comprueba la intención general, no una aceptación persistida por cita. «Cancela A»
+y dos tools para A/B no acreditan que B esté autorizado. Cambiar la clave de
+mutación a acción + booking_id permitiría esa ampliación; no se hará para resolver
+una colisión. El recorrido guiado sí dispone de identidad de propuesta aceptada,
+pero el libre no la transmite al núcleo. Antes de admitir varias mutaciones de la
+misma clase, fijar una aceptación del servidor por tenant, conversación, sujeto,
+acción y objetivo; la huella de payload detecta conflicto, no autoriza. Mientras
+tanto se conserva el límite. Crear/mover en WhatsApp con remate_manual produce
+propuestas; no se atribuyen a ese recorrido dos efectos físicos por las tools.
+
+WA2a puede avanzar independientemente: captura y ticket durables con identidad,
+origen y resolución originales, sin conectar aún el manejador vivo ni ampliar
+la autorización de sus operaciones.
+
 Primer commit completado: migración, autoridad persistida y transición por versión;
 pruebas deterministas de aislamiento y reinicio. La lectura HTTP administrativa
 se incorpora con la operación posterior, no se expuso en esta primera entrega.

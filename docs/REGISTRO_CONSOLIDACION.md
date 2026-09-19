@@ -2359,3 +2359,23 @@ a fin en todas.
 - Acta externa SUITE_CANDIDATO_DFF4B72.md y manifiesto conservan los fallos. Log
   SHA256 f1d67b6bc04bd73bbc0c300ff7bbc217cbed1b22c888d3a9d74d8020c4d755af.
   No modelo, proveedores reales, push ni despliegue. No se declara estable global.
+
+## 2026-09-19 23:31 +02:00 — correcciones integradas y siguiente frontera
+
+- Coordinación `astra/cierre-estable-19sep`, `f4ffd2c`. `2ec42a5` cierra los dos
+  hallazgos de dff4b72: 45 dirigidos/45.51s y causales de orden/omisión; wrapper
+  sobrante retirado. La suite original conserva sus 2 fallos, no se reetiqueta.
+- Widget `00d628a`, integrado en bddb35e: 16 Node/623.90ms, build, script Chrome
+  original sin cambios rojo→verde. Recuperación de centro B no mezcla catálogo A;
+  persona/contacto se conservan. Acta y 18 huellas contrastadas; sin red real.
+- WA1 `fd833b4`, integrado en f4ffd2c: 172 dirigidos/161.86s, 23:18:33.675→
+  23:21:20.691. Cuatro hashes iguales antes/después y log cotejado. Se preservan
+  helpers transaccionales y se retira el wrapper obsoleto de 2ec42a5. Tres casos
+  en nuevo intérprete; no equivale al webhook conectado ni a entrega de Meta.
+- R0: único dirigido terminó con 44 passed/75.75s; cinco mutaciones causales
+  producen 16 fallos y los módulos se restauran exactamente. Acta y revisión
+  final pendientes. revision_pausa_tenants_19sep recibe pytest para avisos;
+  pausa_autoridad_impl implementa WA2a desde f4ffd2c sin ejecutar pruebas.
+- No se amplía la clave de mutación por cita sin aceptación del objetivo. La
+  captura durable puede avanzar sin atribuir autorización a una tool adicional.
+  Modelo/proveedores/suite completa nuevos: ninguno en ejecución.
