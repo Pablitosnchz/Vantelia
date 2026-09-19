@@ -9,43 +9,11 @@ import {
   trackWidgetEvent,
 } from "./utils.js";
 import { mostrarFormulario } from "./form.js";
+import {
+  attentionAllows, attentionRevision, attentionStatusElement, clearAttentionStatus, showAttentionError,
+} from "./atencion.js";
 
 let sending = false;
-const attentionDisabledControls = new Map();
-
-function attentionStatusElement() {
-  let status = document.getElementById("ia-w-atencion-status");
-  const inputArea = document.getElementById("ia-w-input-area");
-  if (!status && inputArea?.parentNode) {
-    status = document.createElement("div");
-    status.id = "ia-w-atencion-status";
-    status.setAttribute("role", "status");
-    status.setAttribute("aria-live", "polite");
-    status.setAttribute("aria-atomic", "true");
-    inputArea.parentNode.insertBefore(status, inputArea);
-  }
-  return status;
-}
-
-function showAttentionStatus(message) {
-  const status = attentionStatusElement();
-  if (status) status.textContent = message;
-  // Los enlaces de contacto humano permanecen disponibles.
-  document.querySelectorAll(
-    "#ia-w-msgs .ia-action-card button[data-quick-message], " +
-    "#ia-form-cita button, #ia-form-cita input, #ia-form-cita select, #ia-form-cita textarea"
-  ).forEach((control) => {
-    if (!attentionDisabledControls.has(control)) attentionDisabledControls.set(control, control.disabled);
-    control.disabled = true;
-  });
-}
-
-function clearAttentionStatus() {
-  const status = document.getElementById("ia-w-atencion-status");
-  if (status) status.textContent = "";
-  attentionDisabledControls.forEach((disabled, control) => { control.disabled = disabled; });
-  attentionDisabledControls.clear();
-}
 
 const DEFAULT_QUICK_ACTIONS = [
   { label: "Agendar cita", message: "Quiero agendar una cita" },
@@ -138,6 +106,7 @@ function buildShortLabel(text) {
 }
 
 export function agregarAccionesIniciales(starterQuestions) {
+  if (!attentionAllows()) return;
   const msgs = document.getElementById("ia-w-msgs");
   if (!msgs || document.getElementById("ia-w-start-actions")) return null;
 
@@ -172,6 +141,7 @@ export function agregarAccionesIniciales(starterQuestions) {
 
   div.querySelectorAll("button[data-quick-message]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!attentionAllows()) return;
       const message = button.getAttribute("data-quick-message") || "";
       trackWidgetEvent("widget_quick_action_click", {
         quick_action: message,
@@ -186,6 +156,7 @@ export function agregarAccionesIniciales(starterQuestions) {
 }
 
 export function agregarAccionesMenu(actions = []) {
+  if (!attentionAllows()) return null;
   const msgs = document.getElementById("ia-w-msgs");
   if (!msgs || !Array.isArray(actions) || !actions.length) return null;
 
@@ -214,6 +185,7 @@ export function agregarAccionesMenu(actions = []) {
 
   div.querySelectorAll("button[data-quick-message]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!attentionAllows()) return;
       const message = button.getAttribute("data-quick-message") || "";
       trackWidgetEvent("widget_quick_action_click", {
         quick_action: message,
@@ -265,6 +237,7 @@ export async function enviarMensaje(textoForzado = "") {
   agregarMensaje(texto, "user");
   mostrarTyping();
   attentionStatusElement();
+  const preparedAt = attentionRevision();
 
   try {
     const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/chat`, {
@@ -277,13 +250,14 @@ export async function enviarMensaje(textoForzado = "") {
       }),
     });
 
+    ocultarTyping();
+    if (typeof data.respuesta !== "string" || !data.respuesta.trim() ||
+        !clearAttentionStatus(preparedAt)) return;
     setSessionId(data.session_id);
-    if (typeof data.respuesta === "string" && data.respuesta.trim()) clearAttentionStatus();
     trackWidgetEvent("widget_message_response", {
       response_length: String(data.respuesta || "").length,
       booking_form_shown: !!(data.mostrar_formulario && WIDGET_CONFIG.bookingEnabled),
     });
-    ocultarTyping();
     agregarMensaje(data.respuesta, "bot");
     if (Array.isArray(data.quick_actions) && data.quick_actions.length) {
       agregarAccionesMenu(data.quick_actions);
@@ -302,11 +276,7 @@ export async function enviarMensaje(textoForzado = "") {
       error_message: error?.message || "unknown",
     });
     ocultarTyping();
-    const attentionStopped = error?.status === 409 && error?.code === "ATTENTION_STOPPED";
-    const attentionUnavailable = error?.status === 503 && error?.code === "ATTENTION_UNAVAILABLE";
-    if (attentionStopped || attentionUnavailable) {
-      showAttentionStatus(message);
-    } else {
+    if (!showAttentionError(error)) {
       agregarMensaje(`${message} Si quieres, puedes abrir una consulta gratuita desde la web.`, "bot");
     }
   } finally {
