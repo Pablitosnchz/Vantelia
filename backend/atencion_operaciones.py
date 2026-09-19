@@ -303,11 +303,6 @@ def consultar_intento_operacion_atencion(cliente_id, ticket_id, accion, clave_in
         raise atencion.AtencionNoDisponible("No se puede consultar el intento de operación.") from exc
 
 
-def consultar_intento_reserva_atencion(cliente_id, ticket_id, accion, clave_intento):
-    return consultar_intento_operacion_atencion(
-        cliente_id, ticket_id, accion, clave_intento, tipo="reserva")
-
-
 def admitir_operacion_atencion(cliente_id, ticket_id, *, tipo, canal, fragmento=0,
                                clave_intento="", payload, solicitud=None):
     """Único permiso duradero para envío, reserva o pago; solo el ganador ejecuta."""
