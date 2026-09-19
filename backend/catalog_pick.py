@@ -72,18 +72,37 @@ _PARA_QUIEN = {
 }
 
 
+def _marcas_de_talla(texto: str) -> List[Tuple[int, int, int, str]]:
+    """Coincidencias del mismo vocabulario de tallas, con sus posiciones."""
+    limpio = _norm(texto)
+    return [
+        (len(forma), marca.start(), marca.end(), canonica)
+        for canonica, formas in _TALLAS
+        for forma in formas
+        for marca in re.finditer(r"\b%s\b" % re.escape(forma), limpio)
+    ]
+
+
+def tallas_de(texto: str) -> List[str]:
+    """Todas las tallas expresas, sin partir «extra largo» en «largo».
+
+    «Corto o medio» conserva ambas. Los alias solapados se resuelven por el
+    mas especifico, igual que talla_de; no hay un segundo vocabulario.
+    """
+    aceptadas: List[Tuple[int, int, int, str]] = []
+    for marca in sorted(_marcas_de_talla(texto), key=lambda m: (-m[0], m[1], m[3])):
+        if all(marca[2] <= otra[1] or marca[1] >= otra[2] for otra in aceptadas):
+            aceptadas.append(marca)
+    return list(dict.fromkeys(m[3] for m in sorted(aceptadas, key=lambda m: m[1])))
+
+
 def talla_de(texto: str) -> str:
     """La talla que menciona un texto, en su forma canonica. "" si ninguna.
 
     Se recorren de la mas especifica a la mas general ("corto medio" antes que
     "corto") para que "corto medio" no se lea como "corto".
     """
-    limpio = _norm(texto)
-    candidatas = []
-    for canonica, formas in _TALLAS:
-        for forma in formas:
-            if re.search(r"\b%s\b" % re.escape(forma), limpio):
-                candidatas.append((len(forma), canonica))
+    candidatas = [(longitud, canonica) for longitud, _, _, canonica in _marcas_de_talla(texto)]
     if not candidatas:
         return ""
     candidatas.sort(reverse=True)  # gana la coincidencia mas larga

@@ -63,3 +63,58 @@ def test_nombre_exacto_con_separadores_no_pide_otro_toque(apunte_aislado, servic
     assert data['servicio'] == servicio, data
     assert data['duracion'] == 20, data
     assert not data['pregunta'] and not data['candidatos'], data
+
+
+@pytest.mark.parametrize('talla, tallas_pack', [
+    ('corto', 'corto o medio'), ('largo', 'medio o largo'),
+])
+def test_un_pack_con_dos_tallas_sigue_compitiendo(apunte_aislado, talla, tallas_pack):
+    client, cookies = apunte_aislado
+    suelta, pack = 'Mechas ' + talla, 'Pack mechas ' + tallas_pack
+    _poner_servicio(client, cookies, suelta, 75)
+    _poner_servicio(client, cookies, pack, 360)
+    response = _interpretar(client, cookies, 'Ana, mechas ' + talla)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data['servicio'] == '', data
+    assert {suelta, pack} <= {c['servicio'] for c in data['candidatos']}, data
+
+
+def test_un_servicio_con_dos_tallas_admite_cualquiera_de_las_declaradas(apunte_aislado):
+    client, cookies = apunte_aislado
+    servicio = 'Hidratacion chico o corto'
+    _poner_servicio(client, cookies, servicio, 20)
+    data = _interpretar(client, cookies, 'Ana, hidratacion corto').json()
+    assert data['servicio'] == servicio and data['duracion'] == 20, data
+
+
+def test_dos_tallas_pedidas_no_se_reducen_a_una_sola(apunte_aislado):
+    client, cookies = apunte_aislado
+    _poner_servicio(client, cookies, 'Mechas medio', 75)
+    data = _interpretar(client, cookies, 'Ana, mechas corto o medio').json()
+    assert data['servicio'] == '' and data['pregunta'], data
+
+
+def test_las_tallas_compuestas_y_sus_alias_no_se_parten(apunte_aislado):
+    from backend import catalog_pick
+    for texto, todas, principal in [
+        ('por los hombros', ['medio'], 'medio'),
+        ('corto o medio', ['corto', 'medio'], 'medio'),
+        ('medio largo', ['medio largo'], 'medio largo'),
+        ('extra largo o corto', ['extra largo', 'corto'], 'extra largo'),
+        ('chico o corto', ['muy corto', 'corto'], 'muy corto'),
+    ]:
+        assert catalog_pick.tallas_de(texto) == todas
+        # La eleccion unica conserva el criterio anterior; otros canales no cambian.
+        assert catalog_pick.talla_de(texto) == principal
+
+
+def test_nombre_mezclado_sin_coma_ofrece_el_servicio_sin_inventar_el_titular(apunte_aislado):
+    client, cookies = apunte_aislado
+    _poner_servicio(client, cookies, 'Pack mechas corto', 195)
+    texto = 'Carmen pack mechas corto'
+    data = _interpretar(client, cookies, texto).json()
+    assert data['nombre'] == texto
+    assert data['servicio'] == '' and data['pregunta'], data
+    assert any(c['servicio'] == 'Pack mechas corto' and c['duracion'] == 195
+               for c in data['candidatos']), data

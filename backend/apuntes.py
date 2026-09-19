@@ -88,17 +88,19 @@ def _texto_del_apunte_canonico(texto: str) -> str:
     Si «media melena» no casa con «medio», el resolvedor puede elegir 75 minutos
     mientras el guardia no ve el pack de 360. Reutiliza sus alias, sin otra lista.
     """
-    talla = catalog_pick.talla_de(texto)
-    return (catalog_pick.tecnica_de(texto) + " " + talla) if talla else texto
+    tallas = catalog_pick.tallas_de(texto)
+    # «corto o medio» no puede reducirse a medio ni juntar ambos como la talla
+    # compuesta «corto medio»: el pack dejaria de competir con la aplicacion corta.
+    return (catalog_pick.tecnica_de(texto) + " " + " o ".join(tallas)) if tallas else texto
 
 
 def partir(texto: str) -> Dict[str, str]:
     """La coma parte el apunte: nombre a la izquierda, servicio a la derecha.
 
     Sin coma no se inventa nada: todo lo escrito hace de nombre (como hasta ahora) y ademas se
-    intenta reconocer el servicio, que para eso hace falta mucho acierto y por eso se exige
-    coincidencia clara. El nombre contamina: «Rosa», «Flor» o «Carmen» son palabras que tambien
-    estan en las cartas de servicios.
+    intenta reconocer el servicio. Si incluye palabras ajenas al servicio (por ejemplo, el
+    nombre), se ofrece para tocarlo y no se aplica solo: no se adivina donde acaba el titular.
+    «Rosa», «Flor» o «Carmen» son palabras que tambien estan en las cartas de servicios.
     """
     escrito = str(texto or "").strip()
     if "," in escrito:
@@ -199,8 +201,9 @@ def _por_que_no_aplicarlo(servicio: str, texto: str, rivales: List[str], minutos
 
     `rivales` son los otros servicios que tambien encajan con lo escrito.
     """
-    talla = catalog_pick.talla_de(servicio)
-    if talla and talla != catalog_pick.talla_de(texto):
+    tallas_servicio = set(catalog_pick.tallas_de(servicio))
+    tallas_escritas = set(catalog_pick.tallas_de(texto))
+    if tallas_servicio and (not tallas_escritas or not tallas_escritas <= tallas_servicio):
         # El largo lo pone quien lo dice. Tambien cuando dice OTRO: sin «extra largo» en el
         # catalogo, el cerebro se quedaba con la talla mas corta y se aplicaba igual.
         return "talla"
