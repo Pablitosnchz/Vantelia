@@ -74,3 +74,9 @@ conservó una sola implementación, con las pruebas más completas, sin borrar l
 otra rama. No repetir esa duplicación de trabajo ni suites. Una revisión manual
 del candidato debe referirse a su SHA y a la evidencia de la suite ya terminada;
 repetir pruebas solo para verificar un hallazgo o por cambios posteriores.
+
+Registrar también quién ejecuta la suite del candidato estable. Si se usa
+`--pedir-revision`, el revisor automático ejecuta pytest completo: tras los
+dirigidos verdes, no lanzar además una suite local del mismo candidato. Si la
+suite local ya terminó, pedir la lectura exacta sin otra ejecución automática.
+Un candidato invalidado por un hallazgo no se declara verde con una suite parcial.

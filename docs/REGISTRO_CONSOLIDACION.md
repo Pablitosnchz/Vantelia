@@ -2002,3 +2002,24 @@ a fin en todas.
   congelar candidato, una suite completa y revisión manual del SHA exacto por
   Claude, sin arrancar además otro ejecutor que repita la suite. Modelo real del
   nuevo candidato no medido; las tablas no convierten pendientes en ceros.
+
+## 2026-09-19 15:10 +02:00 — tallas alternativas y control de recordatorios
+
+- Rama `astra/estabilidad-19sep`, producto `1caa5af`, prueba de control `e057f07`.
+  Claude devolvió CAMBIOS sobre `f2003ec`: una talla alternativa perdida ocultaba
+  el pack largo. Cuatro reproducciones locales rojas (38.57s); ahora se conservan
+  todas las tallas no solapadas con el vocabulario existente. Lectura independiente
+  del diff corregido sin nuevos hallazgos.
+- Control de recordatorios rojo (1 failed y 8 passed, 58.03s) al comprobar que el
+  doble antiguo terminaba contado como fallo. Contrato corregido y aserciones de
+  aceptación. Dirigidos conjuntos finales: **41 passed**, 131.32s.
+- Suite local del candidato rechazado `f2003ec`: 14:39:41 a 14:56:37, detenida
+  solo la ejecución propia PID 35480. Aproximadamente 45%; no resultado completo.
+  Manifest/log en `E:/Vantelia-astra-estabilidad-evidencia/`, estado interrupted_for_review.
+- Diseño de pausa `6a43942`: autoridad persistida por tenant, fronteras de todos
+  los canales y admisión de envíos, operación de cobro separada. Diseño entregado,
+  no implementación. Es trabajo interno aún pendiente; D continúa aparcado.
+- Próximo paso: congelar este candidato y pedir revisión automática, único dueño
+  de la suite completa; ninguna suite local sigue activa. Después resolver su
+  resultado y abordar la autoridad de pausa. Sin nuevos bancos de modelo real,
+  push, despliegue ni cambios en producción.

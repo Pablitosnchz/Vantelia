@@ -1,29 +1,37 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 14:37 Europe/Madrid
+## En curso — 2026-09-19 15:10 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** candidato integrado con F4 y apuntes corregidos; dirigidos terminados, falta la suite completa y revisión exacta.
-- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; base 60993b7, código 3936c0f.
-- **Siguiente:** una suite completa del candidato congelado y revisión manual exacta de Claude sin duplicar esa suite.
-- **Espera a:** validación integrada; dirigidos terminados (29 verdes de apuntes/shim, 48 de avisos, aislamiento 5 verdes).
+- **Tarea:** hallazgo de revisión de f2003ec corregido; 41 dirigidos verdes, pendiente suite completa y revisión del candidato corregido.
+- **Rama:** astra/estabilidad-19sep, E:/Vantelia-astra-estabilidad; base 60993b7, producto 1caa5af, control de recordatorios e057f07.
+- **Siguiente:** solicitar revisión del HEAD congelado; el revisor automático será el único dueño de su suite completa. Después, resolver hallazgos y abordar la pausa persistida diseñada.
+- **Espera a:** solicitud y resultado del revisor; ninguna suite local activa al escribir este relevo. No duplicar la ejecución automática.
 
 - Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
-  `astra/estabilidad-19sep`, base `60993b7`, código integrado hasta `3936c0f`.
+  `astra/estabilidad-19sep`, base `60993b7`, producto integrado hasta `1caa5af`.
 - F4 corregido (`83e5c56`), 48 dirigidos verdes y revisión independiente OK
   acotado. F2 y teclado revisados; CRM/reparto OK con 66 dirigidos y 5 casos
   adicionales. Evidencia en [ACEPTACION_ESTABILIZACION_19SEP.md](ACEPTACION_ESTABILIZACION_19SEP.md).
 - Se compararon dos entregas duplicadas de apuntes, `3c646b0` y `93416aa`, y se
   integró solo `93416aa` (mismo diseño, igualdad de talla y pruebas reales).
-  Astra cerró dos repros adicionales de alias/técnica y dos de separadores;
-  dirigidos finales 29 verdes (100.17s), revisión independiente de lectura OK.
+  Astra cerró repros adicionales de alias/técnica y separadores. La revisión
+  exacta de `f2003ec` encontró después que «corto o medio» perdía una talla:
+  cuatro casos rojos antes; `1caa5af` conserva todas las alternativas sin cambiar
+  el criterio anterior de `talla_de`. Lectura independiente del diff corregido OK.
+  Dirigidos finales: **41 passed**, 131.32s, incluidos shim y recordatorios.
+  `e057f07` corrige otro doble de recordatorios que ocultaba un fallo del contador.
 - Aislamiento ES/EN: 5 pruebas HTTP verdes (45.59s). La interrupción por memoria
   y los dos errores posteriores de fixture (email/HTTPS) están documentados.
   No se atribuyen a fallos del producto.
+- La suite local de `f2003ec` fue interrumpida a las 14:56 al invalidarse el
+  candidato por revisión; había alcanzado aproximadamente el 45%, sin resultado
+  completo. Evidencia fuera del repo: `E:/Vantelia-astra-estabilidad-evidencia/`.
 - No lanzar otra implementación ni suite completa de apuntes. Reparto del
   ejecutor en NORMAS_AGENTE_IA; acta todavía sin nuevos bancos del modelo real.
-- Pausa de temporada: borrador operativo preparado, flujo conjunto no
-  implementado/verificado. No se confunde con apagar Citas o desconectar Meta.
+- Pausa de temporada: [diseño técnico](PAUSA_TEMPORADA_DISENO.md) integrado en
+  `6a43942`; autoridad persistida y fronteras de canales aún sin implementar.
+  Es trabajo interno pendiente, además de las dependencias externas.
   D aparcado; sin cambios en producción, push ni despliegue.
 
 **La memoria compartida entre los agentes que trabajan en este repo.** La lee

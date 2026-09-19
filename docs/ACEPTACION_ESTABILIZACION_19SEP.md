@@ -30,11 +30,13 @@ regresiones demostradas del producto ni se cuentan como casos medidos.
 
 ## Pendiente antes de aceptación técnica
 
-- Congelar SHA con esta evidencia, ejecutar una suite completa y obtener revisión exacta.
+- Congelar el candidato corregido con esta evidencia. El revisor automático
+  ejecutará su única suite completa y la revisión exacta; Astra no la duplica.
 - Procedimiento de pausa documentado: conjunto de silencio, facturación y
   reactivación aún no implementado/verificado. No se cierra por el verde de aislamiento.
-- Suite completa única tras integración estable y revisión independiente del
-  candidato exacto. Registrar fallos y correcciones si aparecen, no ocultar reintentos.
+- Diseño de la siguiente entrega: [PAUSA_TEMPORADA_DISENO.md](PAUSA_TEMPORADA_DISENO.md),
+  `6a43942`. Autoridad persistida, admisión de envíos y cobro separado; sin código
+  vivo ni pausa efectiva acreditada.
 - Evaluar qué medición real comparable corresponde al cambio final: tabla separada
   Alicia/segundo negocio, primer intento/reintentos/fallos/no medidos/no aplica.
   Por ahora esta entrega no tiene nuevos resultados de modelo real.
@@ -61,3 +63,26 @@ cambia los prompts ni habilita el piloto D.
 
 El estado será «candidato técnico verificado» únicamente con su evidencia y revisión;
 «arranque operativo» exige además cumplir las dependencias del negocio y del canal.
+
+## Revisión y corrección — 19-sep 15:10 Europe/Madrid
+
+- Claude revisó por lectura el SHA exacto `f2003ec`: **CAMBIOS**. Reducir
+  «corto o medio» a una talla ocultaba un pack de 360 min frente a un servicio
+  corto de 75. F4 recibió OK acotado, con un doble de prueba adicional a corregir.
+- Reproducción local: cuatro casos de tallas alternas rojos (38.57s).
+  `1caa5af` conserva todas las tallas no solapadas usando el vocabulario existente;
+  `talla_de` mantiene su selección anterior. Se comprueban también cinco vectores
+  de compatibilidad y el texto sin coma, sin adivinar dónde acaba el nombre.
+- Control de recordatorio: rojo con `failed == 1` cuando el doble devolvía `True`
+  (ejecución conjunta: 1 failed, 8 passed, 58.03s). `e057f07` devuelve el contrato
+  real y exige aceptación sin fallo. No cambia el transporte del producto.
+- Validación conjunta final: **41 passed**, 131.32s, en apuntes, intérprete,
+  shim, cita cancelada y contador. Revisión independiente del diff: OK por lectura;
+  no sustituye la revisión exacta ni la suite completa del nuevo candidato.
+- La suite de `f2003ec` empezó a las 14:39:41 y se detuvo a las 14:56:37 al
+  invalidarse ese candidato. Aproximadamente 45%, sin fallos observados hasta
+  entonces; **interrumpida, no aprobada**. Log y manifest en
+  `E:/Vantelia-astra-estabilidad-evidencia/suite-f2003ec.{log,json}`.
+- El modo rápido conserva los 30 minutos aceptados por Pablo: sin elegir una
+  sugerencia puede guardar una nota con ese tiempo. No se presenta esta entrega
+  como eliminación de ese riesgo operativo ni como nuevo resultado con modelo real.
