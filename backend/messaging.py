@@ -20,7 +20,7 @@ except ImportError:  # twilio es opcional en dev
 
 import httpx
 
-from backend import appstate, clients, security, settings, textnorm
+from backend import appstate, atencion_contexto, atencion_salidas, clients, security, settings, textnorm
 
 
 def _normalize_sms_recipient(to_number: str, *, default_country_code: str = "34") -> str:
@@ -50,6 +50,7 @@ def _normalize_sms_recipient(to_number: str, *, default_country_code: str = "34"
 
 
 async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
+    atencion_salidas.tenant_salida_atencion(cliente_id)
     to_number = _normalize_sms_recipient(to_number)
     if not to_number:
         security._channel_audit(cliente_id, "sms", "send_rejected", "invalid_recipient", False, "Telefono SMS invalido.")
@@ -76,7 +77,11 @@ async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
         sent = await _send_twilio_sms(to_number, sender, body)
     else:
         sent = await _send_twilio_sms(to_number, sender, body, account_sid=account_sid, auth_token=auth_token)
-    security._channel_audit(cliente_id, "sms", "send" if sent else "send_failed", mode, sent)
+    if sent:
+        atencion_salidas.auditar_salida_conocida_atencion(
+            cliente_id, security._channel_audit, cliente_id, "sms", "send", mode, True)
+    else:
+        security._channel_audit(cliente_id, "sms", "send_failed", mode, False)
     return sent
 
 
@@ -168,6 +173,7 @@ async def _post_whatsapp_message(
     cliente_id: str,
     phone_number_id: str,
     payload: Dict[str, Any],
+    _atencion_fragmento: int = 0,
 ) -> WhatsAppSendResult:
     """Único POST de mensajes Meta. La respuesta ambigua no autoriza reenvío.
 
@@ -182,37 +188,52 @@ async def _post_whatsapp_message(
         return WhatsAppSendResult("omitido", motivo="Falta número emisor o destinatario de WhatsApp")
     url = f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/{phone_number_id}/messages"
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    response = None
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.post(url, headers=headers, json=payload)
-    except Exception as exc:  # No sabemos si el proveedor llegó a aceptar el POST.
-        if response is None:
-            return WhatsAppSendResult("desconocido", motivo="Sin respuesta concluyente: " + type(exc).__name__)
-        # Un fallo al cerrar el cliente no borra una respuesta ya recibida.
-    status = response.status_code
-    try:
-        body = response.json()
-    except (ValueError, TypeError):
-        body = None
-    if isinstance(body, dict) and 200 <= status < 300 and "error" not in body:
-        messages = body.get("messages")
-        if (isinstance(messages, list) and len(messages) == 1
-                and isinstance(messages[0], dict)
-                and isinstance(messages[0].get("id"), str) and messages[0]["id"].strip()):
-            message_id = messages[0]["id"].strip()
-            return WhatsAppSendResult("aceptado", provider_message_id=message_id,
-                http_status=status, message_ids=(message_id,))
-    error = body.get("error") if isinstance(body, dict) else None
-    # Solo una negativa explícita de cliente es un rechazo seguro. Un 5xx,
-    # timeout HTTP o cuerpo contradictorio se conserva como desconocido.
-    if (400 <= status < 500 and status != 408 and isinstance(error, dict)
-            and type(error.get("code")) is int and isinstance(error.get("message"), str)
-            and error["message"] and not body.get("messages")):
-        return WhatsAppSendResult("rechazado", motivo=error["message"][:300],
-            http_status=status, error_code=str(error["code"]))
-    return WhatsAppSendResult("desconocido", motivo="Respuesta Meta sin aceptación o rechazo concluyente",
-        http_status=status)
+    wire = atencion_salidas.json_salida_atencion(payload)
+    # Los tipos de payload separan un template rechazado de su texto de respaldo;
+    # los fragmentos de texto conservan su índice al reintentar el mismo envío.
+    base_fragmento = {"text": 0, "template": 1000000, "interactive": 2000000}.get(payload.get("type"), 3000000)
+    with atencion_salidas.salida_red_atencion(cliente_id, "whatsapp", base_fragmento + _atencion_fragmento,
+            atencion_salidas.payload_salida_atencion(url, wire)) as admision:
+        def finalizar_meta_atencion(resultado):
+            atencion_salidas.registrar_salida_atencion(admision, resultado.estado)
+            if admision is not None and resultado.estado == "desconocido":
+                raise atencion_contexto.AtencionDetenida("envio_sin_nueva_admision", "desconocido")
+            return resultado
+
+        response = None
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                kwargs = {"json": payload} if admision is None else {"content": wire}
+                response = await client.post(url, headers=headers, **kwargs)
+        except atencion_contexto.AtencionDetenida:
+            raise
+        except Exception as exc:  # No sabemos si el proveedor llegó a aceptar el POST.
+            if response is None:
+                return finalizar_meta_atencion(WhatsAppSendResult("desconocido", motivo="Sin respuesta concluyente: " + type(exc).__name__))
+            # Un fallo al cerrar el cliente no borra una respuesta ya recibida.
+        status = response.status_code
+        try:
+            body = response.json()
+        except (ValueError, TypeError):
+            body = None
+        if isinstance(body, dict) and 200 <= status < 300 and "error" not in body:
+            messages = body.get("messages")
+            if (isinstance(messages, list) and len(messages) == 1
+                    and isinstance(messages[0], dict)
+                    and isinstance(messages[0].get("id"), str) and messages[0]["id"].strip()):
+                message_id = messages[0]["id"].strip()
+                return finalizar_meta_atencion(WhatsAppSendResult("aceptado", provider_message_id=message_id,
+                    http_status=status, message_ids=(message_id,)))
+        error = body.get("error") if isinstance(body, dict) else None
+        # Solo una negativa explícita de cliente es un rechazo seguro. Un 5xx,
+        # timeout HTTP o cuerpo contradictorio se conserva como desconocido.
+        if (400 <= status < 500 and status != 408 and isinstance(error, dict)
+                and type(error.get("code")) is int and isinstance(error.get("message"), str)
+                and error["message"] and not body.get("messages")):
+            return finalizar_meta_atencion(WhatsAppSendResult("rechazado", motivo=error["message"][:300],
+                http_status=status, error_code=str(error["code"])))
+        return finalizar_meta_atencion(WhatsAppSendResult("desconocido", motivo="Respuesta Meta sin aceptación o rechazo concluyente",
+            http_status=status))
 
 
 async def _send_whatsapp_payload(
@@ -367,10 +388,19 @@ async def _send_whatsapp_text(
     detailed: bool = False,
 ) -> Union[bool, WhatsAppSendResult]:
     aceptados: List[str] = []
-    for chunk in _whatsapp_chunks(text):
-        resultado = await _post_whatsapp_message(cliente_id=cliente_id, phone_number_id=phone_number_id,
-            payload={"messaging_product": "whatsapp", "recipient_type": "individual",
-                "to": to_number, "type": "text", "text": {"preview_url": True, "body": chunk}})
+    for fragmento, chunk in enumerate(_whatsapp_chunks(text)):
+        try:
+            resultado = await _post_whatsapp_message(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                payload={"messaging_product": "whatsapp", "recipient_type": "individual",
+                    "to": to_number, "type": "text", "text": {"preview_url": True, "body": chunk}},
+                **({"_atencion_fragmento": fragmento} if atencion_contexto.contexto_atencion_actual() is not None else {}))
+        except atencion_contexto.AtencionDetenida as exc:
+            if aceptados:
+                parcial = atencion_contexto.AtencionDetenida("texto_aceptado_parcialmente", "desconocido")
+                parcial.resultado = WhatsAppSendResult("desconocido", provider_message_id=aceptados[0],
+                    message_ids=tuple(aceptados), motivo="Texto aceptado parcialmente; no reenviar automáticamente")
+                raise parcial from exc
+            raise
         if resultado.estado != "aceptado":
             if aceptados:
                 # Aunque este fragmento fuese rechazado, False autorizaría
@@ -420,19 +450,31 @@ async def _send_twilio_sms(
     if not (account_sid and auth_token and from_number and to_number):
         return False
     url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(
-                url,
-                data={"To": to_number, "From": from_number, "Body": body[:1500]},
-                auth=(account_sid, auth_token),
-            )
-        if resp.status_code >= 300:
-            settings.logger.error("[voice] Twilio SMS error (%s): %s", resp.status_code, resp.text[:300])
+    datos = {"To": to_number, "From": from_number, "Body": body[:1500]}
+    wire = httpx.Request("POST", url, data=datos).content
+    with atencion_salidas.salida_red_atencion(None, "twilio_sms", 0,
+            atencion_salidas.payload_salida_atencion(url, wire)) as admision:
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                kwargs = {"data": datos} if admision is None else {
+                    "content": wire, "headers": {"Content-Type": "application/x-www-form-urlencoded"}}
+                resp = await client.post(url, auth=(account_sid, auth_token), **kwargs)
+                if 200 <= resp.status_code < 300:
+                    # El cierre del cliente no borra una respuesta ya recibida.
+                    atencion_salidas.registrar_salida_atencion(admision, "aceptado")
+            if resp.status_code >= 300:
+                estado = "rechazado" if 400 <= resp.status_code < 500 and resp.status_code != 408 else "desconocido"
+                atencion_salidas.registrar_salida_atencion(admision, estado)
+                if admision is not None and estado == "desconocido":
+                    raise atencion_contexto.AtencionDetenida("envio_sin_nueva_admision", estado)
+                settings.logger.error("[voice] Twilio SMS error (%s): %s", resp.status_code, resp.text[:300])
+                return False
+            atencion_salidas.registrar_salida_atencion(admision, "aceptado")
+            return True
+        except atencion_contexto.AtencionDetenida:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            if admision is not None:
+                raise
+            settings.logger.error("[voice] Twilio SMS exception: %s", exc)
             return False
-        return True
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("[voice] Twilio SMS exception: %s", exc)
-        return False
-
-

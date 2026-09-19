@@ -62,7 +62,8 @@ def notice_has_attempt(cliente_id, booking_id, generation, kind):
             (cliente_id, booking_id, generation, kind)).fetchone() is not None
 
 
-def claim_notice_delivery(cliente_id, booking_id, generation, kind, channel, *, single_delivery=False):
+def claim_notice_delivery(cliente_id, booking_id, generation, kind, channel, *, single_delivery=False,
+                          atencion_automatica=False):
     identidad = (cliente_id, booking_id, generation, kind)
     with closing(db._get_db_connection()) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -74,6 +75,10 @@ def claim_notice_delivery(cliente_id, booking_id, generation, kind, channel, *, 
         consulta = ("SELECT * FROM booking_notice_deliveries WHERE cliente_id=? AND booking_id=? "
                     "AND generation=? AND kind=?")
         filas = conn.execute(consulta, identidad).fetchall()
+        if atencion_automatica and any(fila["state"] == "omitido" and fila["reason"] == "atencion_suprimida"
+                                      for fila in filas):
+            # Solo es un freno. No concede permiso ni cambia el recorrido manual.
+            return {"estado": "omitido", "motivo": "atencion_suprimida"}
         # Un «enviando» pasado de la gracia es un ejecutor perdido: se le retira el
         # turno en esta misma transacción, antes de dejar salir el respaldo, para que
         # si vuelve no pueda enviar ni terminar. La fecha no se toca: la gracia ya corrió.

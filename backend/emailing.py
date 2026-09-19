@@ -27,7 +27,7 @@ from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, Request
 
 from api_models import ChannelEmailStatus, ChannelSettingsResponse, ChannelSmsStatus
-from backend import appstate, clients, db, security, settings, textnorm, timeutils
+from backend import appstate, atencion_contexto, atencion_salidas, clients, db, security, settings, textnorm, timeutils
 
 def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Optional[Request] = None) -> None:
     reset_url = security._password_reset_url(public_token, request)
@@ -614,7 +614,9 @@ def _gmail_access_token(cliente_id: str = "") -> Tuple[str, sqlite3.Row]:
 def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
     if not security._gmail_oauth_configured():
         raise RuntimeError("Google OAuth para Gmail no esta configurado.")
-    access_token, connection_row = _gmail_access_token(cliente_id)
+    connection_row = _gmail_connection(cliente_id)
+    if not connection_row:
+        raise RuntimeError("Gmail no está conectado.")
     connected_email = textnorm._normalize_email(connection_row["email"])
     from_name, from_email = parseaddr(str(message.get("From") or ""))
     if connected_email and textnorm._normalize_email(from_email) != connected_email:
@@ -622,7 +624,16 @@ def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
             message.replace_header("From", formataddr((from_name or settings.SMTP_FROM_NAME or "Vantelia", connected_email)))
         else:
             message["From"] = formataddr((settings.SMTP_FROM_NAME or "Vantelia", connected_email))
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+    raw = base64.urlsafe_b64encode(atencion_salidas.preparar_mime_atencion(message, "gmail_global")).decode("ascii")
+    datos_atencion = atencion_salidas.json_salida_atencion({"raw": raw})
+    atencion_salidas.comprobar_salida_atencion(cliente_id)
+    access_token, _ = _gmail_access_token(cliente_id)
+    with atencion_salidas.salida_red_atencion(cliente_id, "gmail_global", 0,
+            atencion_salidas.payload_salida_atencion(settings.GOOGLE_GMAIL_SEND_URL, datos_atencion)) as admision:
+        _emitir_gmail_global_admitido(cliente_id, access_token, raw, admision)
+
+
+def _emitir_gmail_global_admitido(cliente_id, access_token, raw, admision):
     try:
         with httpx.Client(timeout=25.0) as client:
             response = client.post(
@@ -631,6 +642,9 @@ def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
                 headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
             )
             response.raise_for_status()
+            atencion_salidas.registrar_salida_atencion(admision, "aceptado")
+    except atencion_contexto.AtencionDetenida:
+        raise
     except Exception as exc:
         with db._get_db_connection() as db_row:
             db_row.execute(
@@ -650,15 +664,19 @@ def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
 def _smtp_send_message(message: EmailMessage) -> None:
     if not _smtp_configured():
         raise RuntimeError("El sistema SMTP no esta configurado. Revisa SMTP_HOST y SMTP_FROM_EMAIL.")
-    with smtplib.SMTP(_smtp_host(), _smtp_port(), timeout=20) as smtp:
-        smtp.ehlo()
-        if _smtp_starttls():
-            smtp.starttls()
+    mime = atencion_salidas.preparar_mime_atencion(message, "smtp_global")
+    with atencion_salidas.salida_red_atencion(None, "smtp_global", 0,
+            atencion_salidas.payload_salida_atencion("smtp://%s:%s" % (_smtp_host(), _smtp_port()), mime)) as admision:
+        with smtplib.SMTP(_smtp_host(), _smtp_port(), timeout=20) as smtp:
             smtp.ehlo()
-        username = _smtp_username()
-        if username:
-            smtp.login(username, _smtp_password())
-        smtp.send_message(message)
+            if _smtp_starttls():
+                smtp.starttls()
+                smtp.ehlo()
+            username = _smtp_username()
+            if username:
+                smtp.login(username, _smtp_password())
+            smtp.send_message(message)
+            atencion_salidas.registrar_salida_atencion(admision, "aceptado")
 
 
 # --- Salud SMTP real (login + NOOP, sin enviar) ---------------------------
@@ -730,6 +748,8 @@ def _send_email_object(message: EmailMessage, cliente_id: str = "") -> None:
             else:
                 _gmail_send_message(copy.deepcopy(message))
             return
+        except atencion_contexto.AtencionDetenida:
+            raise
         except Exception as exc:
             if settings.EMAIL_SEND_PROVIDER == "gmail" or not _smtp_configured():
                 raise
@@ -828,14 +848,20 @@ def _send_gmail_message(
     message.set_content(text_body)
     if html_body:
         message.add_alternative(html_body, subtype="html")
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
-    response = httpx.post(
-        settings.GOOGLE_GMAIL_SEND_URL,
-        json={"raw": raw},
-        headers={"Authorization": f"Bearer {_client_gmail_access_token(cliente_id, connection_row)}"},
-        timeout=20,
-    )
-    response.raise_for_status()
+    raw = base64.urlsafe_b64encode(atencion_salidas.preparar_mime_atencion(message, "gmail_cliente")).decode("ascii").rstrip("=")
+    atencion_salidas.comprobar_salida_atencion(cliente_id)
+    access_token = _client_gmail_access_token(cliente_id, connection_row)
+    with atencion_salidas.salida_red_atencion(cliente_id, "gmail_cliente", 0,
+            atencion_salidas.payload_salida_atencion(settings.GOOGLE_GMAIL_SEND_URL,
+                atencion_salidas.json_salida_atencion({"raw": raw}))) as admision:
+        response = httpx.post(
+            settings.GOOGLE_GMAIL_SEND_URL,
+            json={"raw": raw},
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=20,
+        )
+        response.raise_for_status()
+        atencion_salidas.registrar_salida_atencion(admision, "aceptado")
 
 
 def _client_smtp_configured(channel_settings: sqlite3.Row) -> bool:
@@ -879,26 +905,31 @@ def _send_client_smtp_message(
     if html_body:
         message.add_alternative(html_body, subtype="html")
 
-    with smtplib.SMTP(host, port, timeout=20) as smtp:
-        smtp.ehlo()
-        if bool(channel_settings["email_smtp_starttls"]):
-            smtp.starttls()
+    mime = atencion_salidas.preparar_mime_atencion(message, "smtp_cliente")
+    with atencion_salidas.salida_red_atencion(cliente_id, "smtp_cliente", 0,
+            atencion_salidas.payload_salida_atencion("smtp://%s:%s" % (host, port), mime)) as admision:
+        with smtplib.SMTP(host, port, timeout=20) as smtp:
             smtp.ehlo()
-        if username:
-            smtp.login(username, password)
-        smtp.send_message(message)
-    with db._get_db_connection() as connection:
-        connection.execute(
-            "UPDATE client_channel_settings SET last_error='', updated_at=? WHERE cliente_id=?",
-            (timeutils._utc_now_iso(), cliente_id),
-        )
-        connection.commit()
+            if bool(channel_settings["email_smtp_starttls"]):
+                smtp.starttls()
+                smtp.ehlo()
+            if username:
+                smtp.login(username, password)
+            smtp.send_message(message)
+            atencion_salidas.registrar_salida_atencion(admision, "aceptado")
+        with db._get_db_connection() as connection:
+            connection.execute(
+                "UPDATE client_channel_settings SET last_error='', updated_at=? WHERE cliente_id=?",
+                (timeutils._utc_now_iso(), cliente_id),
+            )
+            connection.commit()
 
 
 def _send_client_email(
     cliente_id: str, to_email: str, subject: str, text_body: str,
     html_body: str = "", reply_to: Optional[str] = None,
 ) -> str:
+    atencion_salidas.tenant_salida_atencion(cliente_id)
     channel_settings = security._ensure_channel_settings(cliente_id)
     provider = channel_settings["email_provider"] or "vantelia_smtp"
     if provider == "gmail_oauth":
@@ -906,8 +937,11 @@ def _send_client_email(
         if connection_row and connection_row["status"] == "active":
             try:
                 _send_gmail_message(cliente_id, connection_row, to_email, subject, text_body, html_body, reply_to)
-                security._channel_audit(cliente_id, "email", "send", provider, True)
+                atencion_salidas.auditar_salida_conocida_atencion(
+                    cliente_id, security._channel_audit, cliente_id, "email", "send", provider, True)
                 return provider
+            except atencion_contexto.AtencionDetenida:
+                raise
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)[:500]
                 with db._get_db_connection() as connection:
@@ -925,8 +959,11 @@ def _send_client_email(
         if _client_smtp_configured(channel_settings):
             try:
                 _send_client_smtp_message(cliente_id, channel_settings, to_email, subject, text_body, html_body, reply_to)
-                security._channel_audit(cliente_id, "email", "send", provider, True)
+                atencion_salidas.auditar_salida_conocida_atencion(
+                    cliente_id, security._channel_audit, cliente_id, "email", "send", provider, True)
                 return provider
+            except atencion_contexto.AtencionDetenida:
+                raise
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)[:500]
                 with db._get_db_connection() as connection:
@@ -941,7 +978,8 @@ def _send_client_email(
         elif not channel_settings["email_fallback_enabled"]:
             raise RuntimeError("El SMTP propio del cliente no esta configurado.")
     _send_email_message(to_email, subject, text_body, html_body, reply_to)
-    security._channel_audit(cliente_id, "email", "send", "vantelia_smtp", True)
+    atencion_salidas.auditar_salida_conocida_atencion(
+        cliente_id, security._channel_audit, cliente_id, "email", "send", "vantelia_smtp", True)
     return "vantelia_smtp"
 
 

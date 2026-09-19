@@ -21,6 +21,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from api_models import *  # noqa: F401,F403
 from backend import (
     agenda,
+    atencion,
+    atencion_chat,
+    atencion_contexto,
     billing,
     booking,
     clients,
@@ -280,6 +283,18 @@ async def chat(data: MensajeChat, request: Request) -> RespuestaChat:
     if not message:
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacio.")
 
+    session_id = rag._normalize_session_id(data.session_id)
+
+    def _record_persisted_demo_message(persisted_session_id: str) -> None:
+        outreach._outreach_record_demo_chat_message(data.cliente_id, persisted_session_id)
+
+    try:
+        recibo = await atencion_chat.preparar_recibo_chat_http(
+            request, data.cliente_id, session_id, message, _record_persisted_demo_message,
+            intent=chat_mod._detect_commercial_intent(message))
+    except sqlite3.Error as exc:
+        raise atencion_chat.error_atencion_chat(atencion.AtencionNoDisponible()) from exc
+
     # Self-serve quota (Sem 5): only applies to clientes owned by a self-serve user.
     # Legacy clients fall through to the original public-plan checks below.
     self_serve_sub = db.db_check_self_serve_quota(data.cliente_id)
@@ -297,33 +312,24 @@ async def chat(data: MensajeChat, request: Request) -> RespuestaChat:
                 detail="Se ha alcanzado el límite mensual de conversaciones del plan. Contacta con la empresa para ampliar el plan.",
             )
 
-    session_id = rag._normalize_session_id(data.session_id)
-
-    def _record_persisted_demo_message(persisted_session_id: str) -> None:
-        outreach._outreach_record_demo_chat_message(
-            data.cliente_id, persisted_session_id
-        )
-
+    recibo.contar_uso = bool(self_serve_sub)
     try:
-        response = await chat_mod._process_chat_message(
-            cliente_id=data.cliente_id,
-            message=message,
-            session_id=session_id,
-            request=request,
-            on_user_message_persisted=_record_persisted_demo_message,
-        )
+        with atencion_contexto.turno_atencion(data.cliente_id, recibo.ticket_id, recibo.clave_intento):
+            atencion_contexto.verificar_turno_atencion(data.cliente_id)
+            response = await chat_mod._process_chat_message(
+                cliente_id=data.cliente_id, message=message, session_id=session_id, request=request,
+                user_message_persisted=True,
+                on_assistant_message_prepared=recibo.diferir_assistant,
+                rag_engine_factory=recibo.motor_rag_del_turno,
+            )
+    except atencion_contexto.AtencionDetenida as exc:
+        raise atencion_chat.error_atencion_chat(exc) from exc
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
         settings.logger.exception("Error procesando chat de %s: %s", data.cliente_id, exc)
         raise HTTPException(status_code=500, detail="No se pudo procesar el mensaje.") from exc
-
-    # Count this bot reply against the owner's monthly quota (only for self-serve).
-    if self_serve_sub:
-        try:
-            db.db_increment_message_usage(data.cliente_id, count=1, kind="bot_reply")
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("No se pudo incrementar usage en %s: %s", data.cliente_id, exc)
+    # Historial assistant y bot_reply pertenecen a la emisión ASGI, no al return.
     return response
 
 

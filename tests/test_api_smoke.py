@@ -4674,9 +4674,13 @@ def test_gift_card_info_questions_do_not_use_purchase_shortcut(client: TestClien
     monkeypatch.setattr(api_module, "_get_or_create_session", lambda session_id, cliente_id: SimpleNamespace(
         last_seen=0,
         message_count=0,
-        engine=SimpleNamespace(chat=lambda message: SimpleNamespace(response="No caducan y se pueden transferir.")),
+        engine=SimpleNamespace(chat=lambda message: pytest.fail("HTTP no usa el motor compartido")),
     ))
-    resp = client.post(
+    # HTTP reconstruye un motor por turno: el doble vive en la fábrica del índice.
+    monkeypatch.setattr(api_module, "cargar_indice", lambda cliente_id: SimpleNamespace(
+        as_chat_engine=lambda **kwargs: SimpleNamespace(
+            chat=lambda message: SimpleNamespace(response="No caducan y se pueden transferir."))))
+    response = client.post(
         "/chat",
         json={
             "cliente_id": "demo",
@@ -4684,7 +4688,9 @@ def test_gift_card_info_questions_do_not_use_purchase_shortcut(client: TestClien
             "session_id": session_id,
         },
         headers={"Origin": "http://testserver"},
-    ).json()
+    )
+    assert response.status_code == 200, response.text
+    resp = response.json()
     assert resp.get("intent") != "gift_card"
     assert "No caducan" in resp["respuesta"]
     assert "/gift/demo" not in resp["respuesta"]
