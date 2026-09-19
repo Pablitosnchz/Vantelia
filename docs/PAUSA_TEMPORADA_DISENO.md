@@ -87,6 +87,45 @@ se haya restablecido sin duplicados ni una puesta en marcha nueva.
 Mostrar la pausa completa solo cuando atención y cobro tengan evidencia conocida;
 conservar el acceso del equipo aunque la operación de cobro siga por reconciliar.
 
+## WhatsApp: entrada, vinculación demo y Flow son fronteras distintas
+
+Contrato acotado el 19-sep. WA0 `478d082` solo resuelve sin efectos; no acredita
+atención ni congela el código. La futura aplicación debe verificar dentro de
+la misma transacción el tenant/código esperado y el ticket, sin volver al
+resolver legacy después de admitir un tenant distinto. La repetición del mismo
+evento no puede repetir usos o reiniciar otra vez la conversación. El reset
+real de demo vive en WhatsApp: una vinculación atómica no lo cubre por sí sola.
+
+Resolver el negocio antes de descargar/transcribir audio o tratar `nfm_reply`.
+Conservar la entrada para el equipo aunque no pueda automatizarse; estado de
+plantillas, acuses y ecos humanos no se suprimen por ser parte del mismo lote.
+Cada mensaje conserva su identidad opaca y fecha original de Meta; metadatos
+ausentes, inválidos o futuros no se sustituyen por una fecha nueva que conceda
+permiso. La pausa y su versión invalidan trabajo anterior aunque llegue después.
+
+La [política de WhatsApp](https://whatsappbusiness.com/policy/) permite respuestas
+libres dentro de las 24 horas desde el último mensaje del usuario. Es una ventana
+de respuesta, no un TTL universal de plantillas. No trasladar los 120 segundos
+del adaptador HTTP a WhatsApp: los 120 minutos del estado conversacional local
+y las seis horas del token Flow también resuelven problemas diferentes. Si se
+introduce un presupuesto de worker, fijarlo en la primera recepción sin renovarlo
+en cada reentrega. No se ha verificado una duración exacta de reentregas de Meta.
+
+Flows queda como subcorte explícito: el token debe estar ligado durablemente a
+tenant, teléfono y versión de atención. Una reactivación no resucita un token
+invalidado. Para un token que ha dejado de ser válido, el
+[ejemplo oficial de Meta](https://github.com/WhatsApp/WhatsApp-Flows-Tools/blob/main/examples/endpoint/nodejs/basic/src/server.js#L57-L70)
+devuelve HTTP 427 y el cuerpo cifrado `{"error_msg":"..."}`; no una pantalla
+`SUCCESS`. Esto acredita el contrato de interfaz, no ausencia absoluta de
+reintentos. Si la autoridad no puede comprobarse, falta definir y probar su
+respuesta específica; no confundir incertidumbre con invalidez confirmada.
+
+Los envíos finales y cada fragmento tienen admisión propia. Una supresión no se
+convierte en `False`, fallo del proveedor ni disculpa automática por otro canal.
+El reply humano requiere permiso del servidor vinculado a usuario, tenant,
+conversación y destinatario; un flag del modelo o ausencia de contexto no lo
+acredita. Automatismos sin contexto siguen pendientes de la fase 3.
+
 ## Voz: cerrar una sesión requiere una identidad conocida por el servidor
 
 Auditoría de código y documentación oficial del 19-sep, sin llamadas a proveedores:
