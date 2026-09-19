@@ -31,16 +31,21 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   restaurada sin cambiar su fixture. Falta integración con avisos. La huella acredita intención
   y datos del pago, no una petición Stripe completa congelada; desconocido no
   permite repetición ni acredita reconciliación automática.
-- Chat: 17 dirigidos ASGI/memoria/shim aprobados antes de la revisión. Pendientes
-  los causales de petición en espera durante pausa/reactivación, sesión de otro
-  tenant, intención del mensaje y ausencia de asiento en la frontera. Todavía
-  sin revisión final, integración ni validación de todos sus avisos.
+- Chat: causales de petición en espera, sesión de otro tenant, intención del
+  mensaje y ausencia de asiento corregidos; 42 dirigidos aprobados tras siete
+  fallos causales HTTP/avisos. HTTP tiene OK acotado de Astra. En regresiones,
+  63 aprobados y un doble antiguo de RAG por actualizar a la fábrica del turno;
+  falta cierre de transportes, acta exacta e integración con pago.
 - Avisos: la supresión conocida antes de un POST debe ser terminal y no cuenta
   como fallo del proveedor, entrega ni permiso de probar otro canal. Carrera
   entre claim y pausa en prueba; resultado de red perdido sigue siendo incierto.
 - WhatsApp, Flow, automatismos sin contexto, voz, operación administrativa y
   facturación separada siguen el plan. No hay control público que prometa una
   pausa completa mientras falten esas fronteras.
+- WA0 `478d082` integrado en `23f16b3`: consulta demo inmutable sin cambios de
+  rutas/usos. Dos fallos causales al reintroducir la escritura, 36 dirigidos
+  aprobados/24.75s y dos hashes cotejados. No conecta atención: requiere todavía
+  aplicador atómico ligado al tenant y ticket, con deduplicación del evento.
 
 ## Puertas que faltan
 

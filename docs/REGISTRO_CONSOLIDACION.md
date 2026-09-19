@@ -2233,3 +2233,22 @@ a fin en todas.
   del binding que hoy tiene efectos, mantener wrapper legacy. No conecta WhatsApp.
   Los límites oficiales de WA/Flow están en la nota externa WA_CONTRATO_LIMITES_19SEP.md.
 - Ninguna suite completa nueva ni banco del modelo activo; sin push/despliegue.
+
+## 2026-09-19 21:59 +02:00 — consulta demo integrada; cierre de chat en revisión
+
+- WA0 `478d082b6293e62e989fb8e697a25c03909efbae`, integrado en `23f16b3`,
+  rama coordinadora astra/cierre-estable-19sep. Astra revisó código, acta y
+  dos hashes exactos. Mutación: 2 fallos por escritura de rutas/usos; restaurado,
+  36 passed/24.75s a las 21:52:37. Acta externa WA0.md en
+  `E:/Vantelia-astra-wa-demo-resolucion-evidencia/`.
+- Consulta inmutable sin efectos y wrapper legacy conservado. No es permiso ni
+  congela el código: WA1 debe comprobar resolución/tenant/atención y escribir
+  atómicamente; repetir el wrapper después de admitir X podría vincular Y.
+  Diseño de WA1 en curso, sin implementación ni pytest paralelo.
+- Chat: siete causales HTTP/avisos corregidos y 42 dirigidos verdes. Astra da
+  OK acotado a HTTP; revisión de transportes espera restauración exacta después
+  de mutación. Gmail admite el mensaje tras preparar OAuth; resultado conocido
+  de reserva se conserva separado del aviso suprimido. Regresión posterior:
+  63 verdes y un doble RAG antiguo, ajustado sin cambiar la respuesta exigida.
+- Único ejecutor de pytest: chat. No se ha iniciado suite completa ni modelo.
+  Siguiente: cerrar acta y revisión, integrar chat con pago y probar su convivencia.

@@ -1,11 +1,11 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 21:42 Europe/Madrid
+## En curso — 2026-09-19 21:59 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** fases 1, 2a y 2b integradas; widget `fdf60e3`, CI `80c52e0` y pago `997d2ef` revisados e integrados hasta `0122e53`. Chat/transportes en causales y correcciones. WA0 prepara resolución demo sin efectos, sin conectar aún WhatsApp.
+- **Tarea:** fases 1, 2a y 2b integradas; widget `fdf60e3`, CI `80c52e0`, pago `997d2ef` y consulta demo WA0 `478d082` revisados e integrados hasta `23f16b3`. Chat/transportes cierra causales y revisión. WA1 diseña el aplicador atómico, sin conectar aún WhatsApp.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** cerrar hallazgos de chat (petición en espera, sesión ajena y errores de estado) y avisos; revisar e integrar con pago. WA0 mantiene el resolver legacy y extrae su consulta pura antes de futura admisión. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md y acta abierta ACEPTACION_ATENCION_19SEP.md.
+- **Siguiente:** congelar chat/avisos tras las últimas pruebas dirigidas, cotejar revisión e integrar con pago. HTTP tiene OK acotado de Astra tras sus causales; transportes recoteja Gmail y resultado conocido. WA1 define admisión y vinculación sin carrera entre negocios. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md y acta abierta ACEPTACION_ATENCION_19SEP.md.
 - **Espera a:** entregas de los agentes propios, con un único turno de pytest. Claude confirma en nota c6119d que no hay snapshot saneado actual: solo comunica metadata de catálogo local, sin lectura/copia por Astra. No hay suite completa ni banco del modelo activo.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
