@@ -1,8 +1,10 @@
 # Pausa de temporada: diseño del siguiente bloque
 
-19-sep-2026. Propuesta, sin implementación ni ejecución. Lecturas sobre `60993b7`.
-Complementa [la operación y su acta](PAUSA_TEMPORADA_OPERACION.md); no cambia el contrato.
-El candidato en validación no se modifica con esta nota.
+19-sep-2026. Diseño inicial sobre `60993b7`, actualizado al cierre del 19-sep.
+La autoridad persistida está implementada en `3fad6f2`, integrada en `b5fd11b`,
+con revisión y 67 pruebas dirigidas aprobadas. Los canales aún no la consultan.
+Complementa [la operación y su acta](PAUSA_TEMPORADA_OPERACION.md); no acredita
+una pausa efectiva. Avance y puertas en [el plan de cierre](CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md).
 
 ## Una autoridad para la atención automática
 
@@ -68,10 +70,36 @@ se haya restablecido sin duplicados ni una puesta en marcha nueva.
 Mostrar la pausa completa solo cuando atención y cobro tengan evidencia conocida;
 conservar el acceso del equipo aunque la operación de cobro siga por reconciliar.
 
+## Voz: cerrar una sesión requiere una identidad conocida por el servidor
+
+Auditoría de código y documentación oficial del 19-sep, sin llamadas a proveedores:
+el widget actual recibe un secreto efímero y abre WebRTC directamente; descarta
+el encabezado `Location`. Impedir otro secreto no cierra las sesiones abiertas:
+la [caducidad del secreto](https://developers.openai.com/api/reference/resources/realtime/subresources/client_secrets/methods/create)
+no determina la duración de las sesiones y el mismo secreto puede crear varias.
+
+La adaptación propuesta conserva WebRTC: el navegador entrega su oferta SDP a
+Vantelia y el servidor usa la [interfaz unificada de llamadas](https://developers.openai.com/api/docs/guides/voice-webrtc?api=realtime#connecting-using-the-unified-interface).
+Vantelia captura el `call_id` de `Location`, lo vincula a tenant y versión, y solo
+entonces devuelve la respuesta SDP. Un ID informado por el navegador no garantiza
+el inventario completo de sesiones. Revalidar también al acabar la negociación;
+si se pausó, no entregar la respuesta y solicitar el cierre de la llamada creada.
+
+El [hangup de Realtime](https://developers.openai.com/api/reference/resources/realtime/subresources/calls/methods/hangup)
+admite WebRTC y SIP, pero un 200 inicia el cierre: no acredita por sí solo silencio
+instantáneo ni vaciado del audio que ya recibió el navegador. Registrar por separado
+solicitud, aceptación y cierre comprobado. La
+[conexión lateral del servidor](https://developers.openai.com/api/docs/guides/voice-server-controls?api=realtime)
+permite supervisar una llamada conocida; todavía debe probarse la señal concluyente
+de terminación con nuestro recorrido. No atribuir a Realtime los eventos de cierre
+de otra API. Las sesiones antiguas cuyo ID no conocemos siguen siendo un límite
+explícito, no una pausa verificada. Esta integración de voz sigue pendiente.
+
 ## Primera entrega pequeña y cierre posterior
 
-Primer commit: migración, autoridad persistida, transición por versión y lectura
-administrativa autenticada; pruebas deterministas de aislamiento y reinicio.
+Primer commit completado: migración, autoridad persistida y transición por versión;
+pruebas deterministas de aislamiento y reinicio. La lectura HTTP administrativa
+se incorpora con la operación posterior, no se expuso en esta primera entrega.
 Sin interruptor público de pausa efectiva mientras faltan las fronteras anteriores.
 Después, conectar chat/WhatsApp y sus envíos, conservando las respuestas humanas;
 cerrar voz y automatismos aplicables antes de habilitar la operación de temporada.
@@ -91,5 +119,6 @@ automatizar fechas o Stripe para demostrar primero la autoridad de atención.
 - Cobro conocido, rechazo y respuesta perdida mantienen estados diferenciados;
   apagar atención no marca cuota suspendida, ni reactivar crea otro cobro inicial.
 
-Esta nota no ejecuta pytest ni mide Meta, voz o Stripe. Las referencias son de la
-base leída: ajustar números al candidato integrado antes de implementar.
+La evidencia de la autoridad está en `E:/Vantelia-astra-pausa-evidencia/FASE1.md`.
+No hay medición real de Meta, voz o Stripe para este bloque. Las referencias de
+líneas son de la base leída: ajustar al candidato integrado antes de implementar.
