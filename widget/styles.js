@@ -498,6 +498,20 @@ export function inyectarEstilos(color, accentColor) {
       transform: translateY(-1px);
     }
 
+    #ia-w-atencion-status {
+      color: #46536a;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      flex-shrink: 0;
+    }
+
+    #ia-w-atencion-status:not(:empty) {
+      padding: 10px 14px;
+      background: #f5f7fa;
+      border-top: 1px solid rgba(20, 34, 53, 0.08);
+    }
+
     #ia-w-input-area {
       display: flex;
       gap: 10px;

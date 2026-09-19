@@ -123,8 +123,9 @@ export function scrollMsgs() {
 }
 
 export function humanizeErrorMessage(error, fallbackMessage) {
-  const raw = String(error?.message || "").trim();
-  if (!raw) return fallbackMessage || "No se pudo completar la solicitud.";
+  const value = error?.detail?.message || error?.message;
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw || raw === "[object Object]") return fallbackMessage || "No se pudo completar la solicitud.";
 
   if (raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
     return "No se ha podido conectar con el asistente. Revisa la conexion o la URL del API.";
@@ -185,10 +186,15 @@ export async function fetchJson(url, options = {}) {
     }
 
     if (!response.ok) {
+      const detail = data?.detail;
       const message =
-        data?.detail ||
+        (typeof detail === "string" ? detail : typeof detail?.message === "string" ? detail.message : "") ||
         (rawText ? `Error ${response.status}: ${rawText.slice(0, 240)}` : `Error ${response.status}.`);
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = response.status;
+      error.code = detail?.code;
+      error.detail = detail;
+      throw error;
     }
 
     return data;
