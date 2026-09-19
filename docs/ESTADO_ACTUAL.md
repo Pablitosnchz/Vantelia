@@ -1,11 +1,11 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 21:01 Europe/Madrid
+## En curso — 2026-09-19 21:10 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** fases 1, 2a y 2b integradas hasta `25b84e4`; el núcleo `f6c16e1` tiene revisión independiente OK. Instrumento de cita única `e8a8b6` y contexto de hilos `6b66632` integrados. Fase 2c-chat en preparación: backend y widget con escritores separados.
+- **Tarea:** fases 1, 2a y 2b integradas (`25b84e4`); núcleo `f6c16e1` con revisión independiente OK. Widget `fdf60e3` revisado e integrado en `e6ad008`; backend de chat y pago en implementación separada. Instrumento de cita única y contexto de hilos integrados.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** conectar `/chat` antes de preparación y emisión HTTP; conservar entrada humana y registrar respuesta/consumo solo tras emisión. Auditar enlaces y avisos auxiliares. WhatsApp y demás canales siguen pendientes. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
+- **Siguiente:** validar `/chat` antes de preparación/emisión y su memoria por turno; implementar pago/crear_enlace en diario común, con avisos admitidos aparte. Añadir las pruebas Node del widget a CI. WhatsApp y demás canales siguen pendientes. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
 - **Espera a:** entregas de los agentes propios, con un único turno de pytest. Claude confirma en nota c6119d que no hay snapshot saneado actual: solo comunica metadata de catálogo local, sin lectura/copia por Astra. No hay suite completa ni banco del modelo activo.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
@@ -28,6 +28,12 @@
   mutación adicional 3 fallos → 3 aprobados. Diez hashes y logs cotejados por
   revisión independiente; acta `E:/Vantelia-astra-pausa-evidencia/FASE2B.md`.
   Integración `f6c16e1` → `25b84e4`; no acredita aún pausa completa ni una suite nueva.
+- Widget: 7 pruebas Node aprobadas (6 fallos y 1 aprobado antes), build correcto;
+  fuentes, bundle y logs cotejados por Astra. Aviso HTTP 409/503 fuera del historial,
+  sin falsa respuesta, acciones nuevas ni reintento automático. Mantiene contacto
+  humano y desactiva acciones anteriores hasta una respuesta válida. Harness DOM
+  mínimo, no navegador/lector real ni formularios ya en vuelo. Acta externa
+  `E:/Vantelia-astra-widget-atencion-evidencia/WIDGET_ATENCION.md`.
 - Banco: `reserva-completa-de-verdad` exige una única cita activa con ID nuevo;
   incluye pending_payment sin acreditar cobro. 13 dirigidos, incluida frontera
   SQLite, con causales documentados en MEDICION_CIERRE_COMPARABLE.md. Usar el mismo

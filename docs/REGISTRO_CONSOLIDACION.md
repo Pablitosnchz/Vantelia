@@ -2175,3 +2175,20 @@ a fin en todas.
   HTTP 409/503 acordado y un aviso fuera del historial.
 - Criterios y límite de emisión frente a lectura en el plan de cierre. Es diseño
   y trabajo en curso; aún no hay resultado dirigido de chat/widget ni suite global.
+
+## 2026-09-19 21:10 +02:00 — widget revisado e integrado; pago en pieza separada
+
+- `fdf60e3a58b5b947e200bda24edd059f9e554e4c`, astra/widget-atencion-19sep,
+  integrado como `e6ad008`. Astra leyó fuentes y tests, contrastó selectores con
+  formulario/acciones reales y cotejó cinco hashes con acta y logs.
+- Causal Node: 6 fallos/1 aprobado (268ms) → 7 aprobados (305ms); build esbuild
+  143ms y bundle 72.4KiB. Sin repetirlos durante revisión. Evidencia externa en
+  `E:/Vantelia-astra-widget-atencion-evidencia/WIDGET_ATENCION.md`.
+- Estado accesible de interfaz para 409/503, sin respuesta del asistente ni
+  reintento; acciones anteriores bloqueadas hasta nueva respuesta válida y
+  contactos humanos disponibles. Límite: DOM mínimo y formulario previo en vuelo
+  fuera de este corte. Backend/emisión aún por integrar, no pausa completa.
+- Implementación dividida por dueño: chat ASGI/RAG/transportes en rama de pausa;
+  pago/crear_enlace en rama propia desde f6c16e1, mismo diario y funciones de pago
+  delimitadas; integración de tests Node en CI, sin cambiar versiones. Pytest
+  lo ejecuta un único agente por turno; no hay suite completa ni banco real activo.
