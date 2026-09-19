@@ -54,6 +54,12 @@ entrada, audio previo ni lotes con ecos/estados. Tampoco recorre `/chat` HTTP: e
 canal usa su propio procesador y motor RAG, no el bucle multiherramientas del agente
 que usa WhatsApp. Un resultado de esos bancos no valida el nuevo motor HTTP.
 
+Hay un segundo límite del instrumento: `evals/arnes.py` sustituye los emisores
+`_send_whatsapp_*` y hace que email/SMS devuelvan éxito simulado. Eso es útil para
+la conversación, pero evita la admisión final de los wrappers reales. El nuevo
+adaptador debe conservarlos e interceptar debajo, en HTTP de proveedor y SMTP.
+Reutilizar capturas y veredictos, no esos reemplazos de alto nivel.
+
 Puertas adicionales antes de afirmar cierre operativo:
 
 - Adaptador de banco por el webhook real, con petición local autenticada de
@@ -61,6 +67,11 @@ Puertas adicionales antes de afirmar cierre operativo:
   mismo instrumento sobre referencia y candidato; guardar qué capturador se
   recorrió. Los casos de pausa, reentrega, cambio de tenant y reinicio deben
   comprobar también los hechos persistidos, no solo el texto del modelo.
+  Firmar bytes exactos con secreto sintético y mantener ID/fecha del evento al
+  reentregar. Un HTTP 200 del webhook solo es ACK; recoger salidas del proveedor
+  falso. Denegar cualquier egress no catalogado y marcar capturas ausentes o
+  subcasos sin soporte como NO_MEDIDO. Mantener un loop por caso y esperar sus
+  avisos conocidos, sin cancelarlos al terminar cada turno con asyncio.run.
 - Campaña separada para HTTP con modelo real e historial persistido: preguntas
   consecutivas, digresión y vuelta a la reserva, Q&A/precio/horario cambiado desde
   portal y segunda sesión/tenant. Entrar por `/chat` con el middleware, sin
