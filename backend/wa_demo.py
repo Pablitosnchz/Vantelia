@@ -21,10 +21,13 @@ from __future__ import annotations
 import re
 import secrets
 import sqlite3
+import hashlib
+import json
+from contextlib import closing
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from backend import db, settings, textnorm, timeutils
+from backend import atencion, atencion_operaciones, db, settings, textnorm, timeutils
 
 # Alfabeto sin caracteres ambiguos (0/O, 1/I): el codigo se dicta por telefono.
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -160,9 +163,15 @@ def route_for_phone(phone: str) -> str:
     if not phone:
         return ""
     with db._get_db_connection() as connection:
-        row = connection.execute(
-            "SELECT cliente_id, expires_at FROM wa_demo_routes WHERE phone = ?", (phone,)
-        ).fetchone()
+        row = _demo_route_row(connection, phone)
+    return _demo_live_route_cliente(row)
+
+
+def _demo_route_row(connection, phone):
+    return connection.execute("SELECT * FROM wa_demo_routes WHERE phone = ?", (phone,)).fetchone()
+
+
+def _demo_live_route_cliente(row):
     if not row:
         return ""
     if row["expires_at"] and row["expires_at"] <= timeutils._utc_now_iso():
@@ -181,27 +190,34 @@ def bind_phone(phone: str, code: str) -> str:
         row = _code_row(connection, code)
         if not row:
             return ""
-        cliente_id = row["cliente_id"]
-        connection.execute(
-            """
-            INSERT INTO wa_demo_routes (phone, cliente_id, code, expires_at, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(phone) DO UPDATE SET
-                cliente_id = excluded.cliente_id,
-                code = excluded.code,
-                expires_at = excluded.expires_at,
-                created_at = excluded.created_at
-            """,
-            (
-                phone,
-                cliente_id,
-                code,
-                timeutils._expires_at_in_hours(24 * DEFAULT_ROUTE_DAYS),
-                timeutils._utc_now_iso(),
-            ),
-        )
-        connection.execute("UPDATE wa_demo_codes SET uses = uses + 1 WHERE code = ?", (code,))
+        cliente_id = _bind_demo_phone_en_transaccion(connection, phone, row)
         connection.commit()
+    return cliente_id
+
+
+def _bind_demo_phone_en_transaccion(connection, phone, row):
+    """SQL único de binding; el llamador controla la transacción."""
+    code = row["code"]
+    cliente_id = row["cliente_id"]
+    connection.execute(
+        """
+        INSERT INTO wa_demo_routes (phone, cliente_id, code, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(phone) DO UPDATE SET
+            cliente_id = excluded.cliente_id,
+            code = excluded.code,
+            expires_at = excluded.expires_at,
+            created_at = excluded.created_at
+        """,
+        (
+            phone,
+            cliente_id,
+            code,
+            timeutils._expires_at_in_hours(24 * DEFAULT_ROUTE_DAYS),
+            timeutils._utc_now_iso(),
+        ),
+    )
+    connection.execute("UPDATE wa_demo_codes SET uses = uses + 1 WHERE code = ?", (code,))
     return cliente_id
 
 
@@ -220,6 +236,11 @@ class DemoIncomingResolution:
     cliente_id: str
     code_to_bind: str = ""
     help_text: str = ""
+    phone_number_id: str = ""
+    from_number: str = ""
+    input_hash: str = ""
+    code_snapshot: Optional[tuple] = None
+    route_snapshot: Optional[tuple] = None
 
 
 def _demo_route_resolution(from_number: str, invalid_code: bool) -> DemoIncomingResolution:
@@ -236,17 +257,102 @@ def resolve_incoming_readonly(
 ) -> DemoIncomingResolution:
     """Resuelve tenant/codigo sin vincular, consumir usos, reiniciar ni borrar.
 
-    No concede permiso ni congela el estado. Un adaptador con admision previa
-    debe aplicar el binding comprobando atomicamente tenant/codigo/estado
-    esperados; no puede usar resolve_incoming como aplicador tras admitir.
+    No concede permiso: apply_demo_resolution comprueba ticket y fotos en la
+    misma transaccion del efecto. resolve_incoming sigue siendo solo legacy.
     """
     code = extract_code(incoming_text)
-    if code and _normalize_phone(from_number):
-        with db._get_db_connection() as connection:
-            row = _code_row(connection, code)
-        if row:
-            return DemoIncomingResolution(cliente_id=row["cliente_id"], code_to_bind=code)
-    return _demo_route_resolution(from_number, invalid_code=bool(code))
+    phone = _normalize_phone(from_number)
+    hub = str(phone_number_id or "").strip()
+    input_hash = hashlib.sha256(_demo_operation_bytes(
+        [hub, phone, code or str(incoming_text or "").strip()])).hexdigest()
+    with closing(db._get_db_connection()) as connection, connection:
+        connection.execute("BEGIN")
+        row = _code_row(connection, code) if code and phone else None
+        route = _demo_route_row(connection, phone) if phone else None
+    metadata = dict(phone_number_id=hub, from_number=phone, input_hash=input_hash,
+                    code_snapshot=_demo_code_snapshot(row), route_snapshot=_demo_route_snapshot(route))
+    if row:
+        return DemoIncomingResolution(cliente_id=row["cliente_id"], code_to_bind=code, **metadata)
+    existing = _demo_live_route_cliente(route)
+    prefix = "Ese codigo no es valido o ha caducado. " if code else ""
+    return DemoIncomingResolution(cliente_id=existing,
+                                  help_text="" if existing else prefix + HELP_TEXT, **metadata)
+
+
+def _demo_operation_bytes(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+
+def _demo_code_snapshot(row):
+    # Otros teléfonos pueden consumir el mismo código: uses no es su identidad.
+    return tuple(row[k] for k in ("code", "cliente_id", "active", "expires_at", "created_at")) if row else None
+
+
+def _demo_route_snapshot(row):
+    return tuple(row[k] for k in ("phone", "cliente_id", "code", "expires_at", "created_at")) if row else None
+
+
+def apply_demo_resolution(resolution, *, cliente_id, ticket_id, evento_id):
+    """Aplica solo binding SQLite. No autoriza reset, respuesta ni otro efecto.
+
+    cliente_id procede del contexto autenticado, no de una resolución mutable.
+    Conocido + mismo evento conserva evidencia aun tras pausa/caducidad; nunca
+    devuelve un permiso ni reaplica el binding. El caller sigue sin conectar WA.
+    """
+    if (not isinstance(resolution, DemoIncomingResolution)
+            or not resolution.phone_number_id or not resolution.from_number
+            or not re.fullmatch(r"[a-f0-9]{64}", resolution.input_hash)):
+        raise ValueError("La resolución demo no contiene una entrada verificable.")
+    # Nada identificativo de la entrada se persiste: solo hashes en el diario.
+    event_key = hashlib.sha256(_demo_operation_bytes([resolution.phone_number_id, evento_id])).hexdigest()
+    request = _demo_operation_bytes([resolution.phone_number_id, evento_id, resolution.input_hash])
+    payload = _demo_operation_bytes([resolution.cliente_id, resolution.code_to_bind,
+                                     resolution.code_snapshot, resolution.route_snapshot])
+    try:
+        with closing(db._get_db_connection()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            atencion_operaciones._buscar_ticket_atencion(
+                connection, cliente_id, ticket_id, evento_id=evento_id)
+            known = atencion_operaciones.consultar_intento_operacion_atencion_en_transaccion(
+                connection, cliente_id, ticket_id, "vincular", event_key, tipo="wa_demo")
+            if known is not None:
+                if known["request_hash"] != hashlib.sha256(request).hexdigest():
+                    raise atencion_operaciones.AtencionIdentidadEnConflicto("La entrada del evento no coincide.")
+                return {"cliente_id": cliente_id, "estado": known["estado"],
+                        "binding_aplicado_ahora": False, "repetido": True}
+            if not resolution.code_to_bind:
+                ticket = atencion_operaciones.comprobar_ticket_atencion_en_transaccion(
+                    connection, cliente_id, ticket_id)
+                route = _demo_route_row(connection, resolution.from_number)
+                matches = (resolution.cliente_id == cliente_id
+                           and _demo_route_snapshot(route) == resolution.route_snapshot
+                           and _demo_live_route_cliente(route) == cliente_id)
+                return {"cliente_id": cliente_id,
+                        "estado": "suprimido" if not ticket["puede_preparar"] else (
+                            "ruta_vigente" if matches else "rechazado"),
+                        "binding_aplicado_ahora": False, "repetido": False}
+            operation = atencion_operaciones.admitir_operacion_atencion_en_transaccion(
+                connection, cliente_id, ticket_id, tipo="wa_demo", canal="vincular",
+                clave_intento=event_key, payload=payload, solicitud=request)
+            if not operation["ejecutar_operacion"]:
+                return {"cliente_id": cliente_id, "estado": operation["estado"],
+                        "binding_aplicado_ahora": False, "repetido": False}
+            row = _code_row(connection, resolution.code_to_bind)
+            route = _demo_route_row(connection, resolution.from_number)
+            matches = (resolution.cliente_id == cliente_id and row is not None
+                       and row["cliente_id"] == cliente_id
+                       and _demo_code_snapshot(row) == resolution.code_snapshot
+                       and _demo_route_snapshot(route) == resolution.route_snapshot)
+            if matches:
+                _bind_demo_phone_en_transaccion(connection, resolution.from_number, row)
+            atencion_operaciones.registrar_resultado_operacion_atencion_en_transaccion(
+                connection, cliente_id, ticket_id, tipo="wa_demo", canal="vincular",
+                clave_intento=event_key, owner_token=operation["owner_token"],
+                resultado="aceptado" if matches else "rechazado")
+            return {"cliente_id": cliente_id, "estado": "aceptado" if matches else "rechazado",
+                    "binding_aplicado_ahora": matches, "repetido": False}
+    except sqlite3.Error as exc:
+        raise atencion.AtencionNoDisponible("No se puede aplicar la resolución demo.") from exc
 
 
 def resolve_incoming(phone_number_id: str, from_number: str, incoming_text: str) -> Dict[str, Any]:
