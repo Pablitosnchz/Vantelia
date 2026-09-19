@@ -2339,3 +2339,23 @@ a fin en todas.
   pendiente; no se declara fallo del HTTP actual. Crear/mover en WA remate_manual
   generan propuestas, por lo que no se atribuyen a ese recorrido dos efectos reales.
 - La suite única de dff4b72 conserva su copia. No hay otra suite ni banco activos.
+
+## 2026-09-19 23:08 +02:00 — resultado íntegro de la suite congelada
+
+- `dff4b72f59ce18b34ed2b8a204803d4df062f9e5`: 3267 passed, 1 skipped,
+  2 failed, 1083 warnings, 2317.92s pytest. 22:29:32.719→23:08:19.078,
+  registrador 2326.34s; SHA y árbol limpio iguales antes/después. PID31832 y
+  sesión38194 terminados. Metadata/log final contrastados por root; no relanzada.
+- `test_chat_only_engages_after_user_message_was_persisted` usa el callback del
+  motor antiguo: la persistencia ocurre ya en la recepción HTTP. Debe seguir
+  exigiendo cero interacción si falla guardar y una si falla el motor después.
+  Se actualizará el doble en la frontera real, con mutaciones de orden/omisión.
+- `test_no_hay_funciones_construidas_y_sin_enchufar` detecta
+  consultar_intento_reserva_atencion, wrapper sin llamadas tras generalizar pago
+  y reserva. Se elimina el sobrante; no se crea un consumidor artificial.
+- pausa_autoridad_impl retoma turno exclusivo para esas correcciones y dirigidos.
+  WA1/R0/avisos esperan; widget usa Node/build en copia independiente. Repro Chrome
+  original ahora verde; revisión solicita caso de catálogo A→B al recuperar.
+- Acta externa SUITE_CANDIDATO_DFF4B72.md y manifiesto conservan los fallos. Log
+  SHA256 f1d67b6bc04bd73bbc0c300ff7bbc217cbed1b22c888d3a9d74d8020c4d755af.
+  No modelo, proveedores reales, push ni despliegue. No se declara estable global.

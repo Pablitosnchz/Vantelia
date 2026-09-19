@@ -4,7 +4,7 @@ Seguimiento del candidato `astra/cierre-estable-19sep`, desde `e43baca`.
 El código desplegado comunicado sigue siendo `0cb61de`; esta rama no se ha
 publicado ni desplegado. La suite anterior de 3025 aprobados/1 omitido y humo
 5/5 acredita aquel producto, no este bloque. Última actualización: 19-sep,
-21:42 Europe/Madrid.
+23:08 Europe/Madrid.
 
 ## Entregas comprobadas
 
@@ -59,9 +59,12 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
 1. Integrar piezas revisadas y comprobar conflictos sobre el código resultante.
 2. Completar las fronteras del alcance operativo y sus casos deterministas.
 3. Congelar candidato exacto, ejecutar una suite completa y revisar ese código;
-   `dff4b72` empezó su única suite el 19-sep a las 22:29:32.719 Europe/Madrid,
-   árbol limpio, pytest PID 31832. Resultado todavía pendiente. Esta copia no se
-   modifica; WA1/R0 permanecen fuera. Log/metadata en la carpeta de evidencia.
+   `dff4b72` terminó su única suite el 19-sep a las 23:08:19.078 Europe/Madrid:
+   3267 passed, 1 skipped y 2 failed, 2317.92s. Árbol y SHA iguales antes/después.
+   Fallan el doble antiguo de persistencia en demo_conversion y el vigilante de
+   código sin consumidores por un wrapper ya sustituido. Se corrigen con dirigidos;
+   no hay aceptación global ni repetición de completa por cada pieza. WA1/R0 y
+   arreglo widget permanecen fuera. Log/metadata/acta en la carpeta de evidencia.
 4. Medir referencia y candidato con el mismo instrumento, calendario, catálogo,
    configuración y modelo para Alicia y un segundo negocio. No existe todavía
    un artefacto saneado actual autorizado: Claude lo confirmó; Astra no leyó ni

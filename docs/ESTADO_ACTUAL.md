@@ -1,12 +1,12 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 22:29 Europe/Madrid
+## En curso — 2026-09-19 23:08 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** suite completa única de `dff4b72` activa desde 22:29:32.719: producto `83bed95`, referencia de pago conocido y prueba de persistencia; además fixture PAGO corregido tras otro runtime, causal y 103 dirigidos verdes. Revisión de código OK. WhatsApp sigue sin capturador conectado.
+- **Tarea:** suite única de `dff4b72` terminada: 3267 passed, 1 skipped y 2 failed, 2317.92s. Copia limpia antes/después. Corregir prueba de conversión anclada al callback antiguo y retirar wrapper sin consumidores. No verde global. WhatsApp sigue sin capturador conectado.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
-- **Siguiente:** leer el resultado de esa suite sin repetirla; no editar su copia. WA1 preparado para dirigidos en E:/Vantelia-astra-wa1-integracion-19sep con fixture actual; R0 pendiente. A las 22:55 se reprodujo en Chrome un formulario tardío habilitado tras pausa409: arreglo widget en rama aparte, Node/build sin pytest. Antes de WA/voz multiherramientas faltan identidad por aviso y por mutación/objetivo autorizado.
-- **Espera a:** pytest PID 31832, registrador 39528, sesión 38194, copia E:/Vantelia-astra-pausa limpia al empezar. Log suite_candidato_dff4b72.log y metadata .json en E:/Vantelia-astra-pausa-evidencia. Sin sondeos de porcentaje. Claude confirma en c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
+- **Siguiente:** corregir esos dos hallazgos y dirigidos, sin relanzar completa todavía. Después WA1 preparado en E:/Vantelia-astra-wa1-integracion-19sep, R0 y avisos con identidad. Widget resuelve el repro original en Chrome; revisión pidió comprobar recuperación A→B de centro, aún sin commit. Antes de WA/voz falta también identidad de mutación por objetivo autorizado.
+- **Espera a:** pausa_autoridad_impl tiene el turno exclusivo para corregir y probar los dos fallos; la suite/PID31832 ya terminó, sesión38194 cerrada. Log/meta y acta SUITE_CANDIDATO_DFF4B72.md externos preservados. Claude confirma en c6119d que no hay snapshot saneado actual; no hay banco/modelo activo ni lectura/copia de storage por Astra.
 
 - El bloque anterior sigue desplegado como `0cb61de`, revisado `19ad09e` y con
   3025 passed/1 skipped, humo 5/5. No repetirlo como si validase el bloque nuevo.
