@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 import secrets
 import sqlite3
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from backend import db, settings, textnorm, timeutils
@@ -212,28 +213,54 @@ HELP_TEXT = (
 )
 
 
-def resolve_incoming(phone_number_id: str, from_number: str, incoming_text: str) -> Dict[str, Any]:
-    """Decide con que tenant habla este remitente en el numero compartido.
+@dataclass(frozen=True)
+class DemoIncomingResolution:
+    """Lectura consultiva: code_to_bind propone un efecto, no lo acredita."""
 
-    Devuelve `{"cliente_id", "just_bound", "help_text"}`. Con `cliente_id` vacio
-    el webhook responde `help_text` y no molesta a ningun asistente.
-    """
-    code = extract_code(incoming_text)
-    if code:
-        cliente_id = bind_phone(from_number, code)
-        if cliente_id:
-            return {"cliente_id": cliente_id, "just_bound": True, "help_text": ""}
-        # Codigo con formato correcto pero invalido/caducado: si ya tenia una demo
-        # abierta se sigue en ella; si no, se explica.
-        existing = route_for_phone(from_number)
-        if existing:
-            return {"cliente_id": existing, "just_bound": False, "help_text": ""}
-        return {
-            "cliente_id": "",
-            "just_bound": False,
-            "help_text": "Ese codigo no es valido o ha caducado. " + HELP_TEXT,
-        }
+    cliente_id: str
+    code_to_bind: str = ""
+    help_text: str = ""
+
+
+def _demo_route_resolution(from_number: str, invalid_code: bool) -> DemoIncomingResolution:
+    # Un codigo invalido/caducado conserva una demo abierta; no borra rutas.
     existing = route_for_phone(from_number)
     if existing:
-        return {"cliente_id": existing, "just_bound": False, "help_text": ""}
-    return {"cliente_id": "", "just_bound": False, "help_text": HELP_TEXT}
+        return DemoIncomingResolution(cliente_id=existing)
+    prefix = "Ese codigo no es valido o ha caducado. " if invalid_code else ""
+    return DemoIncomingResolution(cliente_id="", help_text=prefix + HELP_TEXT)
+
+
+def resolve_incoming_readonly(
+    phone_number_id: str, from_number: str, incoming_text: str
+) -> DemoIncomingResolution:
+    """Resuelve tenant/codigo sin vincular, consumir usos, reiniciar ni borrar.
+
+    No concede permiso ni congela el estado. Un adaptador con admision previa
+    debe aplicar el binding comprobando atomicamente tenant/codigo/estado
+    esperados; no puede usar resolve_incoming como aplicador tras admitir.
+    """
+    code = extract_code(incoming_text)
+    if code and _normalize_phone(from_number):
+        with db._get_db_connection() as connection:
+            row = _code_row(connection, code)
+        if row:
+            return DemoIncomingResolution(cliente_id=row["cliente_id"], code_to_bind=code)
+    return _demo_route_resolution(from_number, invalid_code=bool(code))
+
+
+def resolve_incoming(phone_number_id: str, from_number: str, incoming_text: str) -> Dict[str, Any]:
+    """Entrada legacy con efectos: devuelve cliente_id, just_bound y help_text."""
+    resolution = resolve_incoming_readonly(phone_number_id, from_number, incoming_text)
+    if resolution.code_to_bind:
+        cliente_id = bind_phone(from_number, resolution.code_to_bind)
+        if cliente_id:
+            return {"cliente_id": cliente_id, "just_bound": True, "help_text": ""}
+        # El codigo pudo caducar/revocarse tras la consulta. El wrapper legacy
+        # conserva su fallback con la ruta vigente, sin volver a interpretar texto.
+        resolution = _demo_route_resolution(from_number, invalid_code=True)
+    return {
+        "cliente_id": resolution.cliente_id,
+        "just_bound": False,
+        "help_text": resolution.help_text,
+    }
