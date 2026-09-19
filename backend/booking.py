@@ -6333,7 +6333,11 @@ async def _ai_send_payment_link(
             f"{nombre_negocio}: para pagar {servicio} ({amount_label}) usa este enlace seguro: "
             f"{checkout_url}"
         )
-        sent = await messaging._send_client_sms(cliente_id, phone, body)
+        try:
+            sent = await messaging._send_client_sms(cliente_id, phone, body)
+        except atencion_contexto.AtencionDetenida as exc:
+            atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "pago", row["id"])
+            raise
     else:
         reply_to = (config.get("contacto", {}) or {}).get("email", "") or None
         subject = f"Enlace de pago de tu cita en {nombre_negocio}"
@@ -6355,7 +6359,8 @@ async def _ai_send_payment_link(
         try:
             await timeutils._to_thread(emailing._send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
             sent = True
-        except atencion_contexto.AtencionDetenida:
+        except atencion_contexto.AtencionDetenida as exc:
+            atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "pago", row["id"])
             raise
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("[ai-pay] email fallo %s: %s", booking_id, exc)
