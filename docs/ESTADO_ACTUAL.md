@@ -1,11 +1,22 @@
 # Estado actual de Vantelia
 
-## Trabajo activo — 2026-09-19 13:47 Europe/Madrid
+## Trabajo activo — 2026-09-19 14:19 Europe/Madrid
 
-Astra ejecuta ESTABILIZACION_19SEP.md en astra/estabilidad-19sep, base60993b7.
-Claude encargado de apuntes; Astra F4 y F2; revisiones independientes CRM/reparto
- y pausa/aislamiento. No duplicar procesos. Siguiente dirigidos causales y
-candidato integrado; D aparcado, sin produccion/push/despliegue.
+- Astra ejecuta [ESTABILIZACION_19SEP.md](ESTABILIZACION_19SEP.md) en
+  `astra/estabilidad-19sep`, base `60993b7`, integrado hasta `8671178`.
+- F4 corregido (`83e5c56`), 48 dirigidos verdes y revisión independiente OK
+  acotado. F2 y teclado revisados; CRM/reparto OK con 66 dirigidos y 5 casos
+  adicionales. Evidencia en [ACEPTACION_ESTABILIZACION_19SEP.md](ACEPTACION_ESTABILIZACION_19SEP.md).
+- Claude tiene el encargo de apuntes (`claude/encargo-0b86b3`), con cambios de
+  código y tests aún sin entrega. Astra terminó 5 pruebas de aislamiento ES/EN
+  entre dos negocios: verdes (45.59s). La primera ejecución se detuvo sin
+  resultado por falta de memoria; dos errores posteriores de fixture se
+  corrigieron (email y HTTPS). No fueron fallos demostrados del producto.
+- Siguiente: terminar dirigidos, revisar/integrar apuntes, congelar candidato y
+  una suite completa. Espera a: entrega de Claude y después revisión exacta.
+- Pausa de temporada: borrador operativo preparado, flujo conjunto no
+  implementado/verificado. No se confunde con apagar Citas o desconectar Meta.
+  D aparcado; sin cambios en producción, push ni despliegue.
 
 **La memoria compartida entre los agentes que trabajan en este repo.** La lee
 quien empieza una tarea y la actualiza quien la cierra. Lo que no esté aquí, el

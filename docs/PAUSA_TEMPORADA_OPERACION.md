@@ -116,5 +116,10 @@ Validación de esta entrega: `git diff --check` terminó sin errores. El dirigid
 `tests/test_palabras_clave_aislamiento_portal.py` se interrumpió el 19-sep-2026 a
 las 14:05:12 Europe/Madrid por saturación de memoria del equipo, sin resultado.
 Se identificó y detuvo solo su proceso (PID 30168). No se ejecutaron mutaciones,
-suite completa, modelo real ni operaciones externas. **Pruebas pendientes de
-ejecución serializada sobre el candidato integrado; esta entrega no acredita verde.**
+suite completa, modelo real ni operaciones externas en aquella entrega.
+
+Actualización 19-sep, 14:19 Europe/Madrid: las cinco pruebas de aislamiento pasan
+en `astra/estabilidad-19sep` (45.59s), tras corregir dos errores de preparación:
+email admitido por el esquema de login y HTTPS para enviar la cookie Secure.
+No se ha cambiado producto para hacerlas pasar. Este resultado acredita
+aislamiento de reglas y edición ES/EN; **la pausa y reactivación siguen sin probar**.

@@ -1952,3 +1952,32 @@ a fin en todas.
   espacio colado («SEP A») que dejaban la casilla sin efecto.
 - Desplegado como 19b64ff: suite 2994 passed (1 skipped), humo 5/5; comprobado en
   vivo que Cap Rocat ve 3 situaciones y Alicia las 6.
+
+## 2026-09-19 14:19 +02:00 — estabilización independiente de los clientes
+
+- Rama `astra/estabilidad-19sep`, base `60993b7`, integrada hasta `a22eb36`.
+  Plan `155aaf2`: recordatorios, interpretación de apuntes, revisión de CRM y
+  reparto, aislamiento y límites de la pausa de temporada. Sin producción/push.
+- F4 (`83e5c56`): omitidos sin canales dejaban `sent_24h`/`sent_2h` en uno.
+  Repro causal: 2 rojos y 2 positivos verdes antes; tras arreglo, 48 dirigidos
+  verdes (247.57s). Revisión independiente: OK acotado. `sent` mide aceptación
+  conocida, incluida recuperada; no entrega al teléfono ni nuevos transportes.
+- `b417618`: revisión OK acotada con una prueba del manejador de teclado y
+  301 servicios (`eb74dc7`, 1 verde, 4.03s). F2 `0c0838c`: sin nuevo hallazgo
+  concreto, tests de fianza incluidos en los 48; no equivale a cobro real.
+- `73f3302` CRM y `c484131` reparto: revisor independiente, 66 dirigidos y
+  5 casos adicionales verdes. Cobertura integrada en `ff45f3a`.
+- Aislamiento ES/EN (`8671178`, fixture corregida `a22eb36`): 5 casos HTTP
+  verdes (45.59s), dos tenants y sesiones separadas; edición durante la
+  conversación, lectura propia y rechazo de cambios/borrado ajenos.
+- Incidencias de pruebas: se identificó y detuvo solo el pytest propio PID
+  30168 a las 14:05:12 por saturación de memoria, sin resultado. Después se
+  corrigieron dos errores de fixture (email `.invalid` y cookie Secure sobre
+  HTTP); no se modificó producto para que el aislamiento pasara. Pruebas en serie.
+  El doble de envío del smoke devuelve su contrato real en `d9ed572` (1 verde).
+- `PAUSA_TEMPORADA_OPERACION.md`: borrador, no operación ejecutada. No hay pausa
+  conjunta verificada de cuota, silencio y reactivación. No se cambian condiciones.
+- Siguiente: Claude termina apuntes en `claude/encargo-0b86b3` (código/tests
+  modificados, sin SHA entregado aún); revisar, integrar, congelar candidato,
+  una suite completa y revisión exacta. No hay nueva medición con modelo real;
+  acta y límites en `ACEPTACION_ESTABILIZACION_19SEP.md`. D sigue aparcado.
