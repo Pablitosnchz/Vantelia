@@ -15,13 +15,17 @@ from atencion_proceso_aislado import comprobar_intento_en_interprete_nuevo
 
 
 @pytest.fixture
-def pago_atencion(operaciones_atencion, api_module, monkeypatch):
-    from backend import atencion_contexto, booking, emailing, messaging, stripe_gateway
+def pago_atencion(operaciones_atencion, monkeypatch):
+    from backend import atencion_contexto, booking, db, emailing, messaging, stripe_gateway, timeutils
 
     a = operaciones_atencion
-    booking_id = _seed_booking(api_module, "atencion", source="vantelia_widget",
+    # Los helpers históricos solo necesitan estas tres funciones. El api_module
+    # de sesión puede pertenecer a un runtime anterior al backend de esta DB.
+    datos_actuales = SimpleNamespace(_utc_now_iso=timeutils._utc_now_iso,
+        _store_booking=booking._store_booking, _get_db_connection=db._get_db_connection)
+    booking_id = _seed_booking(datos_actuales, "atencion", source="vantelia_widget",
                                email="pago@example.test", telefono="+34600123456")
-    _seed_full_policy(api_module)
+    _seed_full_policy(datos_actuales)
     a.booking = booking._get_booking_row_by_id(booking_id)
     a.efectos, a.entregas, a.hooks = [], [], {}
     a.contexto, a.nucleo = atencion_contexto, booking
@@ -82,6 +86,24 @@ def _enviar_pago(a):
 def _pagos_guardados(a):
     with closing(a.db._get_db_connection()) as connection:
         return [dict(f) for f in connection.execute("SELECT * FROM customer_payments ORDER BY id")]
+
+
+def test_fixture_pago_siembra_solo_en_la_db_actual_tras_otro_runtime(
+        api_module, vantelia_env_factory, request):
+    # El hub histórico abre otro runtime y el shim renueva backend.*. La fixture
+    # de sesión sigue siendo la primera API: sembrar por ella toca otra DB.
+    with closing(api_module._get_db_connection()) as connection:
+        anteriores = connection.execute("SELECT count(*) FROM bookings").fetchone()[0]
+    vantelia_env_factory()
+    a = request.getfixturevalue("pago_atencion")
+    with closing(a.db._get_db_connection()) as connection:
+        cita = connection.execute("SELECT id FROM bookings WHERE id='bk_aipay_atencion'").fetchone()
+        politica = connection.execute(
+            "SELECT mode FROM service_payment_policies WHERE cliente_id='demo' AND service_id='consulta'").fetchone()
+    assert cita is not None and a.booking is not None
+    assert cita["id"] == a.booking["id"] and politica["mode"] == "full"
+    with closing(api_module._get_db_connection()) as connection:
+        assert connection.execute("SELECT count(*) FROM bookings").fetchone()[0] == anteriores
 
 
 @pytest.mark.parametrize("entrada", ["core", "ai"])
