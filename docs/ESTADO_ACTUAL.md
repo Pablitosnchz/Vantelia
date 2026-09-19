@@ -1,9 +1,9 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 20:18 Europe/Madrid
+## En curso — 2026-09-19 20:37 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
-- **Tarea:** fases 1 y 2a integradas (`3fad6f2`, `6458b5`); instrumento de cita única `e8a8b6` integrado en `08e541e`. Ahora fase 2b de contexto/admisión de mutaciones y propagación de contexto a hilos en implementación separada.
+- **Tarea:** fases 1 y 2a integradas (`3fad6f2`, `6458b5`); instrumento de cita única `e8a8b6` y contexto de hilos `6b66632` integrados hasta `cf77b87`. Fase 2b de contexto/admisión en núcleos de agenda en implementación y pruebas causales.
 - **Rama:** coordinación astra/cierre-estable-19sep (E:/Vantelia-astra-cierre); implementación astra/pausa-atencion-19sep (E:/Vantelia-astra-pausa), ambas desde e43baca.
 - **Siguiente:** probar y revisar admisión en núcleos de agenda antes de conectar canales; proteger también la recuperación que libera claims pendientes. Plan CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md.
 - **Espera a:** entregas de los agentes propios, con un único turno de pytest. Claude confirma en nota c6119d que no hay snapshot saneado actual: solo comunica metadata de catálogo local, sin lectura/copia por Astra. No hay suite completa ni banco del modelo activo.
@@ -24,6 +24,11 @@
   incluye pending_payment sin acreditar cobro. 13 dirigidos, incluida frontera
   SQLite, con causales documentados en MEDICION_CIERRE_COMPARABLE.md. Usar el mismo
   instrumento sobre referencia y candidato; no recalificar históricos sin datos.
+- Contexto en hilos: `_to_thread` copia ContextVar por llamada. Cuatro pruebas
+  fallaban antes y pasan después; aislamiento concurrente, hilo reutilizado,
+  argumentos y excepción. Revisión independiente OK, evidencia externa en
+  `E:/Vantelia-astra-contexto-hilos-evidencia/CONTEXTO_HILOS.md`. Contextos de atención
+  inmutables: copiar el contexto no copia profundamente los objetos que contiene.
 - [Plan de cierre](CIERRE_ESTABILIDAD_AUTONOMO_19SEP.md): una autoridad de atención
   por tenant; preservar configuración/cuenta/acceso humano; cobro separado.
   D aparcado y sin nuevas operaciones de producción/push/despliegue.

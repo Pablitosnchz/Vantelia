@@ -2119,3 +2119,23 @@ a fin en todas.
 - Siguiente: fase 2b en rama de pausa y helper `_to_thread` en rama separada,
   sin duplicar escritor. Todavía sin suite completa, canales conectados, push,
   despliegue ni producción. La versión completa no está aceptada.
+
+## 2026-09-19 20:37 +02:00 — contexto de hilos integrado; núcleos en prueba
+
+- Coordinación `astra/cierre-estable-19sep`: `6b66632`, revisión independiente OK,
+  integrado como `cf77b87`. Helper `_to_thread` usa `copy_context` por invocación;
+  conserva argumentos/resultado/excepción y aísla contexto del llamador y de otras
+  tareas, incluido un hilo reutilizado. Solo helper y test dedicado.
+- Causal sobre base `08e541e`: 4 failed/1.55s (20:21:14–19); después,
+  4 passed/0.68s (20:21:34–38). Hash del helper cotejado con evidencia externa en
+  `E:/Vantelia-astra-contexto-hilos-evidencia/CONTEXTO_HILOS.md`. Sin repetir pruebas.
+- Fase 2b en `E:/Vantelia-astra-pausa`: núcleo conectado solo en esa rama,
+  todavía sin commit ni validación final. Causales en ejecución por su único dueño.
+  Revisión preliminar pide preservar supresión tras un retroceso de reloj,
+  validar referencias de resultado y no ocultar un resultado conocido al pausar.
+  La identidad de la mutación será estable también entre tickets distintos;
+  los envíos mantienen su identidad por ticket/canal/fragmento.
+- La migración a diario común debe conservar datos y retirar el escritor anterior;
+  no exige convivencia de workers de fase 2a, que nunca se desplegó. No conectar
+  canales ni mostrar una pausa completa por tener estas primitivas implementadas.
+  Sin suite completa, bancos reales, push, despliegue ni acceso a producción.
