@@ -1,8 +1,8 @@
 """Autoridad persistida de atención automática por tenant.
 
-Esta fase solo conserva el estado; los canales todavía no consultan esta
-autoridad. Una lectura es una foto, nunca una admisión de envío. La futura
-admisión deberá leer y registrar su versión en una misma transacción.
+Los canales todavía no consultan esta autoridad. Una lectura es una foto,
+nunca una admisión de envío. atencion_operaciones comparte esta lectura en
+la transacción que registra cada ticket o admisión, antes de cualquier red.
 
 El llamador resuelve el tenant y autentica al actor. Aquí no se copian reglas,
 credenciales ni configuración de canales. Motivo es un código técnico y actor
@@ -105,7 +105,9 @@ def cambiar_atencion(cliente_id, estado, *, version_esperada, motivo, actor):
                 return anterior
             if version_esperada == _ATENCION_VERSION_MAX:
                 raise AtencionNoDisponible("Se ha agotado la versión de atención.")
-            ahora = timeutils._utc_now_iso()
+            # Precisión del reloj común: un evento anterior a reactivar incluso
+            # en el mismo segundo no puede recibir una generación nueva.
+            ahora = timeutils._to_utc_iso(timeutils._utc_now())
             siguiente = {"cliente_id": cliente_id, "estado": estado,
                          "version": version_esperada + 1, "fecha_efectiva": ahora,
                          "motivo": motivo, "actor": actor}

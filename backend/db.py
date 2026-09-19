@@ -10,7 +10,7 @@ Que tabla guarda que:
 | Dominio | Tablas |
 | --- | --- |
 | Clientes y acceso | `clientes`, `users`, `auth_sessions`, `password_reset_tokens`, `user_permission_overrides`, `admin_impersonations`, `system_settings` |
-| Atención automática | `client_attention_state` (transiciones en `client_channel_audit`) |
+| Atención automática | `client_attention_state`, `client_attention_tickets`, `client_attention_sends` (transiciones en `client_channel_audit`) |
 | Agenda | `bookings`, `booking_audit`, `booking_operations`, `booking_operation_audit`, `employees`, `agenda_blocks`, `locations`, `resources` |
 | Catalogo | `services`, `service_location_overrides`, `service_payment_policies` |
 | Conversaciones | `chat_sessions`, `chat_messages`, `chat_takeovers`, `live_chat_sessions`, `whatsapp_inbound_messages`, `voice_calls` |
@@ -69,6 +69,44 @@ def _init_database() -> None:
                 motivo TEXT NOT NULL CHECK (length(motivo) BETWEEN 1 AND 64),
                 actor TEXT NOT NULL CHECK (length(actor) BETWEEN 1 AND 128)
             )"""
+        )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS client_attention_tickets (
+                cliente_id TEXT NOT NULL,
+                evento_id TEXT NOT NULL,
+                ticket_id TEXT NOT NULL UNIQUE,
+                version INTEGER NOT NULL CHECK (typeof(version) = 'integer' AND version >= 0),
+                event_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                estado TEXT NOT NULL CHECK (estado IN ('vigente', 'suprimido')),
+                motivo TEXT NOT NULL DEFAULT '',
+                suprimido_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (cliente_id, evento_id),
+                UNIQUE (cliente_id, ticket_id)
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS client_attention_sends (
+                cliente_id TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                canal TEXT NOT NULL,
+                fragmento INTEGER NOT NULL CHECK (typeof(fragmento) = 'integer' AND fragmento >= 0),
+                payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
+                estado TEXT NOT NULL CHECK (estado IN
+                    ('en_transito', 'suprimido', 'aceptado', 'rechazado', 'desconocido')),
+                owner_token TEXT NOT NULL DEFAULT '',
+                motivo TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                resultado_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (cliente_id, ticket_id, canal, fragmento),
+                FOREIGN KEY (cliente_id, ticket_id)
+                    REFERENCES client_attention_tickets(cliente_id, ticket_id)
+            )"""
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_attention_sends_state "
+            "ON client_attention_sends(cliente_id, estado)"
         )
         connection.execute(
             """CREATE TABLE IF NOT EXISTS booking_operations (
