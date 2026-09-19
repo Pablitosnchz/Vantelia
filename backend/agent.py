@@ -38,6 +38,7 @@ import re
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend import atencion_contexto
 from backend import catalog_pick, clients, db, intents, settings, textnorm, timeutils
 
 # Cuantas vueltas de tool se le permiten en un turno. Con 4 le sobra para buscar
@@ -5123,6 +5124,8 @@ async def responder(
         remate_final = _fechas_en_humano(remate_final)
         traza.guardar(mensaje=mensaje, respuesta=remate_final)
         return remate_final, cita_creada
+    except atencion_contexto.AtencionDetenida:
+        raise
     except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
         settings.logger.warning("[agenda-agente] fallo con %s: %s", cliente_id, exc)
         # Si el modelo no contesta por saldo o credenciales, que se SEPA: se

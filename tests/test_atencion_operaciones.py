@@ -343,7 +343,7 @@ def test_admision_corrupta_no_renueva_ni_oculta_incertidumbre(operaciones_atenci
     _admitir_prueba(a, ticket)
     with closing(a.db._get_db_connection()) as connection, connection:
         connection.execute("PRAGMA ignore_check_constraints=ON")
-        connection.execute("UPDATE client_attention_sends SET %s=?" % campo, (valor,))
+        connection.execute("UPDATE client_attention_operations SET %s=?" % campo, (valor,))
     with pytest.raises(a.autoridad.AtencionNoDisponible):
         _admitir_prueba(a, ticket)
     with pytest.raises(a.autoridad.AtencionNoDisponible):
@@ -355,7 +355,7 @@ def test_fallo_al_registrar_supresion_revierte_ticket_y_envio_juntos(operaciones
     ticket = _crear_ticket_prueba(a)
     _cambiar_prueba(a, "pausada", 0)
     with closing(a.db._get_db_connection()) as connection, connection:
-        connection.execute("CREATE TRIGGER romper_admision BEFORE INSERT ON client_attention_sends "
+        connection.execute("CREATE TRIGGER romper_admision BEFORE INSERT ON client_attention_operations "
                            "BEGIN SELECT RAISE(ABORT, 'fallo local'); END")
     with pytest.raises(a.autoridad.AtencionNoDisponible):
         _admitir_prueba(a, ticket)
@@ -369,7 +369,7 @@ def test_fallo_al_guardar_resultado_conserva_transito_sin_reenviar(operaciones_a
     ticket = _crear_ticket_prueba(a)
     envio = _admitir_prueba(a, ticket)
     with closing(a.db._get_db_connection()) as connection, connection:
-        connection.execute("CREATE TRIGGER romper_resultado BEFORE UPDATE ON client_attention_sends "
+        connection.execute("CREATE TRIGGER romper_resultado BEFORE UPDATE ON client_attention_operations "
                            "BEGIN SELECT RAISE(ABORT, 'fallo local'); END")
     with pytest.raises(a.autoridad.AtencionNoDisponible):
         _resultado_prueba(a, envio, "aceptado")
@@ -381,7 +381,7 @@ def test_error_db_y_tabla_ausente_nunca_dan_permiso(operaciones_atencion, monkey
     a = operaciones_atencion
     ticket = _crear_ticket_prueba(a)
     with closing(a.db._get_db_connection()) as connection, connection:
-        connection.execute("DROP TABLE client_attention_sends")
+        connection.execute("DROP TABLE client_attention_operations")
     with pytest.raises(a.autoridad.AtencionNoDisponible):
         _admitir_prueba(a, ticket)
 

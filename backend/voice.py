@@ -56,6 +56,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppVoiceResponse, BookingReschedulePayload
+from backend import atencion_contexto
 from backend import agenda, appstate, booking, clients, commerce, crm, db, emailing, messaging, rag, security, settings, textnorm, timeutils
 
 # Tareas en segundo plano (envios best-effort que no deben bloquear la respuesta de voz).
@@ -2507,6 +2508,8 @@ async def _voice_perform_booking(
             source="voice",
             send_confirmation=False,  # la voz confirma con su propio envio en segundo plano
         )
+    except atencion_contexto.AtencionDetenida:
+        raise
     except HTTPException as exc:
         if exc.status_code == status.HTTP_409_CONFLICT:
             # Dos 409 distintos. Si el negocio RETIRO el servicio entre la oferta y
@@ -2964,6 +2967,8 @@ async def _voice_cancel_booking(
             row, source="voice", reason=textnorm._sanitize_text(motivo, allow_multiline=True),
             audit_extra={"channel": "voice", "from_number": from_number},
         )
+    except atencion_contexto.AtencionDetenida:
+        raise
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
     except Exception as exc:  # noqa: BLE001
@@ -3071,6 +3076,8 @@ async def _voice_reschedule_booking(
     )
     try:
         await booking._update_booking_details(row, payload, None, source="voice")
+    except atencion_contexto.AtencionDetenida:
+        raise
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
     except Exception as exc:  # noqa: BLE001
@@ -3169,7 +3176,7 @@ def _huecos_por_franja(slots: List[str]) -> Dict[str, Any]:
 async def _voice_dispatch_tool(
     cliente_id: str, name: str, arguments_json: str, *, from_number: str = "", location_id: str = ""
 ) -> Dict[str, Any]:
-    """Ejecuta una tool y NUNCA deja escapar una excepcion.
+    """Traduce fallos de tool; el control terminal AtencionDetenida se propaga.
 
     Los argumentos los rellena el modelo a partir de lo que oye por telefono, y
     puede mandar "manana" donde se espera "2026-08-25". Esa entrada levantaba un
@@ -3184,6 +3191,8 @@ async def _voice_dispatch_tool(
         return await _voice_dispatch_tool_impl(
             cliente_id, name, arguments_json, from_number=from_number, location_id=location_id,
         )
+    except atencion_contexto.AtencionDetenida:
+        raise
     except Exception as exc:  # noqa: BLE001 - una tool no puede tumbar la llamada
         settings.logger.exception(
             "[voice] la tool %s de %s ha fallado con %s: %s", name, cliente_id, arguments_json[:200], exc

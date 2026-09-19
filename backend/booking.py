@@ -58,7 +58,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
+from backend import agenda, appstate, atencion_contexto, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -1373,6 +1373,8 @@ async def _cancel_booking_by_code(
             request=request,
             audit_extra={"channel": source, "trusted_phone": trusted_phone},
         )
+    except atencion_contexto.AtencionDetenida:
+        raise
     except HTTPException as exc:
         # La verificación y los rechazos de estado ya ocurrieron antes del
         # núcleo. Dentro de él pudo aceptar el proveedor y fallar el guardado.
@@ -1424,6 +1426,8 @@ async def _reschedule_booking_by_code(
             source=source,
             audit_payload={"channel": source, "trusted_phone": trusted_phone},
         )
+    except atencion_contexto.AtencionDetenida:
+        raise
     except HTTPException as exc:
         return {
             "ok": False,
@@ -2522,6 +2526,9 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False, prepar
             ),
         )
         connection.commit()
+    # La reserva ya existe. Un fallo posterior de CRM, pago o aviso no borra
+    # esa evidencia ni convierte la reserva en una entrega de mensaje.
+    atencion_contexto.registrar_mutacion_conocida(record["cliente_id"], record["id"])
     if not skip_payment:
         _booking_payment_after_store(record["id"])
     booking_status = "confirmado" if record.get("status") == "confirmed" else "cita_pendiente"
@@ -3151,6 +3158,16 @@ async def _update_booking_details(
     source: str,
     audit_payload: Optional[Dict[str, Any]] = None,
 ) -> BookingActionResponse:
+    solicitud_atencion = {
+        "booking_id": booking_row["id"], "fecha": textnorm._sanitize_text(data.fecha),
+        "hora": textnorm._sanitize_text(data.hora), "employee_id": str(data.employee_id or ""),
+        "nombre": textnorm._sanitize_text(data.nombre), "email": str(data.email),
+        "telefono": textnorm._sanitize_text(data.telefono), "servicio": textnorm._sanitize_text(data.servicio),
+        "notas": textnorm._sanitize_text(data.notas, allow_multiline=True),
+        "duracion_manual": int(getattr(data, "duracion_minutos", 0) or 0), "source": str(source),
+    }
+    atencion_contexto.comprobar_intento_mutacion_atencion(
+        booking_row["cliente_id"], "mover", solicitud_atencion)
     if booking_row["status"] == "cancelled":
         raise HTTPException(status_code=409, detail="No se puede modificar una cita cancelada.")
     if booking_row["status"] == "completed":
@@ -3243,99 +3260,106 @@ async def _update_booking_details(
         employee_id=target_employee["id"],
         duration_minutes=service_duration,
     )
-    provider_result = (
-        await _reschedule_provider_booking(booking_row, fecha=booking_date, hora=booking_time)
-        if slot_changed
-        else appstate.ProviderBookingResult(
-            success=True,
-            status=booking_row["provider_status"] or "confirmed",
-            provider_name=booking_row["provider_name"] or "internal",
-            provider_booking_id=booking_row["provider_booking_id"] or "",
-            provider_booking_url=booking_row["provider_booking_url"] or "",
-            message="Reserva actualizada internamente.",
-        )
-    )
-
-    updates: Dict[str, Any] = {
-        "nombre": textnorm._sanitize_text(data.nombre),
-        "email": str(data.email),
-        "telefono": textnorm._sanitize_text(data.telefono),
-        "servicio": textnorm._sanitize_text(data.servicio),
-        "notas": textnorm._sanitize_text(data.notas, allow_multiline=True),
-        "employee_id": target_employee["id"],
-        "employee_name": target_employee["name"],
-        "booking_date": booking_date,
-        "booking_time": booking_time,
-        "start_at": timeutils._to_utc_iso(start_local),
-        "end_at": timeutils._to_utc_iso(end_local),
-        "service_id": service_id,
-        "service_price_cents": service_price,
-        "status": "confirmed",
-        "provider_status": provider_result.status,
-        "provider_booking_id": provider_result.provider_booking_id,
-        "provider_booking_url": provider_result.provider_booking_url,
-    }
-    if slot_changed and not solo_cambia_la_duracion:
-        updates.update(
-            {
-                "rescheduled_at": timeutils._utc_now_iso(),
-                "reminder_24h_sent_at": "",
-                "reminder_2h_sent_at": "",
-            }
-        )
-
-    # Igual que al crear: entre comprobar el hueco y guardar hay una llamada al
-    # proveedor, o sea una ventana ancha en la que otra persona puede haberse
-    # quedado ese tramo. Se re-comprueba con el lock cogido (excluyendo la propia
-    # cita, que obviamente ocupa su hueco actual).
-    with appstate.booking_insert_lock:
-        if slot_changed and agenda.slot_pisa_otra_cita(
-            booking_row["cliente_id"], booking_date, booking_time,
-            employee_id=target_employee["id"], duration_minutes=service_duration,
-            exclude_booking_id=booking_row["id"],
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+    with atencion_contexto.admitir_mutacion_atencion(
+            booking_row["cliente_id"], "mover", {"solicitud": solicitud_atencion,
+                "employee_id": target_employee["id"], "employee_name": target_employee["name"],
+                "service_id": service_id, "service_price": service_price, "duracion": service_duration,
+                "start_at": timeutils._to_utc_iso(start_local), "end_at": timeutils._to_utc_iso(end_local)},
+            solicitud=solicitud_atencion):
+        provider_result = (
+            await _reschedule_provider_booking(booking_row, fecha=booking_date, hora=booking_time)
+            if slot_changed
+            else appstate.ProviderBookingResult(
+                success=True,
+                status=booking_row["provider_status"] or "confirmed",
+                provider_name=booking_row["provider_name"] or "internal",
+                provider_booking_id=booking_row["provider_booking_id"] or "",
+                provider_booking_url=booking_row["provider_booking_url"] or "",
+                message="Reserva actualizada internamente.",
             )
-        _update_booking_record(booking_row["id"], **updates)
-    event_type = ("booking_duration_changed" if solo_cambia_la_duracion
-                  else ("booking_rescheduled" if slot_changed else "booking_updated"))
-    _record_booking_audit(
-        booking_row["id"],
-        booking_row["cliente_id"],
-        event_type,
-        {
-            "source": source,
-            "fecha": booking_date,
-            "hora": booking_time,
+        )
+
+        updates: Dict[str, Any] = {
+            "nombre": textnorm._sanitize_text(data.nombre),
+            "email": str(data.email),
+            "telefono": textnorm._sanitize_text(data.telefono),
+            "servicio": textnorm._sanitize_text(data.servicio),
+            "notas": textnorm._sanitize_text(data.notas, allow_multiline=True),
             "employee_id": target_employee["id"],
             "employee_name": target_employee["name"],
-            **(audit_payload or {}),
-        },
-    )
-    refreshed = _load_booking_or_404(booking_row["id"])
-    crm._crm_upsert_contact(
-        refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
-        phone=refreshed["telefono"] or "", source=source, status="confirmado",
-        entity_type="booking", entity_id=refreshed["id"],
-    )
-    if not solo_cambia_la_duracion:
-        try:
-            await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.error("No se ha podido enviar el aviso de actualizacion %s: %s", refreshed["id"], exc)
+            "booking_date": booking_date,
+            "booking_time": booking_time,
+            "start_at": timeutils._to_utc_iso(start_local),
+            "end_at": timeutils._to_utc_iso(end_local),
+            "service_id": service_id,
+            "service_price_cents": service_price,
+            "status": "confirmed",
+            "provider_status": provider_result.status,
+            "provider_booking_id": provider_result.provider_booking_id,
+            "provider_booking_url": provider_result.provider_booking_url,
+        }
+        if slot_changed and not solo_cambia_la_duracion:
+            updates.update(
+                {
+                    "rescheduled_at": timeutils._utc_now_iso(),
+                    "reminder_24h_sent_at": "",
+                    "reminder_2h_sent_at": "",
+                }
+            )
 
-    return BookingActionResponse(
-        ok=True,
-        booking_id=refreshed["id"],
-        estado=refreshed["status"],
-        mensaje="La cita se ha actualizado correctamente.",
-        employee_id=refreshed["employee_id"] or "",
-        employee_name=refreshed["employee_name"] or "",
-        manage_url=_booking_row_manage_url(refreshed, request),
-        provider_booking_url=refreshed["provider_booking_url"] or "",
-    )
+        # Igual que al crear: entre comprobar el hueco y guardar hay una llamada al
+        # proveedor, o sea una ventana ancha en la que otra persona puede haberse
+        # quedado ese tramo. Se re-comprueba con el lock cogido (excluyendo la propia
+        # cita, que obviamente ocupa su hueco actual).
+        with appstate.booking_insert_lock:
+            if slot_changed and agenda.slot_pisa_otra_cita(
+                booking_row["cliente_id"], booking_date, booking_time,
+                employee_id=target_employee["id"], duration_minutes=service_duration,
+                exclude_booking_id=booking_row["id"],
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+                )
+            _update_booking_record(booking_row["id"], **updates)
+        atencion_contexto.registrar_mutacion_conocida(booking_row["cliente_id"], booking_row["id"])
+        event_type = ("booking_duration_changed" if solo_cambia_la_duracion
+                      else ("booking_rescheduled" if slot_changed else "booking_updated"))
+        _record_booking_audit(
+            booking_row["id"],
+            booking_row["cliente_id"],
+            event_type,
+            {
+                "source": source,
+                "fecha": booking_date,
+                "hora": booking_time,
+                "employee_id": target_employee["id"],
+                "employee_name": target_employee["name"],
+                **(audit_payload or {}),
+            },
+        )
+        refreshed = _load_booking_or_404(booking_row["id"])
+        crm._crm_upsert_contact(
+            refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
+            phone=refreshed["telefono"] or "", source=source, status="confirmado",
+            entity_type="booking", entity_id=refreshed["id"],
+        )
+        if not solo_cambia_la_duracion:
+            try:
+                await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("No se ha podido enviar el aviso de actualizacion %s: %s", refreshed["id"], exc)
+
+        return BookingActionResponse(
+            ok=True,
+            booking_id=refreshed["id"],
+            estado=refreshed["status"],
+            mensaje="La cita se ha actualizado correctamente.",
+            employee_id=refreshed["employee_id"] or "",
+            employee_name=refreshed["employee_name"] or "",
+            manage_url=_booking_row_manage_url(refreshed, request),
+            provider_booking_url=refreshed["provider_booking_url"] or "",
+        )
 
 
 # Canales donde no hay nadie supervisando: ahi es donde se cuelan las dobles
@@ -3629,13 +3653,24 @@ async def _create_booking_core(
     Devuelve la fila guardada (el estado final puede ser pending_payment si el
     servicio exige pago por adelantado)."""
     from backend import booking_operations
-    request_hash = ""
-    if operation_key:
-        request_hash = booking_operations.booking_creation_fingerprint(
+    solicitud_atencion = {
+        "fingerprint": booking_operations.booking_creation_fingerprint(
             employee_row=employee_row, nombre=nombre, email=email, telefono=telefono,
             servicio=servicio, booking_date=booking_date, booking_time=booking_time,
-            notas=notas, source=source, fuera_de_horario=fuera_de_horario, expected_terms=expected_terms)
-        recuperada = booking_operations.recover_creation_operation(cliente_id, operation_key, request_hash)
+            notas=notas, source=source, fuera_de_horario=fuera_de_horario, expected_terms=expected_terms),
+        "duracion_manual": int(duracion_manual or 0),
+        "webhook_source": str(webhook_source or source),
+    }
+    atencion_contexto.comprobar_intento_mutacion_atencion(cliente_id, "crear", solicitud_atencion)
+    request_hash = solicitud_atencion["fingerprint"] if operation_key else ""
+    if operation_key:
+        if atencion_contexto.contexto_atencion_actual() is None:
+            # El recorrido anterior conserva su recuperación antes de preparar.
+            recuperada = booking_operations.recover_creation_operation(cliente_id, operation_key, request_hash)
+        else:
+            # Un turno automático solo lee aquí: liberar un claim requiere la
+            # admisión que se decidirá después de preparar los datos efectivos.
+            recuperada = booking_operations.read_completed_creation_operation(cliente_id, operation_key, request_hash)
         if recuperada is not None:
             return recuperada
     config = clients._get_client_config(cliente_id)
@@ -3655,139 +3690,148 @@ async def _create_booking_core(
     service_id = preparada["service_id"]
     service_price = preparada["service_price"]
 
-    booking_id = f"bk_{secrets.token_urlsafe(10)}"
-    if operation_key:
-        recuperada = booking_operations.claim_creation_operation(
-            cliente_id, operation_key, request_hash, booking_id)
-        if recuperada is not None:
-            return recuperada
-    manage_token = _generate_manage_token()
-    created_at = timeutils._utc_now_iso()
-    provider = _get_booking_provider(config)
-    booking_timezone = preparada["terms"]["timezone"]
+    with atencion_contexto.admitir_mutacion_atencion(
+            cliente_id, "crear", {"solicitud": solicitud_atencion,
+                "terms": preparada["terms"], "duracion": service_duration}, solicitud=solicitud_atencion):
+        if operation_key:
+            recuperada = booking_operations.recover_creation_operation(cliente_id, operation_key, request_hash)
+            if recuperada is not None:
+                atencion_contexto.registrar_mutacion_conocida(cliente_id, recuperada["id"])
+                return recuperada
+        booking_id = f"bk_{secrets.token_urlsafe(10)}"
+        if operation_key:
+            recuperada = booking_operations.claim_creation_operation(
+                cliente_id, operation_key, request_hash, booking_id)
+            if recuperada is not None:
+                atencion_contexto.registrar_mutacion_conocida(cliente_id, recuperada["id"])
+                return recuperada
+        manage_token = _generate_manage_token()
+        created_at = timeutils._utc_now_iso()
+        provider = _get_booking_provider(config)
+        booking_timezone = preparada["terms"]["timezone"]
 
-    payload_source = webhook_source or source
-    provider_payload = {
-        "booking_id": booking_id,
-        "cliente_id": cliente_id,
-        "empresa": config["nombre"],
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "fecha": booking_date,
-        "hora": booking_time,
-        "notas": notas,
-        "source": payload_source,
-        "created_at": created_at,
-    }
-    try:
-        provider_result = await _create_provider_booking(cliente_id, provider_payload)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except httpx.HTTPError as exc:
-        settings.logger.error("Error creando cita externa para %s: %s", cliente_id, exc)
-        raise HTTPException(
-            status_code=502,
-            detail="No se ha podido crear la cita en el proveedor de calendario.",
-        ) from exc
-
-    webhook_payload = dict(provider_payload)
-    webhook_payload.update({
-        "provider_name": provider_result.provider_name,
-        "provider_booking_id": provider_result.provider_booking_id,
-        "provider_booking_url": provider_result.provider_booking_url,
-    })
-    _, webhook_status = await _send_booking_to_webhook(cliente_id, webhook_payload)
-    provider_status = webhook_status if provider == "internal" else provider_result.status
-
-    record = {
-        "id": booking_id,
-        "cliente_id": cliente_id,
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "booking_date": booking_date,
-        "booking_time": booking_time,
-        "notas": notas,
-        "status": "confirmed",
-        "provider_name": provider_result.provider_name,
-        "provider_status": provider_status,
-        "provider_booking_id": provider_result.provider_booking_id,
-        "provider_booking_url": provider_result.provider_booking_url,
-        "manage_token": manage_token,
-        "timezone": booking_timezone,
-        "start_at": preparada["terms"]["start_at"],
-        "end_at": preparada["terms"]["end_at"],
-        "confirmed_at": created_at,
-        "cancelled_at": "",
-        **_booking_blank_tracking_fields(),
-        "service_id": service_id,
-        "service_price_cents": service_price,
-        "source": source,
-        "created_at": created_at,
-    }
-    # Comprobar-y-guardar, atomico. El indice unico de la BD para el choque exacto
-    # de hora; el lock + esta re-comprobacion para los SOLAPES parciales, que dos
-    # peticiones simultaneas se colaban las dos (medido en
-    # tests/test_reserva_concurrente.py).
-    try:
-        with appstate.booking_insert_lock:
-            if agenda.slot_pisa_otra_cita(
-                cliente_id, booking_date, booking_time,
-                employee_id=employee_row["id"], duration_minutes=service_duration,
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
-                )
-            _store_booking(record, prepared=preparada)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
-        ) from exc
-
-    _record_booking_audit(
-        booking_id,
-        cliente_id,
-        "booking_created",
-        {
-            "status": "confirmed",
-            "source": source,
-            "provider_name": provider_result.provider_name,
-            "provider_status": provider_status,
+        payload_source = webhook_source or source
+        provider_payload = {
+            "booking_id": booking_id,
+            "cliente_id": cliente_id,
+            "empresa": config["nombre"],
             "employee_id": employee_row["id"],
             "employee_name": employee_row["name"],
-            **(audit_extra or {}),
-        },
-    )
-
-    stored = _get_booking_row_by_id(booking_id)
-    if stored is None:  # defensa: _store_booking acaba de insertar
-        raise HTTPException(status_code=500, detail="No se pudo guardar la cita.")
-    if send_confirmation and _booking_has_reminder_contact(email, telefono):
-        # Con senal pendiente no se puede decir "cita confirmada": se manda el aviso
-        # de pago, que ademas lleva el enlace. Al pagar llega la confirmación real.
-        aviso = "pending_payment" if stored["status"] == "pending_payment" else "confirmed"
+            "nombre": nombre,
+            "email": email,
+            "telefono": telefono,
+            "servicio": servicio,
+            "fecha": booking_date,
+            "hora": booking_time,
+            "notas": notas,
+            "source": payload_source,
+            "created_at": created_at,
+        }
         try:
-            await _send_booking_reminder_by_kind(
-                stored, aviso, request, sent_column="confirmation_email_sent_at",
-            )
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)
-            _mark_booking_email_result(booking_id, status="failed", error=str(exc))
-            _record_booking_audit(
-                booking_id, cliente_id, "booking_email_failed",
-                {"kind": "confirmed", "error": str(exc)},
-            )
-        stored = _get_booking_row_by_id(booking_id) or stored
-    return stored
+            provider_result = await _create_provider_booking(cliente_id, provider_payload)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except httpx.HTTPError as exc:
+            settings.logger.error("Error creando cita externa para %s: %s", cliente_id, exc)
+            raise HTTPException(
+                status_code=502,
+                detail="No se ha podido crear la cita en el proveedor de calendario.",
+            ) from exc
+
+        webhook_payload = dict(provider_payload)
+        webhook_payload.update({
+            "provider_name": provider_result.provider_name,
+            "provider_booking_id": provider_result.provider_booking_id,
+            "provider_booking_url": provider_result.provider_booking_url,
+        })
+        _, webhook_status = await _send_booking_to_webhook(cliente_id, webhook_payload)
+        provider_status = webhook_status if provider == "internal" else provider_result.status
+
+        record = {
+            "id": booking_id,
+            "cliente_id": cliente_id,
+            "employee_id": employee_row["id"],
+            "employee_name": employee_row["name"],
+            "nombre": nombre,
+            "email": email,
+            "telefono": telefono,
+            "servicio": servicio,
+            "booking_date": booking_date,
+            "booking_time": booking_time,
+            "notas": notas,
+            "status": "confirmed",
+            "provider_name": provider_result.provider_name,
+            "provider_status": provider_status,
+            "provider_booking_id": provider_result.provider_booking_id,
+            "provider_booking_url": provider_result.provider_booking_url,
+            "manage_token": manage_token,
+            "timezone": booking_timezone,
+            "start_at": preparada["terms"]["start_at"],
+            "end_at": preparada["terms"]["end_at"],
+            "confirmed_at": created_at,
+            "cancelled_at": "",
+            **_booking_blank_tracking_fields(),
+            "service_id": service_id,
+            "service_price_cents": service_price,
+            "source": source,
+            "created_at": created_at,
+        }
+        # Comprobar-y-guardar, atomico. El indice unico de la BD para el choque exacto
+        # de hora; el lock + esta re-comprobacion para los SOLAPES parciales, que dos
+        # peticiones simultaneas se colaban las dos (medido en
+        # tests/test_reserva_concurrente.py).
+        try:
+            with appstate.booking_insert_lock:
+                if agenda.slot_pisa_otra_cita(
+                    cliente_id, booking_date, booking_time,
+                    employee_id=employee_row["id"], duration_minutes=service_duration,
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+                    )
+                _store_booking(record, prepared=preparada)
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+            ) from exc
+
+        _record_booking_audit(
+            booking_id,
+            cliente_id,
+            "booking_created",
+            {
+                "status": "confirmed",
+                "source": source,
+                "provider_name": provider_result.provider_name,
+                "provider_status": provider_status,
+                "employee_id": employee_row["id"],
+                "employee_name": employee_row["name"],
+                **(audit_extra or {}),
+            },
+        )
+
+        stored = _get_booking_row_by_id(booking_id)
+        if stored is None:  # defensa: _store_booking acaba de insertar
+            raise HTTPException(status_code=500, detail="No se pudo guardar la cita.")
+        if send_confirmation and _booking_has_reminder_contact(email, telefono):
+            # Con senal pendiente no se puede decir "cita confirmada": se manda el aviso
+            # de pago, que ademas lleva el enlace. Al pagar llega la confirmación real.
+            aviso = "pending_payment" if stored["status"] == "pending_payment" else "confirmed"
+            try:
+                await _send_booking_reminder_by_kind(
+                    stored, aviso, request, sent_column="confirmation_email_sent_at",
+                )
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)
+                _mark_booking_email_result(booking_id, status="failed", error=str(exc))
+                _record_booking_audit(
+                    booking_id, cliente_id, "booking_email_failed",
+                    {"kind": "confirmed", "error": str(exc)},
+                )
+            stored = _get_booking_row_by_id(booking_id) or stored
+        return stored
 
 
 async def _cancel_booking_core(
@@ -3802,6 +3846,10 @@ async def _cancel_booking_core(
 
     Devuelve la fila actualizada. No lanza si ya estaba cancelada.
     """
+    solicitud_atencion = {"booking_id": booking_row["id"], "source": str(source),
+                         "reason": textnorm._sanitize_text(reason, allow_multiline=True)}
+    atencion_contexto.comprobar_intento_mutacion_atencion(
+        booking_row["cliente_id"], "cancelar", solicitud_atencion)
     booking_id = booking_row["id"]
     if booking_row["status"] == "cancelled":
         return booking_row
@@ -3810,41 +3858,46 @@ async def _cancel_booking_core(
     if booking_row["status"] == "no_show":
         raise HTTPException(status_code=409, detail="Esa cita esta marcada como no asistida y no se puede cancelar.")
     cancel_reason = textnorm._sanitize_text(reason, allow_multiline=True)
-    await _cancel_provider_booking(booking_row)
-    _update_booking_record(
-        booking_id,
-        status="cancelled",
-        cancelled_at=timeutils._utc_now_iso(),
-        provider_status="cancelled",
-    )
-    _record_booking_audit(
-        booking_id,
-        booking_row["cliente_id"],
-        "booking_cancelled",
-        {
-            "source": source,
-            # Solo para el registro del negocio: al cliente no se le manda.
-            "reason": cancel_reason,
-            **(audit_extra or {}),
-        },
-    )
-    # Aplica automaticamente la politica de cancelación (penalizacion/reembolso)
-    # sobre el pago ya autorizado. No bloquea la cancelación si algo falla.
-    try:
-        apply_cancellation_policy(booking_row, kind="cancel", actor_source=source)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Politica de cancelación fallo %s: %s", booking_id, exc)
-    refreshed = _load_booking_or_404(booking_id)
-    crm._crm_upsert_contact(
-        refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
-        phone=refreshed["telefono"] or "", source=source, status="interesado",
-        entity_type="booking", entity_id=refreshed["id"],
-    )
-    try:
-        await _send_booking_reminder_by_kind(refreshed, "cancelled", request)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se pudo enviar aviso de cancelación %s: %s", booking_id, exc)
-    return refreshed
+    with atencion_contexto.admitir_mutacion_atencion(
+            booking_row["cliente_id"], "cancelar", {"solicitud": solicitud_atencion,
+                "status": booking_row["status"], "provider_name": booking_row["provider_name"],
+                "provider_booking_id": booking_row["provider_booking_id"]}, solicitud=solicitud_atencion):
+        await _cancel_provider_booking(booking_row)
+        _update_booking_record(
+            booking_id,
+            status="cancelled",
+            cancelled_at=timeutils._utc_now_iso(),
+            provider_status="cancelled",
+        )
+        atencion_contexto.registrar_mutacion_conocida(booking_row["cliente_id"], booking_id)
+        _record_booking_audit(
+            booking_id,
+            booking_row["cliente_id"],
+            "booking_cancelled",
+            {
+                "source": source,
+                # Solo para el registro del negocio: al cliente no se le manda.
+                "reason": cancel_reason,
+                **(audit_extra or {}),
+            },
+        )
+        # Aplica automaticamente la politica de cancelación (penalizacion/reembolso)
+        # sobre el pago ya autorizado. No bloquea la cancelación si algo falla.
+        try:
+            apply_cancellation_policy(booking_row, kind="cancel", actor_source=source)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("Politica de cancelación fallo %s: %s", booking_id, exc)
+        refreshed = _load_booking_or_404(booking_id)
+        crm._crm_upsert_contact(
+            refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
+            phone=refreshed["telefono"] or "", source=source, status="interesado",
+            entity_type="booking", entity_id=refreshed["id"],
+        )
+        try:
+            await _send_booking_reminder_by_kind(refreshed, "cancelled", request)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("No se pudo enviar aviso de cancelación %s: %s", booking_id, exc)
+        return refreshed
 
 
 _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>

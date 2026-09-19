@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from fastapi import HTTPException
 
-from backend import clients, db, settings, timeutils
+from backend import atencion_contexto, clients, db, settings, timeutils
 
 
 _PENDING_CREATION_TIMEOUT = timedelta(minutes=15)
@@ -54,6 +54,23 @@ def booking_creation_fingerprint(*, employee_row, nombre, email, telefono, servi
     return creation_request_fingerprint(datos)
 
 
+def read_completed_creation_operation(cliente_id, operation_key, request_hash):
+    """Solo resultado conocido: no reclama ni libera operaciones pendientes."""
+    if not isinstance(operation_key, str) or not operation_key.strip() or len(operation_key) > 128:
+        raise HTTPException(status_code=422, detail="Identidad de operación no válida")
+    with closing(db._get_db_connection()) as conn:
+        op = conn.execute(
+            "SELECT request_hash,booking_id FROM booking_operations WHERE cliente_id=? AND operation_key=?",
+            (cliente_id, operation_key)).fetchone()
+        if op is None:
+            return None
+        if op["request_hash"] != request_hash:
+            raise HTTPException(status_code=409, detail={"code": "OPERATION_KEY_REUSED",
+                "message": "La solicitud ha cambiado; necesita una nueva confirmación."})
+        return conn.execute("SELECT * FROM bookings WHERE id=? AND cliente_id=?",
+                            (op["booking_id"], cliente_id)).fetchone()
+
+
 def recover_creation_operation(cliente_id, operation_key, request_hash):
     if not isinstance(operation_key, str) or not operation_key.strip() or len(operation_key) > 128:
         raise HTTPException(status_code=422, detail="Identidad de operación no válida")
@@ -69,11 +86,13 @@ def recover_creation_operation(cliente_id, operation_key, request_hash):
         booking = conn.execute("SELECT * FROM bookings WHERE id=? AND cliente_id=?",
                                (op["booking_id"], cliente_id)).fetchone()
     if booking is None:
+        atencion_contexto.verificar_turno_atencion(cliente_id)
         # No hubo proveedor externo ni webhook que pueda terminar la operación
         # tarde. Tras el margen, conservar esta llave para siempre solo atrapa a
         # la clienta en un 409. La borramos de forma condicionada y dejamos un
         # rastro sin teléfono, nombre ni datos de la cita.
         if _pending_creation_is_expired(op["created_at"]) and not _booking_has_webhook(cliente_id):
+            atencion_contexto.exigir_mutacion_atencion(cliente_id)
             with closing(db._get_db_connection()) as conn, conn:
                 liberada = conn.execute(
                     "DELETE FROM booking_operations WHERE cliente_id=? AND operation_key=? "
@@ -87,6 +106,7 @@ def recover_creation_operation(cliente_id, operation_key, request_hash):
                         (cliente_id, operation_key, "creation_pending_released", timeutils._utc_now_iso()),
                     )
             if liberada:
+                atencion_contexto.registrar_mutacion_rechazada(cliente_id)
                 raise HTTPException(status_code=409, detail={"code": "OPERATION_RELEASED",
                     "message": "La solicitud anterior no llegó a registrarse; necesita una nueva confirmación."})
         raise HTTPException(status_code=409, detail={"code": "OPERATION_PENDING",
@@ -95,6 +115,7 @@ def recover_creation_operation(cliente_id, operation_key, request_hash):
 
 
 def claim_creation_operation(cliente_id, operation_key, request_hash, booking_id):
+    atencion_contexto.exigir_mutacion_atencion(cliente_id)
     with closing(db._get_db_connection()) as conn, conn:
         result = conn.execute(
             "INSERT OR IGNORE INTO booking_operations"
