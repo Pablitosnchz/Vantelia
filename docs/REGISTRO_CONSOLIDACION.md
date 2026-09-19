@@ -2057,3 +2057,18 @@ a fin en todas.
   Próximo bloque interno: autoridad persistida de pausa, según diseño `6a43942`.
   No hay pruebas ni implementación activas al registrar esto. No se declara
   acabado el plan completo ni se despliega sin orden de Pablo.
+
+## 2026-09-19 18:40 +02:00 — desplegada la estabilización del 19-sep
+
+- Integrado `astra/estabilidad-19sep` en main como `0cb61de` y desplegado, por
+  orden de Pablo. Lleva: F4 (el contador solo suma si el aviso sale), la autoridad
+  única del cuadro de la agenda con las tallas alternativas, el aislamiento ES/EN
+  de las respuestas por palabra clave y las pruebas de CRM y reparto.
+- Evidencia: revisión de Claude sobre el SHA exacto `19ad09e` con la suite completa
+  (3025 passed, 1 skipped, 26 min 32 s) en copia propia `E:/vp-rev-19ad09e`;
+  `5037515` solo añadía documentación, así que el código desplegado es el probado.
+  Humo del despliegue 5/5.
+- Comprobado en vivo con el catálogo real: «mechas medio» y «media melena» aplican
+  el pack de 350 (ya con las duraciones nuevas), «extra largo» el suyo de 395,
+  «mechas» a secas pregunta el largo, y el resto igual que antes.
+- El choque del registro al integrar se resolvió conservando las entradas de los dos.
