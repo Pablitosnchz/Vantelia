@@ -510,6 +510,8 @@ def test_orientative_demo_event_is_ignored_when_secret_is_not_configured(
 def test_chat_only_engages_after_user_message_was_persisted(
     client, api_module, monkeypatch
 ) -> None:
+    from backend import rag
+
     early_email = f"chat-early-{uuid.uuid4().hex[:8]}@example.com"
     early_id = _install_auto_demo(api_module, email=early_email, register=True)
     _insert_outreach_prospect(api_module, early_email)
@@ -524,10 +526,20 @@ def test_chat_only_engages_after_user_message_was_persisted(
         api_module, "db_check_self_serve_quota", lambda cliente_id: {"active": True}
     )
 
-    async def fail_before_persistence(**kwargs):
-        raise RuntimeError("fallo antes de persistir")
+    record_message = rag._record_chat_message
+    motor_calls = []
 
-    monkeypatch.setattr(api_module, "_process_chat_message", fail_before_persistence)
+    def fail_user_persistence(**kwargs):
+        if kwargs["role"] == "user":
+            raise sqlite3.OperationalError("fallo al persistir entrada")
+        return record_message(**kwargs)
+
+    async def fail_after_persistence(**kwargs):
+        motor_calls.append(kwargs["session_id"])
+        raise RuntimeError("fallo de respuesta posterior")
+
+    monkeypatch.setattr(rag, "_record_chat_message", fail_user_persistence)
+    monkeypatch.setattr(api_module, "_process_chat_message", fail_after_persistence)
     early = client.post(
         "/chat",
         json={
@@ -537,13 +549,11 @@ def test_chat_only_engages_after_user_message_was_persisted(
         },
         headers={"origin": "http://testserver"},
     )
-    assert early.status_code == 500
+    assert early.status_code == 503
+    assert early.json()["detail"]["code"] == "ATTENTION_UNAVAILABLE"
+    assert motor_calls == []
 
-    async def fail_after_persistence(**kwargs):
-        kwargs["on_user_message_persisted"](kwargs["session_id"])
-        raise RuntimeError("fallo de respuesta posterior")
-
-    monkeypatch.setattr(api_module, "_process_chat_message", fail_after_persistence)
+    monkeypatch.setattr(rag, "_record_chat_message", record_message)
     payload = {
         "cliente_id": persisted_id,
         "mensaje": "Quiero saber mas",
@@ -557,6 +567,18 @@ def test_chat_only_engages_after_user_message_was_persisted(
     )
     assert persisted.status_code == 500
     assert replay.status_code == 500
+    assert motor_calls == [payload["session_id"], payload["session_id"]]
+
+    with api_module._get_db_connection() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM chat_messages WHERE cliente_id=?", (early_id,)
+        ).fetchone()[0] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM chat_messages WHERE cliente_id=? AND role='user'", (persisted_id,)
+        ).fetchone()[0] == 2
+        assert conn.execute(
+            "SELECT COUNT(*) FROM chat_messages WHERE cliente_id=? AND role='assistant'", (persisted_id,)
+        ).fetchone()[0] == 0
 
     with api_module._outreach_db() as conn:
         assert conn.execute(
