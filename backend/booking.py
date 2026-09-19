@@ -6138,6 +6138,10 @@ def _create_customer_payment_link(
     para que cada llamante mapee el detalle como prefiera. Sincrona (llama a
     Stripe): los llamantes async deben envolverla en timeutils._to_thread."""
     booking_id = booking["id"]
+    solicitud = {"booking_id": booking_id, "base_url": base_url, "override_cents": override_cents}
+    atencion_contexto.comprobar_intento_pago_atencion(cliente_id, solicitud)
+    if atencion_contexto.contexto_atencion_actual() is not None and booking["cliente_id"] != cliente_id:
+        raise atencion_contexto.AtencionDetenida("tenant_incorrecto")
     with db._get_db_connection() as connection:
         # Dedup contra LOS DOS sistemas de pago: el pago directo (customer_payments)
         # y el pago de la reserva con depósito/retención (bookings.payment_status).
@@ -6153,49 +6157,61 @@ def _create_customer_payment_link(
         ).fetchone()
     if paid or (bk and (bk["payment_status"] or "") == "paid"):
         raise HTTPException(status_code=409, detail="Esta cita ya tiene un pago completado.")
-    account = _connect_account_status(cliente_id, refresh=True)
-    if not account.connected or not account.charges_enabled:
-        raise HTTPException(status_code=409, detail="Conecta y activa Stripe antes de solicitar pagos.")
     amount = _payment_amount_for_booking(booking, override_cents)
-    if amount < 50:
+    if amount < 50 and atencion_contexto.contexto_atencion_actual() is not None:
         raise HTTPException(status_code=400, detail="Configura un precio o una señal minima de 0,50 EUR.")
-    contact_id = _payment_contact_for_booking(booking)
-    payment_id, now = "pay_" + secrets.token_hex(10), timeutils._utc_now_iso()
-    metadata = {"source": "customer_payment", "payment_id": payment_id, "cliente_id": cliente_id, "booking_id": booking_id}
-    success_url, cancel_url = _booking_payment_return_urls(base_url, booking["manage_token"])
-    stripe_gateway._stripe_init()
-    try:
-        checkout_kwargs: Dict[str, Any] = dict(
-            mode="payment",
-            line_items=[{"price_data": {"currency": "eur", "unit_amount": amount, "product_data": {"name": booking["servicio"] or "Reserva"}}, "quantity": 1}],
-            metadata=metadata,
-            success_url=success_url,
-            cancel_url=cancel_url,
-            stripe_account=account.stripe_account_id,
-        )
-        if booking["email"]:
-            checkout_kwargs["customer_email"] = booking["email"]
-        session = stripe_gateway.stripe.checkout.Session.create(**checkout_kwargs)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se pudo crear checkout Connect %s: %s", booking_id, exc)
-        raise HTTPException(status_code=502, detail="No se pudo crear el enlace de pago.") from exc
-    with db._get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO customer_payments
-                (id, cliente_id, contact_id, booking_id, service_id, service_name, stripe_account_id,
-                 stripe_checkout_session_id, amount_cents, currency, status, checkout_url, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'eur', 'pending', ?, ?, ?)
-            """,
-            (
-                payment_id, cliente_id, contact_id, booking_id, booking["service_id"] or "",
-                booking["servicio"] or "", account.stripe_account_id, textnorm._object_get(session, "id", ""),
-                amount, textnorm._object_get(session, "url", ""), now, now,
-            ),
-        )
-        connection.commit()
-        row = connection.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
-    return row
+    datos_efectivos = dict(solicitud, amount_cents=amount, currency="eur",
+        service_id=booking["service_id"] or "", servicio=booking["servicio"] or "",
+        email=booking["email"] or "", manage_token=booking["manage_token"])
+    with atencion_contexto.admitir_pago_atencion(cliente_id, datos_efectivos, solicitud=solicitud):
+        # Refresh también escribe DB/Stripe: pertenece al único ganador del pago.
+        account = _connect_account_status(cliente_id, refresh=True)
+        if not account.connected or not account.charges_enabled:
+            atencion_contexto.registrar_pago_rechazado(cliente_id)
+            error = HTTPException(status_code=409, detail="Conecta y activa Stripe antes de solicitar pagos.")
+            error.payment_reason = "stripe_unavailable"
+            raise error
+        # Sin contexto se conserva la prioridad manual: capacidad antes de importe.
+        if amount < 50:
+            raise HTTPException(status_code=400, detail="Configura un precio o una señal minima de 0,50 EUR.")
+        contact_id = _payment_contact_for_booking(booking)
+        payment_id, now = "pay_" + secrets.token_hex(10), timeutils._utc_now_iso()
+        metadata = {"source": "customer_payment", "payment_id": payment_id, "cliente_id": cliente_id, "booking_id": booking_id}
+        success_url, cancel_url = _booking_payment_return_urls(base_url, booking["manage_token"])
+        stripe_gateway._stripe_init()
+        try:
+            checkout_kwargs: Dict[str, Any] = dict(
+                mode="payment",
+                line_items=[{"price_data": {"currency": "eur", "unit_amount": amount, "product_data": {"name": booking["servicio"] or "Reserva"}}, "quantity": 1}],
+                metadata=metadata,
+                success_url=success_url,
+                cancel_url=cancel_url,
+                stripe_account=account.stripe_account_id,
+            )
+            if booking["email"]:
+                checkout_kwargs["customer_email"] = booking["email"]
+            session = stripe_gateway.stripe.checkout.Session.create(**checkout_kwargs)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("No se pudo crear checkout Connect %s: %s", booking_id, exc)
+            raise HTTPException(status_code=502, detail="No se pudo crear el enlace de pago.") from exc
+        with db._get_db_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO customer_payments
+                    (id, cliente_id, contact_id, booking_id, service_id, service_name, stripe_account_id,
+                     stripe_checkout_session_id, amount_cents, currency, status, checkout_url, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'eur', 'pending', ?, ?, ?)
+                """,
+                (
+                    payment_id, cliente_id, contact_id, booking_id, booking["service_id"] or "",
+                    booking["servicio"] or "", account.stripe_account_id, textnorm._object_get(session, "id", ""),
+                    amount, textnorm._object_get(session, "url", ""), now, now,
+                ),
+            )
+            connection.commit()
+            atencion_contexto.registrar_pago_conocido(cliente_id, payment_id)
+            row = connection.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
+        return row
 
 
 def _ai_payment_method_for_source(source: str) -> str:
@@ -6216,8 +6232,11 @@ async def _ai_send_payment_link(
     opt-in del negocio, Stripe conectado, importe NO manipulable por el cliente
     (sale de la politica/precio), dedup de pago ya pagado y rate limit. Devuelve
     un dict con `ok` y mensajes amigables para que el asistente los verbalice.
-    Nunca lanza: cualquier fallo vuelve como {"ok": False, ...}.
+    Los fallos de negocio vuelven como {"ok": False, ...}; AtencionDetenida es terminal.
     """
+    base = base_url or textnorm._preferred_public_base_url()
+    atencion_contexto.comprobar_intento_pago_atencion(cliente_id,
+        {"booking_id": booking["id"], "base_url": base, "override_cents": None})
     config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
     nombre_negocio = config.get("nombre", "") or "el negocio"
 
@@ -6226,11 +6245,6 @@ async def _ai_send_payment_link(
     method = _ai_payment_method_for_source(source)
     email = textnorm._sanitize_text(booking["email"] or "")
     phone = _booking_customer_phone_for_channel(booking, "sms")
-
-    account = _connect_account_status(cliente_id, refresh=True)
-    if not account.connected or not account.charges_enabled:
-        return {"ok": False, "reason": "stripe_unavailable", "method": method,
-                "error": "Conecta y activa Stripe antes de enviar enlaces de pago."}
 
     if method == "sms" and not phone:
         return {"ok": False, "reason": "no_phone", "method": method,
@@ -6254,12 +6268,16 @@ async def _ai_send_payment_link(
         return {"ok": False, "reason": "rate_limited", "method": method,
                 "error": "Ya se han enviado varios enlaces de pago de esta cita en la última hora."}
 
-    base = base_url or textnorm._preferred_public_base_url()
     try:
         row = await timeutils._to_thread(
             _create_customer_payment_link, cliente_id, booking, base_url=base, override_cents=None
         )
+    except atencion_contexto.AtencionDetenida:
+        raise
     except HTTPException as exc:
+        if getattr(exc, "payment_reason", "") == "stripe_unavailable":
+            return {"ok": False, "reason": "stripe_unavailable", "method": method,
+                    "error": "Conecta y activa Stripe antes de enviar enlaces de pago."}
         return {"ok": False, "reason": "link_error", "method": method, "error": str(exc.detail)}
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[ai-pay] no se pudo crear enlace para %s: %s", booking_id, exc)
@@ -6300,6 +6318,8 @@ async def _ai_send_payment_link(
         try:
             await timeutils._to_thread(emailing._send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
             sent = True
+        except atencion_contexto.AtencionDetenida:
+            raise
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("[ai-pay] email fallo %s: %s", booking_id, exc)
             sent = False
