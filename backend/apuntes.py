@@ -27,6 +27,8 @@ La regla de cuando se atreve a elegir sola sale de dos incidentes reales:
   recogido» (medido el 18-sep-2026 sobre el catalogo real del salon, 186 servicios): el catalogo
   resuelve solo y acierta la familia equivocada. Por eso el servicio elegido tiene que compartir
   algo de lo ESCRITO; si no, se ofrece en vez de aplicarse.
+
+Esa regla vive en UN sitio, `_por_que_no_aplicarlo`, y todo lo que se aplica solo pasa por ahi.
 """
 from __future__ import annotations
 
@@ -45,8 +47,12 @@ MAX_CANDIDATOS = 4
 # Cuanto puede durar otro servicio que tambien encaje con lo escrito antes de que haya que
 # preguntar. Media vez mas ya es otra cosa: en el salon, «mechas medio» es la aplicacion de 75
 # minutos y tambien el pack de SEIS HORAS. Equivocarse a la baja deja al asistente dando horas
-# que no existen, asi que a partir de ahi no se elige sola.
+# que no existen, asi que a partir de ahi (INCLUIDO: 60 frente a 90 pregunta) no se elige sola.
 MARGEN_DE_DURACION = 1.5
+# Palabras de la tecnica que no hace falta haber escrito. «pack» es la version completa de lo
+# mismo: si se cuela, se aparta de MAS, que es la direccion que no rompe la agenda.
+_TECNICA_SIN_EXIGIR = {"pack", "packs"}
+_UNIONES = {"y", "e", "de", "del", "con", "para", "en", "a", "al", "la", "el"}
 # Como se pregunta en el mostrador: corto y sin adornos. Quien atiende tiene a la clienta delante.
 _PREGUNTAS = {
     "talla": "¿De qué largo?",
@@ -151,6 +157,61 @@ def _comparte_con_lo_escrito(servicio: str, texto: str) -> bool:
     return any(any(parte.startswith(palabra) for parte in partes) for palabra in palabras)
 
 
+def _tecnica_escrita(servicio: str, texto: str) -> bool:
+    """¿Ha escrito lo que distingue a este servicio de sus hermanos?
+
+    «alisado largo» encajaba LITERALMENTE con «Alisado keratina largo», y como era el unico se
+    aplicaba: la keratina no la habia dicho nadie (revision de Astra, 19-sep-2026). Cada palabra
+    de la tecnica (`catalog_pick.tecnica_de`, el nombre sin la talla) tiene que estar escrita;
+    las alternativas del propio nombre («mechas o balayage») cuentan como una, y basta con una.
+    """
+    escritas = _tokens(texto)
+    grupos: List[List[str]] = []
+    unir = False
+    for palabra in _forma(catalog_pick.tecnica_de(servicio)).split():
+        if palabra == "o":
+            unir = bool(grupos)
+            continue
+        if (palabra in _UNIONES or palabra in _VACIAS or palabra in _TECNICA_SIN_EXIGIR
+                or len(palabra) < 3):
+            unir = False
+            continue
+        if unir:
+            grupos[-1].append(palabra)
+        else:
+            grupos.append([palabra])
+        unir = False
+    return all(
+        any(p.startswith(e) or e.startswith(p) for p in grupo for e in escritas)
+        for grupo in grupos
+    )
+
+
+def _por_que_no_aplicarlo(servicio: str, texto: str, rivales: List[str], minutos: Dict[str, int]) -> str:
+    """La UNICA autoridad que decide si un servicio se aplica solo. «» = se puede.
+
+    Por aqui pasa TODA salida automatica, venga de donde venga (el unico que encaja, el nombre
+    escrito tal cual o el cerebro del catalogo). Antes cada camino llevaba sus comprobaciones y
+    el de «solo encaja uno» no llevaba ninguna: con un catalogo que solo tiene «Mechas corto»,
+    «mechas» elegia el corto sin que nadie dijera el largo (revision de Astra, 19-sep-2026).
+
+    `rivales` son los otros servicios que tambien encajan con lo escrito.
+    """
+    talla = catalog_pick.talla_de(servicio)
+    if talla and talla != catalog_pick.talla_de(texto):
+        # El largo lo pone quien lo dice. Tambien cuando dice OTRO: sin «extra largo» en el
+        # catalogo, el cerebro se quedaba con la talla mas corta y se aplicaba igual.
+        return "talla"
+    if not _tecnica_escrita(servicio, texto):
+        return "tecnica"
+    if not _comparte_con_lo_escrito(servicio, texto):
+        return "familia"          # «color y peinado» -> «maquillaje y recogido»
+    propio = minutos.get(servicio, 0)
+    if any(minutos.get(otro, 0) >= propio * MARGEN_DE_DURACION for otro in rivales if otro != servicio):
+        return "duracion"         # otro que encaja igual dura vez y media o mas
+    return ""
+
+
 def _datos(texto: str, cliente_id: str, **extra: str) -> Dict[str, Any]:
     familias = catalog_pick.familias_pedidas(cliente_id, texto)
     datos = {
@@ -235,10 +296,7 @@ def interpretar(cliente_id: str, texto: str, location_id: str = "") -> Dict[str,
     if not servicios:
         return resultado
 
-    def resuelto(nombre):
-        resultado["servicio"] = nombre
-        resultado["duracion"] = duracion_de(cliente_id, nombre)
-        return resultado
+    minutos = _minutos_del_catalogo(servicios)
 
     def preguntar(pregunta, nombres, hechos=None):
         resultado["pregunta"] = pregunta
@@ -246,6 +304,15 @@ def interpretar(cliente_id: str, texto: str, location_id: str = "") -> Dict[str,
             {"etiqueta": nombre, "servicio": nombre, "duracion": duracion_de(cliente_id, nombre)}
             for nombre in nombres[:MAX_CANDIDATOS]
         ]
+        return resultado
+
+    def resuelto(nombre, rivales):
+        """Aplicar un servicio solo: SIEMPRE pasando por la autoridad. Si no pasa, se ofrece."""
+        if _por_que_no_aplicarlo(nombre, escrito, rivales, minutos):
+            opciones = [nombre] + [otro for otro in rivales if otro != nombre]
+            return preguntar("¿Es esto?" if len(opciones) == 1 else "¿Cuál de estos?", opciones)
+        resultado["servicio"] = nombre
+        resultado["duracion"] = duracion_de(cliente_id, nombre)
         return resultado
 
     # 1. Lo que encaja con TODO lo escrito, del que mejor ajusta al que peor. El nombre escrito
@@ -256,17 +323,14 @@ def interpretar(cliente_id: str, texto: str, location_id: str = "") -> Dict[str,
         encajan = [exacto] + [n for n in encajan if n != exacto]
 
     if len(encajan) == 1:
-        return resuelto(encajan[0])
+        return resuelto(encajan[0], [])
 
     if 1 < len(encajan) <= MAX_CANDIDATOS:
-        # 2. Varios encajan. Solo se aplica el mejor si lo escribio tal cual Y ninguno de los
-        #    otros dura mucho mas: «mechas medio» son 75 minutos de aplicacion y seis horas de
+        # 2. Varios encajan. Solo se intenta aplicar el mejor si lo escribio tal cual; y aun asi
+        #    decide la autoridad: «mechas medio» son 75 minutos de aplicacion y seis horas de
         #    pack, y apartar los 75 es el incidente que no nos podemos permitir.
-        minutos = _minutos_del_catalogo(servicios)
-        mejor = minutos.get(encajan[0], 0)
-        otros = [minutos.get(nombre, 0) for nombre in encajan[1:]]
-        if exacto == encajan[0] and mejor and all(d <= mejor * MARGEN_DE_DURACION for d in otros):
-            return resuelto(encajan[0])
+        if exacto == encajan[0]:
+            return resuelto(exacto, encajan[1:])
         return preguntar("¿Cuál de estos?", encajan)
 
     # 3. Sin decir el largo, no se elige largo. Si lo escrito encaja con servicios de varias
@@ -282,10 +346,9 @@ def interpretar(cliente_id: str, texto: str, location_id: str = "") -> Dict[str,
     # 4. Decide el cerebro del catalogo, que sabe de familias, tecnicas y packs.
     eleccion = catalog_pick.elegir(cliente_id, _datos(escrito, cliente_id), location_id)
     if eleccion.servicio:
-        if _comparte_con_lo_escrito(eleccion.servicio, escrito):
-            return resuelto(eleccion.servicio)
-        # Apuesta del catalogo: nadie ha nombrado eso. Se ofrece, no se aplica.
-        return preguntar("¿Es esto?", [eleccion.servicio])
+        # Tambien lo que elige el catalogo pasa por la autoridad, con todo lo que encaja con lo
+        # escrito como rivales: si nadie ha nombrado eso, se ofrece en vez de aplicarse.
+        return resuelto(eleccion.servicio, encajan)
 
     candidatos = _candidatos(cliente_id, escrito, eleccion, location_id)
     if candidatos:
