@@ -2318,3 +2318,24 @@ a fin en todas.
   manejador de mensajes; no valida webhook completo ni el middleware de /chat.
   Se prepara diseño de adaptadores reutilizando el instrumento e interceptores.
   No se ha iniciado campaña con modelo ni se han atribuido resultados nuevos.
+
+## 2026-09-19 22:59 +02:00 — navegador revela formulario tardío tras la pausa
+
+- Revisión independiente de Astra en Chrome, bundle de `dff4b72`: respuesta 200
+  inicia carga de formulario, 409 posterior pausa la atención, respuesta tardía
+  de centros hace aparecer el formulario con 13 controles habilitados. Repro rojo
+  a las 22:55:46–51, dos requests /chat, sin errores JS ni ruta desconocida.
+  Estado accesible fuera del historial correcto; el problema es la carga pendiente.
+- Script, JSON rojo, captura y acta en E:/Vantelia-astra-widget-atencion-evidencia/
+  BROWSER_ASYNC.md. HTTP local interceptado, sin modelo/proveedor/producción.
+  Los siete tests Node previos no cubrían la carga real. Arreglo encargado en
+  astra/widget-async-19sep desde dff4b72; no modifica la copia de la suite.
+- WA1 aplicado sin conflicto a astra/wa1-integracion-19sep, base `6fd8dff` con
+  fixture corregido. Misma semántica en cuatro archivos revisados; tres hashes
+  cambian solo por CRLF normalizado. Aún sin commit ni pytest; fuente preservada.
+- Lectura acotada confirma otra puerta previa a capturar WA/voz: petición explícita
+  de cancelar A y B del mismo titular puede ejecutar ambas tools; una sola clave
+  de turno por acción confundiría la segunda con la primera. Causal de recorrido
+  pendiente; no se declara fallo del HTTP actual. Crear/mover en WA remate_manual
+  generan propuestas, por lo que no se atribuyen a ese recorrido dos efectos reales.
+- La suite única de dff4b72 conserva su copia. No hay otra suite ni banco activos.
