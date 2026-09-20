@@ -42,6 +42,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
+from backend import atencion_contexto, atencion_whatsapp
 from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, fotos, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding, wa_plantillas
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
@@ -3474,6 +3475,19 @@ async def _wa_handle_reminder_reply(
 
 
 
+def _wa_entrada_sin_atencion(*, cliente_id, from_number, request, entrante, motivo):
+    """Atención pausada: se guarda lo que ha escrito y no se le contesta.
+
+    La conversación tiene que aparecer en el panel igual que siempre; lo que no
+    sale es respuesta automática. Meta recibe su 200 porque un error le haría
+    reintentar el mismo mensaje sin que el negocio pueda pararlo.
+    """
+    if entrante:
+        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                      entrante=entrante)
+    settings.logger.info("[whatsapp] entrada sin atender (%s): %s", cliente_id or "-", motivo)
+
+
 def _wa_registrar(
     *, cliente_id: str, from_number: str, request, entrante: str = "",
     respuesta: str = "", intent: str = "",
@@ -5028,11 +5042,18 @@ async def _handle_whatsapp_webhook(
                         # entera; se adapta al mismo resumen, sin aceptar ni crear.
                         reply = interactive_block.get("nfm_reply", {}) or {}
                         try:
-                            await _wa_handle_flow_reply(
-                                cliente_id=cliente_id, phone_number_id=phone_number_id,
-                                from_number=from_number,
-                                response_json=str(reply.get("response_json") or ""),
-                                request=request,
+                            with atencion_whatsapp.turno_entrada(cliente_id):
+                                    await _wa_handle_flow_reply(
+                                    cliente_id=cliente_id, phone_number_id=phone_number_id,
+                                    from_number=from_number,
+                                    response_json=str(reply.get("response_json") or ""),
+                                    request=request,
+                                )
+                            processed += 1
+                        except atencion_contexto.AtencionDetenida as exc:
+                            _wa_entrada_sin_atencion(
+                                cliente_id=cliente_id, from_number=from_number, request=request,
+                                entrante="[formulario de reserva]", motivo=exc.motivo,
                             )
                             processed += 1
                         except messaging.WhatsAppDeliveryUnknown:
@@ -5108,6 +5129,16 @@ async def _handle_whatsapp_webhook(
                     ilegible = "mensaje"
                     incoming_text = ""
 
+                if audio_media_id and not atencion_whatsapp.puede_atender(cliente_id):
+                    # Transcribir cuesta dinero: con la atencion pausada no se baja
+                    # el audio. Queda la entrada para que el equipo la vea.
+                    _wa_entrada_sin_atencion(
+                        cliente_id=cliente_id, from_number=from_number, request=request,
+                        entrante="[nota de voz]", motivo="atencion_pausada",
+                    )
+                    processed += 1
+                    continue
+
                 if audio_media_id:
                     # Ya se sabe de que negocio es: se puede bajar el audio con SU
                     # token y transcribirlo. El texto sigue el mismo camino que si
@@ -5169,22 +5200,31 @@ async def _handle_whatsapp_webhook(
                     processed += 1
                     continue
 
-                if foto_recibida:
-                    await _wa_foto_recibida(
-                        cliente_id=cliente_id, phone_number_id=phone_number_id,
-                        from_number=from_number, pie=incoming_text, request=request,
-                    )
-                    processed += 1
-                    continue
-
                 try:
-                    await _handle_whatsapp_message(
-                        cliente_id=cliente_id,
-                        phone_number_id=phone_number_id,
-                        from_number=from_number,
-                        incoming_text=incoming_text,
-                        interactive_id=interactive_id,
-                        request=request,
+                    # Con el negocio ya resuelto -incluido el del numero de demo-,
+                    # aqui se decide si hay atencion automatica. Dentro del turno,
+                    # las citas que se creen, cambien o cancelen pasan por la misma
+                    # autoridad; fuera de el no se prepara ni se manda nada.
+                    with atencion_whatsapp.turno_entrada(cliente_id):
+                        if foto_recibida:
+                            await _wa_foto_recibida(
+                                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                                from_number=from_number, pie=incoming_text, request=request,
+                            )
+                        else:
+                            await _handle_whatsapp_message(
+                                cliente_id=cliente_id,
+                                phone_number_id=phone_number_id,
+                                from_number=from_number,
+                                incoming_text=incoming_text,
+                                interactive_id=interactive_id,
+                                request=request,
+                            )
+                    processed += 1
+                except atencion_contexto.AtencionDetenida as exc:
+                    _wa_entrada_sin_atencion(
+                        cliente_id=cliente_id, from_number=from_number, request=request,
+                        entrante=incoming_text, motivo=exc.motivo,
                     )
                     processed += 1
                 except Exception as exc:  # noqa: BLE001

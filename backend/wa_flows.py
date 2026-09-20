@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from backend import agenda, booking, clients, settings, textnorm, timeutils
+from backend import agenda, atencion_whatsapp, booking, clients, settings, textnorm, timeutils
 
 FLOW_JSON_VERSION = "7.2"
 DATA_API_VERSION = "3.0"
@@ -252,6 +252,15 @@ async def handle_data_exchange(payload: Dict[str, Any]) -> Dict[str, Any]:
         })
 
     cliente_id = contexto["cliente_id"]
+    if not atencion_whatsapp.puede_atender(cliente_id):
+        # Con la atencion pausada el formulario no ofrece catalogo ni huecos: se dice la
+        # verdad en la misma pantalla en vez de dejarle avanzar hasta una cita que no se
+        # va a crear. El ping de Meta y los avisos de error no pasan por aqui.
+        return _pantalla(SCREEN_SERVICE, {
+            "servicios": [],
+            "aviso": "Ahora mismo no se pueden coger citas por aqui. Escribenos y te atendemos.",
+            "hay_aviso": True,
+        })
     datos = payload.get("data") or {}
     screen = str(payload.get("screen") or "")
     location_id = str(datos.get("location_id") or "")
