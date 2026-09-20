@@ -90,12 +90,26 @@ import api  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 # Mock outbound WhatsApp (Graph API) — solo senders de bajo nivel.
-async def _noop(*a, **k):
-    return None
+#
+# Devuelve ACEPTADO, no None. Devolver None equivalia a "Meta lo ha rechazado",
+# y desde que el resumen para confirmar deja de existir cuando el envio falla
+# (cambio deliberado del 10-sep: registrarlo pintaba en el panel un mensaje que
+# la clienta nunca recibio), eso cortaba el flujo de reserva por WhatsApp y el
+# arnes reportaba un BUG que no estaba en el producto. Con el instrumento roto,
+# qa_e2e salia siempre con codigo 1 y su BUG dejaba de significar nada.
+WA_ENVIADOS = []
+
+
+async def _envio_aceptado(*a, **k):
+    WA_ENVIADOS.append(k)
+    if k.get("detailed"):
+        from backend.messaging import WhatsAppSendResult
+        return WhatsAppSendResult("aceptado", provider_message_id="wamid.qa")
+    return True
 for _name in dir(api):
     if _name.startswith("_send_whatsapp"):
         try:
-            setattr(api, _name, _noop)
+            setattr(api, _name, _envio_aceptado)
         except Exception:
             pass
 
@@ -354,8 +368,22 @@ assert_true("whatsapp: firma invalida -> 403", client.post("/whatsapp/webhook", 
 wfecha = future_date(4)
 wa_steps = [dict(text="agendar"), dict(list_id="svc_0"), dict(list_id=f"date_{wfecha}"),
             dict(list_id="time_10:00"), dict(text="Maria Whatsapp"), dict(text="maria@wa.com"),
-            dict(button_id="notes_skip"), dict(button_id="confirm_yes")]
+            dict(button_id="notes_skip")]
 wa_ok = all(wa_msg(**s).status_code == 200 for s in wa_steps)
+
+
+def _boton_de_confirmar():
+    """El id sale del ULTIMO resumen que el bot mando de verdad."""
+    for enviado in reversed(WA_ENVIADOS):
+        for bid, _titulo in (enviado.get("buttons") or []):
+            if str(bid).startswith("confirm_yes"):
+                return str(bid)
+    return ""
+
+
+wa_confirm = _boton_de_confirmar()
+assert_true("whatsapp: el resumen ofrece confirmar", bool(wa_confirm), "sin boton de confirmar")
+wa_ok = wa_ok and bool(wa_confirm) and wa_msg(button_id=wa_confirm).status_code == 200
 assert_true("whatsapp: flujo agendar completo (8 pasos)", wa_ok)
 with db() as c:
     wabk = c.execute("SELECT nombre, status FROM bookings WHERE cliente_id=? AND source='whatsapp'", (CID,)).fetchall()
