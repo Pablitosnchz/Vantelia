@@ -23,6 +23,7 @@ from fastapi import (
 from api_models import *  # noqa: F401,F403
 from backend import (
     appstate,
+    atencion_voz,
     db,
     messaging,
     security,
@@ -55,6 +56,13 @@ async def voice_incoming_call(cliente_id: str, request: Request) -> Response:
             voice_cfg = voice._get_voice_config(cliente_id)
         if not voice_cfg:
             return voice._voice_twiml_unavailable()
+
+    if not atencion_voz.puede_atender(cliente_id):
+        # Pausado, la IA no coge el telefono. Se contesta con la locucion de no
+        # disponible en vez de dejar la llamada abierta: el negocio no tiene
+        # forma de pararla despues, y cada segundo de puente se paga.
+        settings.logger.info("[voice] llamada entrante sin atender (%s)", cliente_id)
+        return voice._voice_twiml_unavailable()
 
     call_sid = params.get("CallSid", "")
     if call_sid:
@@ -109,6 +117,12 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         return
     if not settings.OPENAI_API_KEY:
         await websocket.close(code=1011)
+        return
+    if not atencion_voz.puede_atender(cliente_id):
+        # La pausa puede caer entre el TwiML y este WebSocket: se vuelve a
+        # preguntar ANTES de abrir la sesion con OpenAI, que es lo que se cobra.
+        settings.logger.info("[voice] puente cerrado por atencion pausada (%s)", cliente_id)
+        await websocket.close(code=1008)
         return
 
     await websocket.accept()

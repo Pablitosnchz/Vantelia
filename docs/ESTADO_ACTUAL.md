@@ -1,6 +1,15 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-19 23:31 Europe/Madrid
+## En curso — 2026-09-20 Europe/Madrid
+
+- **Testigo:** Claude. Astra se quedo sin creditos con el candidato `f11132c`; Pablo dio la orden de seguir con las fases.
+- **Tarea:** fronteras que faltaban por conectar a la autoridad de atencion. Fase 2 (entrada de WhatsApp) en `c465be1`. Fase 3 (voz y automatismos del worker) sobre ese commit. Rama `claude/atencion-whatsapp-20sep` en E:/vp-atencion-wa, partiendo de `f11132c`.
+- **Suite completa del arbol congelado de la fase 3:** 3310 passed, 1 skipped, 1 failed en 2274.27s. El unico fallo fue el vigilante `test_mapa_del_codigo_no_miente`, que exige que `docs/ARQUITECTURA.md` nombre todo lo de `backend/`: faltaban los cuatro modulos nuevos. Documentados; el vigilante vuelve a pasar. No se relanza la completa por esa correccion de documentacion.
+- **Regla que fija la fase 3, porque no estaba escrita:** la IA no sostiene conversaciones con la atencion pausada, la arranque quien la arranque. Por eso la llamada de confirmacion se frena TAMBIEN desde el boton del panel (409 con el motivo). Lo que el equipo escribe o manda a mano sigue saliendo, y lo que solo deja constancia de algo que ya paso (status callback de Twilio, transcripcion al colgar) no se toca. Si Pablo prefiere la otra lectura, se cambia en una linea.
+- **Siguiente:** fase 4 (operacion de pausa/reactivacion en el panel, con estado visible y facturacion aparte) y fase 5 (candidato integrado y medicion comparable). Sigue sin desplegarse nada: lo desplegado es `0cb61de`.
+- **Deuda anotada en el codigo, no tapada:** los avisos se frenan pero todavia no instalan turno -el diario de envios identifica por canal y fragmento, y dos avisos de la misma cita colisionarian-; la identidad por aviso (negocio, cita, generacion, tipo) es el corte siguiente. En Flows, la puerta impide ofrecer catalogo y huecos, pero el token aun no esta ligado durablemente a la version de atencion.
+
+## En curso anterior — 2026-09-19 23:31 Europe/Madrid
 
 - **Testigo:** Astra, coordinación de la estabilización autorizada por Pablo.
 - **Tarea:** los dos hallazgos de la suite `dff4b72` corregidos en `2ec42a5` (45 dirigidos); widget asíncrono `00d628a` revisado e integrado (16 Node y repro Chrome); WA1 `fd833b4` integrado (172 dirigidos). Candidato de coordinación `f4ffd2c`, todavía sin verde global ni capturador WhatsApp conectado.

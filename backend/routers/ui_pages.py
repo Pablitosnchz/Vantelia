@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from api_models import *  # noqa: F401,F403
 from backend import (
+    atencion_voz,
     clients,
     db,
     demo_agenda,
@@ -272,6 +273,8 @@ async def widget_voice_session(cliente_id: str, request: Request) -> Dict[str, A
     security._enforce_allowed_origin(request, cliente_id)
     if not voice._voice_widget_enabled(cliente_id, config):
         raise HTTPException(status_code=403, detail="La voz no esta activada en este widget.")
+    if not atencion_voz.puede_atender(cliente_id):
+        raise HTTPException(status_code=409, detail=atencion_voz.MOTIVO_PARA_EL_CLIENTE)
     if not settings.OPENAI_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -295,6 +298,10 @@ async def widget_voice_tool(cliente_id: str, request: Request) -> Dict[str, Any]
         raise HTTPException(status_code=403, detail="La voz no esta activada en este widget.")
     client_ip = request.client.host if request.client else "unknown"
     security._check_rate_limit(f"widget_voice_tool:{cliente_id}:{client_ip}", 30)
+    # Se revalida en cada tool: una sesion abierta antes de la pausa no autoriza
+    # seguir tocando la agenda despues.
+    if not atencion_voz.puede_atender(cliente_id):
+        raise HTTPException(status_code=409, detail=atencion_voz.MOTIVO_PARA_EL_CLIENTE)
     try:
         body = await request.json()
     except Exception:  # noqa: BLE001

@@ -58,7 +58,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, atencion_contexto, atencion_salidas, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
+from backend import agenda, appstate, atencion_avisos, atencion_contexto, atencion_salidas, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -327,6 +327,7 @@ def _log_ai_rebooking(cliente_id: str, phone: str, servicio: str) -> None:
 
 async def _run_ai_rebooking_pass() -> int:
     nudged_clients = 0
+    en_pausa = set()
     for cliente_id in list(appstate.CONFIG_CLIENTES.keys()):
         if not _ai_rebooking_enabled_for_client(cliente_id):
             continue
@@ -337,6 +338,10 @@ async def _run_ai_rebooking_pass() -> int:
             continue
         any_sent = False
         for cand in _ai_rebooking_candidates(cliente_id):
+            # Se pregunta por mensaje: escribir a quien no espera nada es lo
+            # primero que sobra cuando el negocio esta cerrado.
+            if not atencion_avisos.hay_atencion(cliente_id, en_pausa):
+                break
             try:
                 ok = await messaging._send_whatsapp_text(
                     cliente_id=cliente_id,
@@ -5738,6 +5743,7 @@ async def _run_review_requests(
 ) -> int:
     now_utc = now_utc or timeutils._utc_now()
     total = 0
+    en_pausa = set()
     for cliente_id in list(appstate.CONFIG_CLIENTES.keys()):
         cfg = _reviews_config(cliente_id)
         if not (cfg["enabled"] and _review_link_valid(cfg["link"])):
@@ -5750,6 +5756,8 @@ async def _run_review_requests(
             settings.logger.error("Resenas: error listando citas de %s: %s", cliente_id, exc)
             continue
         for row in rows:
+            if not atencion_avisos.hay_atencion(cliente_id, en_pausa):
+                continue
             try:
                 res = await _send_review_request(row, request, cfg=cfg)
                 if res.get("sent_channels"):
@@ -5833,6 +5841,7 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
     except Exception as exc:  # noqa: BLE001
         settings.logger.warning("[wa_plantillas] no se pudieron refrescar: %s", exc)
     rows = _bookings_due_for_reminders(now_utc)
+    en_pausa = set()
     processed = 0
     sent_24h = 0
     sent_2h = 0
@@ -5848,6 +5857,12 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
         if fresca is None or fresca["status"] != "confirmed":
             continue
         row = fresca
+        # Se pregunta por cada cita, no una vez por pasada: entre la primera y la
+        # ultima hay red de por medio y una pausa que caiga en ese hueco tiene que
+        # frenar lo que aun no ha salido. Omitir no marca entrega ni fallo: el
+        # aviso se queda sin hacer, que es lo que pidio el negocio.
+        if not atencion_avisos.hay_atencion(row["cliente_id"], en_pausa):
+            continue
         fu = _follow_up_config(row["cliente_id"])
         try:
             if not row["reminder_24h_sent_at"] and _reminder_due_or_pending(

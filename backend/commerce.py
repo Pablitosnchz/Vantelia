@@ -2817,9 +2817,17 @@ LIFECYCLE_MIN_AGE_DAYS = 7        # no avisar de caducidad recien comprado
 LIFECYCLE_REBUY_WINDOW_DAYS = 14  # recompra solo si se agoto hace poco (no historico)
 
 
-def _lifecycle_emails_enabled(cliente_id: str) -> bool:
-    from backend import appstate  # tardio
+def _lifecycle_notices_ok_now(cliente_id: str) -> bool:
+    """Si puede salir AHORA un aviso de ciclo de vida: lo permite el negocio
+    en su configuracion y la atencion automatica no esta pausada."""
+    from backend import appstate, atencion_avisos  # tardio
 
+    # Caducidades y recompras son avisos que salen solos: con la atencion
+    # pausada no salen, y no se sella nada, asi que al reactivar siguen vivos.
+    # La tarjeta regalo ya PAGADA es otra cosa y no pasa por aqui: quedarse el
+    # dinero y no mandarla seria peor que mandarla.
+    if not atencion_avisos.hay_atencion(cliente_id):
+        return False
     raw = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("reminders") or {}
     value = raw.get("lifecycle_emails")
     return True if value is None else bool(value)
@@ -3000,7 +3008,7 @@ def _run_commerce_lifecycle_notices() -> Dict[str, int]:
         ).fetchall()
 
     for row in expiring_packages:
-        if not _lifecycle_emails_enabled(row["cliente_id"]):
+        if not _lifecycle_notices_ok_now(row["cliente_id"]):
             continue
         try:
             remaining = json.loads(row["remaining_json"] or "{}")
@@ -3018,7 +3026,7 @@ def _run_commerce_lifecycle_notices() -> Dict[str, int]:
             sent["package_expiry"] += 1
 
     for row in expiring_gifts:
-        if not _lifecycle_emails_enabled(row["cliente_id"]):
+        if not _lifecycle_notices_ok_now(row["cliente_id"]):
             continue
         if _send_gift_expiry_email(row["cliente_id"], row):
             with db._get_db_connection() as connection:
@@ -3030,7 +3038,7 @@ def _run_commerce_lifecycle_notices() -> Dict[str, int]:
             sent["gift_expiry"] += 1
 
     for row in used_packages:
-        if not _lifecycle_emails_enabled(row["cliente_id"]):
+        if not _lifecycle_notices_ok_now(row["cliente_id"]):
             continue
         if _send_package_rebuy_email(row["cliente_id"], row):
             with db._get_db_connection() as connection:

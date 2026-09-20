@@ -58,6 +58,24 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   interacción comercial y eliminación de wrapper sin consumidores. 45 dirigidos;
   mutaciones de orden/omisión rojas y restauración comprobada.
 
+- WA2 `c465be1` (Claude): frontera de entrada de WhatsApp conectada. 7 dirigidos
+  y 7 mutaciones causales rojas -quitar la puerta, no guardar la entrada,
+  transcribir el audio, tomar el error de lectura por permiso, bloquear los ecos,
+  abrir el formulario, comerse el ping de Meta-. Subconjunto whatsapp/flows/inbox/
+  atencion: 669 aprobados. No acredita entrega real de Meta: transporte interceptado.
+  El token de Flow sigue sin ligarse durablemente a la version de atencion.
+- Fase 3 (Claude), voz y automatismos: telefono entrante, puente revalidado al
+  conectar, voz del widget (sesion y cada tool), llamadas salientes -tambien las
+  del boton del panel-, recordatorios, resenas, rebooking por IA y avisos de
+  ciclo de vida. 10 dirigidos y 10 mutaciones causales rojas, incluida la que
+  cachea el permiso por pasada en vez de preguntarlo por aviso. La supresion no
+  marca entrega: se comprueba que al reactivar el aviso pendiente sale. Suite
+  completa del arbol congelado: 3310 passed, 1 skipped, 1 failed (el vigilante de
+  ARQUITECTURA.md por los cuatro modulos nuevos, ya documentados). Sin proveedor:
+  Twilio, Realtime y SMTP van interceptados, asi que no acredita el silencio de
+  una sesion de voz ya abierta ni una entrega real. Los avisos todavia no
+  instalan turno; la identidad por aviso sigue pendiente.
+
 ## Puertas que faltan
 
 1. Integrar piezas revisadas y comprobar conflictos sobre el código resultante.

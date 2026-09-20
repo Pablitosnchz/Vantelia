@@ -56,7 +56,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppVoiceResponse, BookingReschedulePayload
-from backend import atencion_contexto
+from backend import atencion_contexto, atencion_voz
 from backend import agenda, appstate, booking, clients, commerce, crm, db, emailing, messaging, rag, security, settings, textnorm, timeutils
 
 # Tareas en segundo plano (envios best-effort que no deben bloquear la respuesta de voz).
@@ -483,6 +483,11 @@ def _voice_place_outbound_call(
     Gating: plan Business + numero Twilio del negocio + telefono del cliente."""
     config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
     voice_cfg = config.get("voice") or {}
+    if not atencion_voz.puede_atender(cliente_id):
+        # Sin excepcion humana a proposito: una llamada es una conversacion que
+        # sostiene la IA, la haya pedido el worker o el boton del panel. El
+        # equipo sigue pudiendo escribir o llamar el mismo.
+        return {"ok": False, "error": atencion_voz.MOTIVO_PARA_EL_PANEL}
     if not _client_voice_plan_enabled(cliente_id):
         return {"ok": False, "error": "La voz requiere plan Business."}
     from_number = str(voice_cfg.get("twilio_phone_number") or settings.TWILIO_DEFAULT_PHONE_NUMBER or "").strip()
