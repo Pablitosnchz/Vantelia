@@ -85,6 +85,42 @@ Estos adaptadores/campañas están pendientes, no ejecutados. No se suman a los
 resultados históricos del banco ni a pytest; tampoco autorizan acceso a datos
 reales o mensajes a destinatarios no autorizados.
 
+## Cierre del bloque de atención, 21-sep-2026: solo instrumentos sin coste
+
+Decisión de Pablo del 21-sep: cerrar con los instrumentos que no gastan modelo.
+El banco de casos y el simulador quedan SIN EJECUTAR, y con ellos la comparación
+referencia/candidato que pide este contrato. Lo que sigue es aceptación del
+candidato, no mejora medida, y no se presenta ningún porcentaje.
+
+Instrumentos ejecutados sobre el árbol congelado (`claude/atencion-whatsapp-20sep`):
+
+| Instrumento | Resultado | Qué acredita |
+| --- | --- | --- |
+| `python -m pytest` | 3320 passed, 1 skipped, 0 failed, 2251.58s | El mecanismo, en todos los módulos |
+| 22 mutaciones causales | 22 rojas | Que cada prueba nueva falla sin su arreglo |
+| `python scripts/qa_e2e.py` | PASS 94, WARN 0, BUG 0, salida 0 | El portal entero y la reserva por WhatsApp de punta a punta, en entorno aislado |
+| `npm run test:widget` | 16 pass, 0 fail | El widget con la atención cortada |
+| `py_compile` + `pyflakes` | limpio | Entradas e imports |
+
+Lo que NO se ha medido, y por qué importa decirlo:
+
+- **El banco de casos y el simulador de 100 clientas**: gastan saldo y necesitan
+  una copia saneada de producción que sigue sin existir autorizada. Sin ellos no
+  hay comparación con la referencia.
+- **El humo de cinco conversaciones**: también habla con el modelo, y existe
+  precisamente porque la suite comprueba el MECANISMO y no el CAMINO. Las dos
+  regresiones del 26-ago pasaron 1.373 tests. Este cierre no tiene esa red.
+- **Proveedores reales**: Meta, Twilio, OpenAI Realtime y Stripe van
+  interceptados. No acredita entrega real, ni el silencio de una sesión de voz
+  ya abierta, ni el comportamiento de los reintentos de Meta.
+- **`npm run build`**: no aplica, `widget/` no se ha tocado en estas fases; su
+  último cambio y su bundle son de `00d628a`.
+
+Hallazgo del propio cierre: `scripts/qa_e2e.py` llevaba tiempo dando un BUG
+falso y saliendo con código 1, así que su código de salida no significaba nada.
+Comprobado en `0cb61de` (desplegado) y en `f11132c` antes de tocarlo: el fallo
+era del instrumento, no del producto. Arreglado en `34dab9f`.
+
 ## Resultados, límites y cambio del criterio
 
 - Separar previstos, aplicables, medidos, OK primer intento, primeros intentos
