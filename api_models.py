@@ -1307,6 +1307,31 @@ class ReminderConfigResponse(BaseModel):
     voice_call_available: bool = False  # hay voz + numero para poder llamar
 
 
+# --- Pausa de la atencion automatica (temporada, obras, vacaciones) ---
+
+class AttentionMotivo(BaseModel):
+    clave: str
+    etiqueta: str
+
+
+class AttentionStateResponse(BaseModel):
+    estado: str = "activa"          # activa | pausada
+    version: int = 0                # se devuelve tal cual en el PUT (CAS)
+    desde: Optional[str] = None     # cuando empezo el estado actual, ISO UTC
+    motivo: Optional[str] = None    # codigo tecnico, nunca texto libre
+    puede_cambiarlo: bool = False   # si este usuario tiene el permiso
+    motivos: List[AttentionMotivo] = Field(default_factory=list)
+    se_para: List[str] = Field(default_factory=list)
+    sigue_igual: List[str] = Field(default_factory=list)
+    nota_facturacion: str = ""
+
+
+class AttentionStatePayload(BaseModel):
+    estado: str = Field(min_length=1, max_length=16)
+    version_esperada: int = Field(ge=0)
+    motivo: str = Field(default="decision_del_negocio", max_length=64)
+
+
 # --- Seguimiento del cliente (flujo de confirmacion por plan) ---
 
 class FollowUpPayload(BaseModel):

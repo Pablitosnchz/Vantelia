@@ -27,6 +27,7 @@ from backend import (
     clients,
     commerce,
     db,
+    atencion,
     demo_agenda,
     rag,
     security,
@@ -342,6 +343,32 @@ async def admin_stats_overview() -> AdminStatsOverview:
         churn_riesgo=churn[:20],
         generated_at=now.isoformat(),
     )
+
+
+@app.get("/admin/attention", dependencies=[Depends(security._require_admin_token)])
+async def admin_atencion() -> Dict[str, Any]:
+    """Quien tiene la atencion automatica en pausa ahora mismo.
+
+    Lectura: desde aqui no se pausa ni se reactiva a nadie. El interruptor es del
+    negocio, en su panel, y un cambio hecho por nosotros sin que lo sepan seria
+    peor que el problema que resuelve.
+
+    Un tenant cuyo estado no se puede leer sale como `desconocido`: callarlo
+    daria por hecho que atiende, que es justo lo que no se sabe.
+    """
+    negocios = []
+    for cliente_id in sorted(appstate.CONFIG_CLIENTES.keys()):
+        try:
+            estado = atencion.leer_atencion(cliente_id)
+        except atencion.AtencionNoDisponible:
+            negocios.append({"cliente_id": cliente_id, "estado": "desconocido"})
+            continue
+        if estado["estado"] == "activa":
+            continue
+        negocios.append({"cliente_id": cliente_id, "estado": estado["estado"],
+                         "desde": estado["fecha_efectiva"], "motivo": estado["motivo"],
+                         "version": estado["version"]})
+    return {"total_negocios": len(appstate.CONFIG_CLIENTES), "no_activos": negocios}
 
 
 @app.get("/admin/stats", dependencies=[Depends(security._require_admin_token)])

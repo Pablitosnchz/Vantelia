@@ -76,6 +76,21 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   una sesion de voz ya abierta ni una entrega real. Los avisos todavia no
   instalan turno; la identidad por aviso sigue pendiente.
 
+- Fase 4 (Claude), la operacion: `GET/PUT /auth/app/attention` con permiso
+  `channels.manage` y version CAS, tarjeta en Cuenta, aviso permanente fuera de
+  esa pestana y lectura administrativa `GET /admin/attention` que solo lista.
+  9 dirigidos y 5 mutaciones causales rojas. La prueba central no mira el 200:
+  pulsa la pausa desde el panel, comprueba que `/chat` pasa a 409, reactiva y
+  comprueba que vuelve a contestar. Se comprueba ademas que la pausa no toca
+  plan, suscripcion ni el diario de otros canales.
+  AVISO METODOLOGICO: la mutacion que quitaba la guarda de `atencion_chat`
+  quedo VERDE -el chat tiene dos guardas y quitar una no cambia nada
+  observable-. Se sustituyo por romper la LECTURA de la autoridad (un tenant
+  pausado se lee activa), que si tumba la prueba. Una mutacion sobre una guarda
+  suelta no acredita nada cuando hay defensa en profundidad.
+  Suite completa del arbol congelado: 3320 passed, 1 skipped, 0 failed,
+  2251.58s. Sin proveedor ni medicion con modelo.
+
 ## Puertas que faltan
 
 1. Integrar piezas revisadas y comprobar conflictos sobre el código resultante.

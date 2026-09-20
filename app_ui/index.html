@@ -450,6 +450,37 @@
     .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
     .btn:disabled { opacity: .45; cursor: not-allowed; }
 
+    /* Pausa de la atencion automatica */
+    .atencion-banner {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      margin: 0 0 16px; padding: 12px 16px; border-radius: 12px;
+      background: rgba(255,200,87,0.12); border: 1px solid rgba(255,200,87,0.35);
+      color: var(--text); font-size: 0.9rem;
+    }
+    .atencion-banner > div { flex: 1 1 260px; }
+    .atencion-banner span#atencionBannerDetalle { color: var(--soft); }
+    .atencion-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--warning); box-shadow: 0 0 0 4px rgba(255,200,87,0.18);
+    }
+    .atencion-estado {
+      display: flex; align-items: center; gap: 10px; font-size: 0.95rem;
+      padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+    }
+    .atencion-estado.pausada { border-color: rgba(255,200,87,0.4); background: rgba(255,200,87,0.10); }
+    .atencion-estado .pill { font-weight: 700; }
+    .atencion-estado.pausada .pill { color: var(--warning); }
+    .atencion-estado .desde { color: var(--soft); font-size: 0.85rem; }
+    .atencion-listas {
+      display: flex; gap: 22px; flex-wrap: wrap; margin-top: 18px;
+      padding-top: 16px; border-top: 1px solid var(--line);
+    }
+    .atencion-listas > div { flex: 1 1 260px; }
+    .atencion-listas b { font-size: 0.85rem; }
+    .atencion-listas ul { margin: 8px 0 0; padding-left: 18px; color: var(--soft); font-size: 0.85rem; }
+    .atencion-listas li { margin-bottom: 6px; line-height: 1.45; }
+
     .code-block {
       background: #07101f; border: 1px solid var(--line);
       padding: 14px; border-radius: 10px;
@@ -1883,6 +1914,15 @@
       </div>
     </div>
     </div>
+  </div>
+
+  <div id="atencionBanner" class="atencion-banner" style="display:none;">
+    <span class="atencion-dot"></span>
+    <div>
+      <b>Tu asistente está en pausa.</b>
+      <span id="atencionBannerDetalle"></span>
+    </div>
+    <button class="btn btn-ghost" id="atencionBannerBtn" type="button">Ver y reactivar</button>
   </div>
 
   <!-- Búsqueda global (clientes y conversaciones) -->
@@ -3664,7 +3704,33 @@
 
   <!-- CUENTA -->
   <section class="page" id="page-cuenta">
-    <div class="panel-card">
+    <div class="panel-card" id="atencionBlock">
+      <h2>Atención automática</h2>
+      <p class="panel-sub">El interruptor general de tu asistente. Úsalo cuando cierres por temporada, vacaciones u obras: deja de contestar solo, pero no se borra ni se cancela nada y tu plan no cambia.</p>
+      <div class="atencion-estado" id="atencionEstado"></div>
+      <div class="form-row" id="atencionMotivoRow" style="margin-top:14px; display:none;">
+        <div class="field">
+          <label class="field-label">Motivo</label>
+          <select class="field-input" id="atencionMotivo"></select>
+        </div>
+      </div>
+      <div style="margin-top:14px;" data-perm="channels.manage">
+        <button class="btn btn-primary" id="atencionToggleBtn" type="button"></button>
+      </div>
+      <div class="atencion-listas">
+        <div>
+          <b>Mientras esté en pausa, se para</b>
+          <ul id="atencionSePara"></ul>
+        </div>
+        <div>
+          <b>Sigue igual</b>
+          <ul id="atencionSigueIgual"></ul>
+        </div>
+      </div>
+      <p class="panel-sub" id="atencionFacturacion" style="margin-top:12px;"></p>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
       <h2>Perfil</h2>
       <p class="panel-sub">Tu nombre e email de acceso.</p>
       <div class="form-row">
@@ -4589,7 +4655,7 @@ function setTab(tab) {
   if (tab === 'horarios')   loadHorarios();
   if (tab === 'mensajes')   { loadMensajes(); loadFollowUp(); loadReviews(); }
   if (tab === 'instalacion') loadInstalacion();
-  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); }
+  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); loadAtencion(); }
   if (tab === 'ventas')     openVentas();
   if (tab === 'informes')   loadInformes();
   if (tab === 'clientes')   loadClientes();
@@ -12381,6 +12447,109 @@ document.getElementById('rebookingAiToggle')?.addEventListener('change', async (
   } catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
 });
 
+
+// ── Atención automática: el interruptor general del asistente ──────────
+// El banner vive fuera de la pestaña Cuenta a propósito: si alguien se deja la
+// pausa puesta, tiene que verlo esté donde esté.
+let ATENCION = null;
+
+function pintarAtencion(d) {
+  ATENCION = d;
+  const pausada = d.estado === 'pausada';
+  const motivos = {};
+  (d.motivos || []).forEach((m) => { motivos[m.clave] = m.etiqueta; });
+  const estado = document.getElementById('atencionEstado');
+  if (estado) {
+    estado.classList.toggle('pausada', pausada);
+    const desde = d.desde ? new Date(d.desde) : null;
+    const cuando = (desde && !isNaN(desde))
+      ? ' · desde el ' + desde.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+      : '';
+    const punto = pausada ? '' : 'background:#4ade80;box-shadow:none;';
+    const texto = (pausada ? (motivos[d.motivo] || 'Pausada') : 'Tu asistente atiende con normalidad') + cuando;
+    estado.innerHTML = '<span class="atencion-dot" style="' + punto + '"></span>'
+      + '<span class="pill">' + (pausada ? 'En pausa' : 'Contestando') + '</span>'
+      + '<span class="desde">' + escapeHtml(texto) + '</span>';
+  }
+  const selector = document.getElementById('atencionMotivo');
+  if (selector && !selector.options.length) {
+    selector.innerHTML = (d.motivos || [])
+      .map((m) => '<option value="' + m.clave + '">' + escapeHtml(m.etiqueta) + '</option>').join('');
+  }
+  const fila = document.getElementById('atencionMotivoRow');
+  if (fila) fila.style.display = pausada ? 'none' : '';
+  const btn = document.getElementById('atencionToggleBtn');
+  if (btn) {
+    btn.textContent = pausada ? 'Reactivar el asistente' : 'Pausar el asistente';
+    btn.disabled = !d.puede_cambiarlo;
+  }
+  const lista = (id, valores) => {
+    const nodo = document.getElementById(id);
+    if (nodo) nodo.innerHTML = (valores || []).map((t) => '<li>' + escapeHtml(t) + '</li>').join('');
+  };
+  lista('atencionSePara', d.se_para);
+  lista('atencionSigueIgual', d.sigue_igual);
+  const nota = document.getElementById('atencionFacturacion');
+  if (nota) nota.textContent = d.nota_facturacion || '';
+  const banner = document.getElementById('atencionBanner');
+  if (banner) {
+    banner.style.display = pausada ? '' : 'none';
+    const detalle = document.getElementById('atencionBannerDetalle');
+    if (detalle) {
+      detalle.textContent = pausada
+        ? 'No contesta en la web, WhatsApp ni el teléfono, y no salen recordatorios. Lo que te escriban lo sigues viendo en Conversaciones.'
+        : '';
+    }
+  }
+}
+
+async function loadAtencion() {
+  try {
+    pintarAtencion(await api('/auth/app/attention'));
+  } catch (e) {
+    // No poder leerlo no es lo mismo que estar activa: no se pinta nada nuevo.
+    console.warn('atencion', e.message);
+  }
+}
+
+document.getElementById('atencionBannerBtn')?.addEventListener('click', () => { setTab('cuenta'); });
+
+document.getElementById('atencionToggleBtn')?.addEventListener('click', async () => {
+  if (!ATENCION) return;
+  const pausar = ATENCION.estado !== 'pausada';
+  const motivo = document.getElementById('atencionMotivo')?.value || 'decision_del_negocio';
+  if (pausar) {
+    const ok = await confirmDialog({
+      title: 'Pausar el asistente',
+      bodyHtml: '<p>Dejará de contestar solo en la web, WhatsApp y el teléfono, y no saldrán recordatorios ni peticiones de reseña.</p>'
+        + '<p>Tus citas, tu catálogo y tu plan no cambian, y tu equipo sigue pudiendo contestar a mano desde aquí.</p>',
+      confirmLabel: 'Pausar',
+    });
+    if (!ok) return;
+  }
+  try {
+    const d = await api('/auth/app/attention', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        estado: pausar ? 'pausada' : 'activa',
+        version_esperada: ATENCION.version,
+        motivo: motivo,
+      }),
+    });
+    pintarAtencion(d);
+    toast(pausar ? 'Asistente en pausa.' : 'Asistente reactivado.', 'success');
+  } catch (e) {
+    // Otra pestaña (u otra persona) lo cambió: se relee en vez de insistir.
+    if (e.status === 409) {
+      await loadAtencion();
+      toast('Alguien lo ha cambiado mientras tanto. Te he recargado el estado.', 'error');
+      return;
+    }
+    toast(e.message, 'error');
+  }
+});
+
 // ── Política de cancelación / no-show (config manager+) ────────────────
 async function loadCancellationPolicy() {
   const block = document.getElementById('cancelPolicyBlock');
@@ -14033,6 +14202,7 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
   } catch {}
   if (!portalTabChosenByUser) setTab(initialTab);
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
+  loadAtencion();
   loadAlerts();
   moveStarterPanelToTune();
   loadInstalacion();

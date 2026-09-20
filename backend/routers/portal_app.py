@@ -66,6 +66,8 @@ from backend import (
     agenda,
     appstate,
     apuntes,
+    atencion,
+    atencion_panel,
     billing,
     booking,
     channel_requests,
@@ -3693,3 +3695,64 @@ async def app_gift_public_put(
     clients._persist_configs_to_disk(next_configs)
     rag._invalidate_client_runtime(target)
     return await app_gift_public_get(cliente_id=cliente_id, user=user)
+
+
+# --- Pausa de la atencion automatica ---------------------------------------
+#
+# Hasta aqui la autoridad existia y la consultaban los canales, pero nadie podia
+# accionarla sin entrar en la base de datos. Esto es el interruptor, y por eso
+# llega el ultimo: encenderlo antes de tener las fronteras puestas habria
+# prometido un silencio que no se cumplia.
+
+
+def _atencion_puede_cambiarla(user) -> bool:
+    try:
+        security._require_portal_permission(user, "channels.manage")
+    except HTTPException:
+        return False
+    return True
+
+
+def _atencion_error_http(exc: Exception) -> HTTPException:
+    if isinstance(exc, atencion.AtencionVersionObsoleta):
+        # Alguien la cambio mientras esta pestana estaba abierta. Se devuelve la
+        # version vigente para que el panel relea en vez de pisar la decision.
+        return HTTPException(status_code=409, detail={
+            "code": "ATTENTION_STALE", "version": exc.version_actual,
+            "message": "Alguien ha cambiado el estado mientras tanto. Vuelve a cargarlo."})
+    return HTTPException(status_code=503, detail={
+        "code": "ATTENTION_UNAVAILABLE",
+        "message": "No se puede verificar el estado de atencion en este momento."})
+
+
+@app.get("/auth/app/attention", response_model=AttentionStateResponse)
+async def app_attention_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AttentionStateResponse:
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    try:
+        return AttentionStateResponse(**atencion_panel.estado_para_el_panel(
+            target, puede_cambiarlo=_atencion_puede_cambiarla(user)))
+    except atencion.AtencionNoDisponible as exc:
+        raise _atencion_error_http(exc) from exc
+
+
+@app.put("/auth/app/attention", response_model=AttentionStateResponse)
+async def app_attention_put(
+    data: AttentionStatePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AttentionStateResponse:
+    """Pausa o reactiva la atencion automatica. No toca el plan ni los cobros."""
+    security._require_portal_permission(user, "channels.manage")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    if data.estado not in ("activa", "pausada"):
+        raise HTTPException(status_code=400, detail="Estado de atencion no valido.")
+    try:
+        atencion.cambiar_atencion(
+            target, data.estado, version_esperada=int(data.version_esperada),
+            motivo=atencion_panel.motivo_valido(data.motivo), actor=str(user["id"]))
+    except (atencion.AtencionVersionObsoleta, atencion.AtencionNoDisponible) as exc:
+        raise _atencion_error_http(exc) from exc
+    return await app_attention_get(cliente_id=cliente_id, user=user)
