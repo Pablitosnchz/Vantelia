@@ -91,6 +91,18 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   Suite completa del arbol congelado: 3320 passed, 1 skipped, 0 failed,
   2251.58s. Sin proveedor ni medicion con modelo.
 
+- Identidad por aviso (Astra, `a3df1ee`, rescatada de su copia sin commitear)
+  y worker conectado (Claude, `ec3a58d`): cada recordatorio con su turno, dos
+  momentos de pausa con consecuencias distintas (antes = no se anota y sale al
+  reactivar; durante = `omitido/atencion_suprimida`, terminal). 19 dirigidos de
+  Astra + 5 del worker; 4 mutaciones causales rojas. DOS de las pruebas del worker
+  nacieron mal -enganchaban la pausa y el retraso en una funcion que el worker
+  consulta ANTES de capturar el turno- y lo delato la mutacion de la vigencia, que
+  quedo en verde hasta moverlas dentro del envio. Suite completa: 3342 passed,
+  1 skipped, 2 failed (vigilantes de reglas que leian una funcion partida en dos,
+  reapuntados en `c9bc7ff` y comprobados con mutacion). `qa_e2e` 94/94.
+  Limite: el ticket nace con `event_at` = ahora, no con el origen del aviso.
+
 ## Puertas que faltan
 
 1. Integrar piezas revisadas y comprobar conflictos sobre el código resultante.
