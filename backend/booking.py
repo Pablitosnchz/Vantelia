@@ -5877,6 +5877,24 @@ def _reminder_calls_ok_now(cliente_id: str, rcfg: Optional[Dict[str, Any]] = Non
     return _outbound_calls_today(cliente_id) < int(rcfg["daily_call_cap"])
 
 
+async def _recordatorio_bajo_atencion(
+    row: sqlite3.Row, kind: str, request: Optional[Request], *, sent_column: str,
+) -> Dict[str, Any]:
+    """Un recordatorio automatico, con su propio turno de atencion.
+
+    El turno es de ESTE aviso, no del bucle: asi cada fragmento se admite justo
+    antes de su transporte y una pausa que cae a mitad frena lo que falta. Una
+    supresion no es un fallo del proveedor -que ni se ha tocado-: no se cuenta
+    como fallido ni se marca la cita, y `notice_deliveries` ya la deja anotada.
+    """
+    try:
+        with atencion_avisos.turno_aviso(row["cliente_id"]):
+            return await _send_booking_reminder_by_kind(row, kind, request, sent_column=sent_column)
+    except atencion_contexto.AtencionDetenida as exc:
+        settings.logger.info("[avisos] %s de %s no sale: %s", kind, row["id"], exc.motivo)
+        return {"sent": [], "failed": {}, "skipped": {"all": "atencion_" + str(exc.motivo)}}
+
+
 async def _run_booking_reminders(request: Optional[Request] = None) -> AdminReminderRunResult:
     now_utc = timeutils._utc_now()
     _auto_confirm_pending_bookings()
@@ -5917,12 +5935,8 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
         try:
             if not row["reminder_24h_sent_at"] and _reminder_due_or_pending(
                     row, now_utc, "reminder_24h", settings.REMINDER_24H_HOURS):
-                resultado = await _send_booking_reminder_by_kind(
-                    row,
-                    "reminder_24h",
-                    request,
-                    sent_column="reminder_24h_sent_at",
-                )
+                resultado = await _recordatorio_bajo_atencion(
+                    row, "reminder_24h", request, sent_column="reminder_24h_sent_at")
                 # Un aviso omitido se cierra para no repetirlo, pero no es un envío.
                 if resultado["sent"]:
                     sent_24h += 1
@@ -5938,12 +5952,8 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
                         {"kind": "reminder_2h", "reason": "already_confirmed"},
                     )
                 else:
-                    resultado = await _send_booking_reminder_by_kind(
-                        row,
-                        "reminder_2h",
-                        request,
-                        sent_column="reminder_2h_sent_at",
-                    )
+                    resultado = await _recordatorio_bajo_atencion(
+                        row, "reminder_2h", request, sent_column="reminder_2h_sent_at")
                     if resultado["sent"]:
                         sent_2h += 1
 
