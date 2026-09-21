@@ -20,7 +20,11 @@ import re
 import time
 from typing import Any, Awaitable, Callable, Dict, Set
 
-from backend import booking, settings, textnorm, timeutils, voice
+from backend import atencion_contexto, atencion_voz, booking, settings, textnorm, timeutils, voice
+
+# Colgar y pasar con una persona no son atencion automatica: con la atencion
+# pausada tienen que seguir funcionando, o la IA no podria ni despedirse.
+TOOLS_SIN_ATENCION = frozenset({"finalizar_llamada", "transferir_a_humano"})
 
 # Tools cuyo resultado (mensaje_voz/mensaje/error) SIEMPRE debe convertirse en habla: si el
 # modelo se queda mudo tras ejecutarlas, el puente fuerza la frase. Las informativas/POS no
@@ -620,6 +624,34 @@ class VoiceCallEngine:
             tool_args = {}
         if not isinstance(tool_args, dict):
             tool_args = {}
+        if fname in TOOLS_SIN_ATENCION:
+            result = await self._ejecutar_tool(fname, tool_args, arguments_json)
+        else:
+            # La llamada solo miraba la pausa al CONECTAR: una que ya estaba en
+            # curso cuando se pulso seguia pudiendo crear, cancelar o mover citas.
+            # Ahora cada herramienta lleva su turno, y lo que cree o cambie pasa
+            # por la misma autoridad que el resto del producto.
+            try:
+                with atencion_voz.turno_llamada(cliente_id):
+                    result = await self._ejecutar_tool(fname, tool_args, arguments_json)
+            except atencion_contexto.AtencionDetenida as exc:
+                result = self._llamada_sin_atencion(fname, exc)
+        await self._despues_de_la_tool(call_id, fname, tool_args, result)
+
+    def _llamada_sin_atencion(self, fname: str, exc: Exception) -> Dict[str, Any]:
+        """La atencion se ha pausado (o no se puede comprobar) con la llamada en
+        curso. La herramienta no se ejecuta y la llamada se cierra con la
+        despedida: la IA no sostiene conversaciones con la atencion pausada."""
+        settings.logger.info("[voice] %s no se ejecuta en %s: %s", fname, self.cliente_id,
+                             getattr(exc, "motivo", ""))
+        self.state["should_end_call"] = True
+        return {"ok": False, "atencion_pausada": True,
+                "mensaje_voz": atencion_voz.MOTIVO_PARA_EL_CLIENTE}
+
+    async def _ejecutar_tool(self, fname: str, tool_args: Dict[str, Any],
+                             arguments_json: str) -> Dict[str, Any]:
+        state = self.state
+        cliente_id = self.cliente_id
         if fname == "confirmar_cita" and state.get("outbound"):
             rid = state.get("outbound_booking_id")
             if rid:
@@ -649,6 +681,11 @@ class VoiceCallEngine:
                 from_number=state.get("from_number", ""),
                 location_id=state.get("location_id", ""),
             )
+        return result
+
+    async def _despues_de_la_tool(self, call_id: str, fname: str,
+                                  tool_args: Dict[str, Any], result: Dict[str, Any]) -> None:
+        state = self.state
         # (Antes aqui el puente reprogramaba solo al ver hueco libre. Ahora el modelo decide:
         # el prompt le indica llamar a reprogramar_cita, y abajo le damos la guia para hacerlo.)
         if fname == "crear_cita" and result.get("ok"):

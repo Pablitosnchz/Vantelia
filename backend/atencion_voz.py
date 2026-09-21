@@ -14,7 +14,12 @@ Qué cubre este corte, todo comprobable sin proveedor:
 - el puente (`/voice/stream/{cliente_id}`): se revalida al conectar, porque la
   pausa puede caer entre el TwiML y el WebSocket, y se cierra sin abrir sesión
   con OpenAI -que es lo que se cobra-;
-- voz del widget: no se acuña sesión ni se ejecuta ninguna tool real;
+- una llamada que YA estaba en curso al pausar: cada herramienta lleva su turno
+  (`voice_engine`), así que no crea, cancela ni mueve citas, y la llamada se
+  cierra con la despedida. Colgar y pasar con una persona quedan fuera, o la IA
+  no podría ni despedirse;
+- voz del widget: no se acuña sesión, y cada tool real lleva su turno, así que
+  una pausa que cae entre la comprobación y la reserva también la frena;
 - llamadas salientes (`voice._voice_place_outbound_call`): no se colocan.
 
 Lo que NO se toca: el status callback de Twilio (es un acuse de una llamada que

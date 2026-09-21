@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from api_models import *  # noqa: F401,F403
 from backend import (
+    atencion_contexto,
     atencion_voz,
     clients,
     db,
@@ -312,7 +313,13 @@ async def widget_voice_tool(cliente_id: str, request: Request) -> Dict[str, Any]
     arguments = body.get("arguments", "")
     if not isinstance(arguments, str):
         arguments = json.dumps(arguments, ensure_ascii=False)
-    return await voice._voice_dispatch_tool(cliente_id, name, arguments)
+    # La foto de arriba evita trabajo; el turno es lo que decide. Con el, una
+    # pausa que cae entre esa foto y la reserva la frena el propio nucleo.
+    try:
+        with atencion_voz.turno_llamada(cliente_id):
+            return await voice._voice_dispatch_tool(cliente_id, name, arguments)
+    except atencion_contexto.AtencionDetenida:
+        raise HTTPException(status_code=409, detail=atencion_voz.MOTIVO_PARA_EL_CLIENTE)
 
 
 @app.post("/voice/widget/{cliente_id}/log", include_in_schema=False)

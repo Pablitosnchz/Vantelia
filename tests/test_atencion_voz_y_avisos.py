@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 from datetime import timedelta
 import uuid
 
@@ -420,3 +421,118 @@ def test_los_avisos_de_caducidad_no_salen_en_pausa_y_no_sellan(entorno, monkeypa
             "SELECT expiry_notice_sent_at FROM package_purchases WHERE id = ?",
             (compra_id,)).fetchone()[0]
     assert sellado, "el aviso que sí salió tiene que quedar sellado"
+
+
+# ─── Una llamada que ya estaba en curso cuando se pulso la pausa ───────────
+#
+# El puente solo miraba la pausa al CONECTAR, y las herramientas de la llamada
+# no la consultaban: una llamada en curso seguia pudiendo crear, cancelar o
+# mover citas. El motor se construye aqui dentro, con los modulos de ESTE
+# entorno; el arnes de test_voice_engine apunta a los de otro runtime.
+
+def _motor_de_llamada(monkeypatch, resultado=None, antes=None):
+    from backend import voice, voice_engine
+
+    emitidos, llamadas = [], []
+
+    async def _a_openai(evento):
+        emitidos.append(evento)
+
+    async def _nada(*args, **kwargs):
+        return True
+
+    async def _despacho(cliente_id, nombre, argumentos, *, from_number="", location_id=""):
+        llamadas.append(nombre)
+        if antes:
+            antes()
+        return dict(resultado or {"ok": True, "mensaje_voz": "Hecho."})
+
+    monkeypatch.setattr(voice, "_voice_dispatch_tool", _despacho)
+    motor = voice_engine.VoiceCallEngine("demo", {}, {})
+    motor.bind_transport(send_openai=_a_openai, send_twilio=_nada,
+                         clear_playback=_nada, truncate_interrupted=_nada)
+    return motor, emitidos, llamadas
+
+
+def _herramienta(motor, nombre, argumentos=None):
+    asyncio.run(motor.on_openai_event({
+        "type": "response.function_call_arguments.done", "call_id": "c_" + uuid.uuid4().hex[:6],
+        "name": nombre, "arguments": json.dumps(argumentos or {})}))
+
+
+def _salidas(emitidos):
+    return [json.loads(e["item"]["output"]) for e in emitidos
+            if e.get("type") == "conversation.item.create"
+            and (e.get("item") or {}).get("type") == "function_call_output"]
+
+
+def test_una_llamada_en_curso_no_toca_la_agenda_tras_la_pausa(entorno, monkeypatch):
+    motor, emitidos, llamadas = _motor_de_llamada(monkeypatch)
+    _pausar("demo")
+    _herramienta(motor, "cancelar_cita", {"codigo_reserva": "R-1234", "telefono": "600111222"})
+
+    assert llamadas == [], "una llamada en curso ha tocado la agenda con la atencion pausada"
+    salida = _salidas(emitidos)[-1]
+    assert salida["atencion_pausada"] is True and salida["ok"] is False, salida
+    assert motor.state["should_end_call"] is True, (
+        "la llamada sigue abierta: la IA seguiria hablando en nombre del negocio")
+
+
+def test_colgar_y_pasar_con_una_persona_siguen_funcionando(entorno, monkeypatch):
+    """Sin estas dos, la IA ni siquiera podria despedirse ni pasar la llamada."""
+    motor, emitidos, _ = _motor_de_llamada(monkeypatch)
+    _pausar("demo")
+    _herramienta(motor, "finalizar_llamada")
+    salida = _salidas(emitidos)[-1]
+    assert salida["ok"] is True and "atencion_pausada" not in salida, salida
+
+
+def test_con_la_atencion_activa_la_llamada_reserva_como_siempre(entorno, monkeypatch):
+    motor, emitidos, llamadas = _motor_de_llamada(monkeypatch)
+    _herramienta(motor, "cancelar_cita", {"codigo_reserva": "R-1234"})
+    assert llamadas == ["cancelar_cita"]
+    assert motor.state["should_end_call"] is False
+
+
+def test_la_pausa_que_cae_durante_la_herramienta_la_frena_el_nucleo(entorno, monkeypatch):
+    """Una foto previa no basta: la pausa puede caer entre la comprobacion y la
+    reserva. Con el turno puesto, el nucleo lo vuelve a comprobar al mutar
+    (`verificar_turno_atencion`, lo que llaman crear/cancelar/mover)."""
+    from backend import atencion_contexto
+
+    def _pausa_y_muta():
+        _pausar("demo")
+        atencion_contexto.verificar_turno_atencion("demo")
+
+    motor, emitidos, llamadas = _motor_de_llamada(monkeypatch, antes=_pausa_y_muta)
+    _herramienta(motor, "reprogramar_cita", {"codigo_reserva": "R-1234"})
+    assert llamadas == ["reprogramar_cita"]
+    salida = _salidas(emitidos)[-1]
+    assert salida.get("atencion_pausada") is True, (
+        "la herramienta no llevaba turno: la mutacion habria seguido adelante: %r" % salida)
+    assert motor.state["should_end_call"] is True
+
+
+def test_en_el_widget_la_pausa_durante_la_herramienta_tambien_se_frena(entorno, monkeypatch):
+    """La foto previa del endpoint no ve una pausa que cae despues de ella. Con
+    el turno puesto, el nucleo la ve al mutar y la reserva no sigue."""
+    from starlette.testclient import TestClient
+
+    from backend import atencion_contexto, settings, voice
+
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-de-prueba")
+    monkeypatch.setattr(voice, "_voice_widget_enabled", lambda *a, **k: True)
+    mutadas = []
+
+    async def _pausa_y_muta(cliente_id, nombre, argumentos, **kwargs):
+        _pausar("demo")
+        atencion_contexto.verificar_turno_atencion("demo")   # lo que hacen crear/cancelar/mover
+        mutadas.append(nombre)
+        return {"ok": True}
+
+    monkeypatch.setattr(voice, "_voice_dispatch_tool", _pausa_y_muta)
+    respuesta = TestClient(entorno.app).post(
+        "/voice/widget/demo/tool", headers={"Origin": "http://testserver"},
+        json={"name": "crear_cita", "arguments": "{}"})
+    assert respuesta.status_code == 409, respuesta.text
+    assert mutadas == [], "la reserva ha seguido adelante tras pausar a mitad de la herramienta"
