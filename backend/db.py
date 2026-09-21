@@ -157,6 +157,11 @@ def _init_database() -> None:
             "ON client_attention_operations(canal, clave_intento) WHERE tipo='wa_demo'"
         )
         connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_attention_notice_attempt "
+            "ON client_attention_operations(cliente_id, canal, fragmento, clave_intento) "
+            "WHERE tipo='envio' AND clave_intento<>''"
+        )
+        connection.execute(
             """CREATE TABLE IF NOT EXISTS booking_operations (
                 cliente_id TEXT NOT NULL,
                 operation_key TEXT NOT NULL,

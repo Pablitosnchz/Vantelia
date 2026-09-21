@@ -4409,7 +4409,40 @@ def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "custome
     return pagina
 
 
+def _fila_persistida_aviso_atencion(booking_row):
+    """Con contexto no etiqueta un aviso con una generación inventada o ajena."""
+    if atencion_contexto.contexto_atencion_actual() is None:
+        return booking_row
+    atencion_salidas.tenant_salida_atencion(booking_row["cliente_id"])
+    try:
+        actual = _get_booking_row_by_id(booking_row["id"])
+    except sqlite3.Error as exc:
+        raise atencion_contexto.AtencionDetenida("generacion_aviso_no_verificable") from exc
+    if (actual is None or actual["cliente_id"] != booking_row["cliente_id"]
+            or "reminder_generation" not in actual.keys()
+            or type(actual["reminder_generation"]) is not int or actual["reminder_generation"] < 0):
+        raise atencion_contexto.AtencionDetenida("generacion_aviso_no_verificable")
+    if ("reminder_generation" in booking_row.keys()
+            and booking_row["reminder_generation"] != actual["reminder_generation"]):
+        raise atencion_contexto.AtencionDetenida("generacion_aviso_obsoleta")
+    return actual
+
+
 async def _send_booking_email_by_kind(
+    booking_row: sqlite3.Row,
+    kind: str,
+    request: Optional[Request] = None,
+    *,
+    sent_column: str = "",
+    respect_enabled: bool = True,
+) -> None:
+    booking_row = _fila_persistida_aviso_atencion(booking_row)
+    with atencion_salidas.aviso_reserva_atencion(booking_row, kind):
+        return await _send_booking_email_scoped(
+            booking_row, kind, request, sent_column=sent_column, respect_enabled=respect_enabled)
+
+
+async def _send_booking_email_scoped(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
@@ -4459,6 +4492,23 @@ async def _send_booking_email_by_kind(
 
 
 async def _send_booking_reminder_by_kind(
+    booking_row: sqlite3.Row,
+    kind: str,
+    request: Optional[Request] = None,
+    *,
+    sent_column: str = "",
+    respect_enabled: bool = True,
+    raise_on_failure: bool = True,
+    channel_override: Optional[Dict[str, bool]] = None,
+) -> Dict[str, Any]:
+    booking_row = _fila_persistida_aviso_atencion(booking_row)
+    with atencion_salidas.aviso_reserva_atencion(booking_row, kind):
+        return await _send_booking_reminder_scoped(
+            booking_row, kind, request, sent_column=sent_column, respect_enabled=respect_enabled,
+            raise_on_failure=raise_on_failure, channel_override=channel_override)
+
+
+async def _send_booking_reminder_scoped(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
@@ -6349,7 +6399,8 @@ async def _ai_send_payment_link(
             f"{checkout_url}"
         )
         try:
-            sent = await messaging._send_client_sms(cliente_id, phone, body)
+            with atencion_salidas.aviso_pago_atencion(row):
+                sent = await messaging._send_client_sms(cliente_id, phone, body)
         except atencion_contexto.AtencionDetenida as exc:
             atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "pago", row["id"])
             raise
@@ -6372,7 +6423,8 @@ async def _ai_send_payment_link(
             f"<p>Un saludo,<br>{escape(nombre_negocio)}</p>"
         )
         try:
-            await timeutils._to_thread(emailing._send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
+            with atencion_salidas.aviso_pago_atencion(row):
+                await timeutils._to_thread(emailing._send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
             sent = True
         except atencion_contexto.AtencionDetenida as exc:
             atencion_salidas.adjuntar_operacion_conocida_al_corte(exc, "pago", row["id"])

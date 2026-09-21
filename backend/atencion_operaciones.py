@@ -15,7 +15,8 @@ incluida una reconciliación de desconocido a conocido, aun estando en pausa.
 La consulta no recupera ese token: perder al proceso no acredita reconciliación
 automática; la operación queda conservadora hasta una intervención con evidencia.
 `puede_preparar` tampoco reclama un worker: las fronteras conservan la deduplicación
-de mensajes y coste. En el diario común, tipo=envio mantiene ticket/canal/fragmento;
+de mensajes y coste. Sin ámbito de aviso, tipo=envio mantiene ticket/canal/fragmento;
+con clave de aviso, tenant/canal/fragmento/clave persiste entre tickets.
 tipo=reserva/pago usa tenant/tipo/acción/clave estable incluso con otro ticket.
 tipo=wa_demo vincula una sola vez por evento del hub, incluso si cambia el tenant
 resuelto; un conflicto ajeno no devuelve datos del diario original.
@@ -75,7 +76,7 @@ def _validar_identidad_operacion_atencion(tipo, canal, fragmento, clave_intento)
     if tipo == "envio":
         _validar_referencia_atencion(canal, _ATENCION_CANAL_RE, "canal")
         if clave_intento != "":
-            raise ValueError("Un envío se identifica por su fragmento.")
+            _validar_referencia_atencion(clave_intento, _ATENCION_HASH_RE, "aviso")
     elif tipo == "reserva":
         if canal not in ("crear", "cancelar", "mover") or fragmento != 0:
             raise ValueError("Acción de reserva no válida.")
@@ -283,8 +284,10 @@ def _respuesta_operacion_atencion(operacion, ejecutar=False):
 def _compat_respuesta_envio_atencion(respuesta):
     respuesta = dict(respuesta)
     respuesta["ejecutar_red"] = respuesta.pop("ejecutar_operacion")
-    for nombre in ("tipo", "clave_intento", "result_ref", "request_hash"):
+    for nombre in ("tipo", "result_ref", "request_hash"):
         respuesta.pop(nombre)
+    if not respuesta["clave_intento"]:
+        respuesta.pop("clave_intento")
     return respuesta
 
 
@@ -297,6 +300,11 @@ def _buscar_identidad_operacion_atencion(connection, identidad):
         if row is not None and row["cliente_id"] != cliente_id:
             raise AtencionIdentidadEnConflicto("La identidad del evento no coincide.")
         return row
+    if tipo == "envio" and clave_intento:
+        return connection.execute(
+            "SELECT * FROM client_attention_operations WHERE cliente_id=? AND tipo='envio' "
+            "AND canal=? AND fragmento=? AND clave_intento=?",
+            (cliente_id, canal, fragmento, clave_intento)).fetchone()
     if tipo in ("reserva", "pago"):
         # El intento de una mutación confirmada sobrevive a la captura de otro
         # turno. El ticket original sigue siendo su vínculo de admisión.
@@ -477,15 +485,17 @@ def consultar_operaciones_atencion(cliente_id, *, ticket_id=None, tipo=None):
         raise atencion.AtencionNoDisponible("No se puede consultar el diario de atención.") from exc
 
 
-def admitir_envio_atencion(cliente_id, ticket_id, canal, fragmento, *, payload):
+def admitir_envio_atencion(cliente_id, ticket_id, canal, fragmento, *, payload, clave_intento=""):
     """Compatibilidad de fase2a: el permiso común conserva la API de envíos."""
     return _compat_respuesta_envio_atencion(admitir_operacion_atencion(cliente_id, ticket_id,
-        tipo="envio", canal=canal, fragmento=fragmento, payload=payload))
+        tipo="envio", canal=canal, fragmento=fragmento, payload=payload, clave_intento=clave_intento))
 
 
-def registrar_resultado_atencion(cliente_id, ticket_id, canal, fragmento, *, owner_token, resultado):
+def registrar_resultado_atencion(cliente_id, ticket_id, canal, fragmento, *, owner_token, resultado,
+                                 clave_intento=""):
     return _compat_respuesta_envio_atencion(registrar_resultado_operacion_atencion(cliente_id, ticket_id,
-        tipo="envio", canal=canal, fragmento=fragmento, owner_token=owner_token, resultado=resultado))
+        tipo="envio", canal=canal, fragmento=fragmento, owner_token=owner_token, resultado=resultado,
+        clave_intento=clave_intento))
 
 
 def consultar_envios_atencion(cliente_id, *, ticket_id=None):
