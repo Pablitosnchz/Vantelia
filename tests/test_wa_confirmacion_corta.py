@@ -20,7 +20,11 @@ def test_no_se_confirma_una_cita_que_no_esta_pagada(api_module):
     """Decir "confirmada" a quien tiene que pagar la senal es mentirle."""
     from backend import booking
 
-    fuente = inspect.getsource(booking._send_booking_reminder_by_kind)
+    # La entrada publica delega en la funcion con ambito del aviso: la regla se
+    # busca donde vive, y se exige que no haya otro camino que la esquive.
+    assert "_send_booking_reminder_scoped(" in inspect.getsource(
+        booking._send_booking_reminder_by_kind)
+    fuente = inspect.getsource(booking._send_booking_reminder_scoped)
     assert 'kind == "confirmed" and booking_row["status"] == "pending_payment"' in fuente
     assert '"pending_payment"' in fuente
 

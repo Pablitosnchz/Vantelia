@@ -72,7 +72,12 @@ def test_la_regla_se_aplica_a_TODOS_los_avisos(api_module):
 
     from backend import booking
 
-    fuente = inspect.getsource(booking._send_booking_reminder_by_kind)
+    # La entrada publica solo pone el ambito del aviso y delega; la regla vive
+    # en la funcion con ambito. Se exigen las dos cosas: que la regla este, y
+    # que no haya forma de entrar sin pasar por ella.
+    entrada = inspect.getsource(booking._send_booking_reminder_by_kind)
+    assert "_send_booking_reminder_scoped(" in entrada
+    fuente = inspect.getsource(booking._send_booking_reminder_scoped)
     assert "_channels_reaching_customer(booking_row, channels)" in fuente
 
 
