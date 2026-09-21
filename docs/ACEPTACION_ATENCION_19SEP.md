@@ -105,6 +105,14 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   de Pablo del 21-sep (el recordatorio cuya ventana coincide con la reactivacion
   sale), asi que la migracion del origen de Astra no se integra.
 
+- Flow ligado a la version (Claude, `0657fa5`): token con la version de
+  atencion firmada; se comprueba en pantallas y en envio final. 4 dirigidos y 6
+  mutaciones rojas. La del envio final se rehizo: sin preparar el estado del
+  formulario otra barrera lo frenaba y su rojo venia del texto; preparado como lo
+  deja el envio real, sin la comprobacion un formulario de antes de la pausa
+  prepara una cita. Suite completa del arbol final: 3348 passed, 1 skipped,
+  0 failed. `qa_e2e` 94/94. Sin Meta real.
+
 ## Puertas que faltan
 
 1. Integrar piezas revisadas y comprobar conflictos sobre el código resultante.
