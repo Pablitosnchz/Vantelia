@@ -1518,6 +1518,7 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     elif smtp_health.get("ok") is False:
         blockers.append(f"SMTP caído: {smtp_health.get('error', '')[:120]}")
     # Sin GOOGLE_PLACES_API_KEY el discovery usa OpenStreetMap (gratis): no es blocker.
+    blockers.extend(_outreach_avisos_de_cantera(conn, active_targets, valid_candidates, discovery_enabled))
     tick_state = _outreach_tick_state_snapshot()
     return {
         "enabled": enabled_db,
@@ -2546,9 +2547,16 @@ def _outreach_exhausted_targets(conn: sqlite3.Connection) -> Dict[str, Any]:
         return {}
 
 
-def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, imported: int) -> bool:
+def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, imported: int,
+                                     error: str = "") -> bool:
     """Registra el resultado de un combo. 2 rondas seguidas sin importables → agotado.
-    Devuelve True si el combo acaba de marcarse agotado."""
+    Devuelve True si el combo acaba de marcarse agotado.
+
+    Un ERROR tambien cuenta como ronda sin importables, y se guarda el motivo.
+    Antes el bucle hacia `continue` sin registrar nada: un objetivo que fallaba
+    no se agotaba nunca, y cuando era el unico que quedaba la captacion se
+    quedaba intentandolo cada hora sin escribir a nadie (pasó de agosto a
+    septiembre con «centro de masajes», un sector que el buscador no conocia)."""
     try:
         _outreach_ensure_autopilot_config_columns(conn)
         row = conn.execute("SELECT exhausted_targets_json FROM autopilot_config WHERE id=1").fetchone()
@@ -2562,6 +2570,10 @@ def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, i
     else:
         misses = int(entry.get("misses", 0)) + 1
         entry["misses"] = misses
+        if error:
+            entry["error"] = str(error)[:200]
+        else:
+            entry.pop("error", None)
         if misses >= 2 and not entry.get("exhausted_at"):
             entry["exhausted_at"] = _outreach_now()
             newly_exhausted = True
@@ -2575,6 +2587,36 @@ def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, i
     except Exception:
         pass
     return newly_exhausted
+
+
+def _outreach_avisos_de_cantera(conn: sqlite3.Connection, objetivos: List[Dict[str, str]],
+                                candidatos: int, discovery_enabled: bool) -> List[str]:
+    """Lo que el panel tiene que decir cuando la captacion se ha quedado sin gente.
+
+    El panel ya avisaba de un SMTP caido o de una pausa, pero no de esto: del
+    12-ago al 21-sep el piloto estuvo ENCENDIDO, sin pausa y con el SMTP bien, y
+    no escribio a nadie porque no le quedaba cantera. Nadie se entero.
+    """
+    try:
+        _outreach_ensure_autopilot_config_columns(conn)
+        fila = conn.execute("SELECT exhausted_targets_json FROM autopilot_config WHERE id=1").fetchone()
+        datos = json.loads((fila["exhausted_targets_json"] if fila else "{}") or "{}")
+    except Exception:
+        datos = {}
+    if not isinstance(datos, dict):
+        datos = {}
+    avisos: List[str] = []
+    con_error = sorted(k for k, v in datos.items() if isinstance(v, dict) and v.get("error"))
+    if con_error:
+        clave = con_error[0]
+        avisos.append("El buscador falla en «%s»: %s" % (clave.replace("|", " · "), datos[clave]["error"][:120]))
+    agotados = {k for k, v in datos.items() if isinstance(v, dict) and v.get("exhausted_at")}
+    quedan = [t for t in objetivos
+              if f"{t.get('sector', '')}|{t.get('city', '')}".lower() not in agotados]
+    if discovery_enabled and not candidatos and not quedan:
+        avisos.append("La captacion no tiene a quien escribir: no quedan prospects nuevos y todos "
+                      "los objetivos estan agotados. Anade sectores o ciudades.")
+    return avisos
 
 
 def _outreach_clear_exhausted_targets(conn: sqlite3.Connection) -> None:
@@ -3012,6 +3054,13 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                         log_err(f"discovery {sector}/{city}: {exc}")
                         _autopilot_log("error", "discovery_error", f"Error en {sector}/{city}: {exc}",
                                        {"sector": sector, "city": city})
+                        with _outreach_db() as conn:
+                            if _outreach_register_target_result(conn, combo_key, 0, error=str(exc)):
+                                _autopilot_log(
+                                    "warning", "discovery_target_exhausted",
+                                    f"{sector} · {city}: excluido tras fallar dos rondas seguidas ({exc})",
+                                    {"sector": sector, "city": city, "error": str(exc)[:200]},
+                                )
                         continue
 
                     found_count = len(companies)

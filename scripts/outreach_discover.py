@@ -69,6 +69,11 @@ SECTOR_TO_OSM: dict[str, list[tuple[str, str]]] = {
     "centro de estetica": [("shop", "beauty")],
     "salon belleza": [("shop", "beauty")],
     "barberia": [("shop", "hairdresser")],
+    # Estaba en los objetivos del panel y fallaba cada hora desde agosto: sin
+    # esta entrada el buscador no lo entendia y la rotacion se quedaba ahi.
+    "centro de masajes": [("shop", "massage")],
+    "masajes": [("shop", "massage")],
+    "masaje": [("shop", "massage")],
     "spa": [("leisure", "spa")],
     "gimnasio": [("leisure", "fitness_centre")],
     "academia": [("amenity", "language_school"), ("office", "educational_institution")],
