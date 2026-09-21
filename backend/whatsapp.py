@@ -2119,6 +2119,8 @@ async def _wa_send_booking_form(
     from backend import reserva
     estado = reserva.cargar(cliente_id, to_number)
     token = wa_flows.make_flow_token(cliente_id, to_number)
+    if not token:
+        return False  # Sin atencion verificable no se abre un formulario nuevo.
     token_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
     if not reserva.preparar_formulario_reserva(estado, token_digest):
         await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
@@ -2169,7 +2171,12 @@ async def _wa_handle_flow_reply(
     datos = wa_flows.parse_flow_response(response_json)
     contexto = wa_flows.read_flow_token(datos.get("flow_token", ""))
     phone = crm._normalize_crm_phone(from_number)
-    if (not contexto or contexto.get("cliente_id") != cliente_id or not phone
+    vigente = wa_flows.token_sigue_vigente(contexto) if contexto else False
+    if vigente is None:
+        # No se puede comprobar: no es "caducado", es "ahora no". La entrada
+        # queda para el equipo por el mismo camino que el resto de la pausa.
+        raise atencion_contexto.AtencionDetenida("atencion_no_verificable")
+    if (not contexto or not vigente or contexto.get("cliente_id") != cliente_id or not phone
             or crm._normalize_crm_phone(contexto.get("phone", "")) != phone):
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,

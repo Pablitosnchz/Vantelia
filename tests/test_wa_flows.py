@@ -113,7 +113,10 @@ def test_el_token_ata_la_conversacion_a_su_negocio(api_module, claves):
 
     token = wa_flows.make_flow_token("demo", "34600111222")
     leido = wa_flows.read_flow_token(token)
-    assert leido == {"cliente_id": "demo", "phone": "34600111222"}
+    assert leido["cliente_id"] == "demo" and leido["phone"] == "34600111222"
+    # Tambien la version de atencion con la que se abrio: sin ella, un formulario
+    # abierto antes de una pausa reviviria al reactivar.
+    assert isinstance(leido["version"], int), leido
 
 
 def test_un_token_manipulado_no_vale(api_module, claves):

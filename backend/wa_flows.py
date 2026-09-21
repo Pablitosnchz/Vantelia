@@ -24,13 +24,13 @@ import hmac
 import json
 import secrets
 from datetime import timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from backend import agenda, atencion_whatsapp, booking, clients, settings, textnorm, timeutils
+from backend import agenda, atencion, atencion_whatsapp, booking, clients, settings, textnorm, timeutils
 
 FLOW_JSON_VERSION = "7.2"
 DATA_API_VERSION = "3.0"
@@ -85,16 +85,37 @@ def _token_secret() -> bytes:
     return base.encode("utf-8") or b"vantelia-flow"
 
 
+def _version_de_atencion(cliente_id: str) -> Optional[int]:
+    """Version vigente si el negocio atiende; None si no atiende o no se sabe."""
+    try:
+        estado = atencion.leer_atencion(cliente_id)
+    except atencion.AtencionNoDisponible:
+        return None
+    return estado["version"] if estado["estado"] == "activa" else None
+
+
 def make_flow_token(cliente_id: str, phone: str) -> str:
+    """Token firmado del formulario, o "" si ahora no se puede ofrecer.
+
+    Lleva la VERSION de atencion con la que se abrio. Una pausa y su
+    reactivacion suben la version dos veces, asi que un formulario abierto antes
+    de la pausa no revive al reactivar, y no hace falta ninguna tabla: la version
+    es monotona y va firmada dentro del token.
+    """
+    version = _version_de_atencion(cliente_id)
+    if version is None:
+        return ""
     # Dos aperturas en el mismo segundo son formularios distintos.
-    payload = f"{cliente_id}|{phone}|{timeutils._utc_now_iso()}|{secrets.token_hex(16)}"
+    payload = (f"{cliente_id}|{phone}|{timeutils._utc_now_iso()}|{secrets.token_hex(16)}"
+               f"|v{version}")
     raw = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
     firma = hmac.new(_token_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()[:32]
     return f"{raw}.{firma}"
 
 
-def read_flow_token(token: str) -> Dict[str, str]:
-    """Devuelve {cliente_id, phone} si el token es autentico y no ha caducado."""
+def read_flow_token(token: str) -> Dict[str, Any]:
+    """Devuelve {cliente_id, phone, version} si el token es autentico y no ha
+    caducado. `version` es None en los tokens de antes de ligarlos a la atencion."""
     try:
         raw, firma = str(token or "").split(".", 1)
         esperada = hmac.new(_token_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()[:32]
@@ -102,15 +123,43 @@ def read_flow_token(token: str) -> Dict[str, str]:
             return {}
         relleno = "=" * (-len(raw) % 4)
         partes = base64.urlsafe_b64decode(raw + relleno).decode("utf-8").split("|")
-        if len(partes) not in (3, 4):
+        if len(partes) not in (3, 4, 5):
             return {}
         cliente_id, phone, emitido = partes[:3]
+        version = None
+        if len(partes) == 5:
+            if not partes[4].startswith("v") or not partes[4][1:].isdigit():
+                return {}
+            version = int(partes[4][1:])
     except Exception:  # noqa: BLE001 - token manipulado o de otra version
         return {}
     emitido_dt = timeutils._from_utc_iso(emitido)
     if not emitido_dt or timeutils._utc_now() - emitido_dt > timedelta(hours=TOKEN_TTL_HOURS):
         return {}
-    return {"cliente_id": cliente_id, "phone": phone}
+    return {"cliente_id": cliente_id, "phone": phone, "version": version}
+
+
+def token_sigue_vigente(contexto: Dict[str, Any]) -> Optional[bool]:
+    """¿Sigue valiendo el formulario con la atencion de ahora?
+
+    True: se abrio con la version vigente. False: la atencion ha cambiado desde
+    entonces (una pausa, con o sin reactivacion), y el formulario no revive.
+    None: no se puede saber. Incertidumbre NO es invalidez: quien llama no le
+    dice a la clienta que su solicitud ha caducado cuando lo que pasa es que no
+    se puede comprobar.
+
+    Un token de antes de este cambio no lleva version: solo vale si el negocio
+    no ha pasado nunca por una pausa (version 0). Caducan a las seis horas, asi
+    que esa ventana es corta.
+    """
+    try:
+        actual = atencion.leer_atencion(contexto["cliente_id"])["version"]
+    except atencion.AtencionNoDisponible:
+        return None
+    version = contexto.get("version")
+    if version is None:
+        return actual == 0
+    return version == actual
 
 
 # --- Cifrado ---------------------------------------------------------------
@@ -259,6 +308,14 @@ async def handle_data_exchange(payload: Dict[str, Any]) -> Dict[str, Any]:
         return _pantalla(SCREEN_SERVICE, {
             "servicios": [],
             "aviso": "Ahora mismo no se pueden coger citas por aqui. Escribenos y te atendemos.",
+            "hay_aviso": True,
+        })
+    if token_sigue_vigente(contexto) is False:
+        # Abierto antes de una pausa: reactivar no lo resucita. Se le dice lo
+        # mismo que a un token caducado, porque para ella es lo mismo.
+        return _pantalla(SCREEN_SERVICE, {
+            "servicios": [],
+            "aviso": "Esta solicitud ha caducado. Escribe *cita* para empezar de nuevo.",
             "hay_aviso": True,
         })
     datos = payload.get("data") or {}

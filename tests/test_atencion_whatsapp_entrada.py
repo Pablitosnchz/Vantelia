@@ -247,3 +247,116 @@ def test_el_formulario_no_ofrece_nada_con_la_atencion_pausada(api_module, atenci
     assert pausada["data"]["hay_aviso"] is True, pausada
     # El chequeo de salud de Meta no depende del negocio y tiene que seguir contestando.
     assert asyncio.run(wa_flows.handle_data_exchange({"action": "ping"}))["data"]["status"] == "active"
+
+
+# ─── El formulario queda ligado a la version de atencion ───────────────────
+#
+# Una pausa y su reactivacion suben la version dos veces. Un formulario abierto
+# antes de la pausa no puede revivir al reactivar: ya no corresponde a lo que el
+# negocio ofrece ahora, y la clienta lo retomaria donde lo dejo.
+
+
+def _pantalla_inicial(token):
+    from backend import wa_flows
+
+    return asyncio.run(wa_flows.handle_data_exchange({"action": "INIT", "flow_token": token}))
+
+
+def test_un_formulario_de_antes_de_la_pausa_no_revive_al_reactivar(
+        api_module, atencion_activa, monkeypatch):  # noqa: F811
+    token = _token_de_formulario(monkeypatch)
+    assert _pantalla_inicial(token)["data"]["hay_aviso"] is False
+
+    _pausar("demo")
+    _reactivar("demo")
+    despues = _pantalla_inicial(token)
+    assert despues["data"]["servicios"] == [], "un formulario de antes de la pausa ha revivido"
+    assert "caducado" in despues["data"]["aviso"], despues
+
+    nuevo = _token_de_formulario(monkeypatch)
+    assert _pantalla_inicial(nuevo)["data"]["hay_aviso"] is False, (
+        "tras reactivar, un formulario NUEVO tiene que funcionar")
+
+
+def test_un_token_de_antes_del_cambio_solo_vale_si_nunca_hubo_pausa(
+        api_module, atencion_activa, monkeypatch):  # noqa: F811
+    """Los tokens emitidos antes de ligarlos no llevan version. Con version 0
+    no ha habido ninguna pausa y no hay nada que proteger; si la ha habido, no
+    se puede saber si es de antes o de despues, y no se da por bueno."""
+    import base64
+    import hashlib
+    import hmac
+    import secrets
+
+    from backend import atencion, timeutils, wa_flows
+
+    _token_de_formulario(monkeypatch)       # fija los secretos de firma
+    carga = "demo|%s|%s|%s" % (NUMERO, timeutils._utc_now_iso(), secrets.token_hex(16))
+    raw = base64.urlsafe_b64encode(carga.encode("utf-8")).decode("ascii").rstrip("=")
+    firma = hmac.new(wa_flows._token_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()[:32]
+    antiguo = raw + "." + firma
+    contexto = wa_flows.read_flow_token(antiguo)
+    assert contexto and contexto["version"] is None
+
+    if atencion.leer_atencion("demo")["version"] == 0:
+        assert wa_flows.token_sigue_vigente(contexto) is True
+    _pausar("demo")
+    _reactivar("demo")
+    assert wa_flows.token_sigue_vigente(contexto) is False, (
+        "un token sin version se ha dado por bueno despues de una pausa")
+
+
+def test_no_poder_comprobarlo_no_es_decir_que_ha_caducado(
+        api_module, atencion_activa, monkeypatch):  # noqa: F811
+    """Incertidumbre no es invalidez: a la clienta no se le dice que su
+    solicitud ha caducado cuando lo que pasa es que no se puede comprobar."""
+    from backend import atencion, wa_flows
+
+    token = _token_de_formulario(monkeypatch)
+
+    def _romper(cliente_id):
+        raise atencion.AtencionNoDisponible("base de datos no disponible")
+
+    monkeypatch.setattr(atencion, "leer_atencion", _romper)
+    assert wa_flows.token_sigue_vigente(wa_flows.read_flow_token(token)) is None
+    pantalla = _pantalla_inicial(token)
+    assert pantalla["data"]["servicios"] == []
+    assert "caducado" not in pantalla["data"]["aviso"], pantalla
+    assert wa_flows.make_flow_token("demo", NUMERO) == "", (
+        "se ha abierto un formulario nuevo sin poder comprobar la atencion")
+
+
+def test_enviar_un_formulario_de_antes_de_la_pausa_no_prepara_la_cita(
+        enviados, atencion_activa, monkeypatch):
+    """El otro lector del token: el envio final del formulario. Relleno antes
+    de la pausa y enviado despues de reactivar, no prepara ningun resumen."""
+    from backend import whatsapp
+
+    import hashlib
+
+    from backend import reserva
+
+    telefono = "34600111888"
+    token = _token_de_formulario(monkeypatch, telefono=telefono)
+    # Como lo deja `_wa_send_booking_form` al mandarlo de verdad: sin esto, otra
+    # barrera (el formulario no consta como enviado) lo frenaria igual y la
+    # prueba no demostraria nada sobre la version.
+    estado = reserva.cargar("demo", telefono)
+    assert reserva.preparar_formulario_reserva(
+        estado, hashlib.sha256(token.encode("utf-8")).hexdigest())
+    reserva.guardar("demo", telefono, estado)
+    preparados = []
+    monkeypatch.setattr(whatsapp, "_wa_send_booking_summary",
+                        lambda **k: preparados.append(k))
+    _pausar("demo")
+    _reactivar("demo")
+
+    respuesta = json.dumps({"flow_token": token, "servicio": "consulta",
+                            "hueco": "2030-01-15T10:00", "nombre": "Ana Ruiz"})
+    _recibir(_payload({"from": telefono, "id": "wamid.%s" % uuid.uuid4().hex,
+                       "type": "interactive",
+                       "interactive": {"type": "nfm_reply",
+                                       "nfm_reply": {"response_json": respuesta}}}))
+    assert preparados == [], "un formulario de antes de la pausa ha preparado una cita"
+    assert any("caducado" in str(t) for t in enviados), (
+        "a la clienta no se le ha dicho que la solicitud ya no vale: %r" % enviados)
