@@ -256,7 +256,12 @@ def avisos_listos(entorno, monkeypatch):
 
 def test_el_recordatorio_no_sale_en_pausa_y_no_queda_marcado(avisos_listos):
     """Marcarlo sería peor que no mandarlo: la cita se quedaría sin recordatorio
-    para siempre, también después de reactivar."""
+    para siempre, también después de reactivar.
+
+    Y que salga al reactivar, aunque su ventana se abriera durante la pausa, es
+    una decisión de Pablo del 21-sep (PAUSA_TEMPORADA_DISENO.md): la cita sigue en
+    pie y el negocio vuelve a estar abierto. Si esta prueba molesta, no se
+    «arregla» usando el origen del aviso sin volver a preguntárselo."""
     from backend import booking
 
     enviados = avisos_listos

@@ -119,6 +119,18 @@ bucle ni a sus llamadas de voz. Probar pausa dentro de banda, reactivación,
 reprogramación posterior, reinicio, cambio de intervalo, límite exacto,
 retención del worker, desconocido con gracia y dos tenants antes de integrar.
 
+**Decisión de Pablo, 21-sep-2026: el recordatorio cuya ventana coincide con la
+reactivación SALE.** No se persiste el nacimiento de la generación ni se usa
+max(apertura, nacimiento) como origen del ticket; el worker captura el ticket con
+`event_at` = ahora. Pregunta concreta que se le hizo: pausa por obras, se reactiva
+el lunes a las 16:30 y hay una cita el martes a las 17:00; ¿sale su recordatorio?
+Sí: la cita sigue en pie y el negocio vuelve a estar abierto. Solo afecta a las
+citas cuya ventana (unos 45 min) cubre el momento de reactivar. Consecuencia: la
+migración de `astra/recordatorio-origen-19sep` (columna
+`reminder_generation_born_at` y triggers en `bookings`) NO se integra. La
+extracción de la banda en un solo helper, que venía en la misma copia, sería útil
+por sí sola, pero no tiene consumidor sin el origen y se deja con ella.
+
 ## WhatsApp: entrada, vinculación demo y Flow son fronteras distintas
 
 Contrato acotado el 19-sep. WA0 `478d082` solo resuelve sin efectos; no acredita

@@ -101,7 +101,9 @@ ESTADO_ACTUAL y REGISTRO_CONSOLIDACION; no incluyen conversaciones ni secretos.
   quedo en verde hasta moverlas dentro del envio. Suite completa: 3342 passed,
   1 skipped, 2 failed (vigilantes de reglas que leian una funcion partida en dos,
   reapuntados en `c9bc7ff` y comprobados con mutacion). `qa_e2e` 94/94.
-  Limite: el ticket nace con `event_at` = ahora, no con el origen del aviso.
+  El ticket nace con `event_at` = ahora y no con el origen del aviso: decision
+  de Pablo del 21-sep (el recordatorio cuya ventana coincide con la reactivacion
+  sale), asi que la migracion del origen de Astra no se integra.
 
 ## Puertas que faltan
 
