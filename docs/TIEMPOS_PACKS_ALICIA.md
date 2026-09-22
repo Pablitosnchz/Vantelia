@@ -22,8 +22,8 @@ suman sus pasos (keratina corto: 80 para 100): ahora apartan lo que suman.
   lo mismo que el largo.
 - Ácido láctico: lo acordado el 6-sep, sin lavado; el medio llevaba la plancha de largo, el largo
   un brushing de extensiones y el extra largo 150 min de exposición final: los tres, errores.
-- **Por confirmar:** los 45 min de exposición tras aplicar el ácido son los de SU tabla. Si no hay
-  exposición, cada pack baja 45.
+- **Confirmado por Alicia (22-sep):** tras aplicar el ácido se deja actuar 45 min antes de secar
+  y planchar. Ya estaba aplicado así.
 - Mechas o balayage largo: confirma que usa los tiempos de extra largo. Sin cambios.
 - Maquillaje y recogido: confirma 45 + 45 sin esperas, como ya estaba. Sin cambios.
 - **Por confirmar:** maquillaje y medio recogido (hoy 215 min con brushing y esperas); contestó
