@@ -5687,9 +5687,10 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    # Copy v2: el cold NO lleva enlace (mejor entregabilidad); pide respuesta si/no.
-    # El enlace instantaneo /demo/go aparece a partir de fu1.
-    assert "Responde" in data["html"]
+    # El cold NO lleva enlace (mejor entregabilidad) y pide respuesta con una
+    # pregunta. Desde el lote por sector (22-sep) ya no es «Responde si/no»: cada
+    # version termina en su propia pregunta. El enlace /demo/go llega en fu1.
+    assert "¿Te enseño" in data["html"] or "¿Quién contesta" in data["html"]
     assert "/demo/go/" not in data["html"]
 
 
@@ -5716,7 +5717,7 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
     # entregabilidad; el enlace instantaneo /demo/go/{token} (demo pre-generada)
     # entra a partir de fu1. El servidor resuelve el prospect por el token.
     _subject, cold_text, cold_html = render("cold", prospect, "baja@vantelia.es")
-    assert "Responde" in cold_text
+    assert "¿Te enseño" in cold_text or "¿Quién contesta" in cold_text
     assert "/demo/go/" not in cold_text
     assert "/demo/go/" not in cold_html
 
