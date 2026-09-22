@@ -47,8 +47,12 @@ suman sus pasos (keratina corto: 80 para 100): ahora apartan lo que suman.
   Sin marcas de color; copia previa fuera de su carpeta.
 - Siguen distintos a propósito: en su hoja Servicios los tratamientos sueltos dicen 15-45 min
   (solo aplicar); en producción apartan el pack entero. «RECOGIDO» no existe en su hoja
-  Servicios (45 en producción). Por preguntar: «Mecha test», 10 min en su Excel y 45 en
-  producción, sin decisión registrada.
+  Servicios (45 en producción).
+- **Resuelto (22-sep, Alicia por Pablo):** «Mecha test» son 10 min: producción 45 -> 10 (copia
+  `storage/vantelia-pre-mecha-test-20260922.db`); su Excel ya decía 10. «RECOGIDO» añadido a su
+  hoja Servicios (Peinados, 45 min), con precio y operario en blanco porque no los sabemos; en
+  producción sigue siendo solo un paso del pack, no un servicio reservable. Comparación final
+  Excel contra producción: 0 diferencias en servicios y en packs.
 
 Repaso de sus 37 packs con pasos contra la tabla que nos pasó el 17-sep-2026: 24 cuadran,
 3 se resolvieron con lo que contestó ella y **10 siguen por confirmar**. Vivía en un
