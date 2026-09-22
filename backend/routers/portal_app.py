@@ -3260,15 +3260,12 @@ async def auth_create_booking(
         raise HTTPException(status_code=400, detail="La duracion va en minutos, de 5 en 5.")
     service_duration = duracion_manual or agenda._service_duration_minutes(target_client_id, servicio, employee_row)
 
-    # Limites de plan (salvo override admin del portal).
+    # Suscripcion activa, si (salvo override admin del portal). El tope mensual
+    # de citas NO: lo que el equipo apunta en su propia agenda no puede quedarse
+    # bloqueado a mitad de mes. El tope mide al asistente
+    # (booking.FUENTES_QUE_NO_GASTAN_CUPO) y se aplica donde reserva el asistente.
     if not portal._is_admin_client_portal_override(user, cliente_id):
         billing._require_active_subscription(target_client_id)
-        booking_limit = clients._plan_limits(clients._client_plan(target_client_id)).get("monthly_bookings")
-        if booking_limit is not None and booking._count_bookings_this_month(target_client_id) >= int(booking_limit):
-            raise HTTPException(
-                status_code=429,
-                detail="Se ha alcanzado el limite mensual de citas del plan.",
-            )
 
     # El mostrador apunta a mano, y a veces fuera del horario publicado: abren a
     # las diez y ese dia entran a las ocho por un evento. Lo pidio el salon el

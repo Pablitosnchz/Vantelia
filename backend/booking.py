@@ -392,13 +392,24 @@ def _booking_plan_unavailable_error() -> HTTPException:
     )
 
 
+# Lo que el equipo apunta en su propia agenda no gasta el cupo del plan: el tope
+# mide el trabajo del asistente. Antes contaba todo y bloqueaba tambien el alta
+# manual, asi que un salon que usa la agenda como la suya de siempre (Alicia,
+# cinco profesionales) podia quedarse sin poder apuntar citas a mitad de mes al
+# pasar a Pro (500 al mes). Decision de Pablo, 22-sep-2026.
+FUENTES_QUE_NO_GASTAN_CUPO = ("portal_manual", "admin", "demo_seed", "test")
+
+
 def _count_bookings_this_month(cliente_id: str) -> int:
+    """Citas del ASISTENTE en el periodo: las que cuentan para el tope del plan."""
     period_start, _ = clients._current_billing_period()
+    marcas = ",".join("?" for _ in FUENTES_QUE_NO_GASTAN_CUPO)
     try:
         with db._get_db_connection() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND created_at >= ?",
-                (cliente_id, period_start),
+                "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND created_at >= ? "
+                "AND COALESCE(source, '') NOT IN (%s)" % marcas,
+                (cliente_id, period_start, *FUENTES_QUE_NO_GASTAN_CUPO),
             ).fetchone()
             return int(row[0]) if row and row[0] is not None else 0
     except Exception:
