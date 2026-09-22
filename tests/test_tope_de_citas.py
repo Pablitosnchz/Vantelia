@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+# Arnes compartido, no el `client` de conftest: el shim de api.py recarga
+# `backend.*` en cada runtime, y con el otro arnes el parche del tope caia en una
+# copia del modulo que la app no usa (pasaba en aislado y fallaba en la suite).
+from test_booking_exhaustive import api_module, client  # noqa: F401
+
 ORIGEN = {"Origin": "http://testserver"}
 
 
@@ -99,6 +104,8 @@ def test_el_asistente_si_se_para_en_el_tope(client, api_module, tope_de_una):
     respuesta = client.post("/agendar", headers=ORIGEN, json={
         "cliente_id": "demo", "nombre": "Ana Web", "email": "ana@example.com", "telefono": "600444333",
         "servicio": "Consulta", "fecha": _dia_habil(), "hora": "09:30", "notas": ""})
+    if respuesta.status_code == 200:
+        tope_de_una.append(respuesta.json()["booking_id"])
     assert respuesta.status_code == 429, respuesta.text
 
 
