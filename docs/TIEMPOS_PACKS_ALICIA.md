@@ -34,6 +34,22 @@ suman sus pasos (keratina corto: 80 para 100): ahora apartan lo que suman.
   repetida en la 41, con los mismos pasos).
 - **Decidido por Alicia (22-sep):** grey blending largo se queda como está en su tabla (530 min).
 
+### Tratamientos sueltos y Excel al día (22-sep, decisión de Pablo)
+
+- Los 15 tratamientos sueltos de keratina premium y ácido láctico bio premium (6 activos, 9
+  inactivos) tenían los minutos de su pack ANTES de corregirlo y seguían apartando de menos
+  (keratina muy corto 80 con el pack en 100). Ahora copian duración y pasos de su pack (muy corto
+  = corto, corto medio = medio, medio largo / ML = largo, XL / XXL / extra = extra largo). Copia
+  `storage/vantelia-pre-sueltos-como-packs-20260922.db`. «Corto chico» y «fleq» (15 min) no se
+  tocan: son servicios cortos de verdad.
+- Su Excel refleja ya lo decidido: mechas corto/medio/largo 230/350/430 (espera del elumen 20 y
+  flash repair 15 en el corto), maquillaje y recogido 45 + 45 y diagnóstico de extensiones 15.
+  Sin marcas de color; copia previa fuera de su carpeta.
+- Siguen distintos a propósito: en su hoja Servicios los tratamientos sueltos dicen 15-45 min
+  (solo aplicar); en producción apartan el pack entero. «RECOGIDO» no existe en su hoja
+  Servicios (45 en producción). Por preguntar: «Mecha test», 10 min en su Excel y 45 en
+  producción, sin decisión registrada.
+
 Repaso de sus 37 packs con pasos contra la tabla que nos pasó el 17-sep-2026: 24 cuadran,
 3 se resolvieron con lo que contestó ella y **10 siguen por confirmar**. Vivía en un
 artefacto que se borró el 19-sep; se guarda aquí porque las preguntas siguen abiertas y
