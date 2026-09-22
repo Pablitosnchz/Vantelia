@@ -174,6 +174,7 @@ class DiscoveredCompany:
     source: str = "discovery:places"
     place_id: str = ""
     address: str = ""
+    osm_key: str = ""
 
     def as_csv_row(self) -> dict[str, str]:
         return {
@@ -625,8 +626,17 @@ def nominatim_lookup_bbox(ciudad: str) -> tuple[float, float, float, float] | No
         return (south, west, north, east)
 
 
-def overpass_search(sector: str, ciudad: str, max_results: int = 50) -> list[dict]:
-    """Busca empresas en OpenStreetMap via Overpass API. Sin API key."""
+def overpass_search(sector: str, ciudad: str, max_results: int = 50,
+                    saltar: set[str] | None = None) -> list[dict]:
+    """Busca empresas en OpenStreetMap via Overpass API. Sin API key.
+
+    `saltar` son los negocios que ya se miraron en rondas anteriores (su clave
+    de OSM). Sin esto, Overpass devuelve SIEMPRE los mismos primeros resultados
+    de la ciudad: la ronda siguiente los descartaba por repetidos, no importaba
+    a nadie y el objetivo se marcaba agotado con la ciudad entera sin tocar.
+    Por eso la ventana que se pide es amplia: hay que llegar mas alla de los ya
+    vistos, no quedarse en los primeros.
+    """
     _ensure_httpx()
     tags = _resolve_osm_tags(sector)
     if not tags:
@@ -643,8 +653,10 @@ def overpass_search(sector: str, ciudad: str, max_results: int = 50) -> list[dic
         f'nwr["{k}"="{v}"]({south},{west},{north},{east});'
         for k, v in tags
     )
-    # Pedimos x6 para tener margen tras filtrar los que no tienen web ni email.
-    overshoot = max(max_results * 6, 60)
+    # Margen MUY por encima de lo que se va a usar: la mayoria no tiene web y
+    # ademas hay que pasar de largo los ya vistos para llegar a los nuevos.
+    saltar = saltar or set()
+    overshoot = min(3000, max(max_results * 12 + len(saltar) * 2, 600))
     query = f"[out:json][timeout:60];({selectors});out tags center {overshoot};"
 
     headers = {"User-Agent": SCRAPE_HEADERS["User-Agent"], "Accept": "application/json"}
@@ -671,6 +683,9 @@ def overpass_search(sector: str, ciudad: str, max_results: int = 50) -> list[dic
         name = (t.get("name") or "").strip()
         if not name or name.lower() in seen_names:
             continue
+        clave = "%s/%s" % (el.get("type") or "nwr", el.get("id") or _normalize_text(name))
+        if clave in saltar:
+            continue
         website = (t.get("website") or t.get("contact:website") or "").strip()
         email_tag = (t.get("email") or t.get("contact:email") or "").strip()
         # Descartar los que no tienen ni web ni email — no son contactables.
@@ -684,6 +699,7 @@ def overpass_search(sector: str, ciudad: str, max_results: int = 50) -> list[dic
             t.get("addr:postcode", ""),
         ]
         out.append({
+            "osm_key": clave,
             "name": name,
             "website": website,
             "phone": (t.get("phone") or t.get("contact:phone") or "").strip(),
@@ -704,14 +720,16 @@ def _companies_from_osm(
     tags: str = "discovery,osm",
     email_target: Optional[int] = None,
     max_email_scrapes: Optional[int] = None,
+    saltar: set[str] | None = None,
 ) -> list[DiscoveredCompany]:
-    raw_osm = overpass_search(sector, ciudad, max_results=max_results)
+    raw_osm = overpass_search(sector, ciudad, max_results=max_results, saltar=saltar)
     companies: list[DiscoveredCompany] = []
     email_hits = 0
     email_scrapes = 0
     for entry in raw_osm:
         company = DiscoveredCompany(
             business_name=entry["name"],
+            osm_key=entry.get("osm_key", ""),
             website=entry.get("website", ""),
             phone=entry.get("phone", ""),
             niche=sector,
@@ -817,6 +835,7 @@ def discover_companies(
     source: str = "auto",
     email_target: Optional[int] = None,
     max_email_scrapes: Optional[int] = None,
+    saltar: set[str] | None = None,
 ) -> list[DiscoveredCompany]:
     """Busca empresas combinando fuentes y eliminando duplicados.
 
@@ -887,6 +906,7 @@ def discover_companies(
                 extract_emails,
                 email_target=remaining_email_target,
                 max_email_scrapes=remaining_email_scrapes,
+                saltar=saltar,
             )
             metrics["osm_raw"] = len(osm)
             companies.extend(osm)

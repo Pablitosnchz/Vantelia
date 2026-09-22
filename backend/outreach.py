@@ -2547,8 +2547,41 @@ def _outreach_exhausted_targets(conn: sqlite3.Connection) -> Dict[str, Any]:
         return {}
 
 
+def _outreach_asegurar_vistos(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS osm_vistos (
+        combo TEXT NOT NULL, clave TEXT NOT NULL, visto_at TEXT NOT NULL,
+        PRIMARY KEY (combo, clave))""")
+
+
+def _outreach_vistos_de(conn: sqlite3.Connection, combo_key: str) -> set:
+    """Negocios que la busqueda ya miro en este sector y ciudad."""
+    try:
+        _outreach_asegurar_vistos(conn)
+        return {r[0] for r in conn.execute("SELECT clave FROM osm_vistos WHERE combo=?", (combo_key,))}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _outreach_anotar_vistos(conn: sqlite3.Connection, combo_key: str, claves) -> int:
+    """Guarda los mirados en esta ronda. Devuelve cuantos eran nuevos, que es lo
+    que dice si la busqueda AVANZO por la ciudad aunque no importara a nadie."""
+    claves = [c for c in claves if c]
+    if not claves:
+        return 0
+    try:
+        _outreach_asegurar_vistos(conn)
+        antes = _outreach_vistos_de(conn, combo_key)
+        ahora = _outreach_now()
+        conn.executemany("INSERT OR IGNORE INTO osm_vistos (combo, clave, visto_at) VALUES (?,?,?)",
+                         [(combo_key, c, ahora) for c in claves])
+        conn.commit()
+        return len({c for c in claves} - antes)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, imported: int,
-                                     error: str = "") -> bool:
+                                     error: str = "", avanzo: bool = False) -> bool:
     """Registra el resultado de un combo. 2 rondas seguidas sin importables → agotado.
     Devuelve True si el combo acaba de marcarse agotado.
 
@@ -2565,7 +2598,10 @@ def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, i
         data = {}
     entry = data.get(combo_key) if isinstance(data.get(combo_key), dict) else {}
     newly_exhausted = False
-    if imported > 0:
+    # Avanzar por la ciudad cuenta como que el objetivo sigue vivo: una ronda sin
+    # importables pero con negocios nuevos mirados no lo agota (si no, una ciudad
+    # grande se daba por agotada con casi todo sin ver).
+    if imported > 0 or avanzo:
         data.pop(combo_key, None)
     else:
         misses = int(entry.get("misses", 0)) + 1
@@ -3036,6 +3072,8 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                         continue
                     targets_attempted += 1
                     remaining = max(0, daily_new_target - imported_total)
+                    with _outreach_db() as conn:
+                        ya_vistos = _outreach_vistos_de(conn, combo_key)
                     _outreach_tick_state_update("discovery_run", f"Buscando: {sector} · {city}",
                                                current_target={"sector": sector, "city": city})
                     _autopilot_log("info", "discovery_run", f"Buscando: {sector} · {city}",
@@ -3049,6 +3087,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                             extract_emails=True, source="auto",
                             email_target=remaining,
                             max_email_scrapes=min(scrape_cap, max(3, remaining * 2)),
+                            saltar=ya_vistos,
                         )
                     except Exception as exc:
                         log_err(f"discovery {sector}/{city}: {exc}")
@@ -3065,6 +3104,10 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
 
                     found_count = len(companies)
                     with _outreach_db() as conn:
+                        # Se anota ANTES de filtrar: lo mirado esta mirado, aunque
+                        # no acabe importado, y la ronda siguiente sigue por ahi.
+                        nuevos_vistos = _outreach_anotar_vistos(
+                            conn, combo_key, [getattr(c, "osm_key", "") for c in companies])
                         companies = _outreach_filter_new_discoveries(conn, companies)
 
                     now_iso = _outreach_now()
@@ -3148,10 +3191,11 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                          "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                     )
                     with _outreach_db() as conn:
-                        if _outreach_register_target_result(conn, combo_key, added):
+                        if _outreach_register_target_result(conn, combo_key, added,
+                                                            avanzo=nuevos_vistos > 0):
                             _autopilot_log(
                                 "warning", "discovery_target_exhausted",
-                                f"{sector} · {city}: agotado (2 rondas sin importables); se excluye de la rotación",
+                                f"{sector} · {city}: agotado (2 rondas sin negocios nuevos); se excluye de la rotación",
                                 {"sector": sector, "city": city},
                             )
                     imported_total += added
