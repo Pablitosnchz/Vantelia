@@ -1,5 +1,15 @@
 # Alicia Rincón Estilistas: lo pedido, lo hecho y lo que falta
 
+## Decisiones de Alicia del 22-sep-2026 (por Pablo)
+
+- **Precios:** el asistente no da el precio de ningún servicio. Se queda como está.
+- **Señal en servicios baratos** (los 20 que cuestan menos de 50 €): se quedan sin señal.
+- **Reseñas en Google tras la cita:** de momento no.
+- **Cierres próximos a bloquear:** de momento ninguno.
+- **Plan:** pasa a Pro (decisión de Pablo); ver ESTADO_ACTUAL.
+- Tiempos de packs: ver [TIEMPOS_PACKS_ALICIA.md](TIEMPOS_PACKS_ALICIA.md), aplicado lo claro y
+  tres cosas por confirmar.
+
 Estado a 21-ago-2026. Tenant `alicia_rincon_estilistas`. El inventario de abajo
 (16-sep) manda sobre lo anterior cuando no coinciden.
 

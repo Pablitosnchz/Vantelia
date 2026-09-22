@@ -1,5 +1,38 @@
 # Tiempos de los packs de Alicia Rincón
 
+## Respuestas de Alicia del 22-sep-2026 (por Pablo) y lo aplicado
+
+Aplicado en producción el 22-sep, con copia `storage/vantelia-pre-packs-keratina-acido-20260922.db`,
+y corregido también en su Excel (`AliciaCliente/TABLA SERVICIOS Y PACKS.xlsx`, celdas cambiadas en
+amarillo con nota; original en `... - copia 17-sep.xlsx`). Estos 8 packs apartaban MENOS de lo que
+suman sus pasos (keratina corto: 80 para 100): ahora apartan lo que suman.
+
+| Pack | Antes | Ahora | Pasos |
+|---|---|---|---|
+| Keratina premium corto | 80 | 100 | aplicar 20 + espera 20 + plancha corto 60 |
+| Keratina premium medio | 110 | 130 | aplicar 20 + espera 20 + plancha medio 90 |
+| Keratina premium largo | 140 | 160 | aplicar 20 + espera 20 + plancha largo 120 |
+| Keratina premium extra largo | 140 | 160 | igual que el largo («tardan lo mismo») |
+| Ácido láctico bio premium corto | 90 | 125 | aplicar 20 + espera 45 + plancha corto 60, sin lavado |
+| Ácido láctico bio premium medio | 120 | 155 | aplicar 20 + espera 45 + plancha medio 90 |
+| Ácido láctico bio premium largo | 165 | 185 | aplicar 20 + espera 45 + plancha largo 120 |
+| Ácido láctico bio premium extra largo | 165 | 185 | aplicar 20 + espera 45 + plancha extra largo 120 |
+
+- Keratina: «no se repite la plancha» (la exposición final era un error) y el extra largo tarda
+  lo mismo que el largo.
+- Ácido láctico: lo acordado el 6-sep, sin lavado; el medio llevaba la plancha de largo, el largo
+  un brushing de extensiones y el extra largo 150 min de exposición final: los tres, errores.
+- **Por confirmar:** los 45 min de exposición tras aplicar el ácido son los de SU tabla. Si no hay
+  exposición, cada pack baja 45.
+- Mechas o balayage largo: confirma que usa los tiempos de extra largo. Sin cambios.
+- Maquillaje y recogido: confirma 45 + 45 sin esperas, como ya estaba. Sin cambios.
+- **Por confirmar:** maquillaje y medio recogido (hoy 215 min con brushing y esperas); contestó
+  «lo mismo, 45 y 45», que no deja claro si también aquí.
+- **Por confirmar:** «Pack elumen largo» SÍ sale dos veces en su tabla: la fila 29 son dos
+  brushings seguidos (error evidente) y la 41 es elumen largo 30 + espera 20 + brushing largo 60
+  = 110. En producción sigue en 140 (la de la fila 29) hasta que lo confirme.
+- **Pendiente:** grey blending largo, lo está revisando ella.
+
 Repaso de sus 37 packs con pasos contra la tabla que nos pasó el 17-sep-2026: 24 cuadran,
 3 se resolvieron con lo que contestó ella y **10 siguen por confirmar**. Vivía en un
 artefacto que se borró el 19-sep; se guarda aquí porque las preguntas siguen abiertas y
