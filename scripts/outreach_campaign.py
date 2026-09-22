@@ -57,7 +57,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from outreach_templates import (  # noqa: E402
-    Prospect, STAGE_ORDER, render, niche_copy, stable_pick,
+    Prospect, STAGE_ORDER, render, niche_copy, stable_pick, sector_copy, SECTOR_COPY_CAMPOS,
     html_shell, signature_html, cta_button_html, footer_html, footer_text,
     assign_variant, demo_url_with_utm, demo_go_url,
     OUTREACH_COPY_BUNDLE_VERSION, OUTREACH_COPY_VARIANTS, SUBJECT_POOLS_AB,
@@ -969,6 +969,8 @@ _ALLOWED_TEMPLATE_FIELDS = {
     "service_hint", "website", "phone", "task", "outcome", "proof",
     "unsubscribe", "stage", "signature_html", "footer_html", "footer_text",
     "cta_url", "cta_html",
+    # Frases por sector (outreach_templates.SECTOR_COPY).
+    *SECTOR_COPY_CAMPOS,
 }
 
 
@@ -1026,6 +1028,7 @@ def _template_vars(
         "footer_text": footer_text(unsub),
         "cta_url": demo_go_url(stage, p),
         "cta_html": cta_button_html("Probar una demo", demo_go_url(stage, p)),
+        **sector_copy(p.niche, p.service_hint),
     }
     if not html_context:
         return values

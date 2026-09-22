@@ -104,6 +104,115 @@ def niche_copy(niche: str, service_hint: str = "") -> tuple[str, str, str]:
     return DEFAULT_TASK, DEFAULT_OUTCOME, DEFAULT_PROOF
 
 
+# --- Frases por sector ------------------------------------------------------
+#
+# El 22-sep salieron siete correos a centros de masajes que empezaban por «En las
+# peluquerias pasa mucho...»: la plantilla estaba escrita para peluquerias y la
+# cantera ya no era solo de peluquerias. Estas frases dejan que UNA plantilla del
+# panel hable el idioma de cada negocio: la escena que les pasa, a quien atienden
+# y que les preguntan. Lo que no se reconoce cae en una version general que vale
+# para cualquiera que trabaje con cita.
+#
+# El orden importa: gana la primera que casa, asi que lo especifico va antes
+# (una «clinica estetica» es estetica antes que clinica).
+#
+# `estoy_montando` solo menciona a una peluqueria donde es verdad: el piloto es
+# una peluqueria. A una fisio no se le cuenta que se trabaja con una peluqueria.
+
+SECTOR_COPY_GENERAL = {
+    "sector": "los negocios que trabajan con cita",
+    "escena": "los mensajes para pedir cita llegan justo cuando estáis atendiendo",
+    "atendiendo": "todos atendiendo",
+    "persona": "un cliente",
+    "preguntas": "precios, horarios, huecos",
+    "estoy_montando": "estoy montando un asistente",
+}
+
+SECTOR_COPY = (
+    (("peluquer", "hairdress"), {
+        "sector": "las peluquerías",
+        "escena": "los mensajes de «¿tienes hueco el sábado?» llegan justo cuando estáis con una clienta",
+        "atendiendo": "todas con clientas",
+        "persona": "una clienta",
+        "preguntas": "precios, huecos, cambios de cita",
+        "estoy_montando": "estoy montando con una peluquería un asistente",
+    }),
+    (("barber",), {
+        "sector": "las barberías",
+        "escena": "los mensajes de «¿tienes hueco hoy?» llegan justo cuando estáis con un cliente en el sillón",
+        "atendiendo": "todos con clientes",
+        "persona": "un cliente",
+        "preguntas": "precios, huecos, cambios de cita",
+        "estoy_montando": "estoy montando con una peluquería un asistente",
+    }),
+    (("masaj", " spa "), {
+        "sector": "los centros de masajes",
+        "escena": "los mensajes para reservar llegan en mitad de un masaje, cuando nadie puede coger el móvil",
+        "atendiendo": "todos en cabina",
+        "persona": "un cliente",
+        "preguntas": "precios, huecos, qué masaje le conviene",
+        "estoy_montando": "estoy montando un asistente",
+    }),
+    (("estetic", "belleza", "beauty", "depilac"), {
+        "sector": "los centros de estética",
+        "escena": "los mensajes para pedir cita llegan en mitad de un tratamiento",
+        "atendiendo": "todas con clientas",
+        "persona": "una clienta",
+        "preguntas": "precios, huecos, qué tratamiento le conviene",
+        "estoy_montando": "estoy montando un asistente",
+    }),
+    (("fisio", "osteopat", "readaptac"), {
+        "sector": "las clínicas de fisioterapia",
+        "escena": "los mensajes para pedir o cambiar cita llegan mientras estáis con un paciente en camilla",
+        "atendiendo": "todos con pacientes",
+        "persona": "un paciente",
+        "preguntas": "precios, huecos, si trabajáis con su mutua",
+        "estoy_montando": "estoy montando un asistente",
+    }),
+    (("dental", "dentist", "odontolog", "ortodonc"), {
+        "sector": "las clínicas dentales",
+        "escena": "las llamadas y mensajes para pedir cita entran mientras estáis con un paciente en el sillón",
+        "atendiendo": "todos en consulta",
+        "persona": "un paciente",
+        "preguntas": "precios, primeras visitas, urgencias",
+        "estoy_montando": "estoy montando un asistente",
+    }),
+    (("veterinar",), {
+        "sector": "las clínicas veterinarias",
+        "escena": "los mensajes para pedir cita llegan mientras estáis en consulta",
+        "atendiendo": "todos en consulta",
+        "persona": "un cliente",
+        "preguntas": "horarios, vacunas, huecos",
+        "estoy_montando": "estoy montando un asistente",
+    }),
+    (("clinic", "medic", "podolog", "psicolog", "nutricion", "salud"), {
+        "sector": "las clínicas",
+        "escena": "los mensajes para pedir cita llegan mientras estáis con un paciente",
+        "atendiendo": "todos en consulta",
+        "persona": "un paciente",
+        "preguntas": "precios, primeras visitas, huecos",
+        "estoy_montando": "estoy montando un asistente",
+    }),
+)
+
+SECTOR_COPY_CAMPOS = tuple(SECTOR_COPY_GENERAL)
+
+
+def _sin_tildes(texto: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", texto)
+                   if unicodedata.category(c) != "Mn")
+
+
+def sector_copy(niche: str, service_hint: str = "") -> dict:
+    """Frases del sector del negocio, o las generales si no se reconoce."""
+    blob = _sin_tildes(f" {niche} {service_hint} ".lower())
+    for claves, frases in SECTOR_COPY:
+        if any(_sin_tildes(k) in blob for k in claves):
+            return dict(frases)
+    return dict(SECTOR_COPY_GENERAL)
+
+
 def stable_pick(seed: str, options: list[str]) -> str:
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     return options[int(digest, 16) % len(options)]
@@ -113,44 +222,29 @@ def stable_pick(seed: str, options: list[str]) -> str:
 # por email y se conserva durante toda la secuencia.
 
 SUBJECTS_COLD_A = [
-    "¿te paso una idea para {business}?",
-    "una idea sencilla para {business}",
+    "una pregunta sobre las citas",
 ]
 
 SUBJECTS_COLD_B = [
-    "{business}: una duda sobre la web",
-    "una pregunta sobre {business}",
+    "¿quién contesta los whatsapp?",
 ]
 
+# Los seguimientos tienen un solo texto (aprobado por Pablo el 21-sep): el A/B
+# se mide en el primer correo, que es el que decide si contestan.
 SUBJECTS_FU1_A = [
-    "el ejemplo para {business}",
-    "re: idea para {business}",
+    "te dejo el ejemplo",
 ]
-
-SUBJECTS_FU1_B = [
-    "una pregunta real en {business}",
-    "cómo valorar la idea",
-]
+SUBJECTS_FU1_B = SUBJECTS_FU1_A
 
 SUBJECTS_FU2_A = [
-    "¿es prioridad ahora en {business}?",
-    "solo una confirmación",
+    "¿lo dejo?",
 ]
-
-SUBJECTS_FU2_B = [
-    "¿quién lleva esto en {business}?",
-    "la persona adecuada en {business}",
-]
+SUBJECTS_FU2_B = SUBJECTS_FU2_A
 
 SUBJECTS_BREAKUP_A = [
-    "cierro por aquí",
-    "lo dejamos aquí",
+    "lo dejo aquí",
 ]
-
-SUBJECTS_BREAKUP_B = [
-    "no te escribo más sobre esto",
-    "gracias por leerme",
-]
+SUBJECTS_BREAKUP_B = SUBJECTS_BREAKUP_A
 
 # Compatibilidad hacia atras: codigo antiguo importa SUBJECTS_*.
 SUBJECTS_COLD = SUBJECTS_COLD_A + SUBJECTS_COLD_B
@@ -166,156 +260,80 @@ SUBJECT_POOLS_AB = {
 }
 
 
-OUTREACH_COPY_BUNDLE_VERSION = "2026-08-human-replies-v1"
+OUTREACH_COPY_BUNDLE_VERSION = "2026-09-por-sector-v1"
 
 # Estas plantillas son tambien la fuente del bundle que migra los overrides de
-# produccion. Solo usan variables que el renderer de overrides ya conoce.
+# produccion: al desplegar una version nueva se aplican solas, una vez, con foto
+# de las anteriores para volver atras.
+#
+# Hablan el idioma de cada negocio con las frases de SECTOR_COPY ({sector},
+# {escena}, {atendiendo}, {persona}, {preguntas}, {estoy_montando}). El 22-sep
+# salieron siete correos a centros de masajes con un texto escrito para
+# peluquerias; una plantilla por sector no escala, unas frases por sector si.
+#
+# Reglas de estilo, pedidas por Pablo: que suene a una persona. Nada de
+# «Responde 1 = si / 2 = no», el nombre del negocio una vez y solo en el primer
+# correo, y ninguna cifra ni caso que no podamos respaldar.
+_FIRMA_TXT = "\n\nPablo\nVantelia\n{footer_text}"
+_FIRMA_HTML = "{signature_html}{footer_html}"
+
+
+def _parrafos_html(*parrafos: str) -> str:
+    return "".join(f"<p>{p}</p>" for p in parrafos) + _FIRMA_HTML
+
+
+_COLD_A = (
+    "Soy Pablo. En {sector} pasa mucho que {escena}, y para cuando contestáis ya han "
+    "reservado en otro sitio.",
+    "Ahora {estoy_montando} que responde esos mensajes por WhatsApp y apunta la cita en la "
+    "agenda. ¿Te enseño cómo quedaría con {business}?",
+)
+_COLD_B = (
+    "¿Quién contesta los WhatsApp en {business} cuando estáis {atendiendo}?",
+    "Lo pregunto porque {estoy_montando} que responde esas preguntas ({preguntas}) y deja la "
+    "cita apuntada. Si te encaja, te lo enseño con vuestros servicios.",
+)
+_FU2 = (
+    "No quiero llenarte el correo. ¿Es algo que os interese ahora, o lo dejo para otro momento?",
+    "Con un «ahora no» me vale.",
+)
+_CIERRE = (
+    "Lo dejo aquí para no insistir. Si algún día os viene bien, contesta a este correo y lo "
+    "retomamos.",
+    "Gracias por leer esto,",
+)
+
+
+def _texto(*parrafos: str) -> str:
+    return "{greeting}\n\n" + "\n\n".join(parrafos) + _FIRMA_TXT
+
+
+def _variante(*parrafos: str) -> dict:
+    return {"body_text": _texto(*parrafos), "body_html": _parrafos_html("{greeting}", *parrafos)}
+
+
+_FU1 = {
+    "body_text": (
+        "{greeting}\n\n"
+        "Te dejo un ejemplo hecho con la información de vuestra web, por si prefieres verlo "
+        "antes que leerme:\n{cta_url}\n\n"
+        "Pregúntale lo que te preguntaría {persona}. Si no te convence, me lo dices y listo."
+        + _FIRMA_TXT
+    ),
+    "body_html": _parrafos_html(
+        "{greeting}",
+        "Te dejo un ejemplo hecho con la información de vuestra web, por si prefieres verlo "
+        "antes que leerme:",
+        '<a href="{cta_url}">Ver el ejemplo</a>',
+        "Pregúntale lo que te preguntaría {persona}. Si no te convence, me lo dices y listo.",
+    ),
+}
+
 OUTREACH_COPY_VARIANTS = {
-    "cold": {
-        "A": {
-            "body_text": (
-                "{greeting}\n\n"
-                "Soy Pablo, de Vantelia. Te escribo por {business}. Ayudamos a responder "
-                "las consultas que llegan desde la web cuando el equipo está ocupado.\n\n"
-                "¿Quieres que te prepare y pase un enlace para verlo con vuestro caso? "
-                "Responde sí o no.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>Soy Pablo, de Vantelia. Te escribo por {business}. Ayudamos a responder "
-                "las consultas que llegan desde la web cuando el equipo está ocupado.</p>"
-                "<p>¿Quieres que te prepare y pase un enlace para verlo con vuestro caso? "
-                "Responde <strong>sí</strong> o <strong>no</strong>.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-        "B": {
-            "body_text": (
-                "{greeting}\n\n"
-                "Al ver {business}, me surgió una duda: ¿las consultas que llegan por la web "
-                "se quedan esperando cuando no podéis atender?\n\n"
-                "Estoy probando una forma sencilla de cubrir ese hueco. ¿Te paso un enlace "
-                "adaptado a {business}? Responde 1 = sí / 2 = no.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>Al ver {business}, me surgió una duda: ¿las consultas que llegan por la web "
-                "se quedan esperando cuando no podéis atender?</p>"
-                "<p>Estoy probando una forma sencilla de cubrir ese hueco. ¿Te paso un enlace "
-                "adaptado a {business}? Responde <strong>1 = sí</strong> / <strong>2 = no</strong>.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-    },
-    "fu1": {
-        "A": {
-            "body_text": (
-                "{greeting}\n\n"
-                "Retomo esto una vez. Aquí puedes probar cómo podría responder un asistente "
-                "con la información disponible de {business}:\n{cta_url}\n\n"
-                "La idea es resolver una consulta sencilla aunque estéis ocupados. "
-                "¿Te encaja? Responde sí o no.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>Retomo esto una vez. Aquí puedes probar cómo podría responder un asistente "
-                "con la información disponible de {business}:</p>"
-                "<p><a href=\"{cta_url}\">Probar una demo para {business}</a></p>"
-                "<p>La idea es resolver una consulta sencilla aunque estéis ocupados. "
-                "¿Te encaja? Responde <strong>sí</strong> o <strong>no</strong>.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-        "B": {
-            "body_text": (
-                "{greeting}\n\n"
-                "Para valorar la idea sin una reunión, prueba en este enlace una pregunta real "
-                "que os haga un cliente:\n{cta_url}\n\n"
-                "Así puedes ver si evita una respuesta repetitiva en {business}. "
-                "¿Lo revisamos? Responde 1 = sí / 2 = no.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>Para valorar la idea sin una reunión, prueba en este enlace una pregunta real "
-                "que os haga un cliente:</p>"
-                "<p><a href=\"{cta_url}\">Probar una pregunta</a></p>"
-                "<p>Así puedes ver si evita una respuesta repetitiva en {business}. "
-                "¿Lo revisamos? Responde <strong>1 = sí</strong> / <strong>2 = no</strong>.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-    },
-    "fu2": {
-        "A": {
-            "body_text": (
-                "{greeting}\n\n"
-                "Solo necesito saber si mejorar la respuesta de las consultas web es una "
-                "prioridad ahora en {business}.\n\n"
-                "Responde 1 y te indico el siguiente paso; responde 2 y cierro el tema.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>Solo necesito saber si mejorar la respuesta de las consultas web es una "
-                "prioridad ahora en {business}.</p>"
-                "<p>Responde <strong>1</strong> y te indico el siguiente paso; responde "
-                "<strong>2</strong> y cierro el tema.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-        "B": {
-            "body_text": (
-                "{greeting}\n\n"
-                "¿Eres tú quien decide cómo se atienden las consultas digitales en {business}?\n\n"
-                "Responde 1 si lo vemos contigo / 2 si debo escribir a otra persona. "
-                "Si es otra persona, puedes indicarme quién.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>¿Eres tú quien decide cómo se atienden las consultas digitales en {business}?</p>"
-                "<p>Responde <strong>1</strong> si lo vemos contigo / <strong>2</strong> si debo "
-                "escribir a otra persona. Si es otra persona, puedes indicarme quién.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-    },
-    "breakup": {
-        "A": {
-            "body_text": (
-                "{greeting}\n\n"
-                "Cierro el hilo por aquí. Gracias por leerme.\n\n"
-                "Si más adelante quieres retomarlo, responde a este correo y te paso el enlace.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>Cierro el hilo por aquí. Gracias por leerme.</p>"
-                "<p>Si más adelante quieres retomarlo, responde a este correo y te paso el enlace.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-        "B": {
-            "body_text": (
-                "{greeting}\n\n"
-                "No te escribo más sobre esto.\n\n"
-                "Si en otro momento encaja para {business}, responde sí y lo retomamos; "
-                "si no, no hace falta hacer nada.\n\n"
-                "Pablo\nVantelia\n{footer_text}"
-            ),
-            "body_html": (
-                "<p>{greeting}</p>"
-                "<p>No te escribo más sobre esto.</p>"
-                "<p>Si en otro momento encaja para {business}, responde <strong>sí</strong> y lo "
-                "retomamos; si no, no hace falta hacer nada.</p>"
-                "{signature_html}{footer_html}"
-            ),
-        },
-    },
+    "cold": {"A": _variante(*_COLD_A), "B": _variante(*_COLD_B)},
+    "fu1": {"A": _FU1, "B": _FU1},
+    "fu2": {"A": _variante(*_FU2), "B": _variante(*_FU2)},
+    "breakup": {"A": _variante(*_CIERRE), "B": _variante(*_CIERRE)},
 }
 
 
@@ -620,6 +638,7 @@ def _render_human_stage(stage: str, p: Prospect, unsubscribe_mailto: str) -> tup
     variant = assign_variant(p.email, stage)
     copy = OUTREACH_COPY_VARIANTS[stage][variant]
     subject, _ = pick_subject_with_variant(stage, p)
+    sector = sector_copy(p.niche, p.service_hint)
     plain_vars = {
         "greeting": p.greeting,
         "business": p.business_name or "vuestro negocio",
@@ -627,12 +646,14 @@ def _render_human_stage(stage: str, p: Prospect, unsubscribe_mailto: str) -> tup
         "footer_text": footer_text(unsubscribe_mailto),
         "signature_html": signature_html(stage),
         "footer_html": footer_html(unsubscribe_mailto),
+        **sector,
     }
     html_vars = {
         **plain_vars,
         "greeting": html_lib.escape(plain_vars["greeting"]),
         "business": html_lib.escape(plain_vars["business"]),
         "cta_url": html_lib.escape(plain_vars["cta_url"], quote=True),
+        **{clave: html_lib.escape(valor) for clave, valor in sector.items()},
     }
     text = copy["body_text"].format_map(plain_vars)
     inner = copy["body_html"].format_map(html_vars)

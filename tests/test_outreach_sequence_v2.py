@@ -78,13 +78,27 @@ def test_copy_is_brief_claim_free_and_variant_stays_across_sequence():
             assert text.startswith("Hola,\n")
             assert "Hola equipo" not in text
             assert "Torrejon de Ardoz" not in text
-            if stage != "breakup" or variant == "B":
-                assert "Clínica Norte" in text
+            if stage == "cold":
+                assert text.count("Clínica Norte") == 1, text
+            else:
+                assert "Clínica Norte" not in text, (stage, text)
+            # Nada de encuesta: una persona no escribe «responde 1 o 2».
+            assert "1 = sí" not in text and "responde 1" not in text.lower()
 
-    for stage in templates.STAGE_ORDER:
-        assert rendered_by_variant["A"][stage] != rendered_by_variant["B"][stage]
-    assert "sí o no" in rendered_by_variant["A"]["cold"]
-    assert "1 = sí / 2 = no" in rendered_by_variant["B"]["cold"]
+    # El A/B se mide en el primer correo; los seguimientos tienen un solo texto.
+    assert rendered_by_variant["A"]["cold"] != rendered_by_variant["B"]["cold"]
+    import re as _re
+
+    def _sin_enlace(texto):
+        # El enlace de la demo es propio de cada destinatario; el texto no.
+        return _re.sub(r"https?://\S+", "<enlace>", texto)
+
+    for stage in ("fu1", "fu2", "breakup"):
+        assert _sin_enlace(rendered_by_variant["A"][stage]) == _sin_enlace(rendered_by_variant["B"][stage])
+    # Una clinica dental recibe un correo de clinica dental, no de peluqueria.
+    assert "clínicas dentales" in rendered_by_variant["A"]["cold"]
+    assert "peluquer" not in rendered_by_variant["A"]["cold"].lower()
+    assert "en consulta" in rendered_by_variant["B"]["cold"]
 
 
 def test_bundle_migrates_legacy_once_and_keeps_logical_rollback(tmp_path: Path):
@@ -147,7 +161,7 @@ def test_override_renderer_uses_actual_stable_variant_and_escapes_html(tmp_path:
             assert actual == expected == templates.assign_variant(email, stage)
             assert subject and text and html
             assert '<img src=x onerror="alert(1)">' not in html
-            if stage != "breakup" or expected == "B":
+            if stage == "cold":
                 assert "&lt;img" in html
         variants_seen.add(actual)
     assert variants_seen == {"A", "B"}
