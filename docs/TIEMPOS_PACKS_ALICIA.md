@@ -26,12 +26,13 @@ suman sus pasos (keratina corto: 80 para 100): ahora apartan lo que suman.
   y planchar. Ya estaba aplicado así.
 - Mechas o balayage largo: confirma que usa los tiempos de extra largo. Sin cambios.
 - Maquillaje y recogido: confirma 45 + 45 sin esperas, como ya estaba. Sin cambios.
-- **Por confirmar:** maquillaje y medio recogido (hoy 215 min con brushing y esperas); contestó
-  «lo mismo, 45 y 45», que no deja claro si también aquí.
-- **Por confirmar:** «Pack elumen largo» SÍ sale dos veces en su tabla: la fila 29 son dos
-  brushings seguidos (error evidente) y la 41 es elumen largo 30 + espera 20 + brushing largo 60
-  = 110. En producción sigue en 140 (la de la fila 29) hasta que lo confirme.
-- **Pendiente:** grey blending largo, lo está revisando ella.
+- **Decidido por Alicia (22-sep):** maquillaje y medio recogido NO es como el recogido; se queda
+  como está (215 min, con brushing y esperas).
+- **Aplicado (22-sep, confirmado por Alicia):** «Pack elumen largo» es elumen largo 30 + espera 20
+  + brushing largo 60 = **110** (antes 140, la versión de dos brushings). Copia
+  `storage/vantelia-pre-elumen-largo-20260922.db`. En su Excel, la fila 29 corregida (sigue
+  repetida en la 41, con los mismos pasos).
+- **Decidido por Alicia (22-sep):** grey blending largo se queda como está en su tabla (530 min).
 
 Repaso de sus 37 packs con pasos contra la tabla que nos pasó el 17-sep-2026: 24 cuadran,
 3 se resolvieron con lo que contestó ella y **10 siguen por confirmar**. Vivía en un

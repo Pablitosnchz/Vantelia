@@ -7,8 +7,8 @@
 - **Reseñas en Google tras la cita:** de momento no.
 - **Cierres próximos a bloquear:** de momento ninguno.
 - **Plan:** pasa a Pro (decisión de Pablo); ver ESTADO_ACTUAL.
-- Tiempos de packs: ver [TIEMPOS_PACKS_ALICIA.md](TIEMPOS_PACKS_ALICIA.md), aplicado lo claro y
-  tres cosas por confirmar.
+- Tiempos de packs: ver [TIEMPOS_PACKS_ALICIA.md](TIEMPOS_PACKS_ALICIA.md), todo contestado y
+  aplicado el 22-sep.
 
 Estado a 21-ago-2026. Tenant `alicia_rincon_estilistas`. El inventario de abajo
 (16-sep) manda sobre lo anterior cuando no coinciden.
