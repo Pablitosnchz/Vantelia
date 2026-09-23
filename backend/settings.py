@@ -153,6 +153,9 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
 ELEVENLABS_TOOL_SECRET = os.getenv("ELEVENLABS_TOOL_SECRET", "").strip()
 # "Laura - Customer service", castellana; la eligio Pablo el 23-sep-2026.
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uQw4jpKzMLrZuo0RLPS9").strip()
+# Numero desde el que Sara llama a los negocios de captacion (backend/captacion_voz.py).
+# Vacio = TWILIO_DEFAULT_PHONE_NUMBER. Para llamar a negocios, un 91 espanol.
+CAPTACION_TWILIO_NUMBER = os.getenv("CAPTACION_TWILIO_NUMBER", "").strip()
 # Modelo Realtime GA por defecto. Usamos el FULL (`gpt-realtime`): es bastante mas fiable
 # que el mini siguiendo instrucciones, llamando tools y entendiendo codigos/fechas (clave en
 # el navegador, que no tiene las redes deterministas del puente de Twilio). Override por

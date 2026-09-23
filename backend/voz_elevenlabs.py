@@ -44,6 +44,14 @@ def configurado() -> bool:
     return bool(settings.ELEVENLABS_API_KEY and settings.ELEVENLABS_TOOL_SECRET)
 
 
+def secreto_valido(recibido: str) -> bool:
+    """La peticion trae el secreto que solo conocemos nosotros y ElevenLabs."""
+    import hmac
+
+    esperado = settings.ELEVENLABS_TOOL_SECRET
+    return bool(esperado) and hmac.compare_digest(str(recibido or "").encode(), esperado.encode())
+
+
 def _cabeceras() -> Dict[str, str]:
     return {"xi-api-key": settings.ELEVENLABS_API_KEY}
 
@@ -64,67 +72,108 @@ def _esquema(parametros: Dict[str, Any], nombre: str = "") -> Dict[str, Any]:
     return salida
 
 
-def herramientas(cliente_id: str, config: Dict[str, Any], base_url: str) -> List[Dict[str, Any]]:
+# Por telefono, quien llama llega como variable de la conversacion (la pasamos al
+# registrar la llamada) y viaja en cada tool: es con lo que se verifica que una cita
+# es suya antes de cancelarla o moverla, igual que en el puente de Twilio.
+VARIABLE_LLAMANTE = "llamante"
+CAMPO_LLAMANTE = "_llamante"
+
+
+def herramienta_webhook(nombre: str, descripcion: str, url: str, esquema: Dict[str, Any],
+                        variables: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Una tool de ElevenLabs que llama a nuestra API con el secreto compartido.
+
+    `variables` = {campo: variable_dinamica}: campos que rellena ElevenLabs con datos de
+    la conversacion (quien llama, a quien llamamos), no el modelo.
+    """
+    cuerpo = copy.deepcopy(esquema)
+    cuerpo.setdefault("properties", {})
+    for campo, variable in (variables or {}).items():
+        cuerpo["properties"][campo] = {"type": "string", "dynamic_variable": variable}
+    return {
+        "type": "webhook",
+        "name": nombre,
+        "description": descripcion or nombre,
+        "api_schema": {
+            "url": url,
+            "method": "POST",
+            "request_headers": {CABECERA_SECRETO: settings.ELEVENLABS_TOOL_SECRET},
+            "request_body_schema": cuerpo,
+        },
+    }
+
+
+def colgar(descripcion: str = "") -> Dict[str, Any]:
+    return {"type": "system", "name": "end_call",
+            "description": descripcion or "Termina la llamada cuando la conversacion ha concluido. Despidete antes.",
+            "params": {"system_tool_type": "end_call"}}
+
+
+def herramientas(cliente_id: str, config: Dict[str, Any], base_url: str, *,
+                 telefono: bool = False) -> List[Dict[str, Any]]:
     """Las tools de cita del negocio en el formato de ElevenLabs."""
     salida: List[Dict[str, Any]] = []
+    variables = {CAMPO_LLAMANTE: VARIABLE_LLAMANTE} if telefono else None
     for tool in voice._voice_booking_tools(cliente_id, config):
         nombre = str(tool.get("name") or "")
         if nombre in _SOLO_TELEFONO:
             continue
         if nombre in _DE_SISTEMA:
-            sistema = _DE_SISTEMA[nombre]
-            salida.append({"type": "system", "name": sistema, "description": tool.get("description", ""),
-                           "params": {"system_tool_type": sistema}})
+            salida.append(colgar(str(tool.get("description") or "")))
             continue
-        salida.append({
-            "type": "webhook",
-            "name": nombre,
-            "description": str(tool.get("description") or nombre),
-            "api_schema": {
-                "url": "%s/voice/el/%s/tool/%s" % (base_url.rstrip("/"), cliente_id, nombre),
-                "method": "POST",
-                "request_headers": {CABECERA_SECRETO: settings.ELEVENLABS_TOOL_SECRET},
-                "request_body_schema": _esquema(
-                    tool.get("parameters") or {"type": "object", "properties": {}}, nombre),
-            },
-        })
+        salida.append(herramienta_webhook(
+            nombre, str(tool.get("description") or nombre),
+            "%s/voice/el/%s/tool/%s" % (base_url.rstrip("/"), cliente_id, nombre),
+            _esquema(tool.get("parameters") or {"type": "object", "properties": {}}, nombre),
+            variables))
     if not any(t.get("name") == "end_call" for t in salida):
-        salida.append({"type": "system", "name": "end_call",
-                       "description": "Termina la llamada cuando la conversacion ha concluido. Despidete antes.",
-                       "params": {"system_tool_type": "end_call"}})
+        salida.append(colgar())
     return salida
 
 
-def agente_para(cliente_id: str, config: Dict[str, Any], base_url: str) -> Dict[str, Any]:
+def formato_de_audio(telefono: bool) -> Dict[str, Any]:
+    """Web a 44,1 kHz; telefono en u-law 8 kHz, lo que habla Twilio (entrada y salida)."""
+    if telefono:
+        return {"asr": {"user_input_audio_format": "ulaw_8000"},
+                "tts": {"agent_output_audio_format": "ulaw_8000"}}
+    return {"asr": {}, "tts": {"agent_output_audio_format": "pcm_44100"}}
+
+
+def agente_para(cliente_id: str, config: Dict[str, Any], base_url: str, *,
+                telefono: bool = False) -> Dict[str, Any]:
     """Lo que se manda a ElevenLabs para crear o actualizar el agente del negocio."""
     voice_cfg = config.get("voice") or {}
     nombre = str(config.get("empresa") or config.get("nombre") or cliente_id).strip()
+    audio = formato_de_audio(telefono)
+    agente: Dict[str, Any] = {
+        "first_message": textnorm._voice_default_greeting(config, voice_cfg),
+        "language": "es",
+        "prompt": {
+            "prompt": voice._voice_build_instructions(cliente_id, config),
+            "llm": str(voice_cfg.get("elevenlabs_llm") or LLM_POR_DEFECTO),
+            "temperature": 0.5,
+            "tools": herramientas(cliente_id, config, base_url, telefono=telefono),
+        },
+    }
+    if telefono:
+        agente["dynamic_variables"] = {"dynamic_variable_placeholders": {VARIABLE_LLAMANTE: ""}}
     return {
-        "name": "%s (%s)" % (nombre, cliente_id),
+        "name": "%s (%s)%s" % (nombre, cliente_id, " - telefono" if telefono else ""),
         "conversation_config": {
-            "agent": {
-                "first_message": textnorm._voice_default_greeting(config, voice_cfg),
-                "language": "es",
-                "prompt": {
-                    "prompt": voice._voice_build_instructions(cliente_id, config),
-                    "llm": str(voice_cfg.get("elevenlabs_llm") or LLM_POR_DEFECTO),
-                    "temperature": 0.5,
-                    "tools": herramientas(cliente_id, config, base_url),
-                },
-            },
-            "tts": {
+            "agent": agente,
+            "asr": audio["asr"],
+            "tts": dict({
                 "voice_id": str(voice_cfg.get("elevenlabs_voice_id") or settings.ELEVENLABS_VOICE_ID),
                 "model_id": MODELO_VOZ,
-                "agent_output_audio_format": "pcm_44100",
-            },
+            }, **audio["tts"]),
             "turn": {"speculative_turn": True},
         },
     }
 
 
-def _guardar_agent_id(cliente_id: str, agent_id: str) -> None:
+def guardar_en_voz(cliente_id: str, clave: str, valor: str) -> None:
     siguientes = copy.deepcopy(appstate.CONFIG_CLIENTES)
-    siguientes[cliente_id].setdefault("voice", {})["elevenlabs_agent_id"] = agent_id
+    siguientes[cliente_id].setdefault("voice", {})[clave] = valor
     clients._persist_configs_to_disk(siguientes)
     clients._update_runtime_configs(siguientes)
 
@@ -136,40 +185,87 @@ def _tool_ids(cliente: httpx.Client, agent_id: str) -> List[str]:
     return list(prompt.get("tool_ids") or [])
 
 
-def sincronizar_agente(cliente_id: str, *, base_url: str = "",
-                       cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
-    """Crea o actualiza el agente del negocio en ElevenLabs. Devuelve su id y el enlace de prueba.
+def publicar_agente(cliente: httpx.Client, cuerpo: Dict[str, Any], agent_id: str = "") -> str:
+    """Crea (sin id) o actualiza (con id) un agente. Devuelve su id.
 
     Cada guardado con tools en linea crea herramientas nuevas en la cuenta; las que el
     agente deja de usar se borran para que no se acumulen (una por tool y guardado).
     """
+    antes: List[str] = _tool_ids(cliente, agent_id) if agent_id else []
+    if agent_id:
+        r = cliente.patch("%s/v1/convai/agents/%s" % (API, agent_id), headers=_cabeceras(), json=cuerpo)
+    else:
+        r = cliente.post(API + "/v1/convai/agents/create", headers=_cabeceras(), json=cuerpo)
+    if r.status_code >= 400:
+        raise RuntimeError("ElevenLabs rechazo el agente (%s): %s" % (r.status_code, r.text[:300]))
+    agent_id = agent_id or str(r.json()["agent_id"])
+    ahora = set(_tool_ids(cliente, agent_id))
+    for viejo in antes:
+        if viejo not in ahora:
+            cliente.delete("%s/v1/convai/tools/%s" % (API, viejo), headers=_cabeceras(),
+                           params={"force": "true"})
+    return agent_id
+
+
+def sincronizar_agente(cliente_id: str, *, base_url: str = "",
+                       cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
+    """Crea o actualiza los dos agentes del negocio (web y telefono) desde su config actual."""
     if not configurado():
         raise RuntimeError("Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
     textnorm._assert_valid_client_id(cliente_id)
     config = clients._get_client_config(cliente_id)
-    cuerpo = agente_para(cliente_id, config, base_url or settings.APP_BASE_URL)
-    agent_id = str((config.get("voice") or {}).get("elevenlabs_agent_id") or "")
+    base = base_url or settings.APP_BASE_URL
     propio = cliente is None
     cliente = cliente or httpx.Client(timeout=60.0)
+    salida: Dict[str, Any] = {}
     try:
-        antes: List[str] = _tool_ids(cliente, agent_id) if agent_id else []
-        if agent_id:
-            r = cliente.patch("%s/v1/convai/agents/%s" % (API, agent_id), headers=_cabeceras(), json=cuerpo)
-        else:
-            r = cliente.post(API + "/v1/convai/agents/create", headers=_cabeceras(), json=cuerpo)
-        if r.status_code >= 400:
-            raise RuntimeError("ElevenLabs rechazo el agente (%s): %s" % (r.status_code, r.text[:300]))
-        if not agent_id:
-            agent_id = str(r.json()["agent_id"])
-            _guardar_agent_id(cliente_id, agent_id)
-        ahora = set(_tool_ids(cliente, agent_id))
-        for viejo in antes:
-            if viejo not in ahora:
-                cliente.delete("%s/v1/convai/tools/%s" % (API, viejo), headers=_cabeceras(),
-                               params={"force": "true"})
+        for telefono, clave in ((False, "elevenlabs_agent_id"), (True, "elevenlabs_agent_id_telefono")):
+            cuerpo = agente_para(cliente_id, config, base, telefono=telefono)
+            previo = str((clients._get_client_config(cliente_id).get("voice") or {}).get(clave) or "")
+            agent_id = publicar_agente(cliente, cuerpo, previo)
+            if agent_id != previo:
+                guardar_en_voz(cliente_id, clave, agent_id)
+            salida["agente_telefono" if telefono else "agent_id"] = agent_id
+            if not telefono:
+                salida["herramientas"] = [t["name"] for t in cuerpo["conversation_config"]["agent"]["prompt"]["tools"]]
     finally:
         if propio:
             cliente.close()
-    return {"agent_id": agent_id,
-            "enlace": "https://elevenlabs.io/app/talk-to?agent_id=%s" % agent_id,
-            "herramientas": [t["name"] for t in cuerpo["conversation_config"]["agent"]["prompt"]["tools"]]}
+    salida["enlace"] = "https://elevenlabs.io/app/talk-to?agent_id=%s" % salida["agent_id"]
+    return salida
+
+
+def agente_de_telefono(cliente_id: str) -> str:
+    """El agente que coge el telefono del negocio, o "" si sigue con el motor de siempre.
+
+    Se activa negocio a negocio con `config['voice']['engine'] = 'elevenlabs'`, para
+    poder volver atras sin tocar codigo.
+    """
+    if not configurado():
+        return ""
+    voice_cfg = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice") or {}
+    if str(voice_cfg.get("engine") or "").strip().lower() != "elevenlabs":
+        return ""
+    return str(voice_cfg.get("elevenlabs_agent_id_telefono") or "")
+
+
+def twiml_registrar_llamada(agent_id: str, desde: str, hacia: str, direccion: str,
+                            variables: Optional[Dict[str, str]] = None,
+                            cliente: Optional[httpx.Client] = None) -> str:
+    """El TwiML que conecta una llamada de Twilio con un agente ("register call").
+
+    Twilio sigue siendo nuestro: ElevenLabs no necesita nuestras credenciales. La
+    contrapartida es que no puede transferir llamadas.
+    """
+    propio = cliente is None
+    cliente = cliente or httpx.Client(timeout=20.0)
+    try:
+        r = cliente.post(API + "/v1/convai/twilio/register-call", headers=_cabeceras(), json={
+            "agent_id": agent_id, "from_number": desde, "to_number": hacia, "direction": direccion,
+            "conversation_initiation_client_data": {"dynamic_variables": dict(variables or {})}})
+    finally:
+        if propio:
+            cliente.close()
+    if r.status_code >= 400 or "<Response" not in r.text:
+        raise RuntimeError("ElevenLabs no registro la llamada (%s): %s" % (r.status_code, r.text[:200]))
+    return r.text

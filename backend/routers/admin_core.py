@@ -32,6 +32,7 @@ from api_models import *  # noqa: F401,F403
 from backend import (
     appstate,
     booking,
+    captacion_voz,
     channel_requests,
     clients,
     db,
@@ -474,6 +475,36 @@ async def admin_sync_voz_elevenlabs(cliente_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
     try:
         return await timeutils._to_thread(voz_elevenlabs.sincronizar_agente, cliente_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/admin/captacion/voz/agente", dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_voz_agente() -> Dict[str, Any]:
+    """Crea o actualiza la agente de captacion (Sara) en ElevenLabs."""
+    if not voz_elevenlabs.configurado():
+        raise HTTPException(status_code=503, detail="Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
+    try:
+        return await timeutils._to_thread(captacion_voz.sincronizar_agente)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/admin/captacion/voz/llamada-prueba", dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_voz_llamada(request: Request) -> Dict[str, Any]:
+    """Sara llama a UN telefono concreto (pruebas). No hay lanzador automatico todavia."""
+    try:
+        datos = await request.json()
+    except Exception:  # noqa: BLE001
+        datos = {}
+    if not isinstance(datos, dict) or not datos.get("telefono"):
+        raise HTTPException(status_code=400, detail="Indica el telefono.")
+    try:
+        return await timeutils._to_thread(
+            captacion_voz.llamar, str(datos["telefono"]), str(datos.get("negocio") or "tu negocio"),
+            str(datos.get("sector") or ""), str(datos.get("prospecto") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

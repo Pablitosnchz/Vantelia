@@ -169,4 +169,99 @@ def test_sincronizar_crea_guarda_el_id_y_luego_actualiza(api_module, configurado
     assert "PATCH" in metodos and "POST" not in metodos, "con id guardado se actualiza, no se duplica"
     assert ("DELETE", voz_elevenlabs.API + "/v1/convai/tools/tool_viejo") in falso2.peticiones, (
         "las tools que el agente ya no usa se quedan en la cuenta para siempre")
+    assert appstate.CONFIG_CLIENTES["demo"]["voice"]["elevenlabs_agent_id_telefono"] == "agent_prueba", (
+        "el agente de telefono tambien se crea y se guarda")
     appstate.CONFIG_CLIENTES["demo"]["voice"].pop("elevenlabs_agent_id", None)
+    appstate.CONFIG_CLIENTES["demo"]["voice"].pop("elevenlabs_agent_id_telefono", None)
+
+
+# --- Telefono de los negocios ------------------------------------------------
+
+
+def test_el_agente_de_telefono_habla_ulaw_y_sabe_quien_llama(api_module, configurado):  # noqa: F811
+    from backend import voz_elevenlabs
+
+    config = api_module.CONFIG_CLIENTES["demo"]
+    cuerpo = voz_elevenlabs.agente_para("demo", config, "https://app.test", telefono=True)["conversation_config"]
+    assert cuerpo["asr"]["user_input_audio_format"] == "ulaw_8000"
+    assert cuerpo["tts"]["agent_output_audio_format"] == "ulaw_8000"
+    for tool in cuerpo["agent"]["prompt"]["tools"]:
+        if tool["type"] == "webhook":
+            campo = tool["api_schema"]["request_body_schema"]["properties"]["_llamante"]
+            assert campo == {"type": "string", "dynamic_variable": "llamante"}, tool["name"]
+
+
+def test_la_tool_verifica_con_el_numero_de_quien_llama(client, configurado, monkeypatch):  # noqa: F811
+    from backend import voice
+
+    vistos = []
+
+    async def despachar(cliente_id, nombre, argumentos, **kwargs):
+        vistos.append((json.loads(argumentos), kwargs.get("from_number")))
+        return {"ok": True}
+
+    monkeypatch.setattr(voice, "_voice_dispatch_tool", despachar)
+    r = client.post("/voice/el/demo/tool/cancelar_cita", headers={"X-Vantelia-Voz": SECRETO},
+                    json={"codigo_reserva": "R-1", "_llamante": "+34600111222"})
+    assert r.status_code == 200
+    assert vistos == [({"codigo_reserva": "R-1"}, "+34600111222")], "el llamante no puede llegar como argumento"
+
+
+def test_el_telefono_solo_cambia_de_motor_si_el_negocio_lo_activa(api_module, configurado, monkeypatch):  # noqa: F811
+    from backend import voz_elevenlabs
+
+    voz = api_module.CONFIG_CLIENTES["demo"].setdefault("voice", {})
+    monkeypatch.setitem(voz, "elevenlabs_agent_id_telefono", "agent_tel")
+    monkeypatch.setitem(voz, "engine", "")
+    assert voz_elevenlabs.agente_de_telefono("demo") == ""
+    monkeypatch.setitem(voz, "engine", "elevenlabs")
+    assert voz_elevenlabs.agente_de_telefono("demo") == "agent_tel"
+
+
+@pytest.fixture()
+def llamada_entrante(api_module, client, configurado, monkeypatch):  # noqa: F811
+    from backend import messaging, settings, voice
+
+    monkeypatch.setattr(settings, "TWILIO_ACCOUNT_SID", "ACtest")
+    monkeypatch.setattr(settings, "TWILIO_AUTH_TOKEN", "token-test")
+    monkeypatch.setattr(messaging, "_twilio_request_valid", lambda url, params, firma: True)
+    monkeypatch.setattr(voice, "_client_voice_plan_enabled", lambda cliente_id: True)
+    voz = dict(api_module.CONFIG_CLIENTES["demo"].get("voice") or {})
+    voz.update({"enabled": True, "engine": "elevenlabs", "elevenlabs_agent_id_telefono": "agent_tel"})
+    monkeypatch.setitem(api_module.CONFIG_CLIENTES["demo"], "voice", voz)
+
+    def llamar():
+        return client.post("/voice/demo", data={"CallSid": "CA_EL_1", "From": "+34600111222",
+                                                "To": "+34911111111"},
+                           headers={"X-Twilio-Signature": "simulada"})
+    return llamar
+
+
+TWIML_ELEVENLABS = ('<?xml version="1.0"?><Response><Connect>'
+                    '<Stream url="wss://api.elevenlabs.io/x"/></Connect></Response>')
+
+
+def test_la_llamada_entrante_va_al_agente_del_negocio(llamada_entrante, monkeypatch):
+    from backend import voz_elevenlabs
+
+    pedidas = []
+
+    def registrar(agente, desde, hacia, direccion, variables=None, cliente=None):
+        pedidas.append((agente, desde, direccion, variables))
+        return TWIML_ELEVENLABS
+
+    monkeypatch.setattr(voz_elevenlabs, "twiml_registrar_llamada", registrar)
+    r = llamada_entrante()
+    assert r.status_code == 200 and "api.elevenlabs.io" in r.text
+    assert pedidas == [("agent_tel", "+34600111222", "inbound", {"llamante": "+34600111222"})]
+
+
+def test_si_elevenlabs_falla_contesta_el_motor_de_siempre(llamada_entrante, monkeypatch):
+    from backend import voz_elevenlabs
+
+    def falla(*a, **k):
+        raise RuntimeError("ElevenLabs caido")
+
+    monkeypatch.setattr(voz_elevenlabs, "twiml_registrar_llamada", falla)
+    r = llamada_entrante()
+    assert r.status_code == 200 and "/voice/stream/demo" in r.text, "la llamada no puede perderse"

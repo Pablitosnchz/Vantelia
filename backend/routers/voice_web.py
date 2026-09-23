@@ -25,6 +25,7 @@ from api_models import *  # noqa: F401,F403
 from backend import (
     appstate,
     atencion_contexto,
+    captacion_voz,
     atencion_voz,
     clients,
     db,
@@ -32,6 +33,7 @@ from backend import (
     security,
     settings,
     textnorm,
+    timeutils,
     voice,
     voice_engine,
     voz_elevenlabs,
@@ -73,6 +75,18 @@ async def voice_incoming_call(cliente_id: str, request: Request) -> Response:
     if call_sid:
         voice._voice_call_register(call_sid, cliente_id, params.get("From", ""), params.get("To", ""))
 
+    # Negocio con la voz de ElevenLabs activada: la llamada va a su agente de telefono.
+    # Si ElevenLabs falla, la llamada sigue por el motor de siempre en vez de perderse.
+    agente = voz_elevenlabs.agente_de_telefono(cliente_id)
+    if agente:
+        try:
+            twiml = await timeutils._to_thread(
+                voz_elevenlabs.twiml_registrar_llamada, agente, params.get("From", ""), params.get("To", ""),
+                "inbound", {voz_elevenlabs.VARIABLE_LLAMANTE: params.get("From", "")})
+            return Response(content=twiml, media_type="application/xml")
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("[voice] ElevenLabs no cogio la llamada de %s (%s); motor de siempre",
+                                    cliente_id, exc)
     return voice._voice_twiml_connect_stream(voice._voice_stream_ws_url(request, cliente_id), call_sid)
 
 
@@ -348,8 +362,61 @@ async def elevenlabs_voice_tool(cliente_id: str, nombre: str, request: Request) 
         cuerpo = {}
     if not isinstance(cuerpo, dict):
         cuerpo = {}
+    # Por telefono llega quien llama (variable de la conversacion, no lo dice el
+    # modelo): con eso se verifica que una cita es suya, como en el puente de Twilio.
+    llamante = str(cuerpo.pop(voz_elevenlabs.CAMPO_LLAMANTE, "") or "").strip()
     try:
         with atencion_voz.turno_llamada(cliente_id):
-            return await voice._voice_dispatch_tool(cliente_id, nombre, json.dumps(cuerpo, ensure_ascii=False))
+            return await voice._voice_dispatch_tool(cliente_id, nombre, json.dumps(cuerpo, ensure_ascii=False),
+                                                    from_number=llamante)
     except atencion_contexto.AtencionDetenida:
         raise HTTPException(status_code=409, detail=atencion_voz.MOTIVO_PARA_EL_CLIENTE)
+
+
+async def _twilio_valido(request: Request) -> Dict[str, Any]:
+    if not messaging._voice_twilio_configured():
+        raise HTTPException(status_code=503, detail="Voice not configured")
+    params = await voice._voice_form_params(request)
+    firma = request.headers.get("X-Twilio-Signature", "")
+    if not messaging._twilio_request_valid(voice._voice_request_url(request), params, firma):
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+    return params
+
+
+@app.post(captacion_voz.RUTA + "/twiml", include_in_schema=False)
+async def captacion_voz_twiml(request: Request) -> Response:
+    """Twilio lo pide al descolgar: contestador -> colgar; persona -> Sara (ElevenLabs)."""
+    params = await _twilio_valido(request)
+    try:
+        twiml = await timeutils._to_thread(
+            captacion_voz.twiml_al_descolgar, request.query_params.get("llamada", ""),
+            str(params.get("AnsweredBy", "") or ""), params.get("From", ""), params.get("To", ""))
+    except Exception as exc:  # noqa: BLE001 - mejor colgar que dejar la linea muda
+        settings.logger.warning("[captacion_voz] no se pudo conectar la llamada: %s", exc)
+        twiml = captacion_voz._COLGAR
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.post(captacion_voz.RUTA + "/estado", include_in_schema=False)
+async def captacion_voz_estado(request: Request) -> Response:
+    params = await _twilio_valido(request)
+    await timeutils._to_thread(captacion_voz.estado_final, request.query_params.get("llamada", ""),
+                               str(params.get("CallStatus", "") or "").lower())
+    return Response(status_code=204)
+
+
+@app.post(captacion_voz.RUTA + "/tool/{nombre}", include_in_schema=False)
+async def captacion_voz_tool(nombre: str, request: Request) -> Dict[str, Any]:
+    """Tools de la agente de captacion; las autoriza el secreto compartido con ElevenLabs."""
+    if not voz_elevenlabs.configurado():
+        raise HTTPException(status_code=503, detail="La voz de ElevenLabs no esta configurada.")
+    if not voz_elevenlabs.secreto_valido(request.headers.get(voz_elevenlabs.CABECERA_SECRETO, "")):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+    security._check_rate_limit("captacion_voz_tool", 120)
+    try:
+        cuerpo = await request.json()
+    except Exception:  # noqa: BLE001
+        cuerpo = {}
+    if not isinstance(cuerpo, dict):
+        cuerpo = {}
+    return await timeutils._to_thread(captacion_voz.herramienta, nombre, cuerpo)
