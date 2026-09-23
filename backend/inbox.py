@@ -49,11 +49,55 @@ _PIDE_UNA_PERSONA = re.compile(
     r"\b(?:habl\w*|pas\w*|atien\w*|atend\w*|pon\w*|contact\w*)\b[^.!?]{0,30}?\b(?:persona|humano|humana|alguien|encargad[ao]|responsable|recepcion|operador[ao]?)\b"
     r"|\bno quiero (?:hablar|seguir)[^.!?]{0,20}?(?:bot|robot|maquina|ia|inteligencia artificial)\b"
     r"|\beres (?:un |una )?(?:bot|robot|maquina|ia)\b"
+    # En ingles: un hotel recibe a huespedes de fuera, y "can I speak to someone?"
+    # no llegaba a nadie.
+    r"|\b(?:speak|talk|chat)\w*\b[^.!?]{0,30}?\b(?:person|human|someone|somebody|staff|reception|receptionist|manager|agent)\b"
+    r"|\bare you (?:a |an )?(?:bot|robot|machine|ai)\b"
 )
 
 DEFECTO_PASO_A_PERSONA = (
     "Claro, ahora mismo aviso a una compañera. Espera un momento y te contesta ella por aquí 😊"
 )
+
+# El de arriba es el del salon piloto: tutea, pone emoji y da por hecho que
+# contesta una compañera. Un hotel que trata de usted, o un huesped que escribe
+# en ingles, no pueden recibir eso. El trato y los emojis salen del TONO que el
+# negocio ya eligio en el portal (fuente unica `textnorm._tono_config`).
+_TEXTOS_PERSONA = {
+    # (trato, hay_vuelta, con_telefono)
+    ("usted", True, False): "Por supuesto, aviso ahora mismo a alguien del equipo. "
+                            "Espere un momento y le contestarán por aquí.",
+    ("usted", False, True): "Por supuesto. Por aquí no puedo pasarle con nadie, pero si llama "
+                            "al %s le atienden directamente.",
+    ("usted", False, False): "Por supuesto. Por aquí no puedo pasarle con nadie, pero si nos "
+                             "escribe por WhatsApp le atiende alguien del equipo.",
+    ("en", True, False): "Of course, I'm letting someone from the team know right now. "
+                         "Please wait a moment and they will reply here.",
+    ("en", False, True): "Of course. I can't transfer you from here, but if you call %s "
+                         "someone will help you directly.",
+    ("en", False, False): "Of course. I can't transfer you from here, but if you message us "
+                          "on WhatsApp someone from the team will help you.",
+}
+
+
+def _trato_para(config, mensaje: str) -> str:
+    """"en" si escribe en otro idioma, "usted" si el negocio trata de usted, o ""."""
+    from backend import keywords, textnorm
+
+    idioma = keywords.idioma_de(mensaje) if mensaje else ""
+    if idioma and idioma != "es":
+        return "en"
+    tono = textnorm._tono_config(config or {}) or {}
+    return "usted" if tono.get("tratamiento") == "usted" else ""
+
+
+def _sin_emojis_si_no_quiere(texto: str, config) -> str:
+    from backend import textnorm
+
+    tono = textnorm._tono_config(config or {}) or {}
+    if tono.get("emojis") == "ninguno":
+        return texto.replace(" 😊", "").replace("😊", "").strip()
+    return texto
 
 
 def pide_una_persona(texto: str) -> bool:
@@ -80,7 +124,8 @@ def paso_a_persona_activo(cliente_id: str, config=None) -> bool:
     return bool(_seccion(cliente_id, config).get("enabled", True))
 
 
-def texto_al_pedir_persona(cliente_id: str, config=None, *, hay_vuelta: bool = True) -> str:
+def texto_al_pedir_persona(cliente_id: str, config=None, *, hay_vuelta: bool = True,
+                           mensaje: str = "") -> str:
     """Que se le contesta a quien pide una persona.
 
     `hay_vuelta` dice si por ESE canal alguien puede contestarle. Por WhatsApp si:
@@ -92,8 +137,18 @@ def texto_al_pedir_persona(cliente_id: str, config=None, *, hay_vuelta: bool = T
     propio = str(_seccion(cliente_id, config).get("texto") or "").strip()
     if propio:
         return propio
+    if config is None:
+        from backend import clients
+
+        try:
+            config = clients._get_client_config(cliente_id)
+        except Exception:  # noqa: BLE001
+            config = {}
+    trato = _trato_para(config, mensaje)
     if hay_vuelta:
-        return DEFECTO_PASO_A_PERSONA
+        if trato:
+            return _TEXTOS_PERSONA[(trato, True, False)]
+        return _sin_emojis_si_no_quiere(DEFECTO_PASO_A_PERSONA, config)
     from backend import clients
 
     telefono = ""
@@ -102,6 +157,10 @@ def texto_al_pedir_persona(cliente_id: str, config=None, *, hay_vuelta: bool = T
                        .get("telefono") or "").strip()
     except Exception:  # noqa: BLE001
         telefono = ""
+    if trato:
+        if telefono:
+            return _TEXTOS_PERSONA[(trato, False, True)] % telefono
+        return _TEXTOS_PERSONA[(trato, False, False)]
     if telefono:
         return ("Claro. Por aquí no puedo pasarte con nadie, pero si llamas al %s "
                 "te atienden directamente." % telefono)

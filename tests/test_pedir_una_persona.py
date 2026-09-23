@@ -121,3 +121,72 @@ def test_el_chat_web_no_silencia_al_asistente(api_module):
     fuente = inspect.getsource(chat._process_chat_message)
     assert 'decision["intent"] == "pide_una_persona"' in fuente
     assert "hay_vuelta=False" in fuente
+
+
+# --- En el trato y el idioma de quien lo pide (23-sep, hotel Cap Rocat) ----
+# El texto por defecto era el del salon piloto: tutea, pone emoji y da por hecho
+# que contesta "una compañera". Un hotel que trata de usted, o un huesped que
+# escribe en ingles, no pueden recibir eso.
+
+
+@pytest.mark.parametrize("frase", [
+    "Can I speak to someone?",
+    "I would like to talk to a person please",
+    "could I speak with reception",
+    "are you a bot?",
+])
+def test_se_reconoce_tambien_en_ingles(api_module, frase):
+    from backend import inbox
+
+    assert inbox.pide_una_persona(frase), frase
+
+
+@pytest.mark.parametrize("frase", [
+    "Can we talk about the room price?",
+    "I'd like to speak about my booking",
+])
+def test_en_ingles_hablar_de_algo_no_es_pedir_una_persona(api_module, frase):
+    from backend import inbox
+
+    assert not inbox.pide_una_persona(frase), frase
+
+
+USTED_SIN_EMOJIS = {"tono": {"tratamiento": "usted", "emojis": "ninguno"}}
+
+
+def test_si_el_negocio_trata_de_usted_el_texto_tambien(api_module):
+    from backend import inbox
+
+    texto = inbox.texto_al_pedir_persona("demo", USTED_SIN_EMOJIS, hay_vuelta=True,
+                                         mensaje="quiero hablar con una persona")
+    assert "Espere" in texto
+    for tuteo in ("espera ", "te contesta", "compañera", "😊"):
+        assert tuteo not in texto, (tuteo, texto)
+
+    widget = inbox.texto_al_pedir_persona("demo", USTED_SIN_EMOJIS, hay_vuelta=False,
+                                          mensaje="quiero hablar con una persona")
+    assert "llama" in widget and "llamas" not in widget, widget
+
+
+def test_sin_emojis_si_el_negocio_no_los_quiere(api_module):
+    from backend import inbox
+
+    texto = inbox.texto_al_pedir_persona("demo", {"tono": {"emojis": "ninguno"}}, hay_vuelta=True)
+    assert "😊" not in texto and "Espera un momento" in texto
+
+
+def test_a_quien_escribe_en_ingles_se_le_contesta_en_ingles(api_module):
+    from backend import chat
+
+    decision = chat.decision_del_negocio("demo", "Can I speak to someone please?",
+                                         config=USTED_SIN_EMOJIS)
+    assert decision and decision["accion"] == "pasar_a_humano", decision
+    assert decision["texto"].startswith("Of course"), decision["texto"]
+
+
+def test_sin_tono_configurado_el_salon_sigue_igual(api_module):
+    """Alicia no tiene seccion `tono`: su texto no cambia."""
+    from backend import inbox
+
+    assert inbox.texto_al_pedir_persona("demo", {}, hay_vuelta=True,
+                                        mensaje="quiero hablar con una persona") == inbox.DEFECTO_PASO_A_PERSONA

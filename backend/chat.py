@@ -730,7 +730,7 @@ def decision_del_negocio(
     if inbox.pide_una_persona(mensaje) and inbox.paso_a_persona_activo(cliente_id, config):
         # `hay_vuelta` lo decide el CANAL: se resuelve abajo, en quien llama.
         return {
-            "texto": inbox.texto_al_pedir_persona(cliente_id, config),
+            "texto": inbox.texto_al_pedir_persona(cliente_id, config, mensaje=message),
             "intent": "pide_una_persona",
             "accion": "pasar_a_humano",
             "intencion": "",
@@ -986,7 +986,7 @@ async def _process_chat_message(
             # donde si la atienden. En WhatsApp es al reves y sigue igual.
             if decision["intent"] == "pide_una_persona":
                 decision = dict(decision, texto=inbox.texto_al_pedir_persona(
-                    cliente_id, client_config, hay_vuelta=False))
+                    cliente_id, client_config, hay_vuelta=False, mensaje=message))
             else:
                 inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
         registrar_asistente_http_o_canal(

@@ -3583,7 +3583,7 @@ async def _handle_whatsapp_message(
     if (not iid and inbox.pide_una_persona(incoming_text)
             and inbox.paso_a_persona_activo(cliente_id, config)):
         inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
-        texto_persona = inbox.texto_al_pedir_persona(cliente_id, config)
+        texto_persona = inbox.texto_al_pedir_persona(cliente_id, config, mensaje=incoming_text)
         _wa_registrar(
             cliente_id=cliente_id, from_number=from_number, request=request,
             entrante=incoming_text, respuesta=texto_persona,
