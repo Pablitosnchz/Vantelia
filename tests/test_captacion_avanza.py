@@ -84,6 +84,23 @@ def test_la_ventana_del_mapa_crece_con_lo_ya_visto(monkeypatch):
         "con 300 vistos se pide la misma ventana: no se llega a los nuevos (%r)" % pedidos)
 
 
+def test_la_web_que_no_se_llego_a_mirar_no_cuenta_como_vista(monkeypatch):
+    """23-sep: en Madrid la ronda encontraba 22 peluquerias, miraba la web de
+    unas pocas (tope por ronda) y el resto salia "sin email" y quedaba anotado
+    como visto. Esas webs no se abrian nunca: cantera perdida en silencio."""
+    negocios = [{"osm_key": "node/%d" % i, "name": "Peluqueria %d" % i,
+                 "website": "https://p%d.test" % i} for i in range(1, 6)]
+    monkeypatch.setattr(descubrir, "overpass_search", lambda *a, **k: list(negocios))
+    abiertas = []
+    monkeypatch.setattr(descubrir, "extract_emails_from_website",
+                        lambda url: abiertas.append(url) or [])
+    devueltos = descubrir._companies_from_osm("peluqueria", "madrid", max_results=5,
+                                              extract_emails=True, max_email_scrapes=2)
+    assert len(abiertas) == 2
+    assert [c.osm_key for c in devueltos] == ["node/1", "node/2"], (
+        "se devuelven (y se anotan como vistos) negocios cuya web no se abrio")
+
+
 def test_lo_mirado_se_recuerda_entre_rondas(outreach_mod):  # noqa: F811
     outreach = outreach_mod
     with outreach._outreach_db() as conn:

@@ -754,6 +754,12 @@ def _companies_from_osm(
             if emails:
                 company.email = emails[0]
                 email_hits += 1
+        elif extract_emails:
+            # Se acabo el cupo de webs de esta ronda sin mirar la suya. No se
+            # devuelve: el piloto anota como VISTO todo lo que recibe, y este
+            # negocio se descartaba "sin email" para siempre sin haber abierto
+            # su web. Fuera de la lista, la ronda siguiente llega a el.
+            continue
         companies.append(company)
         if email_target is not None and email_hits >= email_target:
             break
