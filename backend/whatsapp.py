@@ -4448,6 +4448,16 @@ async def _handle_whatsapp_message(
         # de dos apellidos por tener cuatro palabras). Desde 8ca6088 aqui llega
         # tambien la conversacion hablada tras aceptar la valoracion, no solo quien
         # contesta a la lista con su nombre a secas.
+        # Ya se le pidio el apellido y no lo quiere dar: la cita va con su nombre
+        # (decision de Pablo, 23-sep-2026). Sin esto, "no quiero dar mi apellido" se
+        # pegaba al nombre o se le volvia a pedir hasta que se iba.
+        if (flow.apellidos_pedidos and flow.nombre
+                and textnorm.no_quiere_dar_el_apellido(incoming_text or "")):
+            await _wa_send_booking_summary(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=from_number, flow=flow,
+            )
+            return
         # Lo que no es un nombre ("perdona, mejor a las 16") vuelve al agente en vez de
         # guardarse como tal. Solo en conversacional: el flujo de listas no cambia.
         if (_wa_modo_conversacional(config)

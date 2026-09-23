@@ -1040,6 +1040,28 @@ def tiene_algun_apellido(nombre: str) -> bool:
     return len(_palabras_del_nombre(nombre)) >= 2
 
 
+# Patrones SIN tildes: se comparan contra el texto pasado por _strip_accents.
+_NO_QUIERE_DAR_APELLIDO = re.compile(
+    r"\bno (?:quiero|voy a|puedo|me apetece|pienso|deseo) (?:dar|decir|poner)(?:te|le|os|les)? "
+    r"(?:mi |mis |el |los |ningun |ningunos )?apellidos?\b"
+    r"|\bprefiero no (?:dar|decir|poner)(?:te|le|os|les)? (?:mi |mis |el |los )?apellidos?\b"
+    r"|\bsin (?:dar |decir )?(?:mi |mis |el |los )?apellidos?\b"
+    r"|\bsolo (?:con |el |mi )?(?:mi )?nombre\b"
+    r"|\bno (?:tengo por que|hace falta|es necesario)[^.?!]{0,20}apellidos?\b"
+    r"|\b(?:el|mi) apellido no\b"
+)
+
+
+def no_quiere_dar_el_apellido(dicho: str) -> bool:
+    """La clienta ha dicho que no quiere dar su apellido.
+
+    Decision de Pablo (23-sep-2026): se le pide UNA vez; si no quiere, se coge la cita
+    con su nombre. Medido ese dia: 4 de las 5 reservas perdidas de la simulacion de
+    Alicia eran clientas a las que se les pedia el apellido en bucle hasta que se iban.
+    """
+    return bool(_NO_QUIERE_DAR_APELLIDO.search(_strip_accents(str(dicho or "").lower())))
+
+
 def tiene_dos_apellidos(nombre: str) -> bool:
     """Nombre y DOS apellidos: "Ana Ruiz Perez".
 

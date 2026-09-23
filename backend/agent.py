@@ -619,26 +619,31 @@ async def _ejecutar(
         # «Maria Garcia», este freno lo guardo y el resumen salio a ese nombre aunque despues
         # ella dijera «me llamo Ana Ruiz Perez».
         nombre_no_dicho = not _nombre_aparece_en(dicho, quien_nombre)
-        if (quien_nombre and telefono and not conocida
+        # Se piden UNA vez: si ha dicho que no quiere darlos, la cita va con su nombre.
+        sin_apellidos_por_su_decision = textnorm.no_quiere_dar_el_apellido(dicho)
+        if (quien_nombre and telefono and not conocida and not sin_apellidos_por_su_decision
                 and clients.exige_dos_apellidos(cliente_id)
                 and not textnorm.tiene_dos_apellidos(quien_nombre)):
             return {
                 "ok": False,
                 "error": ("Faltan apellidos: a una clienta nueva se la apunta con nombre y "
                           "dos apellidos."),
-                "que_hacer": ("Pidele sus dos apellidos en UNA frase corta (si ya ha dado "
-                              "uno, solo el segundo) y espera a que los diga. Cuando los "
-                              "tenga, llama a `crear_cita` con el nombre COMPLETO. No te "
-                              "los inventes ni cojas la cita sin ellos."),
+                "que_hacer": ("Pidele sus dos apellidos UNA sola vez, en una frase corta "
+                              "(si ya ha dado uno, solo el segundo). Cuando los tenga, llama "
+                              "a `crear_cita` con el nombre COMPLETO. No te los inventes. Si "
+                              "dice que prefiere no darlos, NO insistas: llama a `crear_cita` "
+                              "con el nombre que ha dado."),
                 "conserva_los_datos": True,
                 "nombre_no_dicho": nombre_no_dicho,
             }
-        if quien_nombre and not conocida and not textnorm.tiene_algun_apellido(quien_nombre):
+        if (quien_nombre and not conocida and not sin_apellidos_por_su_decision
+                and not textnorm.tiene_algun_apellido(quien_nombre)):
             return {
                 "ok": False,
                 "error": "Falta el apellido: en la agenda del salon hace falta el nombre completo.",
-                "que_hacer": ("Preguntale sus apellidos en UNA frase corta y espera a que "
-                              "los diga. No te los inventes ni cojas la cita sin ellos."),
+                "que_hacer": ("Preguntale sus apellidos UNA sola vez, en una frase corta. "
+                              "No te los inventes. Si dice que prefiere no darlos, NO "
+                              "insistas: llama a `crear_cita` con el nombre que ha dado."),
                 "conserva_los_datos": True,
                 "nombre_no_dicho": nombre_no_dicho,
             }
