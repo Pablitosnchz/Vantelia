@@ -226,14 +226,58 @@ def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -
     que la IA arranque igual en todos los canales. Orden: bienvenida de Apariencia -> saludo
     de voz especifico (campo admin, solo si no hay bienvenida) -> default. La llamada SALIENTE
     de confirmacion usa su propio guion (_voice_outbound_greeting), no este."""
+    nombre = str(config.get("empresa") or config.get("nombre") or "").strip() or "la empresa"
     bienvenida = _sanitize_text(str(config.get("bienvenida", "") or ""), allow_multiline=True)
     if bienvenida:
-        return bienvenida
+        return _saludo_que_dice_que_es_una_ia(bienvenida, nombre)
     explicit = _sanitize_text(str(voice_cfg.get("greeting", "") or ""), allow_multiline=True)
     if explicit:
-        return explicit
-    nombre = config.get("nombre", "") or "la empresa"
-    return f"Hola, soy el asistente de {nombre}. En que puedo ayudarte?"
+        return _saludo_que_dice_que_es_una_ia(explicit, nombre)
+    return f"Hola, soy la asistente virtual de {nombre}. ¿En qué puedo ayudarte?"
+
+
+# Reglamento europeo de IA, art. 50 (aplicable desde el 2-ago-2026): quien habla con
+# una IA tiene que saberlo, como tarde en la primera interaccion. El saludo de voz
+# era la bienvenida del negocio tal cual ("Hola cariño, ¿en qué puedo ayudarte?") y
+# el prompt PROHIBIA decir que era una IA. Ahora el primer turno lo dice siempre, sin
+# perder el tono del negocio: el aviso va detras de su saludo. Si la bienvenida ya
+# lo cuenta, se respeta tal cual.
+_YA_DICE_QUE_ES_IA = re.compile(
+    r"\b(?:asistente virtual|inteligencia artificial|ia|asistente automatic[oa]|chatbot|bot)\b"
+)
+# "¡Hola cariño!", "Buenos días," ... : el saludo del negocio, hasta su primer signo.
+_SALUDO_DEL_NEGOCIO = re.compile(
+    r"^\s*[¡]?\s*((?:hola|buenas(?: tardes| noches)?|buenos d[ií]as|buenas d[ií]as)\b[^!.,?¿¡\n]{0,30})[!.,]\s*",
+    re.IGNORECASE,
+)
+
+
+def _saludo_que_dice_que_es_una_ia(saludo: str, nombre: str) -> str:
+    texto = str(saludo or "").strip()
+    if _YA_DICE_QUE_ES_IA.search(_strip_accents(texto.lower())):
+        return texto
+    m = _SALUDO_DEL_NEGOCIO.match(texto)
+    if m:
+        cabeza = m.group(1).strip()
+        cabeza = cabeza[0].upper() + cabeza[1:]
+        resto = texto[m.end():].strip()
+    else:
+        cabeza, resto = "Hola", texto
+    # "Buenos días, Cap Rocat, ¿en qué...?": el nombre ya va en el aviso.
+    if nombre and _strip_accents(resto.lower()).startswith(_strip_accents(nombre.lower())):
+        resto = resto[len(nombre):].lstrip(" ,.:;-").strip()
+        # "Hola, MG Clinic al habla." -> lo que queda ("al habla.") ya no dice nada.
+        if len(resto.split()) <= 2 and "?" not in resto:
+            resto = ""
+    # Nueva frase tras el aviso: mayuscula en la primera letra ("¿en qué" -> "¿En qué").
+    for i, letra in enumerate(resto):
+        if letra.isalpha():
+            resto = resto[:i] + letra.upper() + resto[i + 1:]
+            break
+        if letra not in "¿¡ ":
+            break
+    aviso = f"{cabeza}, soy la asistente virtual de {nombre}."
+    return (aviso + " " + resto).strip() if resto else aviso + " ¿En qué puedo ayudarte?"
 
 
 def _normalize_required_time_value(value: Any, field_label: str) -> str:

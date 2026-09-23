@@ -7657,11 +7657,12 @@ def test_voice_uses_shared_identity_and_greeting(api_module):
     norm = api_module._normalize_voice_config({"openai_voice": "verse", "name": "X"})
     assert "name" not in norm
     assert norm["openai_voice"] == "verse"
-    # El saludo de voz sale de la bienvenida de Apariencia (mismo agente que web/WhatsApp).
+    # El saludo de voz sale de la bienvenida de Apariencia (mismo agente que web/WhatsApp),
+    # y desde el art. 50 del Reglamento de IA dice ademas que es una asistente virtual.
     greeting = api_module._voice_default_greeting(
         {"nombre": "MG Clinic", "bienvenida": "Hola, MG Clinic al habla."}, {}
     )
-    assert greeting == "Hola, MG Clinic al habla."
+    assert greeting == "Hola, soy la asistente virtual de MG Clinic. ¿En qué puedo ayudarte?"
 
 
 def test_voice_instructions_resume_after_interruption_without_repeating(api_module):
