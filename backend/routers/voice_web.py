@@ -6,6 +6,7 @@ registro de rutas identico al monolito original.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import time
 from typing import Any, Dict, List
@@ -23,13 +24,17 @@ from fastapi import (
 from api_models import *  # noqa: F401,F403
 from backend import (
     appstate,
+    atencion_contexto,
     atencion_voz,
+    clients,
     db,
     messaging,
     security,
     settings,
+    textnorm,
     voice,
     voice_engine,
+    voz_elevenlabs,
 )
 from backend.main import app
 
@@ -313,3 +318,38 @@ async def admin_voice_call_detail(call_sid: str) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         data["transcript"] = []
     return data
+
+
+@app.post("/voice/el/{cliente_id}/tool/{nombre}", include_in_schema=False)
+async def elevenlabs_voice_tool(cliente_id: str, nombre: str, request: Request) -> Dict[str, Any]:
+    """Herramienta de cita pedida por el agente de ElevenLabs de este negocio.
+
+    La autoriza el secreto compartido (cabecera `X-Vantelia-Voz`), no el origen: la
+    peticion viene de los servidores de ElevenLabs, no de un navegador. Por dentro es
+    lo mismo que la voz del widget: pausa de atencion revalidada en cada tool y
+    `voice._voice_dispatch_tool`, la unica forma de tocar la agenda desde la voz.
+    """
+    if not voz_elevenlabs.configurado():
+        raise HTTPException(status_code=503, detail="La voz de ElevenLabs no esta configurada.")
+    recibido = request.headers.get(voz_elevenlabs.CABECERA_SECRETO, "")
+    if not hmac.compare_digest(recibido.encode(), settings.ELEVENLABS_TOOL_SECRET.encode()):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+    textnorm._assert_valid_client_id(cliente_id)
+    config = clients._get_client_config(cliente_id)
+    permitidas = {str(t.get("name") or "") for t in voice._voice_booking_tools(cliente_id, config)}
+    if nombre not in permitidas:
+        raise HTTPException(status_code=404, detail="Herramienta no disponible para este negocio.")
+    security._check_rate_limit(f"elevenlabs_voice_tool:{cliente_id}", 120)
+    if not atencion_voz.puede_atender(cliente_id):
+        raise HTTPException(status_code=409, detail=atencion_voz.MOTIVO_PARA_EL_CLIENTE)
+    try:
+        cuerpo = await request.json()
+    except Exception:  # noqa: BLE001
+        cuerpo = {}
+    if not isinstance(cuerpo, dict):
+        cuerpo = {}
+    try:
+        with atencion_voz.turno_llamada(cliente_id):
+            return await voice._voice_dispatch_tool(cliente_id, nombre, json.dumps(cuerpo, ensure_ascii=False))
+    except atencion_contexto.AtencionDetenida:
+        raise HTTPException(status_code=409, detail=atencion_voz.MOTIVO_PARA_EL_CLIENTE)

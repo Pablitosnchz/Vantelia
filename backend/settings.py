@@ -147,6 +147,12 @@ try:
 except ValueError:
     VOICE_MAX_DURATION_SECONDS = 300
 VOICE_OPENAI_VOICE = os.getenv("VOICE_OPENAI_VOICE", "alloy").strip() or "alloy"
+# Voz con ElevenLabs Agents (backend/voz_elevenlabs.py). La clave es de la cuenta de
+# ElevenLabs; el secreto lo manda ElevenLabs en cada llamada a nuestras herramientas.
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
+ELEVENLABS_TOOL_SECRET = os.getenv("ELEVENLABS_TOOL_SECRET", "").strip()
+# "Laura - Customer service", castellana; la eligio Pablo el 23-sep-2026.
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uQw4jpKzMLrZuo0RLPS9").strip()
 # Modelo Realtime GA por defecto. Usamos el FULL (`gpt-realtime`): es bastante mas fiable
 # que el mini siguiendo instrucciones, llamando tools y entendiendo codigos/fechas (clave en
 # el navegador, que no tiene las redes deterministas del puente de Twilio). Override por

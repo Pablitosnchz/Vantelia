@@ -45,6 +45,7 @@ from backend import (
     textnorm,
     timeutils,
     voice,
+    voz_elevenlabs,
 )
 from backend.main import app
 
@@ -463,6 +464,18 @@ class AdminVoicePayload(BaseModel):
     realtime_model: Optional[str] = Field(default=None, max_length=40)
     greeting: Optional[str] = Field(default=None, max_length=600)
     request_id: Optional[str] = Field(default=None, max_length=80)
+
+
+@app.post("/admin/clientes/{cliente_id}/voz-elevenlabs", dependencies=[Depends(security._require_admin_token)])
+async def admin_sync_voz_elevenlabs(cliente_id: str) -> Dict[str, Any]:
+    """Crea o actualiza el agente de ElevenLabs del negocio desde su configuracion actual
+    (instrucciones, saludo y herramientas de cita). Devuelve su id y el enlace de prueba."""
+    if not voz_elevenlabs.configurado():
+        raise HTTPException(status_code=503, detail="Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
+    try:
+        return await timeutils._to_thread(voz_elevenlabs.sincronizar_agente, cliente_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/admin/clientes/{cliente_id}/voice", dependencies=[Depends(security._require_admin_token)])
