@@ -3158,7 +3158,10 @@ async def auth_create_employee_blocks(
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalAgendaBlockCreateResponse:
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
-    agenda._resolve_employee_for_booking(target_client_id, employee_id, require_active=False)
+    # Sin caer a la profesional por defecto: un id que no es de este negocio es
+    # un 404, no un bloqueo huerfano guardado con el id ajeno.
+    if not agenda._get_employee_row(employee_id, cliente_id=target_client_id):
+        raise HTTPException(status_code=404, detail="Profesional no encontrado.")
     rows, skipped_count, date_from, date_to = agenda._create_agenda_blocks(
         target_client_id,
         data,

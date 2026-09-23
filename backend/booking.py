@@ -2872,11 +2872,13 @@ def _portal_booking_summary_from_row(
                 "AND event_type='attendance_confirmed_by_customer' LIMIT 1",
                 (row["id"],),
             ).fetchone())
+    # sqlite3.Row no tiene .get(): con `(fila or {}).get(...)` el inicio del
+    # portal daba 500 en cuanto una de sus citas tenia pago con tarjeta.
+    pago_con_tarjeta = _booking_payment_row(row["id"]) if paid_cents is None else None
     cobro = paystate.summary_for_booking(
         row["cliente_id"], row,
         paid_cents=paid_cents,
-        booking_payment_status=str((_booking_payment_row(row["id"]) or {}).get("status", ""))
-        if paid_cents is None else "",
+        booking_payment_status=str(pago_con_tarjeta["status"] or "") if pago_con_tarjeta else "",
     )
     return PortalBookingSummary(
         booking_id=data["booking_id"],

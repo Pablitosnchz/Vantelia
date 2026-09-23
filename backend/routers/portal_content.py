@@ -110,6 +110,12 @@ async def app_lead_create(
     message = textnorm._sanitize_text(data.message, allow_multiline=True)[:4000]
     if not (name or email or phone or message):
         raise HTTPException(status_code=400, detail="Indica al menos nombre, email, telefono o mensaje.")
+    session_id = textnorm._sanitize_text(data.session_id)[:200]
+    if session_id:
+        with db._get_db_connection() as connection:
+            if not connection.execute("SELECT 1 FROM chat_sessions WHERE id=? AND cliente_id=?",
+                                      (session_id, cliente_id)).fetchone():
+                raise HTTPException(status_code=404, detail="Conversacion no encontrada.")
     lead_id = "lead_" + secrets.token_hex(10)
     now_iso = timeutils._utc_now_iso()
     with db._get_db_connection() as connection:
@@ -122,7 +128,7 @@ async def app_lead_create(
             (
                 lead_id,
                 cliente_id,
-                textnorm._sanitize_text(data.session_id)[:200],
+                session_id,
                 name,
                 email,
                 phone,

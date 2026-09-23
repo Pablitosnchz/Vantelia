@@ -619,6 +619,12 @@ def _sell_product(cliente_id: str, product_id: str, data: Any) -> Dict[str, Any]
             detail=f"Stock insuficiente: quedan {int(row['stock'])} unidad(es).",
         )
     unit = int(row["price_cents"] or 0)
+    booking_id = textnorm._sanitize_text(getattr(data, "booking_id", "") or "")
+    if booking_id:
+        with db._get_db_connection() as connection:
+            if not connection.execute("SELECT 1 FROM bookings WHERE id=? AND cliente_id=?",
+                                      (booking_id, cliente_id)).fetchone():
+                raise HTTPException(status_code=404, detail="Cita no encontrada.")
     location_id = agenda._resolve_location_id(cliente_id, getattr(data, "location_id", "") or "", require_active=False)
     sale_id = f"sale_{secrets.token_urlsafe(8)}"
     now_iso = timeutils._utc_now_iso()
@@ -639,7 +645,7 @@ def _sell_product(cliente_id: str, product_id: str, data: Any) -> Dict[str, Any]
                 qty,
                 unit,
                 unit * qty,
-                textnorm._sanitize_text(getattr(data, "booking_id", "") or ""),
+                booking_id,
                 textnorm._sanitize_text(getattr(data, "customer_name", "") or ""),
                 textnorm._sanitize_text(getattr(data, "customer_email", "") or ""),
                 _normalize_payment_method(getattr(data, "payment_method", "") or ""),
