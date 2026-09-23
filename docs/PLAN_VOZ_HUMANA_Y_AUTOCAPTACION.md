@@ -9,6 +9,43 @@ Investigado el 23-sep-2026. Lo marcado **(por verificar)** no se ha probado aun.
 
 ---
 
+## Actualizacion 23-sep (noche): la voz sera de ElevenLabs
+
+Medido y escuchado esa misma noche (muestras en `storage/muestras_voz/`, fuera de git):
+
+| Motor | Latencia medida | Veredicto de Pablo |
+| --- | --- | --- |
+| `gpt-realtime` + alloy (el actual) | 1,25 s | se nota que no es nativa |
+| `gpt-realtime-2.1` | 1,45-1,52 s | mas lento, sin ganancia |
+| GPT-Live-1 (14 voces) | 0,55-1,02 s (media 0,83) | mejor ritmo, pero voces con acento |
+| **ElevenLabs "Laura - Customer service"** (castellana) | Flash v2.5: 0,2 s hasta el primer audio | **"hiperrealista"**; elegida |
+
+Decisiones:
+- **Voz: ElevenLabs Agents con Laura y el modelo Flash v2.5** (un agente en espanol
+  solo admite Flash o Turbo). Por telefono suena peor que en la web por la propia
+  linea (8 kHz), igual que una persona; en la web va a 44,1 kHz.
+- La seccion A.2 queda superada: GPT-Live pasa a plan B.
+- Plan Starter de ElevenLabs (6 $/mes, 75 min). Para el piloto de llamadas, Creator.
+- Riesgo: Laura es una voz de la biblioteca de un tercero. A medio plazo, voz propia.
+
+Hecho:
+- **Paso 1** (`backend/voz_elevenlabs.py`, `tests/test_voz_elevenlabs.py`): un agente
+  por negocio generado desde las mismas fuentes que la voz de OpenAI (instrucciones,
+  saludo con aviso de IA, tools de cita). ElevenLabs pide cada tool a
+  `POST /voice/el/{cliente_id}/tool/{nombre}` con secreto compartido, y se ejecuta
+  `voice._voice_dispatch_tool`. Sincronizar: `POST /admin/clientes/{id}/voz-elevenlabs`.
+
+Siguientes pasos:
+2. Probar a pedir cita de verdad con Sara sobre `van` (tenant de pruebas de Pablo).
+3. Conversaciones al panel: webhook de fin de llamada de ElevenLabs -> `voice_calls`.
+4. Telefono: numero espanol (91) en Twilio (bundle regulatorio en tramite) conectado
+   con "register call" de ElevenLabs (Twilio sigue siendo nuestro), y el telefono del
+   llamante como dato de verificacion en las tools.
+5. Widget web con el SDK de ElevenLabs.
+6. Parte C (llamadas de captacion) sobre este mismo motor.
+
+---
+
 ## 0. Resumen en diez lineas
 
 1. **Lo que mas mueve la aguja no es la voz, es el turno.** Las agencias suenan
