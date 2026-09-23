@@ -66,8 +66,9 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     primera = agente["agent"]["first_message"].lower()
     assert "asistente virtual" in primera and "vantelia" in primera, "quien llama y que es una IA, al empezar"
     guion = agente["agent"]["prompt"]["prompt"].lower()
-    assert "llamada comercial" in guion
-    assert "no se les vuelve a llamar" in guion
+    # Pablo (24-sep) lo pidio corto y detras del gancho, pero tiene que estar al empezar.
+    assert "es comercial, y si no quieres mas llamadas, me lo dices" in guion
+    assert "tu nunca haces de clienta" in guion, "en la demo la clienta es el negocio, no Sara"
     nombres = {t["name"] for t in agente["agent"]["prompt"]["tools"]}
     assert {"apuntar_interes", "volver_a_llamar", "no_volver_a_llamar", "end_call"} <= nombres
     assert agente["tts"]["agent_output_audio_format"] == "ulaw_8000"
