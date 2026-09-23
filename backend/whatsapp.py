@@ -1539,6 +1539,17 @@ async def _wa_send_booking_summary(
                 to_number=to_number, flow=flow,
                 config=clients._get_client_config(cliente_id), request=request)
             return False
+        codigo_suyo = booking.cita_suya_a_esa_hora(exc.detail)
+        if codigo_suyo:
+            texto = _wa_texto_cita_suya(cliente_id, to_number, codigo_suyo)
+            if not texto:
+                return False
+            enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=to_number, text=texto)
+            if enviado:
+                _wa_registrar(cliente_id=cliente_id, from_number=to_number, request=request,
+                    respuesta=texto, intent="ya_tiene_cita")
+            return False
         texto = "⚠️ %s" % exc.detail
         enviado = await messaging._send_whatsapp_text(cliente_id=cliente_id, phone_number_id=phone_number_id,
             to_number=to_number, text=texto)
@@ -1811,6 +1822,25 @@ async def _wa_recuperar_creacion_confirmada(*, cliente_id, phone_number_id, to_n
             appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, to_number), None)
 
 
+def _wa_texto_cita_suya(cliente_id: str, to_number: str, codigo: str) -> str:
+    """Lo que se le dice a la clienta cuando ya tiene cita a esa hora.
+
+    Vacio si es la cita que se acaba de confirmar en ESTA conversacion: la clienta
+    solo estaba dando las gracias y ya tiene su confirmacion; repetirle nada sobra.
+    """
+    from backend import reserva
+
+    try:
+        estado = reserva.cargar(cliente_id, to_number)
+        if estado.hecho and estado.codigo and estado.codigo == codigo:
+            return ""
+    except Exception:  # noqa: BLE001
+        pass
+    numero = " (%s)" % codigo if codigo and codigo != "-" else ""
+    return ("Ya tienes una cita a esa hora%s. Si quieres cambiarla por otra cosa, "
+            "dímelo y la cambiamos." % numero)
+
+
 async def _wa_servicio_retirado(*, cliente_id, phone_number_id, to_number, flow, config, request):
     """Conserva a la clienta y deja elegir otro servicio; solo registra envíos aceptados."""
     from backend import reserva
@@ -1947,6 +1977,10 @@ async def _wa_create_booking(
         # tramo" es perder la cita en el ultimo paso: se le dan horas de verdad.
         if exc.status_code != 409:
             texto = "⚠️ %s" % exc.detail
+        elif booking.cita_suya_a_esa_hora(exc.detail):
+            texto = _wa_texto_cita_suya(cliente_id, to_number, booking.cita_suya_a_esa_hora(exc.detail))
+            if not texto:
+                return False
         elif booking.es_servicio_retirado(exc.detail):
             # No es el hueco: es el servicio. Con otra hora no se arregla.
             await _wa_servicio_retirado(cliente_id=cliente_id, phone_number_id=phone_number_id,

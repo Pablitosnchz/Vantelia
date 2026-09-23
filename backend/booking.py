@@ -3496,6 +3496,25 @@ def es_servicio_retirado(detalle: Any) -> bool:
     return SERVICIO_RETIRADO.lower() in str(detalle or "").lower()
 
 
+CITA_SUYA_A_ESA_HORA = "Esta persona ya tiene una cita a esa hora"
+_CODIGO_EN_CITA_SUYA = re.compile(r"ya tiene una cita a esa hora \(([^,)]+)")
+
+
+def cita_suya_a_esa_hora(detalle: Any) -> str:
+    """Si este 409 es "ya tiene una cita a esa hora", el codigo de esa cita; si no, "".
+
+    El texto del nucleo esta escrito para el MODELO ("hay que CAMBIAR esa cita, no
+    crear una segunda") y WhatsApp se lo mandaba tal cual a la clienta, con su
+    triangulo de aviso, tres veces seguidas despues de confirmar (simulacion de
+    Alicia, 23-sep-2026). Cada canal lo traduce a su clienta con esto.
+    """
+    texto = str(detalle or "")
+    if CITA_SUYA_A_ESA_HORA.lower() not in texto.lower():
+        return ""
+    m = _CODIGO_EN_CITA_SUYA.search(texto)
+    return (m.group(1).strip() if m else "") or "-"
+
+
 def _valid_booking_creation_terms(terms) -> bool:
     if not isinstance(terms, dict) or type(terms.get("version")) is not int or terms["version"] != 1:
         return False
@@ -3606,7 +3625,7 @@ async def _prepare_booking_creation(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Esta persona ya tiene una cita a esa hora (%s, %s). Si quiere otra "
+                CITA_SUYA_A_ESA_HORA + " (%s, %s). Si quiere otra "
                 "cosa, hay que CAMBIAR esa cita, no crear una segunda."
                 % (ya["booking_code"] or ya["id"], ya["servicio"] or "sin servicio")
             ),
