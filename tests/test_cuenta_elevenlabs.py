@@ -37,9 +37,9 @@ class _Api:
         return _Respuesta(self.status_code, self.suscripcion)
 
 
-def _creator(usados=0, limite=300000, plan="creator"):
-    return _Api(200, tier=plan, status="past_due", character_count=usados, character_limit=limite,
-                next_character_count_reset_unix=1791011567)
+def _creator(usados=0, limite=300000, plan="creator", estado="active", factura_abierta=False):
+    return _Api(200, tier=plan, status=estado, character_count=usados, character_limit=limite,
+                next_character_count_reset_unix=1791011567, has_open_invoices=factura_abierta)
 
 
 @pytest.fixture()
@@ -63,6 +63,11 @@ def cuenta(api_module, monkeypatch):  # noqa: F811
     (_creator(usados=300000), False, "agotados"),
     (_creator(plan="free"), False, "gratis"),                         # suscripcion acabada
     (_Api(401, detail={"status": "invalid_api_key"}), False, "clave"),
+    # 24-sep-2026: la Creator cancelada decia "creator" y 300.000 creditos, pero con la
+    # factura sin pagar ElevenLabs rechazaba todo uso.
+    (_creator(estado="past_due", factura_abierta=True), False, "pago"),
+    (_creator(estado="past_due"), True, ""),                          # reintentando el cobro, sin deuda
+    (_creator(estado="unpaid"), False, "pago"),
 ])
 def test_que_se_considera_una_cuenta_caida(cuenta, api, ok, tipo):
     leido = cuenta.estado(fresco=True, cliente=api)

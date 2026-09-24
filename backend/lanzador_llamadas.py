@@ -168,6 +168,11 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
         intentos: Dict[str, List[sqlite3.Row]] = {}
         for fila in conn.execute("SELECT telefono, resultado, creada FROM llamadas_voz"):
             intentos.setdefault(fila["telefono"], []).append(fila)
+        # Quien abrio (1) o pincho (2) en nuestros correos va antes: convierte mejor
+        # que un fijo en frio (peticion de Pablo, 24-sep-2026).
+        calor = {f["email"]: int(f["calor"] or 0) for f in conn.execute(
+            "SELECT email, MAX(CASE type WHEN 'click' THEN 2 WHEN 'open' THEN 1 ELSE 0 END) AS calor "
+            "FROM events GROUP BY email")}
     elegidos: List[Dict[str, Any]] = []
     vistos = set()
     for p in prospectos:
@@ -184,8 +189,9 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
         vistos.add(telefono)
         elegidos.append({"telefono": telefono, "negocio": p["business_name"] or "",
                          "sector": p["niche"] or "", "prospecto": p["email"] or "",
-                         "intentos": len(previos)})
-    elegidos.sort(key=lambda c: c["intentos"])  # estable: primero los que nunca sonaron
+                         "intentos": len(previos), "calor": calor.get(p["email"], 0)})
+    # Estable: primero los que nunca sonaron; dentro, los que se interesaron por el correo.
+    elegidos.sort(key=lambda c: (c["intentos"], -c["calor"]))
     return elegidos[:limite]
 
 

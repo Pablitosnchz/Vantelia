@@ -202,6 +202,23 @@ def test_robinson_se_recuerda_30_dias(lanzador):
     assert len(robinson.preguntados) == 2, "pasados 30 dias la respuesta caduca"
 
 
+def test_primero_quien_se_intereso_por_el_correo(lanzador):
+    """Pablo (24-sep-2026): llamar antes a quien abrio o pincho nuestros correos."""
+    _prospecto(lanzador, "frio@pelu.es", "911111111", creado="2026-09-01T00:00:00+00:00")
+    _prospecto(lanzador, "abrio@pelu.es", "912222222", creado="2026-09-02T00:00:00+00:00")
+    _prospecto(lanzador, "pincho@pelu.es", "913333333", creado="2026-09-03T00:00:00+00:00")
+    _prospecto(lanzador, "ya_llamado@pelu.es", "914444444", creado="2026-08-01T00:00:00+00:00")
+    _llamada_previa(lanzador, "+34914444444", MARTES_10_30 - timedelta(days=5), resultado="no_contesta")
+    with lanzador._db() as conn:
+        for email, tipo in (("abrio@pelu.es", "open"), ("pincho@pelu.es", "open"), ("pincho@pelu.es", "click"),
+                            ("ya_llamado@pelu.es", "click")):
+            conn.execute("INSERT INTO events (email, type, ts) VALUES (?,?,?)", (email, tipo, "2026-09-10T10:00:00+00:00"))
+        conn.commit()
+    orden = [c["prospecto"] for c in lanzador.candidatos(MARTES_10_30)]
+    assert orden == ["pincho@pelu.es", "abrio@pelu.es", "frio@pelu.es", "ya_llamado@pelu.es"], (
+        "los que nunca sonaron van antes; entre ellos, primero quien pincho y luego quien abrio")
+
+
 def test_solo_fijos_y_nunca_a_quien_no_toca(lanzador):
     lanzador.guardar_config(activo=True)
     _prospecto(lanzador, "movil@pelu.es", "675111111")          # movil: autonomo, a mano

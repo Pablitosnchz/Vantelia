@@ -10,8 +10,14 @@ el negocio que descuelga una llamada de Sara oiria colgar. Por eso:
 - `estado()` dice si la cuenta sirve. El lanzador de llamadas lo mira en `bloqueos()`:
   con la cuenta caida no marca (cache de 30 min para no preguntar en cada ronda).
 - Un hilo la revisa cada hora y manda un correo a CONSULTA_NOTIFICATION_EMAIL cuando
-  hay que hacer algo: clave rechazada, plan gratuito, creditos agotados o por debajo
-  del 15 %. El mismo aviso no se repite en 24 h.
+  hay que hacer algo: clave rechazada, pago pendiente, plan gratuito, creditos agotados
+  o por debajo del 15 %. El mismo aviso no se repite en 24 h.
+
+PAGO PENDIENTE = CUENTA CAIDA (24-sep-2026)
+-------------------------------------------
+La Creator cancelada seguia diciendo `tier: creator` con 300.000 creditos, pero con
+`status: past_due` y una factura abierta ElevenLabs rechaza TODO uso ("Complete the
+latest invoice to continue usage"). Mirar solo plan y creditos la daba por buena.
 
 CAMBIAR DE CUENTA (lo que dice el correo)
 -----------------------------------------
@@ -35,6 +41,9 @@ from backend import settings
 
 API = "https://api.elevenlabs.io"
 AVISAR_POR_DEBAJO = 0.15
+# Estados de la suscripcion en los que ElevenLabs no deja usar la voz. `past_due` solo
+# cuenta con factura abierta (en el reintento de cobro puede seguir funcionando).
+ESTADOS_SIN_PAGO = ("past_due", "unpaid", "incomplete", "incomplete_expired")
 MINUTOS_DE_CACHE = 30
 MINUTOS_ENTRE_REVISIONES = 60
 HORAS_ENTRE_AVISOS = 24
@@ -76,7 +85,11 @@ def _consultar(cliente: Optional[httpx.Client]) -> Dict[str, Any]:
         "usados": usados, "limite": limite,
         "renueva": datetime.fromtimestamp(int(renueva), timezone.utc).date().isoformat() if renueva else "",
     }
-    if salida["plan"] == "free":
+    if salida["estado"] in ESTADOS_SIN_PAGO and (datos.get("has_open_invoices") or salida["estado"] != "past_due"):
+        texto = ("La suscripcion de ElevenLabs tiene un pago pendiente (%s): no deja usar la voz hasta pagar "
+                 "la factura." % salida["estado"])
+        salida.update(ok=False, tipo="pago", problema=texto, aviso=texto)
+    elif salida["plan"] == "free":
         texto = "La cuenta de ElevenLabs ha vuelto al plan gratuito: sin plan de pago la voz de Laura no suena."
         salida.update(ok=False, tipo="gratis", problema=texto, aviso=texto)
     elif limite and usados >= limite:
@@ -104,6 +117,9 @@ def _correo(leido: Dict[str, Any]) -> None:
 
     if leido["tipo"] == "pocos":
         intro, cierre = "Todavia funciona. Si no se renuevan a tiempo, pasa a otra cuenta Creator:", ""
+    elif leido["tipo"] == "pago":
+        intro, cierre = ("Paga la factura en ElevenLabs (vuelve a funcionar sola) o pasa a otra cuenta:",
+                         "\nMientras tanto Sara no llama a nadie.")
     else:
         intro, cierre = "Para pasar a otra cuenta Creator:", "\nMientras tanto Sara no llama a nadie."
     pasos = (intro + "\n"
