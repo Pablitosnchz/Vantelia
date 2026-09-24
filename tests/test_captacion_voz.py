@@ -73,6 +73,8 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     assert "siempre en español" in guion and "no lo deletrees" in guion
     nombres = {t["name"] for t in agente["agent"]["prompt"]["tools"]}
     assert {"enviar_informacion", "volver_a_llamar", "no_volver_a_llamar", "end_call"} <= nombres
+    buzon = [t for t in agente["agent"]["prompt"]["tools"] if t["name"] == "voicemail_detection"]
+    assert buzon and buzon[0]["params"]["voicemail_message"] == "", "a un contestador: colgar sin mensaje"
     assert agente["tts"]["agent_output_audio_format"] == "ulaw_8000"
     assert agente["agent"]["prompt"]["llm"] != "gemini-2.5-flash"
 
@@ -82,7 +84,9 @@ def test_no_llamar_mas_se_cumple_de_verdad(captacion):
     llamada = captacion.llamar("91 123 45 67", "Peluqueria Prueba", cliente=falso)
     assert llamada["ok"] is True
     datos = falso.peticiones[0][1]["data"]
-    assert datos["MachineDetection"] == "Enable" and "llamada=" + llamada["llamada"] in datos["Url"]
+    assert "llamada=" + llamada["llamada"] in datos["Url"]
+    # Tercera prueba (24-sep): la deteccion de Twilio hacia esperar ~6 s en silencio.
+    assert "MachineDetection" not in datos, "quien descuelga no puede oir silencio"
     assert "/voice/el-captacion/estado" in datos["StatusCallback"]
 
     r = captacion.herramienta("no_volver_a_llamar", {"_llamada": llamada["llamada"], "motivo": "no llameis"})

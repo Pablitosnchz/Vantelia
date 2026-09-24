@@ -13,7 +13,10 @@ REGLAS QUE NO SE NEGOCIAN (Circular AEPD 1/2023 y Reglamento de IA, art. 50)
 - Se dice que es una llamada comercial y que puede pedir que no le llamemos mas.
 - "No me llames" se apunta en el momento (`no_volver_a_llamar`) y ese telefono no
   vuelve a sonar: `llamar` lo comprueba ANTES de marcar.
-- Contestador (deteccion de Twilio): se cuelga sin dejar mensaje.
+- Contestador o buzon de voz: se cuelga sin dejar mensaje. Lo detecta ElevenLabs
+  dentro de la conversacion (`voicemail_detection` sin mensaje), NO Twilio: la
+  deteccion de Twilio escuchaba ~6 s antes de conectar y quien descolgaba oia
+  silencio (tercera llamada de prueba, 24-sep-2026).
 
 EL CIERRE (segunda llamada de prueba, 24-sep-2026)
 --------------------------------------------------
@@ -99,7 +102,7 @@ _HERRAMIENTAS = {
         "que si, antes de despedirte. El email solo si te ha dado uno distinto del del negocio.",
         {"type": "object", "description": "A donde mandarlo", "properties": {
             "email": {"type": "string", "description": "Email que ha dado, si ha dado uno; si no, vacio"},
-            "nombre": {"type": "string", "description": "Nombre de quien atiende, si lo ha dicho"},
+            "nombre": {"type": "string", "description": "Nombre de la PERSONA con la que hablas, si lo ha dicho. Nunca el tuyo (Sara)"},
             "notas": {"type": "string", "description": "Lo importante de la conversacion en una frase"}},
          "required": []}),
     "volver_a_llamar": (
@@ -186,13 +189,23 @@ def canal_de_envio(telefono: str, email_negocio: str) -> str:
     return "pedir_email"
 
 
+# Buzon de voz o contestador: ElevenLabs lo reconoce en la conversacion y cuelga sin
+# dejar nada (mensaje vacio). Sustituye a la deteccion de Twilio, que retrasaba ~6 s
+# el saludo a TODAS las personas que descolgaban.
+BUZON_SIN_MENSAJE = {
+    "type": "system", "name": "voicemail_detection",
+    "description": "Si contesta un buzon de voz o un contestador automatico, cuelga sin dejar mensaje.",
+    "params": {"system_tool_type": "voicemail_detection", "voicemail_message": ""},
+}
+
+
 def agente_de_captacion(base_url: str) -> Dict[str, Any]:
     base = base_url.rstrip("/")
     herramientas = [
         voz_elevenlabs.herramienta_webhook(nombre, descripcion, "%s%s/tool/%s" % (base, RUTA, nombre),
                                            esquema, {CAMPO_LLAMADA: VARIABLE_LLAMADA})
         for nombre, (descripcion, esquema) in _HERRAMIENTAS.items()
-    ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte.")]
+    ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte."), BUZON_SIN_MENSAJE]
     audio = voz_elevenlabs.formato_de_audio(telefono=True)
     return {
         "name": "Sara - captacion Vantelia (telefono)",
@@ -268,8 +281,7 @@ def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *
             auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
             data={"To": numero, "From": _numero_de_salida(), "Timeout": "25",
                   "Url": "%s%s/twiml?llamada=%s" % (base, RUTA, llamada_id),
-                  "StatusCallback": "%s%s/estado?llamada=%s" % (base, RUTA, llamada_id),
-                  "MachineDetection": "Enable"})
+                  "StatusCallback": "%s%s/estado?llamada=%s" % (base, RUTA, llamada_id)})
     finally:
         if propio:
             cliente.close()
