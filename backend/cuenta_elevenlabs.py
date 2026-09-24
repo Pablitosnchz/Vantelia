@@ -116,6 +116,11 @@ def _correo(leido: Dict[str, Any]) -> None:
     outreach._outreach_notify_admin("⚠️ ElevenLabs: " + leido["aviso"][:120], texto, html)
 
 
+def marcar_avisado(tipo: str) -> None:
+    """Otro aviso ya conto este problema (lanzador_llamadas.fallo_de_voz): no repetirlo."""
+    _avisados[tipo] = time.time()
+
+
 def vigilar_una_vez(*, cliente: Optional[httpx.Client] = None) -> str:
     """Revisa la cuenta y avisa si toca. Devuelve el tipo de aviso mandado ("" si ninguno)."""
     leido = estado(fresco=True, cliente=cliente)

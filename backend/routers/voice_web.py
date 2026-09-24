@@ -394,6 +394,14 @@ async def captacion_voz_twiml(request: Request) -> Response:
     except Exception as exc:  # noqa: BLE001 - mejor colgar que dejar la linea muda
         settings.logger.warning("[captacion_voz] no se pudo conectar la llamada: %s", exc)
         twiml = captacion_voz._COLGAR
+        # Alguien descolgo y oyo colgar: el lanzador se apaga y se avisa a Pablo.
+        from backend import lanzador_llamadas
+
+        try:
+            await timeutils._to_thread(lanzador_llamadas.fallo_de_voz,
+                                       request.query_params.get("llamada", ""), str(exc))
+        except Exception:  # noqa: BLE001 - la respuesta a Twilio va igual
+            settings.logger.exception("[captacion_voz] no se pudo registrar el fallo de voz")
     return Response(content=twiml, media_type="application/xml")
 
 

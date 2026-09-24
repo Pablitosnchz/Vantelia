@@ -14,7 +14,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from test_booking_exhaustive import api_module  # noqa: F401
+from test_booking_exhaustive import api_module, client  # noqa: F401
 from test_lanzador_llamadas import MARTES_10_30, _prospecto, _ronda  # noqa: F401
 
 
@@ -118,3 +118,50 @@ def test_con_la_cuenta_caida_el_lanzador_no_marca(cuenta, monkeypatch, tmp_path)
     _prospecto(lanzador_llamadas, "a@pelu.es", "911111111")
     salida, marcador = _ronda(lanzador_llamadas)
     assert marcador.llamados == [] and "plan gratuito" in salida["motivo"]
+
+
+# --- Si ElevenLabs falla con el negocio ya al telefono -------------------------
+
+@pytest.fixture()
+def al_descolgar(cuenta, monkeypatch, tmp_path, client):  # noqa: F811
+    """Twilio firmado, cuenta en plan gratuito y un negocio que acaba de descolgar."""
+    from backend import captacion_voz, clients, lanzador_llamadas, messaging, settings, voz_elevenlabs
+
+    monkeypatch.setenv("OUTREACH_DB_PATH", str(tmp_path / "outreach.db"))
+    monkeypatch.setattr(messaging, "_voice_twilio_configured", lambda: True)
+    monkeypatch.setattr(messaging, "_twilio_request_valid", lambda *a, **k: True)
+    monkeypatch.setattr(settings, "ELEVENLABS_TOOL_SECRET", "s")
+    monkeypatch.setattr(cuenta, "estado", lambda **k: {
+        "ok": False, "tipo": "gratis", "problema": "La cuenta de ElevenLabs ha vuelto al plan gratuito."})
+
+    def sin_voz(*a, **k):
+        raise RuntimeError("ElevenLabs no registro la llamada (402): payment_required")
+
+    monkeypatch.setattr(voz_elevenlabs, "twiml_registrar_llamada", sin_voz)
+    original = clients._get_client_config
+    monkeypatch.setattr(clients, "_get_client_config", lambda cid: (
+        {"voice": {captacion_voz.CLAVE_AGENTE: "agent_sara"}} if cid == captacion_voz.TENANT else original(cid)))
+    with captacion_voz._db() as conn:
+        conn.execute("INSERT INTO llamadas_voz (id, telefono, estado, origen, creada, actualizada) "
+                     "VALUES ('ll_x', '+34911111111', 'marcando', 'auto', 'x', 'x')")
+        conn.commit()
+    return client, lanzador_llamadas, captacion_voz
+
+
+def test_si_la_voz_falla_al_descolgar_se_apaga_y_avisa(al_descolgar, cuenta):
+    client, lanzador, captacion_voz = al_descolgar
+    lanzador.guardar_config(activo=True)
+    r = client.post(captacion_voz.RUTA + "/twiml?llamada=ll_x",
+                    data={"AnsweredBy": "human", "From": "+34910000000", "To": "+34911111111"})
+    assert r.status_code == 200 and "<Hangup/>" in r.text
+    assert lanzador.config()["activo"] == 0, "ni una llamada mas a alguien que va a oir colgar"
+    assert captacion_voz._fila("ll_x")["resultado"] == "fallida"
+    assert len(cuenta.correos) == 1 and "dejado de llamar" in cuenta.correos[0][0]
+    assert "plan gratuito" in cuenta.correos[0][1]
+    assert cuenta._avisados.get("gratis"), "el vigilante no repite el mismo aviso"
+
+
+def test_en_una_llamada_de_prueba_no_se_manda_correo(al_descolgar, cuenta):
+    client, lanzador, captacion_voz = al_descolgar
+    client.post(captacion_voz.RUTA + "/twiml?llamada=ll_x", data={"AnsweredBy": "human"})
+    assert cuenta.correos == [] and lanzador.config()["activo"] == 0

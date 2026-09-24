@@ -37,6 +37,7 @@ import re
 import sqlite3
 import threading
 from datetime import datetime, time, timedelta, timezone
+from html import escape
 from typing import Any, Callable, Dict, List, Optional
 
 try:
@@ -274,6 +275,43 @@ def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
                                                     hecho.get("motivo") or "sin motivo"), ahora)
     return _motivo("Llamando a %s." % (elegido["negocio"] or elegido["telefono"]), ahora,
                    str(hecho.get("llamada") or ""))
+
+
+def fallo_de_voz(llamada_id: str, error: str) -> bool:
+    """ElevenLabs no conecto una llamada que YA habian descolgado: el negocio oyo colgar.
+
+    Una llamada asi es peor que ninguna, asi que el lanzador se apaga en el acto (no
+    espera a que caduque la cache de la cuenta) y se avisa a Pablo con el motivo y el
+    estado de la cuenta (peticion de Pablo, 24-sep-2026: "mandame un email cuando
+    dejemos de hacer llamadas por la suscripcion"). Devuelve si se aviso.
+    """
+    if llamada_id and captacion_voz._fila(llamada_id) is not None:
+        captacion_voz._actualizar(llamada_id, estado="terminada", resultado="fallida",
+                                  notas=("ElevenLabs: %s" % error)[:200])
+    estaba_activo = bool(config()["activo"])
+    guardar_config(activo=False)
+    _motivo("Apagado solo: ElevenLabs no conecto una llamada.", timeutils._utc_now(), llamada_id)
+    if not estaba_activo:
+        return False  # llamada de prueba: quien la hizo ya lo ha oido
+    cuenta = cuenta_elevenlabs.estado(fresco=True)
+    causa = cuenta.get("problema") or "La cuenta parece en orden; el fallo fue al conectar la llamada."
+    texto = ("Sara ha dejado de llamar: un negocio descolgo y ElevenLabs no conecto la llamada.\n\n"
+             "Error:  %s\nCuenta: %s\n\nEl lanzador se ha apagado solo. Cuando este arreglado, "
+             "vuelve a encenderlo en el panel (Llamadas).\n" % (error[:300], causa))
+    html = ("<div style='font-family:sans-serif'><h2 style='color:#dc2626'>Sara ha dejado de llamar</h2>"
+            "<p>Un negocio descolgo y ElevenLabs no conecto la llamada.</p><p>Error: %s<br>Cuenta: %s</p>"
+            "<p>El lanzador se ha apagado solo. Cuando este arreglado, vuelve a encenderlo en el panel "
+            "(Llamadas).</p></div>" % (escape(error[:300]), escape(causa)))
+    from backend import outreach
+
+    try:
+        outreach._outreach_notify_admin("📵 Sara ha dejado de llamar (ElevenLabs)", texto, html)
+    except Exception:  # noqa: BLE001
+        settings.logger.exception("[lanzador_llamadas] no se pudo avisar del fallo de voz")
+        return False
+    if cuenta.get("tipo"):
+        cuenta_elevenlabs.marcar_avisado(cuenta["tipo"])  # un solo correo, no dos
+    return True
 
 
 def _trabajador() -> None:
