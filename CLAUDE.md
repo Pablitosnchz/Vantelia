@@ -32,7 +32,7 @@ config.json          Config multi-tenant de clientes.
 | Capa | Tecnologia |
 | --- | --- |
 | Backend | Python 3.11, FastAPI, uvicorn, Pydantic |
-| IA/RAG | llama-index, OpenAI, `gpt-4o-mini`, `text-embedding-3-small` |
+| IA/RAG | llama-index, OpenAI, `gpt-4.1-mini` (`CHAT_MODEL`, el mismo que la voz de Laura desde el 25-sep-2026), `text-embedding-3-small` |
 | Persistencia | SQLite local e indices vectoriales en `storage/` |
 | Widget | JavaScript ES6 vanilla, bundle con esbuild |
 | UI admin/portal | HTML/CSS/JS sin framework |
@@ -302,7 +302,7 @@ La intencion se adivinaba con expresiones regulares: de 19 formas naturales de
 pedir cita se reconocian DOS (medido). Ahora la decide el modelo.
 
 - `backend/intents.py`: `atajo_local()` (gratis, lo evidente) -> `classify()`
-  (`gpt-4o-mini`, JSON `{intencion, familia, pregunta, confianza}`). `INTENCIONES`
+  (`CHAT_MODEL`, JSON `{intencion, familia, pregunta, confianza}`). `INTENCIONES`
   es una lista CERRADA a proposito. Las familias salen del catalogo del tenant
   (`familias_del_tenant`), y `pregunta` identifica cual de las Q&A del negocio le
   estan haciendo aunque la escriba con otras palabras (`preguntas_del_tenant`).

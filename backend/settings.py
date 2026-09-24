@@ -38,7 +38,10 @@ SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{12,128}$")
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{2,80}$")
 TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
 
-DEFAULT_CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
+# El mismo modelo que la voz de Laura (voz_elevenlabs.LLM_POR_DEFECTO): Pablo lo hizo
+# estandar el 25-sep-2026. Medido antes con el banco de casos sobre una foto de
+# produccion: 45/45 con gpt-4o-mini y 45/45 con gpt-4.1-mini, sin fallos criticos.
+DEFAULT_CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4.1-mini")
 DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 AVAILABLE_CHAT_MODELS_BOOT = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"]
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "Europe/Madrid")
