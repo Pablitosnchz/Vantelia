@@ -1060,6 +1060,11 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .ll-account:empty { display: none; }
 .ll-account--warn { color: var(--warning); }
 .ll-account--error { color: var(--danger); }
+.ll-accounts { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.ll-accounts[hidden] { display: none; }
+.ll-accounts ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ll-accounts__caida { color: var(--soft); }
+.ll-accounts em { color: var(--accent); font-style: normal; }
 .ll-result { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 750; white-space: nowrap; color: var(--soft); background: var(--surface-2); }
 .ll-result--interesado { color: var(--success); background: var(--success-soft, var(--surface-2)); }
 .ll-result--volver_a_llamar { color: var(--info); background: var(--info-soft); }
@@ -3825,6 +3830,10 @@ tbody tr:last-child td { border-bottom: none; }
               </div>
             </form>
             <p id="llAccount" class="ll-account"></p>
+            <div id="llAccountsBox" class="ll-accounts" hidden>
+              <ul id="llAccounts"></ul>
+              <button id="llRotateBtn" class="ghost small" type="button">Pasar a otra cuenta</button>
+            </div>
           </article>
 
           <article class="cap-card" aria-labelledby="llCallsTitle">
@@ -8872,6 +8881,13 @@ tbody tr:last-child td { border-bottom: none; }
           cuenta.textContent = "";
         }
         cuenta.className = "ll-account" + (cv.problema ? " ll-account--error" : cv.aviso ? " ll-account--warn" : "");
+        // Reserva de cuentas de voz (ELEVENLABS_API_KEYS): se muestra con mas de una.
+        const reserva = d.cuentas_voz || [];
+        LQ("#llAccountsBox").hidden = reserva.length < 2;
+        LQ("#llAccounts").innerHTML = reserva.map((c) => `<li class="${c.ok ? "" : "ll-accounts__caida"}">
+            <strong>${c.activa ? "● " : ""}Cuenta ${esc(c.cuenta)}</strong> · ${esc(c.plan || "?")}
+            · ${c.ok ? `quedan ${Number(c.quedan || 0).toLocaleString("es-ES")} créditos` : esc(c.problema || "no funciona")}
+            ${c.activa ? "<em>(activa)</em>" : ""}</li>`).join("");
         const form = LQ("#llSettingsForm");
         if (!form.contains(document.activeElement)) {
           LQ("#llActive").checked = activo;
@@ -8966,6 +8982,21 @@ tbody tr:last-child td { border-bottom: none; }
       LQ("#llRefreshBtn")?.addEventListener("click", cargar);
       LQ("#llSettingsForm")?.addEventListener("submit", guardar);
       LQ("#llRoundBtn")?.addEventListener("click", ronda);
+      LQ("#llRotateBtn")?.addEventListener("click", async () => {
+        const ok = await confirmDialog({
+          title: "¿Pasar la voz a otra cuenta?",
+          bodyHtml: "Se usará la primera otra cuenta de ElevenLabs que funcione. Se crean allí los agentes de Sara y de los negocios, y se borran los de la cuenta actual.",
+          confirmLabel: "Cambiar de cuenta",
+        });
+        if (!ok) return;
+        try {
+          const r = await api("/admin/voz/cuenta/rotar", { method: "POST" });
+          toast(r.rotada ? `Voz pasada a la cuenta ${r.a}` : (r.motivo || "No se cambió de cuenta"), r.rotada ? "success" : "warning");
+          cargar();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      });
       LQ("#llDialogClose")?.addEventListener("click", cerrar);
       LQ("#llModal")?.addEventListener("click", (event) => { if (event.target === LQ("#llModal")) cerrar(); });
       LQ("#llCallsBody")?.addEventListener("click", (event) => {

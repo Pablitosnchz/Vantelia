@@ -241,6 +241,8 @@ def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
     ajustes = config()
     if not ajustes["activo"]:
         return _motivo("Apagado en el panel.", ahora)
+    if voz_elevenlabs.configurado():
+        cuenta_elevenlabs.asegurar_cuenta()  # si la cuenta de voz cayo, pasa a otra de la reserva
     faltan = bloqueos()
     if faltan:
         return _motivo(faltan[0], ahora)
@@ -286,20 +288,28 @@ def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
 def fallo_de_voz(llamada_id: str, error: str) -> bool:
     """ElevenLabs no conecto una llamada que YA habian descolgado: el negocio oyo colgar.
 
-    Una llamada asi es peor que ninguna, asi que el lanzador se apaga en el acto (no
-    espera a que caduque la cache de la cuenta) y se avisa a Pablo con el motivo y el
-    estado de la cuenta (peticion de Pablo, 24-sep-2026: "mandame un email cuando
-    dejemos de hacer llamadas por la suscripcion"). Devuelve si se aviso.
+    Si la culpa es de la cuenta (sin creditos, pago pendiente...) y hay otra en la reserva
+    que funciona, la voz pasa a ella y el lanzador sigue (el correo del cambio lo cuenta).
+    Si no, una llamada asi es peor que ninguna: el lanzador se apaga en el acto y se avisa
+    a Pablo con el motivo y el estado de la cuenta (peticion de Pablo, 24-sep-2026:
+    "mandame un email cuando dejemos de hacer llamadas por la suscripcion"). Devuelve si
+    se aviso.
     """
     if llamada_id and captacion_voz._fila(llamada_id) is not None:
         captacion_voz._actualizar(llamada_id, estado="terminada", resultado="fallida",
                                   notas=("ElevenLabs: %s" % error)[:200])
     estaba_activo = bool(config()["activo"])
+    cuenta = cuenta_elevenlabs.estado(fresco=True)
+    if not cuenta["ok"] and cuenta.get("tipo") in cuenta_elevenlabs.CAIDA:
+        cambio = cuenta_elevenlabs.rotar("Un negocio descolgo y la voz fallo (%s). %s"
+                                         % (error[:200], cuenta.get("problema", "")))
+        if cambio.get("rotada"):
+            _motivo("Voz pasada a otra cuenta tras un fallo; sigue llamando.", timeutils._utc_now(), llamada_id)
+            return True
     guardar_config(activo=False)
     _motivo("Apagado solo: ElevenLabs no conecto una llamada.", timeutils._utc_now(), llamada_id)
     if not estaba_activo:
         return False  # llamada de prueba: quien la hizo ya lo ha oido
-    cuenta = cuenta_elevenlabs.estado(fresco=True)
     causa = cuenta.get("problema") or "La cuenta parece en orden; el fallo fue al conectar la llamada."
     texto = ("Sara ha dejado de llamar: un negocio descolgo y ElevenLabs no conecto la llamada.\n\n"
              "Error:  %s\nCuenta: %s\n\nEl lanzador se ha apagado solo. Cuando este arreglado, "
@@ -361,6 +371,7 @@ def resumen(limite: int = 100) -> Dict[str, Any]:
     return {
         "config": config(), "bloqueos": bloqueos(), "en_horario": en_horario(ahora),
         "cuenta_voz": cuenta_elevenlabs.estado() if voz_elevenlabs.configurado() else {},
+        "cuentas_voz": cuenta_elevenlabs.cuentas() if voz_elevenlabs.configurado() else [],
         "hilo_vivo": bool(hilo and hilo.is_alive()),
         "hoy": {str(o or "manual"): n for o, n in hoy},
         "por_resultado": {str(r or "sin_resultado"): n for r, n in por_resultado},

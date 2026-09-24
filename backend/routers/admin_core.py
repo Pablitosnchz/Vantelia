@@ -35,6 +35,7 @@ from backend import (
     captacion_voz,
     channel_requests,
     clients,
+    cuenta_elevenlabs,
     db,
     demo_agenda,
     emailing,
@@ -515,6 +516,13 @@ async def admin_captacion_llamadas(limit: int = 100) -> Dict[str, Any]:
     """Panel de llamadas de Sara: ajustes del lanzador, que falta para llamar, como va
     hoy y las ultimas llamadas con su resultado."""
     return await timeutils._to_thread(lanzador_llamadas.resumen, limit)
+
+
+@app.post("/admin/voz/cuenta/rotar", dependencies=[Depends(security._require_admin_token)])
+async def admin_voz_rotar_cuenta() -> Dict[str, Any]:
+    """Pasa la voz a la primera otra cuenta de ELEVENLABS_API_KEYS que funcione (crea alli
+    los agentes y borra los de la vieja). Lo mismo que hace solo el vigilante."""
+    return await timeutils._to_thread(cuenta_elevenlabs.rotar, "Cambio pedido desde el panel.")
 
 
 @app.put("/admin/captacion/llamadas/config", dependencies=[Depends(security._require_admin_token)])

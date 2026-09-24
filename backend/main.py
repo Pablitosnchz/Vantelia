@@ -152,9 +152,13 @@ def _start_background_workers() -> None:
         appstate.register_worker("booking-reminders", appstate.booking_reminder_thread)
 
     # Llamadas de captacion de Sara: solo arranca con CAPTACION_LLAMADAS_ENABLED=true.
-    # La cuenta de ElevenLabs se vigila aparte: avisa a Pablo si se acaba el plan.
+    # La cuenta de ElevenLabs se vigila aparte: avisa a Pablo si se acaba el plan y pasa a
+    # otra de la reserva. Primero se recupera la cuenta que eligio la ultima rotacion.
     from backend import cuenta_elevenlabs, lanzador_llamadas
 
+    activa = cuenta_elevenlabs.aplicar_activa_guardada()
+    if activa:
+        settings.logger.info("[cuenta_elevenlabs] cuenta de voz activa: %s", activa)
     hilo_llamadas = lanzador_llamadas.arrancar()
     if hilo_llamadas is not None:
         appstate.register_worker("captacion-llamadas", hilo_llamadas)

@@ -150,6 +150,10 @@ VOICE_OPENAI_VOICE = os.getenv("VOICE_OPENAI_VOICE", "alloy").strip() or "alloy"
 # Voz con ElevenLabs Agents (backend/voz_elevenlabs.py). La clave es de la cuenta de
 # ElevenLabs; el secreto lo manda ElevenLabs en cada llamada a nuestras herramientas.
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
+# Reserva de claves de otras cuentas, en orden de preferencia y separadas por comas: si la
+# activa se queda sin creditos o sin pago, la voz pasa sola a la primera que funcione
+# (backend/cuenta_elevenlabs.py).
+ELEVENLABS_API_KEYS = [c.strip() for c in os.getenv("ELEVENLABS_API_KEYS", "").split(",") if c.strip()]
 ELEVENLABS_TOOL_SECRET = os.getenv("ELEVENLABS_TOOL_SECRET", "").strip()
 # "Laura - Customer service", castellana; la eligio Pablo el 23-sep-2026.
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uQw4jpKzMLrZuo0RLPS9").strip()

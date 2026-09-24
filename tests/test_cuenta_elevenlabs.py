@@ -170,3 +170,115 @@ def test_en_una_llamada_de_prueba_no_se_manda_correo(al_descolgar, cuenta):
     client, lanzador, captacion_voz = al_descolgar
     client.post(captacion_voz.RUTA + "/twiml?llamada=ll_x", data={"AnsweredBy": "human"})
     assert cuenta.correos == [] and lanzador.config()["activo"] == 0
+
+
+# --- Varias cuentas: pasar sola a la siguiente (Pablo, 24-sep-2026) -------------------
+
+def _suscripcion(plan="creator", estado="active", usados=0, limite=300000, factura=False):
+    return {"tier": plan, "status": estado, "character_count": usados, "character_limit": limite,
+            "has_open_invoices": factura, "next_character_count_reset_unix": 1791011567}
+
+
+class _Reserva:
+    """Varias cuentas de ElevenLabs: cada clave con su suscripcion. Apunta lo que se borra."""
+
+    def __init__(self, cuentas, agentes=None):
+        self.cuentas, self.agentes, self.borrados = cuentas, agentes or {}, []
+
+    def get(self, url, headers=None, **k):
+        if "/v1/convai/agents/" in url:
+            agente = url.rsplit("/", 1)[1]
+            if agente in self.agentes:
+                return _Respuesta(200, {"conversation_config": {"agent": {"prompt": {"tool_ids": self.agentes[agente]}}}})
+            return _Respuesta(404)
+        datos = self.cuentas[(headers or {})["xi-api-key"]]
+        return _Respuesta(datos) if isinstance(datos, int) else _Respuesta(200, datos)
+
+    def delete(self, url, headers=None, **k):
+        self.borrados.append(((headers or {})["xi-api-key"], url.rsplit("/", 1)[1]))
+        return _Respuesta(204)
+
+
+@pytest.fixture()
+def reserva(cuenta, monkeypatch, tmp_path):
+    """Activa sin creditos; en la reserva, dos caidas y dos buenas. Agentes guardados en 'demo'."""
+    from backend import appstate, settings
+
+    monkeypatch.setattr(settings, "STORAGE_DIR", tmp_path)
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_agotada")
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_agotada", "k_con_factura", "k_gratis", "k_buena", "k_otra"])
+    monkeypatch.setitem(appstate.CONFIG_CLIENTES, "negocio_voz", {"voice": {"elevenlabs_agent_id": "agent_viejo"}})
+    sincronizados = []
+    monkeypatch.setattr(cuenta, "sincronizar_agentes", lambda: sincronizados.append(settings.ELEVENLABS_API_KEY)
+                        or {"negocio_voz": "agent_nuevo"})
+    api = _Reserva({
+        "k_agotada": _suscripcion(usados=300000),
+        "k_con_factura": _suscripcion(estado="past_due", factura=True),
+        "k_gratis": _suscripcion(plan="free", limite=10000),
+        "k_buena": _suscripcion(plan="starter", usados=4000, limite=40000),
+        "k_otra": _suscripcion(plan="payg", limite=10000),
+    }, agentes={"agent_viejo": ["tool_viejo"]})
+    api.sincronizados = sincronizados
+    return api
+
+
+def test_si_la_activa_cae_pasa_a_la_primera_que_funciona(cuenta, reserva, tmp_path):
+    from backend import settings
+
+    assert cuenta.vigilar_una_vez(cliente=reserva) == "rotada"
+    assert settings.ELEVENLABS_API_KEY == "k_buena", "se saltan la de factura pendiente y la gratuita"
+    assert reserva.sincronizados == ["k_buena"], "los agentes se crean ya con la clave nueva"
+    assert ("k_agotada", "agent_viejo") in reserva.borrados and ("k_agotada", "tool_viejo") in reserva.borrados, (
+        "los agentes de la cuenta que se deja se borran de ella")
+    guardado = (tmp_path / "elevenlabs_cuenta_activa.json").read_text(encoding="utf-8")
+    assert cuenta.huella("k_buena") in guardado and "k_buena" not in guardado, "se guarda la huella, nunca la clave"
+    assert len(cuenta.correos) == 1 and "otra cuenta" in cuenta.correos[0][0]
+    assert not any(k in cuenta.correos[0][1] for k in ("k_agotada", "k_buena")), "las claves no van en el correo"
+
+
+def test_la_cuenta_elegida_sobrevive_a_un_reinicio(cuenta, reserva, monkeypatch):
+    from backend import settings
+
+    cuenta.vigilar_una_vez(cliente=reserva)
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_agotada")  # lo que trae el .env al arrancar
+    assert cuenta.aplicar_activa_guardada() == cuenta.huella("k_buena")
+    assert settings.ELEVENLABS_API_KEY == "k_buena"
+
+
+def test_sin_ninguna_que_funcione_no_se_cambia_y_se_avisa(cuenta, reserva):
+    from backend import settings
+
+    reserva.cuentas["k_buena"] = 401
+    reserva.cuentas["k_otra"] = _suscripcion(estado="unpaid")
+    assert cuenta.vigilar_una_vez(cliente=reserva) == "agotados"
+    assert settings.ELEVENLABS_API_KEY == "k_agotada" and reserva.sincronizados == []
+    assert "No queda ninguna otra cuenta" in cuenta.correos[0][1]
+
+
+def test_la_preferida_vuelve_cuando_funciona(cuenta, reserva, monkeypatch):
+    """Pablo: "usa la creator primero". Si se paga su factura, la voz vuelve a ella."""
+    from backend import settings
+
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_buena")
+    assert cuenta.vigilar_una_vez(cliente=reserva) == "", "con la preferida caida, se sigue en la que funciona"
+    reserva.cuentas["k_con_factura"] = _suscripcion()  # factura pagada
+    assert cuenta.vigilar_una_vez(cliente=reserva) == "rotada"
+    assert settings.ELEVENLABS_API_KEY == "k_con_factura"
+
+
+def test_el_panel_no_ensena_claves(cuenta, reserva):
+    lista = cuenta.cuentas(cliente=reserva)
+    assert [c["ok"] for c in lista] == [False, False, False, True, True]
+    assert not any(k in str(lista) for k in ("k_agotada", "k_buena", "k_otra"))
+
+
+def test_si_la_voz_falla_y_hay_otra_cuenta_sigue_llamando(al_descolgar, cuenta, monkeypatch):
+    """La cuenta cayo con un negocio al telefono: pasa a otra y el lanzador sigue."""
+    client, lanzador, captacion_voz = al_descolgar
+    lanzador.guardar_config(activo=True)
+    cambios = []
+    monkeypatch.setattr(cuenta, "rotar", lambda motivo, **k: cambios.append(motivo) or {"rotada": True})
+    client.post(captacion_voz.RUTA + "/twiml?llamada=ll_x", data={"AnsweredBy": "human"})
+    assert cambios and "descolgo" in cambios[0]
+    assert lanzador.config()["activo"] == 1, "con otra cuenta que funciona, se sigue llamando"
+    assert captacion_voz._fila("ll_x")["resultado"] == "fallida"
