@@ -157,7 +157,12 @@ def test_a_un_movil_se_le_manda_un_sms_sin_pedir_nada(captacion, envios):
     r = captacion.herramienta("enviar_informacion", {"_llamada": llamada})
     assert r["ok"] is True and "SMS" in r["mensaje"]
     assert len(envios["sms"]) == 1 and envios["sms"][0][0] == "+34675802001"
-    assert "Peluqueria Movil" in envios["sms"][0][1] and "vantelia.es" in envios["sms"][0][1]
+    sms = envios["sms"][0][1]
+    assert "Peluqueria Movil" in sms and "vantelia.es" in sms
+    assert "675 802 001" in sms and "info@vantelia.es" in sms, "cualquier duda: Pablo o info@ (Pablo, 24-sep)"
+    assert sms.isascii(), "una tilde cambia la codificacion y el SMS cuesta mas del doble"
+    enlace_largo = "https://app.vantelia.es/demo/go/" + "x" * 60
+    assert len(captacion.texto_sms("Peluqueria Con Nombre Largo", enlace_largo)) <= 306, "mas de 2 SMS"
     assert envios["email"] == []
     assert captacion._fila(llamada)["resultado"] == "interesado"
     assert len(envios["avisos"]) == 1, "Pablo tiene que enterarse"

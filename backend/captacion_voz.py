@@ -52,6 +52,7 @@ VARIABLE_LLAMADA = "llamada"
 CAMPO_LLAMADA = "_llamada"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
 TELEFONO_PABLO = "675 802 001"
+EMAIL_VANTELIA = "info@vantelia.es"
 WEB = "https://www.vantelia.es"
 
 PRIMER_MENSAJE = ("Hola, buenas. Soy Sara, una asistente virtual de Vantelia. "
@@ -358,7 +359,8 @@ def enlace_de_demo(email_negocio: str) -> str:
 def texto_sms(negocio: str, enlace: str) -> str:
     # Sin tildes a proposito: con una sola, el SMS pasa a otra codificacion y cuesta el doble.
     return ("Hola! Soy Sara, de Vantelia. Asi atenderia el telefono y el WhatsApp de %s: %s "
-            "Pruebalo gratis. Dudas: Pablo, %s" % (textnorm._strip_accents(negocio), enlace, TELEFONO_PABLO))
+            "Pruebalo gratis. Cualquier duda, te llamamos: escribe a Pablo al %s o a %s"
+            % (textnorm._strip_accents(negocio), enlace, TELEFONO_PABLO, EMAIL_VANTELIA))
 
 
 def correo(negocio: str, enlace: str) -> Dict[str, str]:
@@ -368,9 +370,9 @@ def correo(negocio: str, enlace: str) -> Dict[str, str]:
         "atendería el teléfono y el WhatsApp de %s: da citas, las cambia y las cancela mientras "
         "estáis con las manos ocupadas.\n\n"
         "Pruébalo con tu propio negocio: %s\n\n"
-        "Si prefieres que te lo enseñe una persona, Pablo (el fundador) te atiende en el %s o "
-        "respondiendo a este correo.\n\n"
-        "Un saludo,\nSara · Vantelia\n" % (negocio, enlace, TELEFONO_PABLO))
+        "¿Alguna duda? Te llamamos cuando te venga bien: escribe a Pablo al %s, a %s o "
+        "responde a este correo.\n\n"
+        "Un saludo,\nSara · Vantelia\n" % (negocio, enlace, TELEFONO_PABLO, EMAIL_VANTELIA))
     html = (
         "<div style='font-family:sans-serif;max-width:560px;color:#1a1a2e;line-height:1.5'>"
         "<p>Hola,</p><p>Soy Sara, la asistente virtual de Vantelia que os ha llamado hace un "
@@ -378,9 +380,9 @@ def correo(negocio: str, enlace: str) -> Dict[str, str]:
         "cambia y las cancela mientras estáis con las manos ocupadas.</p>"
         "<p><a href='%s' style='display:inline-block;padding:11px 20px;border-radius:999px;"
         "background:#00D1FF;color:#04101C;font-weight:700;text-decoration:none'>Pruébalo con tu "
-        "negocio</a></p><p>Si prefieres que te lo enseñe una persona, Pablo (el fundador) te "
-        "atiende en el %s o respondiendo a este correo.</p><p>Un saludo,<br>Sara · Vantelia</p></div>"
-        % (escape(negocio), escape(enlace, quote=True), TELEFONO_PABLO))
+        "negocio</a></p><p>¿Alguna duda? Te llamamos cuando te venga bien: escribe a Pablo al %s, "
+        "a <a href='mailto:%s'>%s</a> o responde a este correo.</p><p>Un saludo,<br>Sara · Vantelia</p></div>"
+        % (escape(negocio), escape(enlace, quote=True), TELEFONO_PABLO, EMAIL_VANTELIA, EMAIL_VANTELIA))
     return {"asunto": "Lo que te conté por teléfono", "texto": texto, "html": html}
 
 
