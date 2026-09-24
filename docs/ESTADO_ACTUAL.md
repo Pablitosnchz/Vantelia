@@ -1,6 +1,20 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-09-21 Europe/Madrid
+## En curso — 2026-09-23/24 Europe/Madrid (Claude; todo DESPLEGADO, `main` = `77f4c4a`)
+
+- **Voz nueva con ElevenLabs (decision de Pablo):** comparo a oido OpenAI (gpt-realtime, 2.1, GPT-Live) con voces castellanas nativas y eligio "Laura" de ElevenLabs. Plan y mediciones en `docs/PLAN_VOZ_HUMANA_Y_AUTOCAPTACION.md`. Plan Starter de ElevenLabs; claves `ELEVENLABS_API_KEY` y `ELEVENLABS_TOOL_SECRET` en el `.env` del VPS (copia previa `/srv/vantelia-backups/env-pre-elevenlabs-20260923`).
+  - `backend/voz_elevenlabs.py` (`16bb407`, `7163769`): dos agentes por negocio (web 44,1 kHz y telefono u-law) generados desde las MISMAS fuentes que la voz de OpenAI; tools por `POST /voice/el/{cliente_id}/tool/{nombre}` con secreto compartido -> `voice._voice_dispatch_tool`. Por telefono el llamante llega como variable (`_llamante`) para verificar citas. Llamada entrante: solo con `voice.engine = "elevenlabs"` va por "register call"; si ElevenLabs falla, sigue por el motor de siempre. Sincronizar: `POST /admin/clientes/{id}/voz-elevenlabs`. Probado: tenant `van`.
+  - `backend/captacion_voz.py` (`7163769`, `f6d5f4d`): Sara llama a negocios con guion legal (IA + comercial + opcion de no mas llamadas, corto y tras el gancho por peticion de Pablo). Tools `apuntar_interes` (avisa a Pablo), `volver_a_llamar`, `no_volver_a_llamar` (tabla `no_llamar`, se mira ANTES de marcar). Contestador = colgar. Tabla `llamadas_voz` en la base de captacion. SOLO llamada de prueba por admin; SIN lanzador automatico. Primera llamada real a Pablo el 24-sep: bien; apertura acortada despues.
+  - Pendiente: numero 91 (bundle de Twilio en revision), alta en Lista Robinson (Pablo), transcripciones de ElevenLabs a Conversaciones, lanzador automatico, widget web con ElevenLabs.
+- **Legal (art. 50 del Reglamento de IA, desde 2-ago):** la voz de OpenAI decia "no digas que eres una IA". Ahora el saludo (fuente unica) dice que es la asistente virtual y dice la verdad si preguntan (`468a8e0`).
+- **Aislamiento entre negocios:** `tests/test_aislamiento_entre_negocios.py` ataca ~80 rutas del portal con ids de otro negocio: sin fugas. Arreglados: `/auth/dashboard` daba 500 con una cita pagada con tarjeta (desde el 15-ago) y 3 referencias ajenas que se guardaban sin validar (`b3b3cc2`).
+- **Simulacion de Alicia (40 clientas, 23-sep):** 81 % bien, 0 fallos caros. Arreglado: el apellido se pide UNA vez y si no lo quiere dar, cita con su nombre (decision de Pablo, `d4d0510`); el aviso interno "hay que CAMBIAR esa cita" ya no llega a la clienta por WhatsApp (`ac93c9f`). Pendiente: la respuesta fija de extensiones se come la reserva.
+- **Cap Rocat:** tono usted y sin emojis en su config de produccion (decision de Pablo); "pasar a una persona" en usted y en ingles a quien escribe en ingles (`0154453`). La pausa de temporada ya existe en su panel; la cuota nov-mar se pausa a mano en Stripe.
+- **Web:** el widget de vantelia.es pedia un tenant que no existia (404). Creado `vantelia` (Sara, alta express desde la web) y la web apunta a el (`63443a1`, subido por FTP).
+- **Captacion por email:** la ronda marcaba como vistos negocios cuya web no llego a abrir (`3f6d27f`).
+- **Carpetas:** TODAS las copias de trabajo viven ahora en `E:\Vantelia-copias\` (`claude\` y `astra\`; lista de lo movido en `astra\MOVIDAS_24sep.txt`). Nuevas copias, siempre ahi.
+
+## En curso anterior — 2026-09-21 Europe/Madrid
 
 - **Testigo:** Claude. Astra se quedo sin creditos con el candidato `f11132c`; Pablo dio la orden de seguir con las fases.
 - **Tarea:** fronteras que faltaban por conectar a la autoridad de atencion. Fase 2 (entrada de WhatsApp) en `c465be1`. Fase 3 (voz y automatismos del worker) sobre ese commit. Rama `claude/atencion-whatsapp-20sep` en E:/vp-atencion-wa, partiendo de `f11132c`.
