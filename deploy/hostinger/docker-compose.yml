@@ -23,3 +23,15 @@ services:
       # retocarlas en caliente (scp) sin reconstruir la imagen. El deploy sigue
       # subiendo el contenido del repo a /srv/vantelia/client_sites.
       - ../../client_sites:/app/client_sites
+    networks:
+      - default
+      - proxy
+
+networks:
+  # nginx-proxy-manager (openresty) reenvia app.vantelia.es a "vantelia-app" POR NOMBRE,
+  # asi que los dos tienen que compartir red. 24-sep-2026 el contenedor recien creado
+  # arranco solo en la red por defecto y la web publica dio 502 unos 10 minutos (la app
+  # respondia 200 por dentro). Con la red declarada aqui, cada despliegue la trae puesta.
+  proxy:
+    external: true
+    name: nginx-proxy-manager_default

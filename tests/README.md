@@ -45,6 +45,10 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   producción. (2) Un `` de regex que perdió el prefijo `r` y quedó como el byte
   de retroceso: compila, `pyflakes` calla, y el freno no salta nunca. Pasó cuatro
   veces en una noche.
+- `test_la_web_llega_a_la_app.py` — el compose de producción mete la app en la red
+  del proxy (`nginx-proxy-manager_default`). El proxy la busca por nombre; el
+  24-sep-2026 un contenedor recién creado arrancó sin esa red y la web dio 502 unos
+  10 minutos con la app sana por dentro.
 - `test_los_tests_no_mandan_emails.py` — la suite no habla con el buzón real.
   Pasó de verdad (ago-2026): `pytest` cargaba el `.env` de producción y las
   confirmaciones de cita salían por `smtp.hostinger.com` a `@test.es` y
