@@ -69,9 +69,12 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     # Pablo (24-sep) lo pidio corto y detras del gancho, pero tiene que estar al empezar.
     assert "es comercial, y si no quieres mas llamadas, me lo dices" in guion
     assert "tu nunca haces de clienta" in guion, "en la demo la clienta es el negocio, no Sara"
+    # Segunda prueba (24-sep): se le colo el ingles y deletreo el email 25 segundos.
+    assert "siempre en español" in guion and "no lo deletrees" in guion
     nombres = {t["name"] for t in agente["agent"]["prompt"]["tools"]}
-    assert {"apuntar_interes", "volver_a_llamar", "no_volver_a_llamar", "end_call"} <= nombres
+    assert {"enviar_informacion", "volver_a_llamar", "no_volver_a_llamar", "end_call"} <= nombres
     assert agente["tts"]["agent_output_audio_format"] == "ulaw_8000"
+    assert agente["agent"]["prompt"]["llm"] != "gemini-2.5-flash"
 
 
 def test_no_llamar_mas_se_cumple_de_verdad(captacion):
@@ -108,23 +111,90 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
     cuerpo = falso.peticiones[0][1]["json"]
     assert cuerpo["agent_id"] == "agent_sara" and cuerpo["direction"] == "outbound"
     assert cuerpo["conversation_initiation_client_data"]["dynamic_variables"] == {
-        "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": llamada}
+        "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": llamada,
+        "canal_envio": "pedir_email", "email_negocio": ""}
 
 
-def test_un_email_mal_dictado_no_se_apunta(captacion, monkeypatch):
+# --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------
+
+
+@pytest.fixture()
+def envios(captacion, monkeypatch):
+    from backend import messaging, outreach
+
+    registro = {"sms": [], "email": [], "avisos": []}
+
+    async def sms(to, remitente, texto, **k):
+        registro["sms"].append((to, texto))
+        return True
+
+    monkeypatch.setattr(messaging, "_send_twilio_sms", sms)
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", lambda msg: registro["email"].append(msg))
+    monkeypatch.setattr(outreach, "_outreach_notify_admin", lambda *a: registro["avisos"].append(a) or True)
+    return registro
+
+
+def _con_negocio_en_captacion(email, telefono):
     from backend import outreach
 
-    avisos = []
-    monkeypatch.setattr(outreach, "_outreach_notify_admin", lambda *a: avisos.append(a) or True)
-    llamada = captacion.llamar("911234562", "Peluqueria Email", cliente=_Falso())["llamada"]
-    malo = captacion.herramienta("apuntar_interes", {"_llamada": llamada, "email": "elidio arroba"})
-    assert malo["ok"] is False and avisos == []
-    bueno = captacion.herramienta("apuntar_interes", {"_llamada": llamada, "email": "Elidio@Correo.es",
-                                                      "nombre": "Elidio"})
-    assert bueno["ok"] is True
-    fila = captacion._fila(llamada)
-    assert fila["resultado"] == "interesado" and fila["email"] == "elidio@correo.es"
-    assert len(avisos) == 1 and "Peluqueria Email" in avisos[0][0], "Pablo tiene que enterarse"
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT OR REPLACE INTO prospects (email, business_name, niche, phone, created_at, updated_at) "
+                     "VALUES (?,?,?,?,?,?)", (email, "Peluqueria Fija", "peluqueria", telefono, "x", "x"))
+        conn.commit()
+
+
+@pytest.mark.parametrize("telefono,email,canal", [
+    ("+34675802001", "", "sms"), ("+34675802001", "a@b.es", "sms"),
+    ("+34911234570", "info@pelu.es", "email"), ("+34911234571", "", "pedir_email"),
+])
+def test_el_canal_depende_de_si_es_movil_y_de_lo_que_sabemos(captacion, telefono, email, canal):
+    assert captacion.canal_de_envio(telefono, email) == canal
+
+
+def test_a_un_movil_se_le_manda_un_sms_sin_pedir_nada(captacion, envios):
+    llamada = captacion.llamar("675 802 001", "Peluqueria Movil", cliente=_Falso())["llamada"]
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada})
+    assert r["ok"] is True and "SMS" in r["mensaje"]
+    assert len(envios["sms"]) == 1 and envios["sms"][0][0] == "+34675802001"
+    assert "Peluqueria Movil" in envios["sms"][0][1] and "vantelia.es" in envios["sms"][0][1]
+    assert envios["email"] == []
+    assert captacion._fila(llamada)["resultado"] == "interesado"
+    assert len(envios["avisos"]) == 1, "Pablo tiene que enterarse"
+
+
+def test_a_un_fijo_conocido_se_le_manda_al_correo_del_negocio(captacion, envios, monkeypatch):
+    monkeypatch.setenv("OUTREACH_TRACKING_SECRET", "secreto-seguimiento")
+    _con_negocio_en_captacion("info@pelufija.es", "91 123 45 72")
+    llamada = captacion.llamar("911234572", "Peluqueria Fija", cliente=_Falso())["llamada"]
+    assert captacion._fila(llamada)["prospecto"] == "info@pelufija.es", "se reconoce por su telefono"
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada})
+    assert r["ok"] is True and envios["sms"] == []
+    assert len(envios["email"]) == 1 and envios["email"][0]["To"] == "info@pelufija.es"
+    cuerpo = envios["email"][0].get_body(("plain",)).get_content()
+    assert "/demo/go/" in cuerpo, "la demo del propio negocio, como en los correos de captacion"
+
+
+def test_a_un_fijo_sin_email_se_le_pide_y_uno_mal_dictado_no_vale(captacion, envios):
+    llamada = captacion.llamar("911234573", "Peluqueria Sin Email", cliente=_Falso())["llamada"]
+    assert captacion.herramienta("enviar_informacion", {"_llamada": llamada})["ok"] is False
+    assert captacion.herramienta("enviar_informacion", {"_llamada": llamada, "email": "pepe arroba"})["ok"] is False
+    assert envios["email"] == [] and envios["avisos"] == []
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada, "email": "Pepe@Correo.es"})
+    assert r["ok"] is True and envios["email"][0]["To"] == "pepe@correo.es"
+
+
+def test_si_no_se_puede_mandar_el_interesado_no_se_pierde(captacion, envios, monkeypatch):
+    from backend import messaging
+
+    async def falla(*a, **k):
+        raise RuntimeError("Twilio caido")
+
+    monkeypatch.setattr(messaging, "_send_twilio_sms", falla)
+    llamada = captacion.llamar("675802002", "Peluqueria Sin Suerte", cliente=_Falso())["llamada"]
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada})
+    assert r["ok"] is True and "en un rato" in r["mensaje"]
+    assert captacion._fila(llamada)["resultado"] == "interesado"
+    assert "NO se pudo" in envios["avisos"][0][1], "Pablo tiene que saber que le toca escribirle"
 
 
 def test_twilio_cuenta_como_acabo_la_llamada(captacion):

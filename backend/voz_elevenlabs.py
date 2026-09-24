@@ -32,7 +32,9 @@ API = "https://api.elevenlabs.io"
 # Un agente en espanol solo admite los modelos rapidos (lo exige ElevenLabs). Flash es
 # el que sono bien a Pablo en calidad de telefono y tarda ~0,2 s en empezar a hablar.
 MODELO_VOZ = "eleven_flash_v2_5"
-LLM_POR_DEFECTO = "gemini-2.5-flash"
+# gpt-4.1-mini: Gemini 2.5 Flash colo frases en ingles y se quedo mudo al cerrar
+# (segunda llamada de prueba de Sara, 24-sep-2026).
+LLM_POR_DEFECTO = "gpt-4.1-mini"
 CABECERA_SECRETO = "X-Vantelia-Voz"
 # Herramientas nuestras que tienen equivalente de sistema en ElevenLabs.
 _DE_SISTEMA = {"finalizar_llamada": "end_call"}
