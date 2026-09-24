@@ -257,11 +257,6 @@ def rotar(motivo: str, *, cliente: Optional[httpx.Client] = None, destino: str =
         _rotando.release()
 
 
-def preferida_que_sirve(cliente: Optional[httpx.Client] = None) -> str:
-    """La primera cuenta de la reserva (orden de preferencia) que funciona, o ""."""
-    return next((c for c in claves() if estado(cliente=cliente, clave=c)["ok"]), "")
-
-
 def asegurar_cuenta(cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
     """La cuenta activa, o la siguiente de la reserva si la activa ha caido."""
     actual = estado(cliente=cliente)
