@@ -122,7 +122,8 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
 def envios(captacion, monkeypatch):
     from backend import messaging, outreach
 
-    registro = {"sms": [], "email": [], "avisos": []}
+    registro = {"sms": [], "email": [], "avisos": [], "demos": []}
+    monkeypatch.setattr(outreach, "_outreach_maybe_pregenerate_demo", lambda email: registro["demos"].append(email))
 
     async def sms(to, remitente, texto, **k):
         registro["sms"].append((to, texto))
@@ -172,6 +173,7 @@ def test_a_un_fijo_conocido_se_le_manda_al_correo_del_negocio(captacion, envios,
     assert len(envios["email"]) == 1 and envios["email"][0]["To"] == "info@pelufija.es"
     cuerpo = envios["email"][0].get_body(("plain",)).get_content()
     assert "/demo/go/" in cuerpo, "la demo del propio negocio, como en los correos de captacion"
+    assert envios["demos"] == ["info@pelufija.es"], "su demo tiene que empezar a generarse ya"
 
 
 def test_a_un_fijo_sin_email_se_le_pide_y_uno_mal_dictado_no_vale(captacion, envios):

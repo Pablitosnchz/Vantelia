@@ -414,6 +414,16 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "error": "No tengo a donde mandarlo: pidele un email."}
     negocio = fila["negocio"] or "tu negocio"
     enlace = enlace_de_demo(email_negocio)
+    if email_negocio:
+        # Su demo empieza a generarse YA (desde su web, en segundo plano): cuando abra
+        # el SMS o el correo, un par de minutos despues, la encuentra lista en vez de
+        # una pagina de espera. Misma pregeneracion que los correos de captacion.
+        try:
+            from backend import outreach
+
+            outreach._outreach_maybe_pregenerate_demo(email_negocio)
+        except Exception:  # noqa: BLE001 - sin demo lista, el enlace la genera al pinchar
+            settings.logger.warning("[captacion_voz] no se pudo adelantar la demo de %s", email_negocio)
     try:
         if destino_email:
             canal, enviado = "email", _mandar_correo(destino_email, correo(negocio, enlace))
