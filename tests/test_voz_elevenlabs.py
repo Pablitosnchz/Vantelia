@@ -323,3 +323,59 @@ def test_si_elevenlabs_falla_contesta_el_motor_de_siempre(llamada_entrante, monk
     monkeypatch.setattr(voz_elevenlabs, "twiml_registrar_llamada", falla)
     r = llamada_entrante()
     assert r.status_code == 200 and "/voice/stream/demo" in r.text, "la llamada no puede perderse"
+
+
+# --- Primera llamada de prueba de un negocio con Laura (24-sep-2026) ---------------
+
+def test_el_codigo_de_reserva_se_dice_cifra_a_cifra():
+    from backend import textnorm
+
+    assert textnorm.codigo_para_decir("R-059953") == "erre, cero, cinco, nueve, nueve, cinco, tres"
+    assert textnorm.codigo_para_decir("r059953") == textnorm.codigo_para_decir("R-059953")
+    assert textnorm.codigo_para_decir("") == ""
+
+
+def test_la_cita_creada_por_voz_trae_el_codigo_ya_en_palabras(api_module):  # noqa: F811
+    """La agente leyo "erre cero cinco nueve cinco tres" por R-059953: convertia ella las
+    cifras y se comio un nueve. El mensaje de la tool lo trae ya deletreado."""
+    import asyncio
+    from datetime import date, timedelta
+
+    from backend import appstate, textnorm, voice
+
+    appstate.rate_limit_buckets.clear()
+    dia = date.today() + timedelta(days=9)
+    while dia.weekday() >= 5:
+        dia += timedelta(days=1)
+    argumentos = {"nombre": "Cliente Codigo", "telefono": "600111222", "servicio": "Consulta",
+                  "fecha": dia.isoformat(), "fecha_texto": "ese dia", "hora": "12:30"}
+    r = asyncio.run(voice._voice_dispatch_tool("demo", "crear_cita", json.dumps(argumentos),
+                                               from_number="600111222"))
+    assert r.get("ok") is True, r
+    hablado = textnorm.codigo_para_decir(r["codigo_reserva"])
+    assert r["codigo_para_decir"] == hablado
+    assert hablado in r["mensaje_voz"] and r["codigo_reserva"] not in r["mensaje_voz"], r["mensaje_voz"]
+
+
+def test_por_telefono_no_pide_el_numero_desde_el_que_llaman(api_module, configurado):  # noqa: F811
+    from backend import voz_elevenlabs
+
+    config = api_module.CONFIG_CLIENTES["demo"]
+    telefono = voz_elevenlabs.agente_para("demo", config, "https://app.test", telefono=True)
+    web = voz_elevenlabs.agente_para("demo", config, "https://app.test", telefono=False)
+    prompt_tel = telefono["conversation_config"]["agent"]["prompt"]["prompt"]
+    marca = "{{" + voz_elevenlabs.VARIABLE_LLAMANTE + "}}"
+    assert marca in prompt_tel and "NO se lo pidas" in prompt_tel
+    assert marca not in web["conversation_config"]["agent"]["prompt"]["prompt"], "en la web no hay llamante"
+
+
+def test_la_voz_va_estable_en_sara_y_en_los_negocios(api_module, configurado):  # noqa: F811
+    """Pablo: "a veces le cambiaba la voz". De serie ElevenLabs pone estabilidad 0,5."""
+    from backend import captacion_voz, voz_elevenlabs
+
+    negocio = voz_elevenlabs.agente_para("demo", api_module.CONFIG_CLIENTES["demo"], "https://app.test",
+                                         telefono=True)["conversation_config"]["tts"]
+    sara = captacion_voz.agente_de_captacion("https://app.test")["conversation_config"]["tts"]
+    for tts in (negocio, sara):
+        assert tts["stability"] >= 0.7 and tts["similarity_boost"] >= 0.9
+        assert tts["agent_output_audio_format"] == "ulaw_8000"

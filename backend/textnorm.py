@@ -250,6 +250,33 @@ _SALUDO_DEL_NEGOCIO = re.compile(
     r"^\s*[¡]?\s*((?:hola|buenas(?: tardes| noches)?|buenos d[ií]as|buenas d[ií]as)\b[^!.,?¿¡\n]{0,30})[!.,]\s*",
     re.IGNORECASE,
 )
+# "Soy el asistente de X." / "Soy tu asistente." tras el saludo: el aviso ya la presenta.
+_YA_SE_PRESENTA = re.compile(
+    r"^soy\s+(?:el|la|tu|su|vuestr[oa])\s+asistente\b[^.!?]*[.!]\s*", re.IGNORECASE)
+
+
+_CIFRA_HABLADA = {"0": "cero", "1": "uno", "2": "dos", "3": "tres", "4": "cuatro", "5": "cinco",
+                  "6": "seis", "7": "siete", "8": "ocho", "9": "nueve"}
+_LETRA_HABLADA = {"A": "a", "B": "be", "C": "ce", "D": "de", "E": "e", "F": "efe", "G": "ge", "H": "hache",
+                  "I": "i", "J": "jota", "K": "ka", "L": "ele", "M": "eme", "N": "ene", "O": "o", "P": "pe",
+                  "Q": "cu", "R": "erre", "S": "ese", "T": "te", "U": "u", "V": "uve", "W": "uve doble",
+                  "X": "equis", "Y": "i griega", "Z": "zeta"}
+
+
+def codigo_para_decir(codigo: str) -> str:
+    """"R-059953" -> "erre, cero, cinco, nueve, nueve, cinco, tres".
+
+    La voz tiene que LEER el codigo, no convertirlo: en la primera llamada de prueba de un
+    negocio con ElevenLabs (24-sep-2026) el modelo paso "R-059953" a palabras por su cuenta
+    y se comio un nueve. Con el codigo con que se gestiona la cita, eso no puede pasar.
+    """
+    partes = []
+    for caracter in str(codigo or "").upper():
+        if caracter in _CIFRA_HABLADA:
+            partes.append(_CIFRA_HABLADA[caracter])
+        elif caracter in _LETRA_HABLADA:
+            partes.append(_LETRA_HABLADA[caracter])
+    return ", ".join(partes)
 
 
 def _saludo_que_dice_que_es_una_ia(saludo: str, nombre: str) -> str:
@@ -269,6 +296,9 @@ def _saludo_que_dice_que_es_una_ia(saludo: str, nombre: str) -> str:
         # "Hola, MG Clinic al habla." -> lo que queda ("al habla.") ya no dice nada.
         if len(resto.split()) <= 2 and "?" not in resto:
             resto = ""
+    # "Hola, soy el asistente de Alicia Rincón Estilistas. ¿En qué...?": el aviso ya la
+    # presenta; dejarlo sonaba a dos asistentes distintas (llamada de prueba, 24-sep-2026).
+    resto = _YA_SE_PRESENTA.sub("", resto, count=1).strip()
     # Nueva frase tras el aviso: mayuscula en la primera letra ("¿en qué" -> "¿En qué").
     for i, letra in enumerate(resto):
         if letra.isalpha():

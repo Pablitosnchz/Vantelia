@@ -134,12 +134,27 @@ def herramientas(cliente_id: str, config: Dict[str, Any], base_url: str, *,
     return salida
 
 
+# Voz mas estable que la de serie (0,5 / 0,8): en la primera llamada de prueba de un
+# negocio (24-sep-2026) Pablo noto que "a veces le cambiaba la voz". Mas estabilidad =
+# menos saltos de tono entre frases; mas parecido = mas fiel a la Laura original.
+AJUSTES_DE_VOZ = {"stability": 0.7, "similarity_boost": 0.9}
+
+
 def formato_de_audio(telefono: bool) -> Dict[str, Any]:
-    """Web a 44,1 kHz; telefono en u-law 8 kHz, lo que habla Twilio (entrada y salida)."""
+    """Web a 44,1 kHz; telefono en u-law 8 kHz, lo que habla Twilio (entrada y salida).
+    Lleva tambien los ajustes de voz, comunes a Sara y a los agentes de los negocios."""
     if telefono:
         return {"asr": {"user_input_audio_format": "ulaw_8000"},
-                "tts": {"agent_output_audio_format": "ulaw_8000"}}
-    return {"asr": {}, "tts": {"agent_output_audio_format": "pcm_44100"}}
+                "tts": dict(AJUSTES_DE_VOZ, agent_output_audio_format="ulaw_8000")}
+    return {"asr": {}, "tts": dict(AJUSTES_DE_VOZ, agent_output_audio_format="pcm_44100")}
+
+
+# Por telefono ya sabemos desde que numero llaman. En la primera llamada de prueba
+# (24-sep-2026) la agente se lo pidio igualmente a quien llamaba desde el.
+LLAMANTE_EN_EL_PROMPT = (
+    "\n\nTELEFONO DE QUIEN LLAMA: {{" + VARIABLE_LLAMANTE + "}}. Si aparece un numero, es el telefono "
+    "desde el que llama: usalo como su telefono al crear la cita y NO se lo pidas. Solo si dice que "
+    "quiere dar otro, usa el que te diga.")
 
 
 def agente_para(cliente_id: str, config: Dict[str, Any], base_url: str, *,
@@ -160,6 +175,7 @@ def agente_para(cliente_id: str, config: Dict[str, Any], base_url: str, *,
     }
     if telefono:
         agente["dynamic_variables"] = {"dynamic_variable_placeholders": {VARIABLE_LLAMANTE: ""}}
+        agente["prompt"]["prompt"] += LLAMANTE_EN_EL_PROMPT
     return {
         "name": "%s (%s)%s" % (nombre, cliente_id, " - telefono" if telefono else ""),
         "conversation_config": {

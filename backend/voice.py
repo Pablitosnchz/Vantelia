@@ -2555,14 +2555,16 @@ async def _voice_perform_booking(
         bono_redeemed = commerce.auto_redeem_package_for_booking(
             cliente_id, booking_id, extra_phone=telefono
         )
+    # El codigo va ya en palabras, cifra a cifra: convertido por el modelo se comia digitos.
+    codigo_hablado = textnorm.codigo_para_decir(booking_code)
     if booking_status == "pending_payment":
         voice_message = (
             f"Perfecto, la cita queda reservada para {fecha_voz} a {hora_voz}, pendiente de pago. "
-            f"Codigo {booking_code}."
+            f"Codigo: {codigo_hablado}."
         )
     else:
         voice_message = (
-            f"Perfecto, la cita queda confirmada para {fecha_voz} a {hora_voz}. Codigo {booking_code}."
+            f"Perfecto, la cita queda confirmada para {fecha_voz} a {hora_voz}. Codigo: {codigo_hablado}."
         )
     if bono_redeemed:
         left = int(bono_redeemed.get("sessions_left") or 0)
@@ -2608,6 +2610,7 @@ async def _voice_perform_booking(
         "ok": True,
         "booking_id": booking_id,
         "codigo_reserva": booking_code,
+        "codigo_para_decir": codigo_hablado,
         "fecha": booking_date,
         "hora": booking_time,
         "servicio": service_label,

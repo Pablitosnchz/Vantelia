@@ -42,6 +42,17 @@ def test_el_saludo_conserva_el_tono_del_negocio(api_module):
     assert saludo == "Hola cariño, soy la asistente virtual de Alicia Rincón. ¿En qué puedo ayudarte?"
 
 
+def test_no_se_presenta_dos_veces(api_module):
+    """Llamada de prueba (24-sep-2026): "soy la asistente virtual de Van. Soy el asistente
+    de Alicia Rincón Estilistas" sonaba a dos asistentes distintas."""
+    from backend import textnorm
+
+    saludo = textnorm._voice_default_greeting(
+        {"nombre": "Alicia Rincón", "bienvenida": "Hola, soy el asistente de Alicia Rincón Estilistas. "
+                                                  "¿En qué puedo ayudarte?"}, {})
+    assert saludo == "Hola, soy la asistente virtual de Alicia Rincón. ¿En qué puedo ayudarte?", saludo
+
+
 def test_si_la_bienvenida_ya_lo_dice_no_se_toca(api_module):
     from backend import textnorm
 
