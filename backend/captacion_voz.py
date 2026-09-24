@@ -131,6 +131,13 @@ def _db():
         creada TEXT NOT NULL, actualizada TEXT NOT NULL)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS no_llamar (
         telefono TEXT PRIMARY KEY, motivo TEXT NOT NULL DEFAULT '', creado TEXT NOT NULL)""")
+    columnas = {f[1] for f in conn.execute("PRAGMA table_info(llamadas_voz)")}
+    # origen: 'manual' (prueba desde el panel) o 'auto' (lanzador_llamadas).
+    # conversation_id: la conversacion de ElevenLabs, para leer la transcripcion.
+    for columna, tipo in (("origen", "TEXT NOT NULL DEFAULT 'manual'"),
+                          ("conversation_id", "TEXT NOT NULL DEFAULT ''")):
+        if columna not in columnas:
+            conn.execute("ALTER TABLE llamadas_voz ADD COLUMN %s %s" % (columna, tipo))
     return conn
 
 
@@ -251,7 +258,8 @@ def _numero_de_salida() -> str:
 
 
 def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *,
-           base_url: str = "", cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
+           origen: str = "manual", base_url: str = "",
+           cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
     """Apunta la llamada y pide a Twilio que marque. No marca si ese telefono pidio que no."""
     numero = telefono_e164(telefono)
     if not numero:
@@ -267,10 +275,11 @@ def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *
     llamada_id = "ll_" + secrets.token_urlsafe(9)
     ahora = _ahora()
     with _db() as conn:
-        conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, creada, "
-                     "actualizada) VALUES (?,?,?,?,?,?,?,?)",
+        conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, "
+                     "creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?)",
                      (llamada_id, numero, textnorm._sanitize_text(negocio)[:120],
-                      textnorm._sanitize_text(sector)[:80], str(prospecto or "")[:200], "marcando", ahora, ahora))
+                      textnorm._sanitize_text(sector)[:80], str(prospecto or "")[:200], "marcando",
+                      "auto" if origen == "auto" else "manual", ahora, ahora))
         conn.commit()
     base = (base_url or settings.APP_BASE_URL).rstrip("/")
     propio = cliente is None
@@ -348,7 +357,8 @@ def twiml_al_descolgar(llamada_id: str, respondio: str, desde: str, hacia: str,
         {"negocio": fila["negocio"] or "tu negocio", "sector": fila["sector"] or "un negocio con citas",
          VARIABLE_LLAMADA: llamada_id, "canal_envio": canal_de_envio(fila["telefono"], email_negocio),
          "email_negocio": email_hablado(email_negocio)}, cliente=cliente)
-    _actualizar(llamada_id, estado="en_curso")
+    _actualizar(llamada_id, estado="en_curso",
+                conversation_id=voz_elevenlabs.id_de_conversacion(twiml))
     return twiml
 
 

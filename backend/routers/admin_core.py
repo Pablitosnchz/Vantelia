@@ -38,6 +38,7 @@ from backend import (
     db,
     demo_agenda,
     emailing,
+    lanzador_llamadas,
     messaging,
     portal,
     rag,
@@ -492,7 +493,7 @@ async def admin_captacion_voz_agente() -> Dict[str, Any]:
 
 @app.post("/admin/captacion/voz/llamada-prueba", dependencies=[Depends(security._require_admin_token)])
 async def admin_captacion_voz_llamada(request: Request) -> Dict[str, Any]:
-    """Sara llama a UN telefono concreto (pruebas). No hay lanzador automatico todavia."""
+    """Sara llama a UN telefono concreto (pruebas). Las de captacion las hace el lanzador."""
     try:
         datos = await request.json()
     except Exception:  # noqa: BLE001
@@ -503,6 +504,53 @@ async def admin_captacion_voz_llamada(request: Request) -> Dict[str, Any]:
         return await timeutils._to_thread(
             captacion_voz.llamar, str(datos["telefono"]), str(datos.get("negocio") or "tu negocio"),
             str(datos.get("sector") or ""), str(datos.get("prospecto") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/admin/captacion/llamadas", dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_llamadas(limit: int = 100) -> Dict[str, Any]:
+    """Panel de llamadas de Sara: ajustes del lanzador, que falta para llamar, como va
+    hoy y las ultimas llamadas con su resultado."""
+    return await timeutils._to_thread(lanzador_llamadas.resumen, limit)
+
+
+@app.put("/admin/captacion/llamadas/config", dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_llamadas_config(request: Request) -> Dict[str, Any]:
+    try:
+        datos = await request.json()
+    except Exception:  # noqa: BLE001
+        datos = {}
+    if not isinstance(datos, dict):
+        raise HTTPException(status_code=400, detail="Cuerpo no valido.")
+    try:
+        return await timeutils._to_thread(
+            lanzador_llamadas.guardar_config,
+            activo=bool(datos["activo"]) if "activo" in datos else None,
+            cupo_diario=int(datos["cupo_diario"]) if datos.get("cupo_diario") is not None else None,
+            minutos_entre=int(datos["minutos_entre"]) if datos.get("minutos_entre") is not None else None)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Valores no validos.") from exc
+
+
+@app.post("/admin/captacion/llamadas/ronda", dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_llamadas_ronda() -> Dict[str, Any]:
+    """Una ronda ahora. Respeta las mismas reglas que el hilo (horario, cupo, Robinson)."""
+    return await timeutils._to_thread(lanzador_llamadas.ronda)
+
+
+@app.get("/admin/captacion/llamadas/{llamada_id}/transcripcion",
+         dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_llamada_transcripcion(llamada_id: str) -> Dict[str, Any]:
+    fila = await timeutils._to_thread(captacion_voz._fila, llamada_id)
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Llamada no encontrada.")
+    if not fila["conversation_id"]:
+        raise HTTPException(status_code=404, detail="Esta llamada no llego a hablar con Sara.")
+    try:
+        return await timeutils._to_thread(voz_elevenlabs.transcripcion, fila["conversation_id"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:

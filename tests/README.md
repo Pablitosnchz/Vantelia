@@ -25,6 +25,7 @@ python -m pytest -k senal             # por nombre
 | WhatsApp | todos los `test_wa_*.py` + `test_inbox_takeover.py` |
 | Voz | `test_voice_engine.py`, `test_voz_widget_limites.py` |
 | Comercio (bonos, tarjetas, tienda, POS) | `test_bonos_gift_journey.py`, `test_shop_public.py`, `test_pos_charge.py` |
+| Voz con ElevenLabs y llamadas de Sara | `test_voz_elevenlabs.py`, `test_captacion_voz.py`, `test_lanzador_llamadas.py` — a quién NO se llama y que sin Lista Robinson no suena nadie |
 | Widget web | `test_widget_reserva.py` |
 | Portal, roles y sesión | `test_sesion_deslizante.py`, `test_client_channels.py`, `test_admin_edge_cases_e2e.py` |
 | CRM | `test_crm_light.py` |

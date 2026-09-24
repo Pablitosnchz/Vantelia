@@ -156,6 +156,13 @@ ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uQw4jpKzMLrZuo0RLPS9").s
 # Numero desde el que Sara llama a los negocios de captacion (backend/captacion_voz.py).
 # Vacio = TWILIO_DEFAULT_PHONE_NUMBER. Para llamar a negocios, un 91 espanol.
 CAPTACION_TWILIO_NUMBER = os.getenv("CAPTACION_TWILIO_NUMBER", "").strip()
+# Lista Robinson (Adigital): credenciales de la API de empresa (backend/lista_robinson.py).
+# Sin ellas, Sara NO llama a nadie en frio.
+ROBINSON_API_KEY = os.getenv("ROBINSON_API_KEY", "").strip()
+ROBINSON_API_SECRET = os.getenv("ROBINSON_API_SECRET", "").strip()
+# Lanzador automatico de llamadas de captacion (backend/lanzador_llamadas.py). Primera de
+# sus tres llaves: sin 'true' ni arranca el hilo.
+CAPTACION_LLAMADAS_ENABLED = os.getenv("CAPTACION_LLAMADAS_ENABLED", "").strip().lower() == "true"
 # Modelo Realtime GA por defecto. Usamos el FULL (`gpt-realtime`): es bastante mas fiable
 # que el mini siguiendo instrucciones, llamando tools y entendiendo codigos/fechas (clave en
 # el navegador, que no tiene las redes deterministas del puente de Twilio). Override por

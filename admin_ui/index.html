@@ -1047,6 +1047,27 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   backdrop-filter: blur(8px);
 }
 .cap-modal[aria-hidden="false"] { display: grid; }
+/* Llamadas de Sara (captacion por telefono): reutiliza la piel cap-*. */
+[data-view="llamadas"] { min-width: 0; }
+.ll-blockers { margin: 8px 0 0; padding-left: 18px; color: var(--warning); font-size: 12px; display: grid; gap: 3px; }
+.ll-blockers:empty { display: none; }
+.ll-settings { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 18px; }
+.ll-settings label { display: grid; gap: 5px; color: var(--soft); font-size: 11px; }
+.ll-settings input[type="number"] { width: 120px; font-variant-numeric: tabular-nums; }
+.ll-settings .ll-switch { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; font-weight: 650; }
+.ll-settings__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.ll-result { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 750; white-space: nowrap; color: var(--soft); background: var(--surface-2); }
+.ll-result--interesado { color: var(--success); background: var(--success-soft, var(--surface-2)); }
+.ll-result--volver_a_llamar { color: var(--info); background: var(--info-soft); }
+.ll-result--no_llamar { color: var(--danger); background: var(--danger-soft); }
+.ll-result--en_curso { color: var(--accent); background: var(--accent-soft); }
+.ll-dialog { height: min(680px, calc(100vh - 48px)); width: min(720px, 100%); }
+.ll-transcript { overflow: auto; padding: 16px 19px; display: grid; align-content: start; gap: 10px; }
+.ll-turn { display: grid; gap: 3px; max-width: 85%; padding: 9px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; background: var(--surface-2); }
+.ll-turn--agente { justify-self: start; border: 1px solid var(--line); }
+.ll-turn--persona { justify-self: end; background: var(--accent-soft); }
+.ll-turn__who { color: var(--soft); font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.ll-summary { padding: 10px 12px; border-left: 3px solid var(--accent); color: var(--text-2); font-size: 12px; background: var(--surface-2); border-radius: 8px; }
 .cap-dialog {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -2576,6 +2597,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a2 2 0 0 0 2 2h1l4 4V5L6 9H5a2 2 0 0 0-2 2z"></path><path d="M16 8a5 5 0 0 1 0 8"></path><path d="M19 5a9 9 0 0 1 0 14"></path></svg></span>
           <span class="nav-text"><strong>Captacion</strong><span>Dashboard outbound</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="llamadas">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M21 3l-7 7"></path><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span>
+          <span class="nav-text"><strong>Llamadas</strong><span>Sara llama a negocios</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="instagram">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg></span>
           <span class="nav-text"><strong>Instagram</strong><span>Captacion via DM</span></span>
@@ -3750,6 +3775,81 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
       </section>
 
+      <section class="dashboard-view" data-view="llamadas">
+        <section class="cap-dashboard" aria-labelledby="llTitle">
+          <header class="cap-header">
+            <div class="cap-header__copy">
+              <span class="cap-eyebrow">Captación por teléfono</span>
+              <h2 id="llTitle">Llamadas de Sara</h2>
+              <p>Sara llama a fijos de la base de captación, de martes a viernes (10:00-12:30 y 16:00-18:00), tras consultar la Lista Robinson. Una llamada cada vez.</p>
+            </div>
+            <div class="cap-header__meta">
+              <span id="llStatus" class="cap-status"><span class="cap-status__dot" aria-hidden="true"></span><span>Cargando</span></span>
+              <button id="llRefreshBtn" class="ghost small cap-refresh" type="button">Actualizar</button>
+            </div>
+          </header>
+
+          <section id="llOperational" class="cap-operational" aria-live="polite">
+            <div class="cap-operational__summary">
+              <span class="cap-operational__indicator" aria-hidden="true"></span>
+              <div>
+                <h3 id="llOperationalTitle">Comprobando el lanzador</h3>
+                <p id="llOperationalDetail">—</p>
+                <ul id="llBlockers" class="ll-blockers"></ul>
+              </div>
+            </div>
+            <dl class="cap-operational__facts">
+              <div><dt>Última ronda</dt><dd id="llLastRound">—</dd></div>
+              <div><dt>Automáticas hoy</dt><dd id="llToday">—</dd></div>
+              <div><dt>Interesados</dt><dd id="llInterested">—</dd></div>
+              <div><dt>No llamar</dt><dd id="llDoNotCall">—</dd></div>
+            </dl>
+          </section>
+
+          <article class="cap-card" aria-labelledby="llSettingsTitle">
+            <div class="cap-card__header">
+              <div><span class="cap-card__eyebrow">Lanzador automático</span><h3 id="llSettingsTitle">Ajustes</h3></div>
+              <span class="cap-card__hint">Apagado de serie</span>
+            </div>
+            <form id="llSettingsForm" class="ll-settings">
+              <label class="ll-switch"><input id="llActive" type="checkbox"> <span>Llamar automáticamente</span></label>
+              <label>Llamadas al día <input id="llQuota" type="number" min="1" max="40" step="1"></label>
+              <label>Minutos entre llamadas <input id="llGap" type="number" min="5" max="120" step="1"></label>
+              <div class="ll-settings__actions">
+                <button class="secondary small" type="submit">Guardar ajustes</button>
+                <button id="llRoundBtn" class="ghost small" type="button">Hacer una ronda ahora</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="cap-card" aria-labelledby="llCallsTitle">
+            <div class="cap-card__header">
+              <div><span class="cap-card__eyebrow">Últimas 100</span><h3 id="llCallsTitle">Llamadas</h3></div>
+            </div>
+            <div class="cap-table-wrap">
+              <table class="cap-table">
+                <thead><tr><th>Fecha</th><th>Negocio</th><th>Teléfono</th><th>Origen</th><th>Resultado</th><th>Notas</th><th class="cap-table__action">Conversación</th></tr></thead>
+                <tbody id="llCallsBody"><tr><td colspan="7"><div class="cap-state cap-state--loading">Cargando llamadas…</div></td></tr></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <div id="llModal" class="cap-modal" aria-hidden="true">
+          <section class="cap-dialog ll-dialog" role="dialog" aria-modal="true" aria-labelledby="llDialogTitle" tabindex="-1">
+            <header class="cap-dialog__header">
+              <div>
+                <span class="cap-eyebrow">Transcripción</span>
+                <h3 id="llDialogTitle">Conversación</h3>
+                <p id="llDialogSubtitle" class="cap-dialog__subtitle"></p>
+              </div>
+              <button id="llDialogClose" class="ghost small" type="button">Cerrar</button>
+            </header>
+            <div id="llDialogBody" class="cap-dialog__body ll-transcript"></div>
+          </section>
+        </div>
+      </section>
+
       <section class="dashboard-view" data-view="instagram">
         <section class="card panel">
           <div class="section-header">
@@ -4330,6 +4430,8 @@ tbody tr:last-child td { border-bottom: none; }
         try { window.__tkInit && window.__tkInit(); } catch(e) { console.warn(e); }
       } else if (nextView === "voice") {
         try { window.__voiceInit && window.__voiceInit(); } catch(e) { console.warn(e); }
+      } else if (nextView === "llamadas") {
+        try { window.__llInit && window.__llInit(); } catch(e) { console.warn(e); }
       }
       if (isMobileSidebar()) closeSidebar();
     }
@@ -8700,6 +8802,166 @@ tbody tr:last-child td { border-bottom: none; }
       };
     })();
     // === END VOICE PANEL ========================================
+
+    // === LLAMADAS DE SARA (captacion por telefono) ===============
+    // Backend: backend/lanzador_llamadas.py + /admin/captacion/llamadas*.
+    (function() {
+      const LQ = (s) => document.querySelector(s);
+      const RESULTADOS = {
+        interesado: "Interesado", volver_a_llamar: "Volver a llamar", no_llamar: "No llamar",
+        no_contesta: "No contesta", ocupado: "Ocupado", contestador: "Contestador", fallida: "Fallida",
+      };
+      const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const fecha = (iso) => {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        return isNaN(d) ? iso : d.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      };
+      let ultimo = null;
+
+      function etiqueta(ll) {
+        if (ll.resultado) return [ll.resultado, RESULTADOS[ll.resultado] || ll.resultado];
+        if (ll.estado === "marcando") return ["en_curso", "Marcando"];
+        if (ll.estado === "en_curso") return ["en_curso", "En curso"];
+        return ["", ll.conversation_id ? "Habló, sin acción" : "Sin resultado"];
+      }
+
+      function pintar(d) {
+        ultimo = d;
+        const cfg = d.config || {};
+        const bloqueos = d.bloqueos || [];
+        const activo = !!cfg.activo;
+        let clase = "paused", titulo = "Apagado", detalle = "Sara no llama a nadie hasta que enciendas el lanzador.";
+        if (bloqueos.length) {
+          clase = "error";
+          titulo = activo ? "Encendido, pero no puede llamar" : "Apagado · falta configuración";
+          detalle = "Lo que falta para poder llamar:";
+        } else if (activo && d.en_horario) {
+          clase = "active"; titulo = "Llamando"; detalle = cfg.ultimo_motivo || "Esperando la siguiente ronda.";
+        } else if (activo) {
+          clase = "running"; titulo = "Encendido · fuera de horario";
+          detalle = "Llama de martes a viernes, 10:00-12:30 y 16:00-18:00 (hora de Madrid).";
+        }
+        const pill = LQ("#llStatus");
+        pill.className = "cap-status cap-status--" + clase;
+        pill.innerHTML = `<span class="cap-status__dot" aria-hidden="true"></span><span>${esc(titulo)}</span>`;
+        LQ("#llOperational").className = "cap-operational cap-operational--" + clase;
+        LQ("#llOperationalTitle").textContent = titulo;
+        LQ("#llOperationalDetail").textContent = detalle;
+        LQ("#llBlockers").innerHTML = bloqueos.map((b) => `<li>${esc(b)}</li>`).join("");
+        LQ("#llLastRound").textContent = cfg.ultima_ronda ? fecha(cfg.ultima_ronda) : "—";
+        LQ("#llLastRound").title = cfg.ultimo_motivo || "";
+        LQ("#llToday").textContent = `${(d.hoy || {}).auto || 0} de ${cfg.cupo_diario || 0}`;
+        LQ("#llInterested").textContent = String((d.por_resultado || {}).interesado || 0);
+        LQ("#llDoNotCall").textContent = String(d.no_llamar || 0);
+        const form = LQ("#llSettingsForm");
+        if (!form.contains(document.activeElement)) {
+          LQ("#llActive").checked = activo;
+          LQ("#llQuota").value = cfg.cupo_diario || 8;
+          LQ("#llGap").value = cfg.minutos_entre || 12;
+        }
+        const filas = (d.llamadas || []).map((ll) => {
+          const [clave, texto] = etiqueta(ll);
+          const boton = ll.conversation_id
+            ? `<button class="ghost small" type="button" data-ll-transcript="${esc(ll.id)}">Leer</button>` : "—";
+          return `<tr>
+            <td>${esc(fecha(ll.creada))}</td>
+            <td><div class="cap-company"><strong>${esc(ll.negocio || "—")}</strong><span>${esc(ll.sector || ll.prospecto || "")}</span></div></td>
+            <td>${esc(ll.telefono)}</td>
+            <td>${ll.origen === "auto" ? "Automática" : "Manual"}</td>
+            <td><span class="ll-result ${clave ? "ll-result--" + esc(clave) : ""}">${esc(texto)}</span></td>
+            <td>${esc(ll.notas || ll.email || "")}</td>
+            <td class="cap-table__action">${boton}</td>
+          </tr>`;
+        });
+        LQ("#llCallsBody").innerHTML = filas.length ? filas.join("")
+          : `<tr><td colspan="7"><div class="cap-state">Todavía no hay llamadas.</div></td></tr>`;
+      }
+
+      async function cargar() {
+        try {
+          pintar(await api("/admin/captacion/llamadas?limit=100"));
+        } catch (error) {
+          LQ("#llCallsBody").innerHTML = `<tr><td colspan="7"><div class="cap-state cap-state--error">${esc(error.message)}</div></td></tr>`;
+        }
+      }
+
+      async function guardar(event) {
+        event.preventDefault();
+        const activo = LQ("#llActive").checked;
+        if (activo && !(ultimo && ultimo.config && ultimo.config.activo)) {
+          const ok = await confirmDialog({
+            title: "¿Encender las llamadas automáticas?",
+            bodyHtml: "Sara empezará a llamar a negocios reales de la base de captación, dentro del horario y del cupo diario. Puedes apagarlo cuando quieras.",
+            confirmLabel: "Encender",
+          });
+          if (!ok) { LQ("#llActive").checked = false; return; }
+        }
+        try {
+          await api("/admin/captacion/llamadas/config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ activo, cupo_diario: Number(LQ("#llQuota").value), minutos_entre: Number(LQ("#llGap").value) }),
+          });
+          toast("Ajustes guardados", "success");
+          cargar();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      }
+
+      async function ronda() {
+        const boton = LQ("#llRoundBtn");
+        boton.disabled = true;
+        try {
+          const salida = await api("/admin/captacion/llamadas/ronda", { method: "POST" });
+          toast(salida.motivo || "Ronda hecha", salida.llamada ? "success" : "warning");
+          cargar();
+        } catch (error) {
+          toast(error.message, "error");
+        } finally {
+          boton.disabled = false;
+        }
+      }
+
+      function cerrar() { LQ("#llModal").setAttribute("aria-hidden", "true"); }
+
+      async function transcripcion(id) {
+        const ll = ((ultimo && ultimo.llamadas) || []).find((x) => x.id === id) || {};
+        LQ("#llDialogTitle").textContent = ll.negocio || "Conversación";
+        LQ("#llDialogSubtitle").textContent = `${ll.telefono || ""} · ${fecha(ll.creada)}`;
+        const cuerpo = LQ("#llDialogBody");
+        cuerpo.innerHTML = `<div class="cap-state cap-state--loading">Cargando transcripción…</div>`;
+        LQ("#llModal").setAttribute("aria-hidden", "false");
+        try {
+          const t = await api(`/admin/captacion/llamadas/${encodeURIComponent(id)}/transcripcion`);
+          const duracion = t.duracion ? `<div class="cap-card__hint">Duración: ${Math.round(t.duracion)} s</div>` : "";
+          const resumen = t.resumen ? `<div class="ll-summary">${esc(t.resumen)}</div>` : "";
+          const turnos = (t.turnos || []).map((x) => `<div class="ll-turn ll-turn--${x.quien === "agente" ? "agente" : "persona"}">
+              <span class="ll-turn__who">${x.quien === "agente" ? "Sara" : "Negocio"}</span>${esc(x.texto)}</div>`).join("");
+          cuerpo.innerHTML = duracion + resumen + (turnos || `<div class="cap-state">Sin turnos en la transcripción.</div>`);
+        } catch (error) {
+          cuerpo.innerHTML = `<div class="cap-state cap-state--error">${esc(error.message)}</div>`;
+        }
+      }
+
+      LQ("#llRefreshBtn")?.addEventListener("click", cargar);
+      LQ("#llSettingsForm")?.addEventListener("submit", guardar);
+      LQ("#llRoundBtn")?.addEventListener("click", ronda);
+      LQ("#llDialogClose")?.addEventListener("click", cerrar);
+      LQ("#llModal")?.addEventListener("click", (event) => { if (event.target === LQ("#llModal")) cerrar(); });
+      LQ("#llCallsBody")?.addEventListener("click", (event) => {
+        const boton = event.target.closest("[data-ll-transcript]");
+        if (boton) transcripcion(boton.dataset.llTranscript);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && LQ("#llModal")?.getAttribute("aria-hidden") === "false") cerrar();
+      });
+
+      window.__llInit = cargar;
+    })();
+    // === END LLAMADAS DE SARA ====================================
   </script>
 
   <div class="vtoast" id="vtoast" role="status" aria-live="polite"></div>

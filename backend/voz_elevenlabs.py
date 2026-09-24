@@ -22,6 +22,7 @@ en `config['voice']['elevenlabs_agent_id']`. Sin `ELEVENLABS_API_KEY` y
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -180,8 +181,11 @@ def guardar_en_voz(cliente_id: str, clave: str, valor: str) -> None:
     clients._update_runtime_configs(siguientes)
 
 
-def _tool_ids(cliente: httpx.Client, agent_id: str) -> List[str]:
+def _tool_ids(cliente: httpx.Client, agent_id: str) -> Optional[List[str]]:
+    """Las tools del agente, o None si el agente no existe en esta cuenta."""
     r = cliente.get("%s/v1/convai/agents/%s" % (API, agent_id), headers=_cabeceras())
+    if r.status_code == 404:
+        return None
     r.raise_for_status()
     prompt = ((r.json().get("conversation_config") or {}).get("agent") or {}).get("prompt") or {}
     return list(prompt.get("tool_ids") or [])
@@ -193,7 +197,15 @@ def publicar_agente(cliente: httpx.Client, cuerpo: Dict[str, Any], agent_id: str
     Cada guardado con tools en linea crea herramientas nuevas en la cuenta; las que el
     agente deja de usar se borran para que no se acumulen (una por tool y guardado).
     """
-    antes: List[str] = _tool_ids(cliente, agent_id) if agent_id else []
+    antes: List[str] = []
+    if agent_id:
+        previas = _tool_ids(cliente, agent_id)
+        if previas is None:
+            # El id guardado es de otra cuenta (se cambio la clave de ElevenLabs, 24-sep-2026):
+            # se crea uno nuevo en la cuenta actual en vez de fallar.
+            agent_id = ""
+        else:
+            antes = previas
     if agent_id:
         r = cliente.patch("%s/v1/convai/agents/%s" % (API, agent_id), headers=_cabeceras(), json=cuerpo)
     else:
@@ -201,7 +213,7 @@ def publicar_agente(cliente: httpx.Client, cuerpo: Dict[str, Any], agent_id: str
     if r.status_code >= 400:
         raise RuntimeError("ElevenLabs rechazo el agente (%s): %s" % (r.status_code, r.text[:300]))
     agent_id = agent_id or str(r.json()["agent_id"])
-    ahora = set(_tool_ids(cliente, agent_id))
+    ahora = set(_tool_ids(cliente, agent_id) or [])
     for viejo in antes:
         if viejo not in ahora:
             cliente.delete("%s/v1/convai/tools/%s" % (API, viejo), headers=_cabeceras(),
@@ -271,3 +283,35 @@ def twiml_registrar_llamada(agent_id: str, desde: str, hacia: str, direccion: st
     if r.status_code >= 400 or "<Response" not in r.text:
         raise RuntimeError("ElevenLabs no registro la llamada (%s): %s" % (r.status_code, r.text[:200]))
     return r.text
+
+
+def id_de_conversacion(twiml: str) -> str:
+    """El TwiML de register-call lleva la conversacion como <Parameter>: con ella se
+    lee despues la transcripcion. "" si no viene."""
+    encontrado = re.search(r'name="conversation_id"\s+value="([A-Za-z0-9_-]+)"', twiml or "")
+    return encontrado.group(1) if encontrado else ""
+
+
+def transcripcion(conversation_id: str, cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
+    """Lo que se dijo en una conversacion: turnos, duracion y el resumen de ElevenLabs."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,80}", conversation_id or ""):
+        raise ValueError("Conversacion no valida.")
+    propio = cliente is None
+    cliente = cliente or httpx.Client(timeout=20.0)
+    try:
+        r = cliente.get(API + "/v1/convai/conversations/" + conversation_id, headers=_cabeceras())
+    finally:
+        if propio:
+            cliente.close()
+    if r.status_code >= 400:
+        raise RuntimeError("ElevenLabs no devolvio la conversacion (%s)." % r.status_code)
+    datos = r.json() or {}
+    turnos = []
+    for turno in datos.get("transcript") or []:
+        texto = str(turno.get("message") or "").strip()
+        if texto:
+            turnos.append({"quien": "agente" if turno.get("role") == "agent" else "persona",
+                           "texto": texto, "segundo": turno.get("time_in_call_secs")})
+    return {"estado": str(datos.get("status") or ""), "turnos": turnos,
+            "duracion": (datos.get("metadata") or {}).get("call_duration_secs"),
+            "resumen": str((datos.get("analysis") or {}).get("transcript_summary") or "")}

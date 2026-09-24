@@ -175,6 +175,44 @@ def test_sincronizar_crea_guarda_el_id_y_luego_actualiza(api_module, configurado
     appstate.CONFIG_CLIENTES["demo"]["voice"].pop("elevenlabs_agent_id_telefono", None)
 
 
+class _CuentaNueva(_ElevenLabsFalso):
+    """Otra cuenta de ElevenLabs: los agentes guardados no existen en ella."""
+
+    def get(self, url, **k):
+        if url.endswith("/agent_de_la_cuenta_vieja"):
+            self.peticiones.append(("GET", url))
+            return _Respuesta(404, {"detail": "not_found"})
+        return super().get(url, **k)
+
+
+def test_con_una_clave_de_otra_cuenta_se_crean_agentes_nuevos(api_module, configurado, monkeypatch):  # noqa: F811
+    """24-sep-2026: Pablo paso a una cuenta Creator nueva. Los ids guardados eran de la
+    vieja y sincronizar tiraba un 500 en vez de crear los agentes en la cuenta actual."""
+    from backend import appstate, clients, voz_elevenlabs
+
+    monkeypatch.setattr(clients, "_persist_configs_to_disk", lambda configs: None)
+    voz = api_module.CONFIG_CLIENTES["demo"].setdefault("voice", {})
+    voz["elevenlabs_agent_id"] = voz["elevenlabs_agent_id_telefono"] = "agent_de_la_cuenta_vieja"
+    falso = _CuentaNueva()
+    salida = voz_elevenlabs.sincronizar_agente("demo", base_url="https://app.test", cliente=falso)
+    assert salida["agent_id"] == salida["agente_telefono"] == "agent_prueba"
+    metodos = [m for m, _ in falso.peticiones]
+    assert "PATCH" not in metodos and metodos.count("POST") == 2
+    assert appstate.CONFIG_CLIENTES["demo"]["voice"]["elevenlabs_agent_id"] == "agent_prueba"
+    assert appstate.CONFIG_CLIENTES["demo"]["voice"]["elevenlabs_agent_id_telefono"] == "agent_prueba"
+    appstate.CONFIG_CLIENTES["demo"]["voice"].pop("elevenlabs_agent_id", None)
+    appstate.CONFIG_CLIENTES["demo"]["voice"].pop("elevenlabs_agent_id_telefono", None)
+
+
+def test_el_id_de_conversacion_sale_del_twiml():
+    from backend import voz_elevenlabs
+
+    twiml = ('<?xml version="1.0"?><Response><Connect><Stream url="wss://x">'
+             '<Parameter name="conversation_id" value="conv_01abcXYZ" /></Stream></Connect></Response>')
+    assert voz_elevenlabs.id_de_conversacion(twiml) == "conv_01abcXYZ"
+    assert voz_elevenlabs.id_de_conversacion("<Response/>") == ""
+
+
 # --- Telefono de los negocios ------------------------------------------------
 
 

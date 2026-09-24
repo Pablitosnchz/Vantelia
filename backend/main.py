@@ -151,6 +151,13 @@ def _start_background_workers() -> None:
         appstate.booking_reminder_thread.start()
         appstate.register_worker("booking-reminders", appstate.booking_reminder_thread)
 
+    # Llamadas de captacion de Sara: solo arranca con CAPTACION_LLAMADAS_ENABLED=true.
+    from backend import lanzador_llamadas
+
+    hilo_llamadas = lanzador_llamadas.arrancar()
+    if hilo_llamadas is not None:
+        appstate.register_worker("captacion-llamadas", hilo_llamadas)
+
     if messaging._voice_twilio_configured():
         settings.logger.info("Voice channel enabled (Twilio configurado).")
     else:
@@ -167,6 +174,9 @@ def _stop_background_workers() -> None:
     instagram.ig_autopilot_stop.set()
     instagram.ig_campaign_stop.set()
     tiktok.tk_campaign_stop.set()
+    from backend import lanzador_llamadas
+
+    lanzador_llamadas.parar.set()
 
 
 @asynccontextmanager
