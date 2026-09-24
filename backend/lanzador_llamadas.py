@@ -26,9 +26,10 @@ REGLAS (Circular AEPD 1/2023 y sentido comun)
 - Maximo 2 intentos por telefono, separados 2 dias, y solo si el primero no lo cogio
   nadie. Si hubo conversacion, no se vuelve a llamar solo.
 - Nada de llamar a quien recibio un correo nuestro hace menos de 3 dias.
-- De martes a viernes, 10:00-12:30 y 16:00-18:00 (hora de Madrid). Criterio inicial
-  (24-sep-2026): el lunes cierran muchas peluquerias y barberias, y a primera hora
-  y a mediodia estan con clientas.
+- De lunes a viernes, 10:00-12:30 y 16:00-18:00 (hora de Madrid): a primera hora y a
+  mediodia estan con clientas. El lunes lo anadio Pablo (24-sep-2026); el criterio
+  inicial lo dejaba fuera porque cierran muchas peluquerias, y a esas no les coge
+  nadie: la llamada se queda en "no contesta" y cuenta como intento.
 - Una llamada cada vez, con un hueco minimo entre dos (config) y un cupo diario.
 """
 from __future__ import annotations
@@ -48,7 +49,7 @@ except ImportError:  # pragma: no cover - Python 3.8
 from backend import captacion_voz, clients, cuenta_elevenlabs, lista_robinson, settings, timeutils, voz_elevenlabs
 
 ZONA = ZoneInfo("Europe/Madrid")
-DIAS_DE_LLAMADA = (1, 2, 3, 4)  # martes a viernes
+DIAS_DE_LLAMADA = (0, 1, 2, 3, 4)  # lunes a viernes
 FRANJAS = ((time(10, 0), time(12, 30)), (time(16, 0), time(18, 0)))
 MAX_INTENTOS = 2
 DIAS_ENTRE_INTENTOS = 2
@@ -247,7 +248,7 @@ def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
     if faltan:
         return _motivo(faltan[0], ahora)
     if not en_horario(ahora):
-        return _motivo("Fuera de horario (martes a viernes, 10:00-12:30 y 16:00-18:00).", ahora)
+        return _motivo("Fuera de horario (lunes a viernes, 10:00-12:30 y 16:00-18:00).", ahora)
     with _db() as conn:
         hoy = conn.execute("SELECT COUNT(*) FROM llamadas_voz WHERE origen='auto' AND creada >= ?",
                            (_iso(_inicio_del_dia(ahora)),)).fetchone()[0]

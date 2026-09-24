@@ -239,7 +239,8 @@ def test_solo_fijos_y_nunca_a_quien_no_toca(lanzador):
 
 
 @pytest.mark.parametrize("ahora,llama", [
-    (datetime(2026, 9, 28, 8, 30, tzinfo=timezone.utc), False),   # lunes 10:30
+    (datetime(2026, 9, 28, 8, 30, tzinfo=timezone.utc), True),    # lunes 10:30 (Pablo lo anadio el 24-sep)
+    (datetime(2026, 9, 27, 8, 30, tzinfo=timezone.utc), False),   # domingo 10:30
     (datetime(2026, 9, 29, 11, 0, tzinfo=timezone.utc), False),   # martes 13:00
     (datetime(2026, 9, 29, 14, 30, tzinfo=timezone.utc), True),   # martes 16:30
     (datetime(2026, 9, 29, 16, 0, tzinfo=timezone.utc), False),   # martes 18:00
