@@ -44,7 +44,7 @@ try:
 except ImportError:  # pragma: no cover - Python 3.8
     from backports.zoneinfo import ZoneInfo
 
-from backend import captacion_voz, clients, lista_robinson, settings, timeutils, voz_elevenlabs
+from backend import captacion_voz, clients, cuenta_elevenlabs, lista_robinson, settings, timeutils, voz_elevenlabs
 
 ZONA = ZoneInfo("Europe/Madrid")
 DIAS_DE_LLAMADA = (1, 2, 3, 4)  # martes a viernes
@@ -124,6 +124,11 @@ def bloqueos() -> List[str]:
     elif not str((clients._get_client_config(captacion_voz.TENANT).get("voice") or {})
                  .get(captacion_voz.CLAVE_AGENTE) or ""):
         faltan.append("La agente de captacion no esta creada en ElevenLabs.")
+    else:
+        # Cuenta sin plan o sin creditos: quien descolgase oiria colgar (cuenta_elevenlabs).
+        cuenta = cuenta_elevenlabs.estado()
+        if not cuenta["ok"]:
+            faltan.append(cuenta["problema"])
     return faltan
 
 
@@ -311,6 +316,7 @@ def resumen(limite: int = 100) -> Dict[str, Any]:
         no_llamar = conn.execute("SELECT COUNT(*) FROM no_llamar").fetchone()[0]
     return {
         "config": config(), "bloqueos": bloqueos(), "en_horario": en_horario(ahora),
+        "cuenta_voz": cuenta_elevenlabs.estado() if voz_elevenlabs.configurado() else {},
         "hilo_vivo": bool(hilo and hilo.is_alive()),
         "hoy": {str(o or "manual"): n for o, n in hoy},
         "por_resultado": {str(r or "sin_resultado"): n for r, n in por_resultado},

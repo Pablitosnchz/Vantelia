@@ -36,7 +36,10 @@ def lanzador(api_module, monkeypatch, tmp_path):  # noqa: F811
     original = clients._get_client_config
     monkeypatch.setattr(clients, "_get_client_config", lambda cid: (
         {"voice": {captacion_voz.CLAVE_AGENTE: "agent_sara"}} if cid == captacion_voz.TENANT else original(cid)))
-    from backend import lanzador_llamadas
+    from backend import cuenta_elevenlabs, lanzador_llamadas
+
+    # Cuenta de ElevenLabs sana (la caida se prueba en test_cuenta_elevenlabs.py).
+    monkeypatch.setattr(cuenta_elevenlabs, "estado", lambda **k: {"ok": True, "tipo": "", "problema": "", "aviso": ""})
 
     return lanzador_llamadas
 

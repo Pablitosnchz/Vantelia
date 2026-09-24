@@ -176,13 +176,28 @@ def test_sincronizar_crea_guarda_el_id_y_luego_actualiza(api_module, configurado
 
 
 class _CuentaNueva(_ElevenLabsFalso):
-    """Otra cuenta de ElevenLabs: los agentes guardados no existen en ella."""
+    """Otra cuenta de ElevenLabs: ni los agentes guardados ni la voz de Laura estan en ella."""
+
+    def __init__(self):
+        super().__init__()
+        self.voces = set()
 
     def get(self, url, **k):
         if url.endswith("/agent_de_la_cuenta_vieja"):
             self.peticiones.append(("GET", url))
             return _Respuesta(404, {"detail": "not_found"})
+        if "/v1/voices/" in url:
+            self.peticiones.append(("GET", url))
+            voz = url.rsplit("/", 1)[1]
+            return _Respuesta(200, {"voice_id": voz}) if voz in self.voces else _Respuesta(400, {"detail": "voice_not_found"})
         return super().get(url, **k)
+
+    def post(self, url, **k):
+        if "/v1/voices/add/" in url:
+            self.peticiones.append(("POST", url))
+            self.voces.add(url.rsplit("/", 1)[1])
+            return _Respuesta(200, {"voice_id": url.rsplit("/", 1)[1]})
+        return super().post(url, **k)
 
 
 def test_con_una_clave_de_otra_cuenta_se_crean_agentes_nuevos(api_module, configurado, monkeypatch):  # noqa: F811
@@ -197,7 +212,12 @@ def test_con_una_clave_de_otra_cuenta_se_crean_agentes_nuevos(api_module, config
     salida = voz_elevenlabs.sincronizar_agente("demo", base_url="https://app.test", cliente=falso)
     assert salida["agent_id"] == salida["agente_telefono"] == "agent_prueba"
     metodos = [m for m, _ in falso.peticiones]
-    assert "PATCH" not in metodos and metodos.count("POST") == 2
+    assert "PATCH" not in metodos
+    creados = [u for m, u in falso.peticiones if m == "POST" and u.endswith("/v1/convai/agents/create")]
+    assert len(creados) == 2
+    anadidas = [u for m, u in falso.peticiones if m == "POST" and "/v1/voices/add/" in u]
+    assert len(anadidas) == 1 and anadidas[0].endswith("/" + voz_elevenlabs.settings.ELEVENLABS_VOICE_ID), (
+        "la voz de Laura se anade a la cuenta nueva, una sola vez")
     assert appstate.CONFIG_CLIENTES["demo"]["voice"]["elevenlabs_agent_id"] == "agent_prueba"
     assert appstate.CONFIG_CLIENTES["demo"]["voice"]["elevenlabs_agent_id_telefono"] == "agent_prueba"
     appstate.CONFIG_CLIENTES["demo"]["voice"].pop("elevenlabs_agent_id", None)

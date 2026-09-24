@@ -51,6 +51,10 @@ CREDENCIALES_QUE_NO_ENTRAN_EN_TESTS = (
     "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_APP_SECRET",
     # Modelo de pago
     "OPENAI_API_KEY",
+    # Voz de pago y consultas externas: ElevenLabs (crearia agentes en la cuenta real)
+    # y la Lista Robinson (consultas de verdad a Adigital)
+    "ELEVENLABS_API_KEY", "ELEVENLABS_TOOL_SECRET", "ROBINSON_API_KEY", "ROBINSON_API_SECRET",
+    "CAPTACION_TWILIO_NUMBER",
 )
 
 for _clave in CREDENCIALES_QUE_NO_ENTRAN_EN_TESTS:

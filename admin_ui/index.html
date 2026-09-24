@@ -1056,6 +1056,10 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .ll-settings input[type="number"] { width: 120px; font-variant-numeric: tabular-nums; }
 .ll-settings .ll-switch { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; font-weight: 650; }
 .ll-settings__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.ll-account { margin: 14px 0 0; color: var(--soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ll-account:empty { display: none; }
+.ll-account--warn { color: var(--warning); }
+.ll-account--error { color: var(--danger); }
 .ll-result { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 750; white-space: nowrap; color: var(--soft); background: var(--surface-2); }
 .ll-result--interesado { color: var(--success); background: var(--success-soft, var(--surface-2)); }
 .ll-result--volver_a_llamar { color: var(--info); background: var(--info-soft); }
@@ -3820,6 +3824,7 @@ tbody tr:last-child td { border-bottom: none; }
                 <button id="llRoundBtn" class="ghost small" type="button">Hacer una ronda ahora</button>
               </div>
             </form>
+            <p id="llAccount" class="ll-account"></p>
           </article>
 
           <article class="cap-card" aria-labelledby="llCallsTitle">
@@ -8855,6 +8860,18 @@ tbody tr:last-child td { border-bottom: none; }
         LQ("#llToday").textContent = `${(d.hoy || {}).auto || 0} de ${cfg.cupo_diario || 0}`;
         LQ("#llInterested").textContent = String((d.por_resultado || {}).interesado || 0);
         LQ("#llDoNotCall").textContent = String(d.no_llamar || 0);
+        const cv = d.cuenta_voz || {};
+        const cuenta = LQ("#llAccount");
+        if (cv.problema || cv.aviso) {
+          cuenta.textContent = `Voz (ElevenLabs): ${cv.problema || cv.aviso}`;
+        } else if (cv.plan) {
+          const numero = (n) => Number(n || 0).toLocaleString("es-ES");
+          const renueva = cv.renueva ? ` · se renuevan el ${new Date(cv.renueva).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}` : "";
+          cuenta.textContent = `Voz (ElevenLabs): plan ${cv.plan} · quedan ${numero(cv.limite - cv.usados)} de ${numero(cv.limite)} créditos${renueva}`;
+        } else {
+          cuenta.textContent = "";
+        }
+        cuenta.className = "ll-account" + (cv.problema ? " ll-account--error" : cv.aviso ? " ll-account--warn" : "");
         const form = LQ("#llSettingsForm");
         if (!form.contains(document.activeElement)) {
           LQ("#llActive").checked = activo;

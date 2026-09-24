@@ -191,12 +191,35 @@ def _tool_ids(cliente: httpx.Client, agent_id: str) -> Optional[List[str]]:
     return list(prompt.get("tool_ids") or [])
 
 
+# Voces de la biblioteca de ElevenLabs que usamos: id -> (dueno publico, nombre). Con el
+# dueno se anade la voz a una cuenta nueva y conserva el mismo id.
+VOCES_DE_BIBLIOTECA = {
+    "uQw4jpKzMLrZuo0RLPS9": ("a878d61205d24b1a767fae2ab15c6dcf56cebdf388f11c8ad6a80f5a20e137f1",
+                             "Laura - Customer service"),
+}
+
+
+def asegurar_voz(cliente: httpx.Client, voice_id: str) -> None:
+    """La voz tiene que estar en la cuenta de la clave: en una cuenta nueva no esta
+    (cambio a otra cuenta Creator, 24-sep-2026). Si es de la biblioteca, se anade."""
+    dueno = VOCES_DE_BIBLIOTECA.get(voice_id)
+    if not dueno:
+        return
+    if cliente.get("%s/v1/voices/%s" % (API, voice_id), headers=_cabeceras()).status_code == 200:
+        return
+    r = cliente.post("%s/v1/voices/add/%s/%s" % (API, dueno[0], voice_id), headers=_cabeceras(),
+                     json={"new_name": dueno[1]})
+    if r.status_code >= 400:
+        raise RuntimeError("No se pudo anadir la voz %s a la cuenta (%s): %s" % (dueno[1], r.status_code, r.text[:200]))
+
+
 def publicar_agente(cliente: httpx.Client, cuerpo: Dict[str, Any], agent_id: str = "") -> str:
     """Crea (sin id) o actualiza (con id) un agente. Devuelve su id.
 
     Cada guardado con tools en linea crea herramientas nuevas en la cuenta; las que el
     agente deja de usar se borran para que no se acumulen (una por tool y guardado).
     """
+    asegurar_voz(cliente, str(((cuerpo.get("conversation_config") or {}).get("tts") or {}).get("voice_id") or ""))
     antes: List[str] = []
     if agent_id:
         previas = _tool_ids(cliente, agent_id)
