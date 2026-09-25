@@ -191,8 +191,14 @@ def agente_para(cliente_id: str, config: Dict[str, Any], base_url: str, *,
 
 
 def guardar_en_voz(cliente_id: str, clave: str, valor: str) -> None:
+    """Guarda un dato de voz del negocio. Vacio = quitarlo: la vuelta atras de una rotacion
+    tiene que dejar SIN agente de telefono a quien no lo tenia (revision de Astra, 25-sep)."""
     siguientes = copy.deepcopy(appstate.CONFIG_CLIENTES)
-    siguientes[cliente_id].setdefault("voice", {})[clave] = valor
+    voz = siguientes[cliente_id].setdefault("voice", {})
+    if valor:
+        voz[clave] = valor
+    else:
+        voz.pop(clave, None)
     clients._persist_configs_to_disk(siguientes)
     clients._update_runtime_configs(siguientes)
 

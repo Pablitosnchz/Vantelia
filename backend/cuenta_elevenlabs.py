@@ -174,6 +174,11 @@ def aplicar_activa_guardada() -> str:
         return ""
     for clave in claves():
         if huella(clave) == guardada:
+            principal = settings.ELEVENLABS_API_KEY
+            if principal and principal != clave and principal not in settings.ELEVENLABS_API_KEYS:
+                # La principal del .env sigue en la reserva, delante, para poder volver a ella
+                # tras un reinicio (revision de Astra, 25-sep-2026). Solo en memoria.
+                settings.ELEVENLABS_API_KEYS = [principal] + list(settings.ELEVENLABS_API_KEYS)
             settings.ELEVENLABS_API_KEY = clave
             return guardada
     return ""
@@ -255,14 +260,22 @@ def _restaurar_ids(antes: Dict[str, Dict[str, str]]) -> None:
     from backend import appstate, voz_elevenlabs
 
     ahora = _ids_de_voz()
-    for cid, campos in antes.items():
-        for campo, valor in campos.items():
-            if (ahora.get(cid) or {}).get(campo) == valor:
+    for cid in set(antes) | set(ahora):
+        previos, actuales = antes.get(cid) or {}, ahora.get(cid) or {}
+        # Tambien los campos que la rotacion CREO: sin esto quedaba apuntando a un agente
+        # de telefono recien borrado de la cuenta nueva (revision de Astra, 25-sep-2026).
+        for campo in set(previos) | set(actuales):
+            valor = previos.get(campo, "")
+            if actuales.get(campo, "") == valor:
                 continue
             try:
                 voz_elevenlabs.guardar_en_voz(cid, campo, valor)
             except Exception as exc:  # noqa: BLE001
-                (appstate.CONFIG_CLIENTES.get(cid) or {}).setdefault("voice", {})[campo] = valor
+                voz = (appstate.CONFIG_CLIENTES.get(cid) or {}).setdefault("voice", {})
+                if valor:
+                    voz[campo] = valor
+                else:
+                    voz.pop(campo, None)
                 settings.logger.warning("[cuenta_elevenlabs] %s/%s restaurado solo en memoria: %s",
                                         cid, campo, censurar(exc))
 

@@ -1,0 +1,192 @@
+# -*- coding: utf-8 -*-
+"""Lo que cazo Astra al revisar los arreglos, el plan del responsable y las transcripciones.
+
+POR QUE EXISTE
+--------------
+Segunda revision de Astra (25-sep-2026, acta docs/REVISION_SARA_25SEP.md en su rama):
+nueve hallazgos sobre 3a33f02, 5e2c841 y 246bdce, reproducidos con los modulos reales y
+sin red. Los tres criticos: la vuelta atras de una rotacion dejaba apuntando a un agente
+de telefono recien borrado; un rechazo que llegaba mientras contestaba la Lista Robinson
+no frenaba la llamada; y una conversacion "processing" guardada como definitiva ya no se
+volvia a recoger. Cada test es uno de sus casos y falla sin el arreglo.
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+
+import httpx
+import pytest
+
+from test_booking_exhaustive import api_module, client  # noqa: F401
+from test_captacion_voz import _Falso, _Respuesta, captacion  # noqa: F401
+from test_cuenta_elevenlabs import cuenta, reserva  # noqa: F401
+from test_hablar_con_el_responsable import MARTES_16_30, _hablo_con_un_empleado, _Marcador  # noqa: F401
+from test_lanzador_llamadas import lanzador  # noqa: F401
+from test_transcripciones_llamadas import _conversacion, llamada  # noqa: F401
+
+
+# --- Rotacion (sobre 3a33f02) -----------------------------------------------------
+
+def test_la_vuelta_atras_quita_tambien_el_telefono_que_se_creo(cuenta, reserva, monkeypatch):  # noqa: F811
+    from backend import appstate, clients
+
+    monkeypatch.setattr(clients, "_persist_configs_to_disk", lambda configs: None)
+    antes = json.loads(json.dumps(appstate.CONFIG_CLIENTES["negocio_voz"]))  # solo agente web
+
+    def crea_telefono_y_falla():
+        from backend import voz_elevenlabs
+
+        voz_elevenlabs.guardar_en_voz("negocio_voz", "elevenlabs_agent_id_telefono", "tel_nuevo")
+        reserva.agentes["tel_nuevo"] = []
+        raise RuntimeError("Falla el segundo negocio")
+
+    monkeypatch.setattr(cuenta, "sincronizar_agentes", crea_telefono_y_falla)
+    assert cuenta.rotar("prueba", cliente=reserva)["rotada"] is False
+    assert appstate.CONFIG_CLIENTES["negocio_voz"] == antes, "sin agente de telefono, como estaba"
+    assert ("k_buena", "tel_nuevo") in reserva.borrados
+
+
+def test_la_principal_fuera_de_la_reserva_sobrevive_a_un_reinicio(cuenta, reserva, monkeypatch):  # noqa: F811
+    from backend import settings
+    from test_cuenta_elevenlabs import _suscripcion
+
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_principal")
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_buena", "k_otra"])
+    reserva.cuentas["k_principal"] = _suscripcion(usados=300000)
+    assert cuenta.rotar("sin creditos", cliente=reserva)["rotada"] is True
+    # Reinicio: vuelven los valores del .env y se aplica la activa guardada.
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_principal")
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_buena", "k_otra"])
+    assert cuenta.aplicar_activa_guardada() == cuenta.huella("k_buena")
+    reserva.cuentas["k_principal"] = _suscripcion()
+    assert cuenta.vigilar_una_vez(cliente=reserva) == "rotada"
+    assert settings.ELEVENLABS_API_KEY == "k_principal"
+
+
+# --- Rellamada dirigida (sobre 5e2c841) ---------------------------------------------
+
+def test_un_rechazo_que_llega_mientras_contesta_robinson_frena(lanzador):  # noqa: F811
+    lanzador.guardar_config(activo=True)
+    _hablo_con_un_empleado(lanzador)
+
+    def robinson(numeros):
+        with lanzador._db() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS llamadas_transcripcion (llamada_id TEXT PRIMARY KEY, "
+                         "analisis_json TEXT)")
+            conn.execute("INSERT INTO llamadas_transcripcion VALUES ('ll_original', ?)",
+                         (json.dumps({"data_collection_results": {"desenlace": {"value": "rechazo"}}}),))
+            conn.commit()
+        return {n: False for n in numeros}
+
+    marcador = _Marcador(lanzador, MARTES_16_30)
+    lanzador.ronda(ahora=MARTES_16_30, llamar=marcador, consultar=robinson)
+    assert marcador.llamadas == []
+
+
+def test_no_se_llama_antes_de_la_hora_que_dijeron(lanzador):  # noqa: F811
+    _hablo_con_un_empleado(lanzador, cuando="el martes a partir de las cinco", hace_horas=30)
+    assert lanzador.rellamadas_dirigidas(MARTES_16_30) == [], "son las 16:30 y pidieron desde las 17:00"
+    assert len(lanzador.rellamadas_dirigidas(MARTES_16_30 + timedelta(minutes=35))) == 1
+
+
+@pytest.mark.parametrize("cuando", ["", "no se", "el 3 de octubre"])
+def test_sin_saber_cuando_esta_no_hay_rellamada(lanzador, cuando):  # noqa: F811
+    _hablo_con_un_empleado(lanzador, cuando=cuando)
+    assert lanzador.rellamadas_dirigidas(MARTES_16_30) == []
+
+
+# --- Transcripciones (sobre 246bdce) ----------------------------------------------------
+
+class _Api:
+    def __init__(self, conversacion):
+        self.conversacion, self.pedidas = conversacion, []
+
+    def get(self, url, headers=None, **k):
+        self.pedidas.append(url.rsplit("/", 1)[1])
+        return _Respuesta(200, self.conversacion)
+
+    def close(self):
+        pass
+
+
+def test_una_conversacion_a_medias_no_se_guarda_como_definitiva(llamada, captacion, monkeypatch):  # noqa: F811
+    from backend import lanzador_llamadas, settings
+
+    llamada_id, t = llamada
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_vieja"])
+    captacion._actualizar(llamada_id, interlocutor="empleado", responsable_nombre="Ana",
+                          responsable_cuando="por las tardes")
+    with captacion._db() as conn:
+        conn.execute("UPDATE llamadas_voz SET origen='auto', creada='2026-09-28T08:00:00+00:00', "
+                     "actualizada='2026-09-20T08:00:00+00:00'")
+        conn.commit()
+    a_medias = dict(_conversacion(), status="processing", analysis={})
+    assert t.leer(llamada_id, cliente=_Api(a_medias))["estado"] == "processing"
+    assert t.de_la_llamada(llamada_id) is None, "no se guarda lo que aun no ha terminado"
+    final = _conversacion(data_collection_results={"desenlace": {"value": "rechazo"}})
+    assert t.recoger_pendientes(cliente=_Api(final)) == 1
+    martes_tarde = datetime(2026, 9, 29, 14, 30, tzinfo=timezone.utc)
+    assert lanzador_llamadas.rellamadas_dirigidas(martes_tarde) == []
+
+
+def test_la_clasificacion_no_pisa_lo_que_escribe_la_herramienta_a_la_vez(llamada, captacion, monkeypatch):  # noqa: F811
+    llamada_id, t = llamada
+    turnos = t._turnos
+
+    def entremedias(transcript):
+        captacion.herramienta("anotar_responsable", {captacion.CAMPO_LLAMADA: llamada_id,
+                                                     "interlocutor": "duena_o_encargada", "nombre": "Ana"})
+        return turnos(transcript)
+
+    monkeypatch.setattr(t, "_turnos", entremedias)
+    t.guardar(_conversacion(), "aviso")  # clasifica empleado / Marta
+    fila = captacion._fila(llamada_id)
+    assert (fila["interlocutor"], fila["responsable_nombre"]) == ("duena_o_encargada", "Ana")
+
+
+def test_las_conversaciones_perdidas_no_atascan_la_cola(llamada, captacion, monkeypatch):  # noqa: F811
+    from backend import settings
+
+    llamada_id, t = llamada
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_vieja"])
+    antiguas = []
+    for i in range(20):
+        hecho = captacion.llamar("91%07d" % (i + 10), "Antiguo %d" % i, cliente=_Falso())
+        captacion._actualizar(hecho["llamada"], estado="terminada", conversation_id="conv_perdida_%d" % i)
+        antiguas.append(hecho["llamada"])
+    with captacion._db() as conn:
+        conn.execute("UPDATE llamadas_voz SET actualizada='2026-09-01T00:00:00+00:00' WHERE id<>?", (llamada_id,))
+        conn.execute("UPDATE llamadas_voz SET actualizada='2026-09-02T00:00:00+00:00' WHERE id=?", (llamada_id,))
+        conn.commit()
+
+    class _SoloLaNueva(_Api):
+        def get(self, url, headers=None, **k):
+            self.pedidas.append(url.rsplit("/", 1)[1])
+            return _Respuesta(200, _conversacion()) if url.endswith("/conv_1") else _Respuesta(404, {})
+
+    api = _SoloLaNueva(None)
+    t.recoger_pendientes(cliente=api)
+    t.recoger_pendientes(cliente=api)
+    assert t.de_la_llamada(llamada_id) is not None, "la nueva se recoge aunque haya 20 perdidas delante"
+
+
+def test_si_una_cuenta_no_responde_se_prueba_la_siguiente(llamada, monkeypatch):  # noqa: F811
+    from backend import settings
+
+    _, t = llamada
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_caida")
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_caida", "k_vieja"])
+
+    class _Timeout:
+        def __init__(self):
+            self.claves = []
+
+        def get(self, url, headers=None, **k):
+            self.claves.append(headers["xi-api-key"])
+            if headers["xi-api-key"] == "k_caida":
+                raise httpx.ReadTimeout("sin respuesta")
+            return _Respuesta(200, _conversacion())
+
+    api = _Timeout()
+    assert t._pedir("conv_1", api) is not None and api.claves[-2:] == ["k_caida", "k_vieja"]

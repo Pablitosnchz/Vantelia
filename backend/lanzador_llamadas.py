@@ -212,23 +212,35 @@ _HORAS_HABLADAS = {"una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis
 
 
 def cuando_esta(cuando: str) -> Dict[str, Any]:
-    """"por las tardes", "el jueves a partir de las cuatro", "manana por la manana"...
-    -> {franja: 0 (manana) | 1 (tarde) | None, dia: 0-4 | None, otro_dia: bool}."""
+    """"por las tardes", "el jueves a partir de las cinco", "manana por la manana"...
+    -> {franja: 0 (manana) | 1 (tarde) | None, dia: 0-4 | None, otro_dia: bool,
+        desde: minutos desde medianoche | None (no llamar antes), entendido: bool}.
+
+    Sin nada entendido no hay rellamada: no se inventa una franja (revision de Astra,
+    25-sep-2026: con "" o algo raro se programaba igual)."""
     texto = textnorm._strip_accents(str(cuando or "").lower())
+    desde: Optional[int] = None
+    # La hora solo cuenta tras "la(s)": "a las cinco", "desde las 10:30"; "el 3 de octubre" no.
+    hora = re.search(r"\blas? (\d{1,2})(?:[:.](\d{2}))?\b|\blas? (" + "|".join(_HORAS_HABLADAS) + r")\b", texto)
+    if hora:
+        numero = int(hora.group(1)) if hora.group(1) else _HORAS_HABLADAS[hora.group(3)]
+        minutos = int(hora.group(2)) if hora.group(2) else (30 if "y media" in texto else 15 if "y cuarto" in texto else 0)
+        # "a las cinco" es por la tarde; "a las diez", por la manana.
+        hora_24 = numero if 8 <= numero <= 19 else numero + 12 if 1 <= numero <= 7 else None
+        if hora_24 is not None:
+            desde = hora_24 * 60 + minutos
     franja: Optional[int] = None
     if "tarde" in texto:
         franja = 1
     elif re.search(r"(por|de|a) la manana|primera hora|mediodia", texto):
         franja = 0
-    else:
-        hora = re.search(r"\b(\d{1,2})\b|\b(" + "|".join(_HORAS_HABLADAS) + r")\b", texto)
-        if hora:
-            numero = int(hora.group(1)) if hora.group(1) else _HORAS_HABLADAS[hora.group(2)]
-            franja = 1 if (1 <= numero <= 7 or 13 <= numero <= 19) else 0 if 8 <= numero <= 12 else None
+    elif desde is not None:
+        franja = 1 if desde >= 13 * 60 else 0
     dia = next((n for nombre, n in _DIAS.items() if nombre in texto), None)
     # "manana" suelto es el dia siguiente, no la franja de la manana.
     otro_dia = bool(re.search(r"\bmanana\b", re.sub(r"(por|de|a) la manana", "", texto)))
-    return {"franja": franja, "dia": dia, "otro_dia": otro_dia}
+    entendido = franja is not None or dia is not None or otro_dia
+    return {"franja": franja, "dia": dia, "otro_dia": otro_dia, "desde": desde, "entendido": entendido}
 
 
 def _franja_de(ahora: datetime) -> Optional[int]:
@@ -280,8 +292,12 @@ def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
         if fila["id"] in rechazos or not es_fijo(fila["telefono"]):
             continue
         preferencia = cuando_esta(fila["responsable_cuando"])
+        if not preferencia["entendido"]:
+            continue  # sin saber cuando esta, no se vuelve a llamar solos
         if preferencia["franja"] is not None and preferencia["franja"] != franja_actual:
             continue
+        if preferencia["desde"] is not None and local.hour * 60 + local.minute < preferencia["desde"]:
+            continue  # "a partir de las cinco": no a las cuatro y media
         if preferencia["dia"] is not None and preferencia["dia"] != local.weekday():
             continue
         dia_de_la_llamada = datetime.fromisoformat(fila["creada"]).astimezone(ZONA).date()
@@ -337,6 +353,12 @@ def ronda(*, ahora: Optional[datetime] = None, llamar: Callable[..., Dict[str, A
         return _ronda(reloj, llamar or captacion_voz.llamar, consultar)
     finally:
         _cerrojo.release()
+
+
+def _sigue_elegible(candidato: Dict[str, Any], ahora: datetime) -> bool:
+    if candidato.get("rellamada_de"):
+        return any(c["rellamada_de"] == candidato["rellamada_de"] for c in rellamadas_dirigidas(ahora))
+    return any(c["telefono"] == candidato["telefono"] for c in candidatos(ahora, limite=100000))
 
 
 def _impedimento(ahora: datetime) -> str:
@@ -395,7 +417,11 @@ def _ronda(reloj: Callable[[], datetime], llamar: Callable[..., Dict[str, Any]],
     motivo = _impedimento(ahora)
     if motivo:
         return _motivo(motivo, ahora)
-    elegido = libres[0]
+    # Y el propio candidato sigue siendo llamable: mientras contestaba Robinson pudo llegar
+    # un rechazo en la transcripcion o una baja (revision de Astra, 25-sep-2026).
+    elegido = next((c for c in libres if _sigue_elegible(c, ahora)), None)
+    if elegido is None:
+        return _motivo("Los candidatos dejaron de ser llamables mientras se consultaba.", ahora)
     dirigida = {k: elegido[k] for k in ("responsable", "rellamada_de") if elegido.get(k)}
     try:
         hecho = llamar(elegido["telefono"], elegido["negocio"], elegido["sector"],

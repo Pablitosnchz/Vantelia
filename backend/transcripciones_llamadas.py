@@ -35,6 +35,7 @@ import json
 import re
 import sqlite3
 import time
+from datetime import timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
@@ -44,6 +45,8 @@ from backend import captacion_voz, cuenta_elevenlabs, settings, timeutils
 API = "https://api.elevenlabs.io"
 TOLERANCIA_FIRMA_SEGUNDOS = 30 * 60
 MINUTOS_ANTES_DE_RECOGER = 10
+MAX_INTENTOS = 24  # una vez por hora: un dia intentandolo
+ESTADOS_TERMINADOS = ("done", "failed")
 
 
 def _db():
@@ -53,6 +56,8 @@ def _db():
         transcripcion_json TEXT NOT NULL DEFAULT '[]', resumen TEXT NOT NULL DEFAULT '',
         duracion_s INTEGER, analisis_json TEXT NOT NULL DEFAULT '{}', origen TEXT NOT NULL DEFAULT '',
         recibida TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS llamadas_transcripcion_intentos (
+        llamada_id TEXT PRIMARY KEY, intentos INTEGER NOT NULL DEFAULT 0, ultimo TEXT NOT NULL DEFAULT '')""")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -101,6 +106,10 @@ def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
     conversation_id = str(conversacion.get("conversation_id") or "")
     if not conversation_id:
         return None
+    # Solo lo terminado: una conversacion "processing" guardada como definitiva ya no se
+    # volvia a recoger y se perdia su clasificacion final (revision de Astra, 25-sep-2026).
+    if str(conversacion.get("status") or "done") not in ESTADOS_TERMINADOS:
+        return None
     with _db() as conn:
         fila = conn.execute("SELECT id, interlocutor, responsable_nombre FROM llamadas_voz WHERE conversation_id=?",
                             (conversation_id,)).fetchone()
@@ -123,17 +132,19 @@ def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
              str(analisis.get("transcript_summary") or ""), metadatos.get("call_duration_secs"),
              json.dumps(guardado, ensure_ascii=False), origen, timeutils._utc_now().isoformat(timespec="seconds")))
         conn.commit()
-    # Si Sara no llamo a `anotar_responsable`, lo que clasifico ElevenLabs rellena el hueco
-    # (nunca pisa lo que apunto la herramienta durante la llamada).
-    rellenar: Dict[str, Any] = {}
+    # Si Sara no llamo a `anotar_responsable`, lo que clasifico ElevenLabs rellena el hueco.
+    # La condicion "esta vacio" va en el propio UPDATE: decidir sobre la fila leida antes
+    # pisaba lo que la herramienta escribiera entremedias (revision de Astra, 25-sep-2026).
     interlocutor = str(_valor(datos.get("interlocutor")) or "").strip().lower()
-    if not fila[1] and interlocutor in captacion_voz.INTERLOCUTORES:
-        rellenar["interlocutor"] = interlocutor
     nombre = str(_valor(datos.get("responsable_nombre")) or "").strip()
-    if not fila[2] and nombre and nombre.lower() not in ("none", "null", "no", "desconocido"):
-        rellenar["responsable_nombre"] = nombre[:80]
-    if rellenar:
-        captacion_voz._actualizar(fila[0], **rellenar)
+    with _db() as conn:
+        if interlocutor in captacion_voz.INTERLOCUTORES:
+            conn.execute("UPDATE llamadas_voz SET interlocutor=? WHERE id=? AND interlocutor=''",
+                         (interlocutor, fila[0]))
+        if nombre and nombre.lower() not in ("none", "null", "no", "desconocido"):
+            conn.execute("UPDATE llamadas_voz SET responsable_nombre=? WHERE id=? AND responsable_nombre=''",
+                         (nombre[:80], fila[0]))
+        conn.commit()
     return fila[0]
 
 
@@ -148,48 +159,53 @@ def _pedir(conversation_id: str, cliente: httpx.Client) -> Optional[Dict[str, An
             r = cliente.get("%s/v1/convai/conversations/%s" % (API, conversation_id),
                             headers={"xi-api-key": clave})
         except httpx.HTTPError as exc:
+            # Una cuenta que no responde no impide probar las demas (revision de Astra).
             settings.logger.warning("[transcripciones] %s no se pudo pedir: %s", conversation_id,
                                     cuenta_elevenlabs.censurar(exc))
-            return None
+            continue
         if r.status_code == 200:
             return r.json()
     return None
 
 
 def recoger_pendientes(*, cliente: Optional[httpx.Client] = None, limite: int = 20) -> int:
-    """Baja las transcripciones que no llegaron por el aviso. Devuelve cuantas guardo."""
-    antes = (timeutils._utc_now().timestamp() - MINUTOS_ANTES_DE_RECOGER * 60)
+    """Baja las transcripciones que no llegaron por el aviso. Devuelve cuantas guardo.
+
+    Primero las que nunca se intentaron y luego las que llevan mas tiempo sin intentarse:
+    antes, veinte conversaciones que ya no existen ocupaban siempre el cupo y las nuevas no
+    se recogian nunca (revision de Astra, 25-sep-2026). Tras MAX_INTENTOS se dejan."""
+    ahora = timeutils._utc_now()
+    corte = (ahora - timedelta(minutes=MINUTOS_ANTES_DE_RECOGER)).isoformat(timespec="seconds")
     with _db() as conn:
-        filas = conn.execute(
-            "SELECT l.id, l.conversation_id, l.actualizada FROM llamadas_voz l "
-            "WHERE l.conversation_id <> '' AND l.estado = 'terminada' "
+        pendientes = conn.execute(
+            "SELECT l.id, l.conversation_id FROM llamadas_voz l "
+            "LEFT JOIN llamadas_transcripcion_intentos i ON i.llamada_id = l.id "
+            "WHERE l.conversation_id <> '' AND l.estado = 'terminada' AND l.actualizada <= ? "
+            "AND COALESCE(i.intentos, 0) < ? "
             "AND NOT EXISTS (SELECT 1 FROM llamadas_transcripcion t WHERE t.llamada_id = l.id) "
-            "ORDER BY l.actualizada LIMIT ?", (max(1, limite),)).fetchall()
-    pendientes = [f for f in filas if _marca(f[2]) <= antes]
+            "ORDER BY COALESCE(i.ultimo, ''), l.actualizada LIMIT ?",
+            (corte, MAX_INTENTOS, max(1, limite))).fetchall()
     if not pendientes or not cuenta_elevenlabs.claves():
         return 0
     propio = cliente is None
     cliente = cliente or httpx.Client(timeout=20.0)
     guardadas = 0
     try:
-        for _, conversation_id, _ in pendientes:
+        for llamada_id, conversation_id in pendientes:
             conversacion = _pedir(conversation_id, cliente)
-            if conversacion and str(conversacion.get("status") or "") in ("done", "failed") and guardar(
-                    conversacion, "recogida"):
+            if conversacion and guardar(conversacion, "recogida"):
                 guardadas += 1
+                continue
+            with _db() as conn:
+                conn.execute(
+                    "INSERT INTO llamadas_transcripcion_intentos (llamada_id, intentos, ultimo) VALUES (?, 1, ?) "
+                    "ON CONFLICT(llamada_id) DO UPDATE SET intentos = intentos + 1, ultimo = excluded.ultimo",
+                    (llamada_id, ahora.isoformat(timespec="seconds")))
+                conn.commit()
     finally:
         if propio:
             cliente.close()
     return guardadas
-
-
-def _marca(iso: str) -> float:
-    from datetime import datetime
-
-    try:
-        return datetime.fromisoformat(str(iso)).timestamp()
-    except ValueError:
-        return 0.0
 
 
 # --- Leer y exportar ------------------------------------------------------------------
@@ -219,9 +235,15 @@ def leer(llamada_id: str, *, cliente: Optional[httpx.Client] = None) -> Optional
     finally:
         if propio:
             cliente.close()
-    if not conversacion or not guardar(conversacion, "panel"):
+    if not conversacion:
         return None
-    return de_la_llamada(llamada_id)
+    if guardar(conversacion, "panel"):
+        return de_la_llamada(llamada_id)
+    # Aun sin terminar: se ensena tal cual, sin guardarla como definitiva.
+    analisis = conversacion.get("analysis") or {}
+    return {"estado": str(conversacion.get("status") or ""), "turnos": _turnos(conversacion.get("transcript")),
+            "duracion": (conversacion.get("metadata") or {}).get("call_duration_secs"),
+            "resumen": str(analisis.get("transcript_summary") or ""), "analisis": {}}
 
 
 def exportar() -> Iterable[str]:
