@@ -47,6 +47,7 @@ from backend import (
     settings,
     textnorm,
     timeutils,
+    transcripciones_llamadas,
     voice,
     voz_elevenlabs,
 )
@@ -552,17 +553,31 @@ async def admin_captacion_llamadas_ronda() -> Dict[str, Any]:
 @app.get("/admin/captacion/llamadas/{llamada_id}/transcripcion",
          dependencies=[Depends(security._require_admin_token)])
 async def admin_captacion_llamada_transcripcion(llamada_id: str) -> Dict[str, Any]:
+    """La guardada (transcripciones_llamadas); si aun no esta, se pide en cualquier cuenta
+    de la reserva y se guarda. Antes se leia en vivo con la clave activa y, tras rotar de
+    cuenta, las llamadas de la vieja ya no se podian leer."""
     fila = await timeutils._to_thread(captacion_voz._fila, llamada_id)
     if fila is None:
         raise HTTPException(status_code=404, detail="Llamada no encontrada.")
     if not fila["conversation_id"]:
         raise HTTPException(status_code=404, detail="Esta llamada no llego a hablar con Sara.")
+    transcripcion = await timeutils._to_thread(transcripciones_llamadas.leer, llamada_id)
+    if transcripcion is None:
+        raise HTTPException(status_code=502, detail="ElevenLabs no devuelve esta conversacion todavia.")
+    return transcripcion
+
+
+@app.get("/admin/captacion/llamadas/transcripciones.jsonl", dependencies=[Depends(security._require_admin_token)])
+async def admin_captacion_transcripciones_jsonl() -> Response:
+    """Todas las llamadas con su transcripcion y lo que clasifico ElevenLabs, una por linea,
+    para analizarlas (Pablo, 25-sep-2026). Antes recoge las que falten."""
     try:
-        return await timeutils._to_thread(voz_elevenlabs.transcripcion, fila["conversation_id"])
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        await timeutils._to_thread(transcripciones_llamadas.recoger_pendientes)
+    except Exception as exc:  # noqa: BLE001 - se exporta lo que haya
+        settings.logger.warning("[transcripciones] recogida antes de exportar: %s", exc)
+    lineas = await timeutils._to_thread(lambda: "".join(transcripciones_llamadas.exportar()))
+    return Response(content=lineas, media_type="application/x-ndjson",
+                    headers={"Content-Disposition": 'attachment; filename="llamadas_sara.jsonl"'})
 
 
 @app.post("/admin/clientes/{cliente_id}/voice", dependencies=[Depends(security._require_admin_token)])

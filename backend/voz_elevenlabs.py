@@ -334,28 +334,3 @@ def id_de_conversacion(twiml: str) -> str:
     lee despues la transcripcion. "" si no viene."""
     encontrado = re.search(r'name="conversation_id"\s+value="([A-Za-z0-9_-]+)"', twiml or "")
     return encontrado.group(1) if encontrado else ""
-
-
-def transcripcion(conversation_id: str, cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
-    """Lo que se dijo en una conversacion: turnos, duracion y el resumen de ElevenLabs."""
-    if not re.fullmatch(r"[A-Za-z0-9_-]{4,80}", conversation_id or ""):
-        raise ValueError("Conversacion no valida.")
-    propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=20.0)
-    try:
-        r = cliente.get(API + "/v1/convai/conversations/" + conversation_id, headers=_cabeceras())
-    finally:
-        if propio:
-            cliente.close()
-    if r.status_code >= 400:
-        raise RuntimeError("ElevenLabs no devolvio la conversacion (%s)." % r.status_code)
-    datos = r.json() or {}
-    turnos = []
-    for turno in datos.get("transcript") or []:
-        texto = str(turno.get("message") or "").strip()
-        if texto:
-            turnos.append({"quien": "agente" if turno.get("role") == "agent" else "persona",
-                           "texto": texto, "segundo": turno.get("time_in_call_secs")})
-    return {"estado": str(datos.get("status") or ""), "turnos": turnos,
-            "duracion": (datos.get("metadata") or {}).get("call_duration_secs"),
-            "resumen": str((datos.get("analysis") or {}).get("transcript_summary") or "")}

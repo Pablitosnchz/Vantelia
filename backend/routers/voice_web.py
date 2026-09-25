@@ -34,6 +34,7 @@ from backend import (
     settings,
     textnorm,
     timeutils,
+    transcripciones_llamadas,
     voice,
     voice_engine,
     voz_elevenlabs,
@@ -413,6 +414,27 @@ async def captacion_voz_estado(request: Request) -> Response:
     await timeutils._to_thread(captacion_voz.estado_final, request.query_params.get("llamada", ""),
                                str(params.get("CallStatus", "") or "").lower())
     return Response(status_code=204)
+
+
+@app.post(captacion_voz.RUTA + "/fin", include_in_schema=False)
+async def captacion_voz_fin(request: Request) -> Dict[str, Any]:
+    """Aviso de fin de llamada de ElevenLabs (webhook post-call): guarda la transcripcion y
+    lo que clasifico de la llamada (backend/transcripciones_llamadas.py)."""
+    secreto = settings.ELEVENLABS_WEBHOOK_SECRET
+    if not secreto:
+        raise HTTPException(status_code=503, detail="Aviso de fin de llamada sin configurar.")
+    cuerpo = await request.body()
+    if not transcripciones_llamadas.firma_valida(cuerpo, request.headers.get("ElevenLabs-Signature", ""), secreto):
+        raise HTTPException(status_code=401, detail="Firma no valida.")
+    try:
+        evento = json.loads(cuerpo.decode("utf-8") or "{}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Cuerpo no valido.") from exc
+    tipo = str((evento or {}).get("type") or "")
+    if tipo != "post_call_transcription":
+        return {"ok": True, "ignorado": tipo}
+    llamada = await timeutils._to_thread(transcripciones_llamadas.guardar, evento.get("data") or {}, "aviso")
+    return {"ok": True, "llamada": llamada or ""}
 
 
 @app.post(captacion_voz.RUTA + "/tool/{nombre}", include_in_schema=False)

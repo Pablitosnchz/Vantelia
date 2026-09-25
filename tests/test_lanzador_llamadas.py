@@ -331,7 +331,7 @@ def test_el_panel_exige_admin_y_ensena_lo_que_falta(client, lanzador, monkeypatc
 
 
 def test_la_transcripcion_sale_de_elevenlabs(client, lanzador, monkeypatch):  # noqa: F811
-    from backend import voz_elevenlabs
+    from backend import transcripciones_llamadas
 
     _llamada_previa(lanzador, "+34911111111", MARTES_10_30, resultado="no_contesta")
     llamada = "ll_+34911111111_%s" % MARTES_10_30
@@ -340,6 +340,7 @@ def test_la_transcripcion_sale_de_elevenlabs(client, lanzador, monkeypatch):  # 
     with lanzador._db() as conn:
         conn.execute("UPDATE llamadas_voz SET conversation_id='conv_abc123'")
         conn.commit()
-    monkeypatch.setattr(voz_elevenlabs, "transcripcion", lambda cid: {"turnos": [{"quien": "agente", "texto": cid}]})
+    monkeypatch.setattr(transcripciones_llamadas, "leer",
+                        lambda llamada_id: {"turnos": [{"quien": "agente", "texto": llamada_id}]})
     r = client.get("/admin/captacion/llamadas/%s/transcripcion" % llamada, headers=CABECERAS)
-    assert r.status_code == 200 and r.json()["turnos"][0]["texto"] == "conv_abc123"
+    assert r.status_code == 200 and r.json()["turnos"][0]["texto"] == llamada

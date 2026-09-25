@@ -53,7 +53,8 @@ CREDENCIALES_QUE_NO_ENTRAN_EN_TESTS = (
     "OPENAI_API_KEY",
     # Voz de pago y consultas externas: ElevenLabs (crearia agentes en la cuenta real)
     # y la Lista Robinson (consultas de verdad a Adigital)
-    "ELEVENLABS_API_KEY", "ELEVENLABS_API_KEYS", "ELEVENLABS_TOOL_SECRET", "ROBINSON_API_KEY",
+    "ELEVENLABS_API_KEY", "ELEVENLABS_API_KEYS", "ELEVENLABS_TOOL_SECRET", "ELEVENLABS_WEBHOOK_SECRET",
+    "ROBINSON_API_KEY",
     "ROBINSON_API_SECRET",
     "CAPTACION_TWILIO_NUMBER",
 )

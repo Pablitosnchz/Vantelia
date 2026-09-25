@@ -158,6 +158,10 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
 # (backend/cuenta_elevenlabs.py).
 ELEVENLABS_API_KEYS = [c.strip() for c in os.getenv("ELEVENLABS_API_KEYS", "").split(",") if c.strip()]
 ELEVENLABS_TOOL_SECRET = os.getenv("ELEVENLABS_TOOL_SECRET", "").strip()
+# Secreto del aviso de fin de llamada de ElevenLabs (transcripciones de las llamadas de
+# Sara, backend/transcripciones_llamadas.py). Sin el, el aviso se rechaza y las
+# transcripciones llegan por la recogida de respaldo.
+ELEVENLABS_WEBHOOK_SECRET = os.getenv("ELEVENLABS_WEBHOOK_SECRET", "").strip()
 # "Laura - Customer service", castellana; la eligio Pablo el 23-sep-2026.
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uQw4jpKzMLrZuo0RLPS9").strip()
 # Numero desde el que Sara llama a los negocios de captacion (backend/captacion_voz.py).

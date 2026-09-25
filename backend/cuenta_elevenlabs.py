@@ -438,6 +438,13 @@ def _trabajador() -> None:
             vigilar_una_vez()
         except Exception:  # noqa: BLE001
             settings.logger.exception("[cuenta_elevenlabs] error revisando la cuenta")
+        try:
+            # Las transcripciones que no llegaron por el aviso de fin de llamada.
+            from backend import transcripciones_llamadas
+
+            transcripciones_llamadas.recoger_pendientes()
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("[cuenta_elevenlabs] recogida de transcripciones: %s", censurar(exc))
         parar.wait(MINUTOS_ENTRE_REVISIONES * 60)
 
 
