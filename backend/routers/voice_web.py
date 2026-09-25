@@ -392,10 +392,12 @@ async def captacion_voz_twiml(request: Request) -> Response:
             captacion_voz.twiml_al_descolgar, request.query_params.get("llamada", ""),
             str(params.get("AnsweredBy", "") or ""), params.get("From", ""), params.get("To", ""))
     except Exception as exc:  # noqa: BLE001 - mejor colgar que dejar la linea muda
-        settings.logger.warning("[captacion_voz] no se pudo conectar la llamada: %s", exc)
+        from backend import cuenta_elevenlabs, lanzador_llamadas
+
+        settings.logger.warning("[captacion_voz] no se pudo conectar la llamada: %s",
+                                cuenta_elevenlabs.censurar(exc))
         twiml = captacion_voz._COLGAR
         # Alguien descolgo y oyo colgar: el lanzador se apaga y se avisa a Pablo.
-        from backend import lanzador_llamadas
 
         try:
             await timeutils._to_thread(lanzador_llamadas.fallo_de_voz,

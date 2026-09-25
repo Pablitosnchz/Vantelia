@@ -252,7 +252,12 @@ def publicar_agente(cliente: httpx.Client, cuerpo: Dict[str, Any], agent_id: str
     if r.status_code >= 400:
         raise RuntimeError("ElevenLabs rechazo el agente (%s): %s" % (r.status_code, r.text[:300]))
     agent_id = agent_id or str(r.json()["agent_id"])
-    ahora = set(_tool_ids(cliente, agent_id) or [])
+    posteriores = _tool_ids(cliente, agent_id)
+    if posteriores is None:
+        # Sin una lectura buena del agente recien guardado no se limpia nada: borrar a
+        # ciegas dejaba al agente sin herramientas (revision de Astra, 24-sep-2026).
+        raise RuntimeError("ElevenLabs no devuelve el agente %s despues de guardarlo." % agent_id)
+    ahora = set(posteriores)
     for viejo in antes:
         if viejo not in ahora:
             cliente.delete("%s/v1/convai/tools/%s" % (API, viejo), headers=_cabeceras(),

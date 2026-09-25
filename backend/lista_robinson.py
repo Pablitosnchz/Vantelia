@@ -107,11 +107,17 @@ def consultar(telefonos: Iterable[str], *, cliente: Optional[httpx.Client] = Non
             if r.status_code >= 400:
                 raise RuntimeError("Lista Robinson respondio %s: %s" % (r.status_code, r.text[:200]))
             datos = r.json()
+            if not isinstance(datos, dict):
+                raise RuntimeError("La Lista Robinson devolvio una respuesta que no se entiende.")
             for h in lote:
-                if h not in datos:
-                    raise RuntimeError("La Lista Robinson no contesto por todos los numeros.")
+                entrada = datos.get(h)
+                encontrado = entrada.get("found") if isinstance(entrada, dict) else None
+                # Solo un booleano de verdad decide: `{}`, `null` o `found: null` NO son
+                # "no esta en la lista" (revision de Astra, 24-sep-2026: con eso se llamaba).
+                if not isinstance(encontrado, bool):
+                    raise RuntimeError("La Lista Robinson no contesto bien por todos los numeros.")
                 for telefono in por_huella[h]:
-                    resultado[telefono] = bool((datos[h] or {}).get("found"))
+                    resultado[telefono] = encontrado
     finally:
         if propio:
             cliente.close()

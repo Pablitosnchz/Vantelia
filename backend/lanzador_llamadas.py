@@ -58,8 +58,11 @@ DIAS_QUE_VALE_ROBINSON = 30
 MINUTOS_LLAMADA_VIVA = 15  # una llamada 'marcando'/'en_curso' mas vieja se da por muerta
 MINUTOS_ENTRE_RONDAS = 5
 ESTADOS_QUE_NO_SE_LLAMAN = ("replied", "client", "lost", "baja")
-# Resultados en los que nadie hablo con Sara: se puede reintentar.
-SIN_CONVERSACION = ("", "no_contesta", "ocupado", "contestador", "fallida")
+# Resultados que ACREDITAN que nadie hablo con Sara: solo con ellos se reintenta. Un
+# resultado vacio no vale: una conversacion que acabo sin herramienta queda vacia y se
+# volvia a llamar a los dos dias (revision de Astra, 24-sep-2026). Y con conversacion
+# registrada no se reintenta nunca.
+SIN_CONVERSACION = ("no_contesta", "ocupado", "contestador", "fallida")
 
 CUPO_POR_DEFECTO = 8
 MINUTOS_ENTRE_POR_DEFECTO = 12
@@ -126,6 +129,9 @@ def bloqueos() -> List[str]:
     elif not str((clients._get_client_config(captacion_voz.TENANT).get("voice") or {})
                  .get(captacion_voz.CLAVE_AGENTE) or ""):
         faltan.append("La agente de captacion no esta creada en ElevenLabs.")
+    elif cuenta_elevenlabs.cambiando_de_cuenta():
+        # A media rotacion la clave nueva puede no tener aun sus agentes.
+        faltan.append("Cambiando de cuenta de voz.")
     else:
         # Cuenta sin plan o sin creditos: quien descolgase oiria colgar (cuenta_elevenlabs).
         cuenta = cuenta_elevenlabs.estado()
@@ -167,7 +173,7 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
             ESTADOS_QUE_NO_SE_LLAMAN + (hace_correo,)).fetchall()
         vetados = {f["telefono"] for f in conn.execute("SELECT telefono FROM no_llamar")}
         intentos: Dict[str, List[sqlite3.Row]] = {}
-        for fila in conn.execute("SELECT telefono, resultado, creada FROM llamadas_voz"):
+        for fila in conn.execute("SELECT telefono, resultado, conversation_id, creada FROM llamadas_voz"):
             intentos.setdefault(fila["telefono"], []).append(fila)
         # Quien abrio (1) o pincho (2) en nuestros correos va antes: convierte mejor
         # que un fijo en frio (peticion de Pablo, 24-sep-2026).
@@ -183,7 +189,7 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
         previos = intentos.get(telefono, [])
         if len(previos) >= MAX_INTENTOS:
             continue
-        if any(f["resultado"] not in SIN_CONVERSACION for f in previos):
+        if any(f["resultado"] not in SIN_CONVERSACION or f["conversation_id"] for f in previos):
             continue
         if any(f["creada"] >= hace_intentos for f in previos):
             continue
@@ -207,8 +213,8 @@ def fuera_de_robinson(lista: List[Dict[str, Any]], ahora: datetime,
     pendientes = [c["telefono"] for c in lista if c["telefono"] not in sabidos]
     if pendientes:
         respuesta = consultar(pendientes)
-        if set(respuesta) != set(pendientes):
-            raise RuntimeError("La Lista Robinson no contesto por todos los numeros.")
+        if set(respuesta) != set(pendientes) or not all(isinstance(v, bool) for v in respuesta.values()):
+            raise RuntimeError("La Lista Robinson no contesto bien por todos los numeros.")
         with _db() as conn:
             conn.executemany(
                 "INSERT OR REPLACE INTO robinson_consultas (telefono, en_lista, consultado) VALUES (?,?,?)",
@@ -227,28 +233,33 @@ def _motivo(texto: str, ahora: datetime, llamada: str = "") -> Dict[str, Any]:
 
 
 def ronda(*, ahora: Optional[datetime] = None, llamar: Callable[..., Dict[str, Any]] = None,
-          consultar: Callable[[List[str]], Dict[str, bool]] = None) -> Dict[str, Any]:
-    """Una pasada: como mucho UNA llamada. Devuelve {llamada, motivo}."""
+          consultar: Callable[[List[str]], Dict[str, bool]] = None,
+          reloj: Optional[Callable[[], datetime]] = None) -> Dict[str, Any]:
+    """Una pasada: como mucho UNA llamada. Devuelve {llamada, motivo}.
+
+    `ahora` fija la hora de toda la ronda (tests); sin ella, la hora se vuelve a mirar
+    justo antes de marcar."""
     if not _cerrojo.acquire(blocking=False):
         return {"llamada": "", "motivo": "Ya hay una ronda en marcha."}
     try:
-        return _ronda(ahora or timeutils._utc_now(), llamar or captacion_voz.llamar, consultar)
+        reloj = reloj or ((lambda: ahora) if ahora else timeutils._utc_now)
+        return _ronda(reloj, llamar or captacion_voz.llamar, consultar)
     finally:
         _cerrojo.release()
 
 
-def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
-           consultar: Optional[Callable[[List[str]], Dict[str, bool]]]) -> Dict[str, Any]:
+def _impedimento(ahora: datetime) -> str:
+    """Lo que impide llamar AHORA, o "". Se mira al empezar la ronda y otra vez justo
+    antes de marcar: la consulta a la Lista Robinson tarda, y en ese rato pueden apagar
+    el lanzador, acabarse la franja o bajar el cupo (revision de Astra, 24-sep-2026)."""
     ajustes = config()
     if not ajustes["activo"]:
-        return _motivo("Apagado en el panel.", ahora)
-    if voz_elevenlabs.configurado():
-        cuenta_elevenlabs.asegurar_cuenta()  # si la cuenta de voz cayo, pasa a otra de la reserva
+        return "Apagado en el panel."
     faltan = bloqueos()
     if faltan:
-        return _motivo(faltan[0], ahora)
+        return faltan[0]
     if not en_horario(ahora):
-        return _motivo("Fuera de horario (lunes a viernes, 10:00-12:30 y 16:00-18:00).", ahora)
+        return "Fuera de horario (lunes a viernes, 10:00-12:30 y 16:00-18:00)."
     with _db() as conn:
         hoy = conn.execute("SELECT COUNT(*) FROM llamadas_voz WHERE origen='auto' AND creada >= ?",
                            (_iso(_inicio_del_dia(ahora)),)).fetchone()[0]
@@ -257,11 +268,24 @@ def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
                             (_iso(ahora - timedelta(minutes=MINUTOS_LLAMADA_VIVA)),)).fetchone()
         ultima = conn.execute("SELECT MAX(creada) FROM llamadas_voz WHERE origen='auto'").fetchone()[0]
     if hoy >= int(ajustes["cupo_diario"]):
-        return _motivo("Cupo de hoy cubierto (%d llamadas)." % hoy, ahora)
+        return "Cupo de hoy cubierto (%d llamadas)." % hoy
     if viva:
-        return _motivo("Hay una llamada en curso.", ahora)
+        return "Hay una llamada en curso."
     if ultima and ultima > _iso(ahora - timedelta(minutes=int(ajustes["minutos_entre"]))):
-        return _motivo("Esperando el hueco entre llamadas.", ahora)
+        return "Esperando el hueco entre llamadas."
+    return ""
+
+
+def _ronda(reloj: Callable[[], datetime], llamar: Callable[..., Dict[str, Any]],
+           consultar: Optional[Callable[[List[str]], Dict[str, bool]]]) -> Dict[str, Any]:
+    ahora = reloj()
+    if not config()["activo"]:
+        return _motivo("Apagado en el panel.", ahora)
+    if voz_elevenlabs.configurado():
+        cuenta_elevenlabs.asegurar_cuenta()  # si la cuenta de voz cayo, pasa a otra de la reserva
+    motivo = _impedimento(ahora)
+    if motivo:
+        return _motivo(motivo, ahora)
     lista = candidatos(ahora)
     if not lista:
         return _motivo("No quedan negocios a los que llamar.", ahora)
@@ -272,13 +296,19 @@ def _ronda(ahora: datetime, llamar: Callable[..., Dict[str, Any]],
         return _motivo("La Lista Robinson no contesto: no se llama a nadie.", ahora)
     if not libres:
         return _motivo("Todos los candidatos estan en la Lista Robinson.", ahora)
+    # Otra vez, con la hora de AHORA: lo de arriba pudo cambiar mientras contestaba Robinson.
+    ahora = reloj()
+    motivo = _impedimento(ahora)
+    if motivo:
+        return _motivo(motivo, ahora)
     elegido = libres[0]
     try:
         hecho = llamar(elegido["telefono"], elegido["negocio"], elegido["sector"],
                        elegido["prospecto"], origen="auto")
     except Exception as exc:  # noqa: BLE001 - un fallo de Twilio no tumba el hilo
-        settings.logger.exception("[lanzador_llamadas] no se pudo llamar a %s", elegido["telefono"])
-        return _motivo("Fallo al llamar: %s" % str(exc)[:160], ahora)
+        error = cuenta_elevenlabs.censurar(exc)
+        settings.logger.warning("[lanzador_llamadas] no se pudo llamar a %s: %s", elegido["telefono"], error)
+        return _motivo("Fallo al llamar: %s" % error[:160], ahora)
     if not hecho.get("ok"):
         return _motivo("No se llamo a %s (%s)." % (elegido["negocio"] or elegido["telefono"],
                                                     hecho.get("motivo") or "sin motivo"), ahora)
@@ -296,6 +326,9 @@ def fallo_de_voz(llamada_id: str, error: str) -> bool:
     "mandame un email cuando dejemos de hacer llamadas por la suscripcion"). Devuelve si
     se aviso.
     """
+    # El texto del error viene del proveedor: se censuran las claves antes de guardarlo,
+    # mandarlo o escribirlo en el log (revision de Astra, 24-sep-2026).
+    error = cuenta_elevenlabs.censurar(error)
     if llamada_id and captacion_voz._fila(llamada_id) is not None:
         captacion_voz._actualizar(llamada_id, estado="terminada", resultado="fallida",
                                   notas=("ElevenLabs: %s" % error)[:200])

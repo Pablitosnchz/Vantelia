@@ -49,12 +49,14 @@ def cuenta(api_module, monkeypatch):  # noqa: F811
     monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "clave-de-prueba")
     cuenta_elevenlabs._cache.clear()
     cuenta_elevenlabs._avisados.clear()
+    cuenta_elevenlabs._fallidas.clear()
     correos = []
     monkeypatch.setattr(outreach, "_outreach_notify_admin", lambda asunto, texto, html="": correos.append((asunto, texto)))
     cuenta_elevenlabs.correos = correos
     yield cuenta_elevenlabs
     cuenta_elevenlabs._cache.clear()
     cuenta_elevenlabs._avisados.clear()
+    cuenta_elevenlabs._fallidas.clear()
 
 
 @pytest.mark.parametrize("api,ok,tipo", [
@@ -209,8 +211,14 @@ def reserva(cuenta, monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_agotada", "k_con_factura", "k_gratis", "k_buena", "k_otra"])
     monkeypatch.setitem(appstate.CONFIG_CLIENTES, "negocio_voz", {"voice": {"elevenlabs_agent_id": "agent_viejo"}})
     sincronizados = []
-    monkeypatch.setattr(cuenta, "sincronizar_agentes", lambda: sincronizados.append(settings.ELEVENLABS_API_KEY)
-                        or {"negocio_voz": "agent_nuevo"})
+
+    def sincronizar():
+        # Como la de verdad: crea el agente en la cuenta activa y guarda su id.
+        sincronizados.append(settings.ELEVENLABS_API_KEY)
+        appstate.CONFIG_CLIENTES["negocio_voz"]["voice"]["elevenlabs_agent_id"] = "agent_nuevo"
+        return {"negocio_voz": "agent_nuevo"}
+
+    monkeypatch.setattr(cuenta, "sincronizar_agentes", sincronizar)
     api = _Reserva({
         "k_agotada": _suscripcion(usados=300000),
         "k_con_factura": _suscripcion(estado="past_due", factura=True),

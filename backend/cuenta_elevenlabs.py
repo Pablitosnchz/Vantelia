@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -54,12 +55,28 @@ parar = threading.Event()
 hilo: Optional[threading.Thread] = None
 _cache: Dict[str, Dict[str, Any]] = {}
 _avisados: Dict[str, float] = {}
+_fallidas: Dict[str, float] = {}  # huella -> cuando fallo el paso a esa cuenta
 _rotando = threading.Lock()
+# Tras no poder pasar a una cuenta, no se reintenta con ella en este rato (cada ronda
+# del lanzador creaba y borraba agentes a medias).
+MINUTOS_TRAS_FALLAR = 60
+_CLAVE_SUELTA = re.compile(r"\bsk_[A-Za-z0-9]{16,}\b")
 
 
 def huella(clave: str) -> str:
     """Como se nombra una cuenta en logs, panel y correos: nunca la clave."""
     return hashlib.sha256(clave.encode()).hexdigest()[:10] if clave else ""
+
+
+def censurar(texto: Any) -> str:
+    """El texto sin ninguna clave de ElevenLabs: las conocidas se cambian por su huella y
+    cualquier otra con forma de clave se tacha. Los errores del proveedor pueden traerlas
+    y acababan en el log, el correo y las notas (revision de Astra, 24-sep-2026)."""
+    salida = str(texto or "")
+    conocidas = set(claves()) | {settings.ELEVENLABS_API_KEY}
+    for clave in sorted((c for c in conocidas if c), key=len, reverse=True):
+        salida = salida.replace(clave, "[clave %s]" % huella(clave))
+    return _CLAVE_SUELTA.sub("[clave]", salida)
 
 
 def claves() -> List[str]:
@@ -223,35 +240,97 @@ def _borrar_agentes(clave: str, ids: List[str], cliente: Optional[httpx.Client] 
     return borrados
 
 
+def _ids_de_voz() -> Dict[str, Dict[str, str]]:
+    """{negocio: {campo: agent_id}} de todos los agentes guardados, para poder volver atras."""
+    from backend import appstate
+
+    return {cid: {campo: str(valor) for campo, valor in ((cfg or {}).get("voice") or {}).items()
+                  if campo.startswith("elevenlabs_agent") and valor}
+            for cid, cfg in list(appstate.CONFIG_CLIENTES.items())}
+
+
+def _restaurar_ids(antes: Dict[str, Dict[str, str]]) -> None:
+    """Deja los ids de agente como estaban. Nunca lanza: si no se puede guardar en disco,
+    al menos el proceso vivo vuelve a los de antes (y queda en el log)."""
+    from backend import appstate, voz_elevenlabs
+
+    ahora = _ids_de_voz()
+    for cid, campos in antes.items():
+        for campo, valor in campos.items():
+            if (ahora.get(cid) or {}).get(campo) == valor:
+                continue
+            try:
+                voz_elevenlabs.guardar_en_voz(cid, campo, valor)
+            except Exception as exc:  # noqa: BLE001
+                (appstate.CONFIG_CLIENTES.get(cid) or {}).setdefault("voice", {})[campo] = valor
+                settings.logger.warning("[cuenta_elevenlabs] %s/%s restaurado solo en memoria: %s",
+                                        cid, campo, censurar(exc))
+
+
+def cambiando_de_cuenta() -> bool:
+    """A media rotacion la clave nueva puede no tener aun sus agentes: no se llama."""
+    return _rotando.locked()
+
+
 def rotar(motivo: str, *, cliente: Optional[httpx.Client] = None, destino: str = "",
           sincronizar: Optional[Callable[[], Dict[str, str]]] = None) -> Dict[str, Any]:
-    """Pasa a `destino` o a la primera cuenta de la reserva que sirva. {rotada, de, a, agentes|motivo}."""
+    """Pasa a `destino` o a la primera cuenta de la reserva que sirva. {rotada, de, a, agentes|motivo}.
+
+    Solo se da por hecha si los agentes quedan creados en la cuenta nueva. Si falla, todo
+    vuelve a como estaba (clave activa e ids de los agentes) y no se guarda nada: antes se
+    guardaba la clave nueva primero y, con la sincronizacion rota, se llamaba con agentes
+    de la cuenta vieja (revision de Astra, 24-sep-2026).
+    """
     if not _rotando.acquire(blocking=False):
         return {"rotada": False, "motivo": "Ya se esta cambiando de cuenta."}
     try:
         vieja = settings.ELEVENLABS_API_KEY
+        ahora = time.time()
         opciones = [destino] if destino else claves()
-        nueva = next((c for c in opciones if c != vieja and estado(fresco=True, cliente=cliente, clave=c)["ok"]), "")
+        nueva = next((c for c in opciones if c != vieja
+                      and ahora - _fallidas.get(huella(c), 0) >= MINUTOS_TRAS_FALLAR * 60
+                      and estado(fresco=True, cliente=cliente, clave=c)["ok"]), "")
         if not nueva:
             return {"rotada": False, "motivo": "No queda ninguna otra cuenta de ElevenLabs que funcione."}
-        ids_viejos = _agentes_guardados()
+        if vieja and vieja not in settings.ELEVENLABS_API_KEYS:
+            # La principal del .env fuera de la reserva: se queda en ella, delante, para
+            # poder volver cuando se recupere (revision de Astra, 24-sep-2026).
+            settings.ELEVENLABS_API_KEYS = [vieja] + list(settings.ELEVENLABS_API_KEYS)
+        antes = _ids_de_voz()
+        ids_viejos = {i for campos in antes.values() for i in campos.values()}
         settings.ELEVENLABS_API_KEY = nueva
-        _guardar_activa(nueva)
         try:
             agentes = (sincronizar or sincronizar_agentes)()
-            error = ""
-        except Exception as exc:  # noqa: BLE001 - la cuenta cambia igual; se avisa del fallo
-            settings.logger.exception("[cuenta_elevenlabs] no se pudieron crear los agentes en la cuenta nueva")
-            agentes, error = {}, str(exc)[:300]
-        borrados = 0 if error else _borrar_agentes(vieja, [i for i in ids_viejos if i not in agentes.values()],
-                                                   cliente=cliente)
+        except Exception as exc:  # noqa: BLE001 - se vuelve atras entero y se avisa
+            creados = set(_agentes_guardados()) - ids_viejos
+            settings.ELEVENLABS_API_KEY = vieja
+            _restaurar_ids(antes)
+            _borrar_agentes(nueva, sorted(creados), cliente=cliente)
+            _fallidas[huella(nueva)] = time.time()
+            error = censurar(exc)[:300]
+            settings.logger.warning("[cuenta_elevenlabs] no se pudo pasar a la cuenta %s: %s", huella(nueva), error)
+            salida = {"rotada": False, "de": huella(vieja), "a": huella(nueva), "error": error,
+                      "motivo": "No se pudieron crear los agentes en la cuenta nueva; se sigue con la de antes."}
+            if time.time() - _avisados.get("rotacion_fallida", 0) >= HORAS_ENTRE_AVISOS * 3600:
+                try:
+                    _correo_rotacion_fallida(motivo, salida)
+                    _avisados["rotacion_fallida"] = time.time()
+                except Exception as aviso:  # noqa: BLE001
+                    settings.logger.warning("[cuenta_elevenlabs] sin aviso de rotacion fallida: %s", censurar(aviso))
+            return salida
+        _guardar_activa(nueva)
+        # Se borra de la cuenta vieja SOLO lo que ya no esta en la configuracion: con dos
+        # claves de la misma cuenta los agentes siguen siendo los mismos y no se toca nada.
+        vigentes = set(_agentes_guardados())
+        borrados = _borrar_agentes(vieja, sorted(ids_viejos - vigentes), cliente=cliente)
         salida = {"rotada": True, "de": huella(vieja), "a": huella(nueva), "agentes": agentes,
-                  "borrados": borrados, "error": error}
-        settings.logger.warning("[cuenta_elevenlabs] voz pasada de %s a %s: %s", salida["de"], salida["a"], motivo)
+                  "borrados": borrados, "error": ""}
+        settings.logger.warning("[cuenta_elevenlabs] voz pasada de %s a %s: %s", salida["de"], salida["a"],
+                                censurar(motivo))
         try:
             _correo_rotacion(motivo, salida, estado(clave=nueva, cliente=cliente))
-        except Exception:  # noqa: BLE001
-            settings.logger.exception("[cuenta_elevenlabs] no se pudo avisar del cambio de cuenta")
+        except Exception as aviso:  # noqa: BLE001
+            settings.logger.warning("[cuenta_elevenlabs] sin aviso del cambio de cuenta: %s", censurar(aviso))
         return salida
     finally:
         _rotando.release()
@@ -274,13 +353,25 @@ def _correo_rotacion(motivo: str, salida: Dict[str, Any], nueva: Dict[str, Any])
 
     agentes = ", ".join("%s: %s" % (k, v) for k, v in salida["agentes"].items()) or "-"
     quedan = max(0, nueva.get("limite", 0) - nueva.get("usados", 0))
-    texto = ("La voz ha pasado a otra cuenta de ElevenLabs.\n\nMotivo:  %s\nDe:      cuenta %s\nA:       cuenta %s "
-             "(plan %s, quedan %s creditos)\nAgentes creados en la nueva: %s\nAgentes borrados de la vieja: %s\n%s\n"
-             "No hace falta hacer nada. Si la cuenta vieja era de pago, revisa por que ha caido.\n"
-             % (motivo, salida["de"], salida["a"], nueva.get("plan", "?"), quedan, agentes, salida["borrados"],
-                ("\nOJO: no se pudieron crear los agentes: %s\n" % salida["error"]) if salida["error"] else ""))
+    texto = censurar(
+        "La voz ha pasado a otra cuenta de ElevenLabs.\n\nMotivo:  %s\nDe:      cuenta %s\nA:       cuenta %s "
+        "(plan %s, quedan %s creditos)\nAgentes creados en la nueva: %s\nAgentes borrados de la vieja: %s\n\n"
+        "No hace falta hacer nada. Si la cuenta vieja era de pago, revisa por que ha caido.\n"
+        % (motivo, salida["de"], salida["a"], nueva.get("plan", "?"), quedan, agentes, salida["borrados"]))
     html = "<div style='font-family:sans-serif'><h2 style='color:#0891b2'>Voz pasada a otra cuenta</h2><pre style='white-space:pre-wrap'>%s</pre></div>" % escape(texto)
     outreach._outreach_notify_admin("🔁 ElevenLabs: voz pasada a otra cuenta", texto, html)
+
+
+def _correo_rotacion_fallida(motivo: str, salida: Dict[str, Any]) -> None:
+    from backend import outreach
+
+    texto = censurar(
+        "La voz NO ha podido pasar a otra cuenta de ElevenLabs: no se crearon los agentes en la nueva.\n\n"
+        "Motivo del cambio: %s\nCuenta nueva:      %s\nError:             %s\n\nSe sigue con la cuenta %s y "
+        "Sara no llama mientras esa no funcione. Se reintentara en una hora.\n"
+        % (motivo, salida["a"], salida["error"], salida["de"]))
+    html = "<div style='font-family:sans-serif'><h2 style='color:#dc2626'>No se pudo cambiar de cuenta de voz</h2><pre style='white-space:pre-wrap'>%s</pre></div>" % escape(texto)
+    outreach._outreach_notify_admin("⚠️ ElevenLabs: no se pudo cambiar de cuenta", texto, html)
 
 
 def _correo(leido: Dict[str, Any]) -> None:
