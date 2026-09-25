@@ -207,6 +207,11 @@ JUEVES = datetime(2026, 10, 1, tzinfo=timezone.utc)  # 1-oct-2026, jueves; Madri
     ("a las cinco", (15, 30), True),
     ("a las cinco", (8, 30), False),
     ("el jueves a una hora rara", (8, 30), False),   # hora que no se sabe leer: no se llama
+    # Cuarta vuelta (c40a60c): "no esta hasta las cinco" es "desde las cinco".
+    ("el jueves no esta hasta las cinco", (14, 30), False),
+    ("el jueves no esta hasta las cinco", (15, 30), True),
+    ("no llega antes de las cinco", (15, 30), True),
+    ("por la tarde no, mejor otro dia", (15, 30), False),  # otra negacion: no se adivina
 ])
 def test_se_respeta_la_hora_entera_que_dijeron(lanzador, cuando, hora_utc, llama):  # noqa: F811
     ahora = JUEVES.replace(hour=hora_utc[0], minute=hora_utc[1])
@@ -237,3 +242,36 @@ def test_descargar_el_jsonl_no_gasta_los_reintentos(llamada, captacion, monkeypa
     api.codigo = 200
     assert t.recoger_pendientes(cliente=api) == 1
     assert t.de_la_llamada(llamada_id) is not None
+
+
+def test_recogidas_a_la_vez_gastan_un_solo_intento(llamada, captacion, monkeypatch):  # noqa: F811
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from backend import settings
+
+    llamada_id, t = llamada
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_vieja"])
+    reloj = [captacion.timeutils._utc_now()]
+    monkeypatch.setattr(t.timeutils, "_utc_now", lambda: reloj[0])
+    todos_eligen, hilo = threading.Barrier(8), threading.local()
+    claves = t.cuenta_elevenlabs.claves
+
+    def espera_a_los_demas():  # las ocho han leido la cola antes de que nadie apunte nada
+        if not getattr(hilo, "visto", False):
+            hilo.visto = True
+            todos_eligen.wait(timeout=10)
+        return claves()
+
+    monkeypatch.setattr(t.cuenta_elevenlabs, "claves", espera_a_los_demas)
+
+    class _Caida(_Api):
+        def get(self, url, headers=None, **k):
+            return _Respuesta(503, {})
+
+    with ThreadPoolExecutor(max_workers=8) as hilos:
+        list(hilos.map(lambda _: t.recoger_pendientes(cliente=_Caida(None)), range(8)))
+    with t._db() as conn:
+        intentos = conn.execute("SELECT intentos FROM llamadas_transcripcion_intentos WHERE llamada_id=?",
+                                (llamada_id,)).fetchone()[0]
+    assert intentos == 1

@@ -35,7 +35,7 @@ import json
 import re
 import sqlite3
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
@@ -198,20 +198,30 @@ def recoger_pendientes(*, cliente: Optional[httpx.Client] = None, limite: int = 
     guardadas = 0
     try:
         for llamada_id, conversation_id in pendientes:
+            if not _reservar_intento(llamada_id, ahora, reintento):
+                continue  # otra recogida (el vigilante, otra descarga) se la ha quedado
             conversacion = _pedir(conversation_id, cliente)
             if conversacion and guardar(conversacion, "recogida"):
                 guardadas += 1
-                continue
-            with _db() as conn:
-                conn.execute(
-                    "INSERT INTO llamadas_transcripcion_intentos (llamada_id, intentos, ultimo) VALUES (?, 1, ?) "
-                    "ON CONFLICT(llamada_id) DO UPDATE SET intentos = intentos + 1, ultimo = excluded.ultimo",
-                    (llamada_id, ahora.isoformat(timespec="seconds")))
-                conn.commit()
     finally:
         if propio:
             cliente.close()
     return guardadas
+
+
+def _reservar_intento(llamada_id: str, ahora: datetime, reintento: str) -> bool:
+    """Apunta el intento ANTES de pedir la conversacion, y solo si sigue tocando. Si se
+    apuntaba despues, dos recogidas a la vez (el vigilante y una descarga del JSONL)
+    elegian la misma llamada y gastaban varios intentos en el mismo minuto: veinticuatro
+    descargas simultaneas la daban por perdida (revision de Astra, 25-sep-2026)."""
+    with _db() as conn:
+        apuntado = conn.execute(
+            "INSERT INTO llamadas_transcripcion_intentos (llamada_id, intentos, ultimo) VALUES (?, 1, ?) "
+            "ON CONFLICT(llamada_id) DO UPDATE SET intentos = intentos + 1, ultimo = excluded.ultimo "
+            "WHERE llamadas_transcripcion_intentos.ultimo <= ? AND llamadas_transcripcion_intentos.intentos < ?",
+            (llamada_id, ahora.isoformat(timespec="seconds"), reintento, MAX_INTENTOS))
+        conn.commit()
+        return apuntado.rowcount == 1
 
 
 # --- Leer y exportar ------------------------------------------------------------------

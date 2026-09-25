@@ -214,15 +214,21 @@ _HORAS_HABLADAS = {"una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis
 # Una hora dicha: "5", "17:30", "11h", "cinco", "cinco y media", "seis menos cuarto".
 _HORA = (r"(?:\d{1,2}(?:[:.h]\d{2}|h)?|" + "|".join(_HORAS_HABLADAS) + r")"
          r"(?: y media| y cuarto| menos cuarto)?")
-# Como se acota: "de cinco a seis" / "entre las cinco y las seis" (tramo), "a partir de las
-# cinco" (desde), "hasta las cinco" (hasta) y "a las cinco" (sobre esa hora). Se leen en
-# este orden y cada uno se come su trozo: "de las cinco a las seis" no es "a las seis".
+# Como se acota: "no esta hasta las cinco" (= desde las cinco), "de cinco a seis" / "entre
+# las cinco y las seis" (tramo), "a partir de las cinco" (desde), "hasta las cinco" (hasta)
+# y "a las cinco" (sobre esa hora). Se leen en este orden y cada uno se come su trozo: "de
+# las cinco a las seis" no es "a las seis", ni "no esta hasta las cinco" es "hasta las cinco".
+_NO_HASTA = re.compile(r"\bno (?:[a-z]+ ){0,3}?(?:hasta|antes de) (?:las? )?(%s)\b" % _HORA)
 _TRAMO = re.compile(r"\b(?:de|entre) (?:las? )?(%s) (?:a|y|hasta) (?:las? )?(%s)\b" % (_HORA, _HORA))
 _DESDE = re.compile(r"\b(?:a partir de|desde|despues de) (?:las? )?(%s)\b" % _HORA)
 _HASTA = re.compile(r"\b(?:hasta|antes de) (?:las? )?(%s)\b" % _HORA)
 _SOBRE = re.compile(r"\b(?:a|sobre|hacia|para|a eso de|por) las? (%s)\b" % _HORA)
-# Lo que queda y huele a hora sin haberse entendido: mejor no llamar que llamar mal.
+_ACOTACIONES = ((_NO_HASTA, "desde"), (_TRAMO, "tramo"), (_DESDE, "desde"), (_HASTA, "hasta"),
+                (_SOBRE, "sobre"))
+# Lo que queda y huele a hora sin haberse entendido, o una negacion o excepcion que no sea
+# la de "no esta hasta": mejor no llamar que llamar justo cuando dijeron que no.
 _HORA_SUELTA = re.compile(r"\b(?:a|de|las?|hasta|desde|entre|sobre|hacia|antes|despues|y) (?:las? )?%s\b" % _HORA)
+_NEGACION = re.compile(r"\b(?:no|nunca|tampoco|ni|salvo|excepto|menos)\b")
 _MINUTOS_SI_DICEN_UNA_HORA = 60  # "a las cinco": de 17:00 a 18:00
 
 
@@ -249,27 +255,29 @@ def cuando_esta(cuando: str) -> Dict[str, Any]:
     Sin nada entendido no hay rellamada, y tampoco si dijeron una hora que no se ha sabido
     leer: entender solo el dia y llamar a cualquier hora es peor que no llamar (revisiones
     de Astra, 25-sep-2026: "" programaba igual; "el jueves de cinco a seis" llamaba a las
-    10:30; "hasta las cinco" se leia como "desde las cinco")."""
+    10:30; "hasta las cinco" se leia como "desde las cinco"; "no esta hasta las cinco"
+    llamaba a las 16:30). Una negacion que no sea "no ... hasta" tambien deja sin rellamada."""
     texto = re.sub(r"\s+", " ", textnorm._strip_accents(str(cuando or "").lower()))
     desde: Optional[int] = None
     hasta: Optional[int] = None
     hora_rara = False
     resto = texto
-    for patron in (_TRAMO, _DESDE, _HASTA, _SOBRE):
+    for patron, forma in _ACOTACIONES:
         for encontrado in patron.finditer(resto):
             horas = [_minutos(h) for h in encontrado.groups()]
             if None in horas:
                 hora_rara = True
-            elif patron is _TRAMO:
+            elif forma == "tramo":
                 desde, hasta = horas
-            elif patron is _DESDE:
+            elif forma == "desde":
                 desde = horas[0]
-            elif patron is _HASTA:
+            elif forma == "hasta":
                 hasta = horas[0]
             else:
                 desde, hasta = horas[0], horas[0] + _MINUTOS_SI_DICEN_UNA_HORA
         resto = patron.sub(" ", resto)
-    if _HORA_SUELTA.search(resto) or (desde is not None and hasta is not None and hasta <= desde):
+    if (_HORA_SUELTA.search(resto) or _NEGACION.search(resto)
+            or (desde is not None and hasta is not None and hasta <= desde)):
         hora_rara = True
     franja: Optional[int] = None
     if "tarde" in texto:
