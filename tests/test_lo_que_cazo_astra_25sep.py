@@ -212,6 +212,9 @@ JUEVES = datetime(2026, 10, 1, tzinfo=timezone.utc)  # 1-oct-2026, jueves; Madri
     ("el jueves no esta hasta las cinco", (15, 30), True),
     ("no llega antes de las cinco", (15, 30), True),
     ("por la tarde no, mejor otro dia", (15, 30), False),  # otra negacion: no se adivina
+    # Quinta vuelta (5dcc0ad): la duda no desaparece por ir antes de "hasta".
+    ("el jueves no se si esta hasta las cinco", (15, 30), False),
+    ("el jueves no se si esta hasta las cinco", (14, 30), False),
 ])
 def test_se_respeta_la_hora_entera_que_dijeron(lanzador, cuando, hora_utc, llama):  # noqa: F811
     ahora = JUEVES.replace(hour=hora_utc[0], minute=hora_utc[1])

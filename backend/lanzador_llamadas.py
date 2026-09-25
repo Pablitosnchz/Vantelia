@@ -218,7 +218,10 @@ _HORA = (r"(?:\d{1,2}(?:[:.h]\d{2}|h)?|" + "|".join(_HORAS_HABLADAS) + r")"
 # las cinco y las seis" (tramo), "a partir de las cinco" (desde), "hasta las cinco" (hasta)
 # y "a las cinco" (sobre esa hora). Se leen en este orden y cada uno se come su trozo: "de
 # las cinco a las seis" no es "a las seis", ni "no esta hasta las cinco" es "hasta las cinco".
-_NO_HASTA = re.compile(r"\bno (?:[a-z]+ ){0,3}?(?:hasta|antes de) (?:las? )?(%s)\b" % _HORA)
+# Solo con verbos de llegar o estar: con palabras cualesquiera, "no se si esta hasta las
+# cinco" se leia como "desde las cinco" y la duda desaparecia (revision de Astra).
+_NO_HASTA = re.compile(r"\bno (?:esta|estara|llega|llegara|viene|vendra|entra|entrara|empieza|empezara) "
+                       r"(?:hasta|antes de) (?:las? )?(%s)\b" % _HORA)
 _TRAMO = re.compile(r"\b(?:de|entre) (?:las? )?(%s) (?:a|y|hasta) (?:las? )?(%s)\b" % (_HORA, _HORA))
 _DESDE = re.compile(r"\b(?:a partir de|desde|despues de) (?:las? )?(%s)\b" % _HORA)
 _HASTA = re.compile(r"\b(?:hasta|antes de) (?:las? )?(%s)\b" % _HORA)
