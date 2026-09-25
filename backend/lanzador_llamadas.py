@@ -211,24 +211,66 @@ _HORAS_HABLADAS = {"una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis
                    "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12}
 
 
-def cuando_esta(cuando: str) -> Dict[str, Any]:
-    """"por las tardes", "el jueves a partir de las cinco", "manana por la manana"...
-    -> {franja: 0 (manana) | 1 (tarde) | None, dia: 0-4 | None, otro_dia: bool,
-        desde: minutos desde medianoche | None (no llamar antes), entendido: bool}.
+# Una hora dicha: "5", "17:30", "11h", "cinco", "cinco y media", "seis menos cuarto".
+_HORA = (r"(?:\d{1,2}(?:[:.h]\d{2}|h)?|" + "|".join(_HORAS_HABLADAS) + r")"
+         r"(?: y media| y cuarto| menos cuarto)?")
+# Como se acota: "de cinco a seis" / "entre las cinco y las seis" (tramo), "a partir de las
+# cinco" (desde), "hasta las cinco" (hasta) y "a las cinco" (sobre esa hora). Se leen en
+# este orden y cada uno se come su trozo: "de las cinco a las seis" no es "a las seis".
+_TRAMO = re.compile(r"\b(?:de|entre) (?:las? )?(%s) (?:a|y|hasta) (?:las? )?(%s)\b" % (_HORA, _HORA))
+_DESDE = re.compile(r"\b(?:a partir de|desde|despues de) (?:las? )?(%s)\b" % _HORA)
+_HASTA = re.compile(r"\b(?:hasta|antes de) (?:las? )?(%s)\b" % _HORA)
+_SOBRE = re.compile(r"\b(?:a|sobre|hacia|para|a eso de|por) las? (%s)\b" % _HORA)
+# Lo que queda y huele a hora sin haberse entendido: mejor no llamar que llamar mal.
+_HORA_SUELTA = re.compile(r"\b(?:a|de|las?|hasta|desde|entre|sobre|hacia|antes|despues|y) (?:las? )?%s\b" % _HORA)
+_MINUTOS_SI_DICEN_UNA_HORA = 60  # "a las cinco": de 17:00 a 18:00
 
-    Sin nada entendido no hay rellamada: no se inventa una franja (revision de Astra,
-    25-sep-2026: con "" o algo raro se programaba igual)."""
-    texto = textnorm._strip_accents(str(cuando or "").lower())
+
+def _minutos(dicho: str) -> Optional[int]:
+    """"cinco y media" -> 17:30, en minutos desde medianoche. "A las cinco" es por la tarde;
+    "a las diez", por la manana. Lo que no cae en un horario de trabajo devuelve None."""
+    partes = re.match(r"(\d{1,2}|[a-z]+)(?:[:.h](\d{2}))?", dicho)
+    numero = int(partes.group(1)) if partes.group(1).isdigit() else _HORAS_HABLADAS.get(partes.group(1))
+    if numero is None:
+        return None
+    minutos = int(partes.group(2)) if partes.group(2) else 0
+    minutos += 30 if dicho.endswith("y media") else 15 if dicho.endswith("y cuarto") else 0
+    minutos -= 15 if dicho.endswith("menos cuarto") else 0
+    hora_24 = numero if 8 <= numero <= 20 else numero + 12 if 1 <= numero <= 7 else None
+    return None if hora_24 is None or minutos >= 60 else hora_24 * 60 + minutos
+
+
+def cuando_esta(cuando: str) -> Dict[str, Any]:
+    """"por las tardes", "el jueves a partir de las cinco", "de cinco a seis"...
+    -> {franja: 0 (manana) | 1 (tarde) | None, dia: 0-4 | None, otro_dia: bool,
+        desde / hasta: minutos desde medianoche | None (no llamar antes / a partir de),
+        entendido: bool}.
+
+    Sin nada entendido no hay rellamada, y tampoco si dijeron una hora que no se ha sabido
+    leer: entender solo el dia y llamar a cualquier hora es peor que no llamar (revisiones
+    de Astra, 25-sep-2026: "" programaba igual; "el jueves de cinco a seis" llamaba a las
+    10:30; "hasta las cinco" se leia como "desde las cinco")."""
+    texto = re.sub(r"\s+", " ", textnorm._strip_accents(str(cuando or "").lower()))
     desde: Optional[int] = None
-    # La hora solo cuenta tras "la(s)": "a las cinco", "desde las 10:30"; "el 3 de octubre" no.
-    hora = re.search(r"\blas? (\d{1,2})(?:[:.](\d{2}))?\b|\blas? (" + "|".join(_HORAS_HABLADAS) + r")\b", texto)
-    if hora:
-        numero = int(hora.group(1)) if hora.group(1) else _HORAS_HABLADAS[hora.group(3)]
-        minutos = int(hora.group(2)) if hora.group(2) else (30 if "y media" in texto else 15 if "y cuarto" in texto else 0)
-        # "a las cinco" es por la tarde; "a las diez", por la manana.
-        hora_24 = numero if 8 <= numero <= 19 else numero + 12 if 1 <= numero <= 7 else None
-        if hora_24 is not None:
-            desde = hora_24 * 60 + minutos
+    hasta: Optional[int] = None
+    hora_rara = False
+    resto = texto
+    for patron in (_TRAMO, _DESDE, _HASTA, _SOBRE):
+        for encontrado in patron.finditer(resto):
+            horas = [_minutos(h) for h in encontrado.groups()]
+            if None in horas:
+                hora_rara = True
+            elif patron is _TRAMO:
+                desde, hasta = horas
+            elif patron is _DESDE:
+                desde = horas[0]
+            elif patron is _HASTA:
+                hasta = horas[0]
+            else:
+                desde, hasta = horas[0], horas[0] + _MINUTOS_SI_DICEN_UNA_HORA
+        resto = patron.sub(" ", resto)
+    if _HORA_SUELTA.search(resto) or (desde is not None and hasta is not None and hasta <= desde):
+        hora_rara = True
     franja: Optional[int] = None
     if "tarde" in texto:
         franja = 1
@@ -239,8 +281,9 @@ def cuando_esta(cuando: str) -> Dict[str, Any]:
     dia = next((n for nombre, n in _DIAS.items() if nombre in texto), None)
     # "manana" suelto es el dia siguiente, no la franja de la manana.
     otro_dia = bool(re.search(r"\bmanana\b", re.sub(r"(por|de|a) la manana", "", texto)))
-    entendido = franja is not None or dia is not None or otro_dia
-    return {"franja": franja, "dia": dia, "otro_dia": otro_dia, "desde": desde, "entendido": entendido}
+    entendido = not hora_rara and (franja is not None or dia is not None or otro_dia or hasta is not None)
+    return {"franja": franja, "dia": dia, "otro_dia": otro_dia, "desde": desde, "hasta": hasta,
+            "entendido": entendido}
 
 
 def _franja_de(ahora: datetime) -> Optional[int]:
@@ -296,8 +339,11 @@ def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
             continue  # sin saber cuando esta, no se vuelve a llamar solos
         if preferencia["franja"] is not None and preferencia["franja"] != franja_actual:
             continue
-        if preferencia["desde"] is not None and local.hour * 60 + local.minute < preferencia["desde"]:
+        minuto = local.hour * 60 + local.minute
+        if preferencia["desde"] is not None and minuto < preferencia["desde"]:
             continue  # "a partir de las cinco": no a las cuatro y media
+        if preferencia["hasta"] is not None and minuto >= preferencia["hasta"]:
+            continue  # "hasta las cinco": no a las cinco y media
         if preferencia["dia"] is not None and preferencia["dia"] != local.weekday():
             continue
         dia_de_la_llamada = datetime.fromisoformat(fila["creada"]).astimezone(ZONA).date()

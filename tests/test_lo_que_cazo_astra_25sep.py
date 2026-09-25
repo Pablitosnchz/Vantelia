@@ -190,3 +190,50 @@ def test_si_una_cuenta_no_responde_se_prueba_la_siguiente(llamada, monkeypatch):
 
     api = _Timeout()
     assert t._pedir("conv_1", api) is not None and api.claves[-2:] == ["k_caida", "k_vieja"]
+
+
+# --- Tercera vuelta: lo que quedaba en 08df105 ------------------------------------------
+
+JUEVES = datetime(2026, 10, 1, tzinfo=timezone.utc)  # 1-oct-2026, jueves; Madrid = UTC+2
+
+
+@pytest.mark.parametrize("cuando,hora_utc,llama", [
+    ("el jueves de cinco a seis", (8, 30), False),   # 10:30: solo se entendia el dia
+    ("el jueves de cinco a seis", (15, 30), True),   # 17:30
+    ("el jueves hasta las cinco", (14, 30), True),   # 16:30: todavia esta
+    ("el jueves hasta las cinco", (15, 30), False),  # 17:30: ya se ha ido
+    ("entre las cinco y las seis", (15, 15), True),
+    ("de las cinco a las seis", (15, 30), True),     # el tramo manda, no "a las seis" suelto
+    ("a las cinco", (15, 30), True),
+    ("a las cinco", (8, 30), False),
+    ("el jueves a una hora rara", (8, 30), False),   # hora que no se sabe leer: no se llama
+])
+def test_se_respeta_la_hora_entera_que_dijeron(lanzador, cuando, hora_utc, llama):  # noqa: F811
+    ahora = JUEVES.replace(hour=hora_utc[0], minute=hora_utc[1])
+    creada = ahora - timedelta(hours=30)  # la llamada fue el miercoles
+    _hablo_con_un_empleado(lanzador, cuando=cuando, hace_horas=(MARTES_16_30 - creada).total_seconds() / 3600)
+    assert bool(lanzador.rellamadas_dirigidas(ahora)) is llama
+
+
+def test_descargar_el_jsonl_no_gasta_los_reintentos(llamada, captacion, monkeypatch):  # noqa: F811
+    from backend import settings
+
+    llamada_id, t = llamada
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_vieja"])
+    reloj = [captacion.timeutils._utc_now()]
+    monkeypatch.setattr(t.timeutils, "_utc_now", lambda: reloj[0])
+
+    class _Caida(_Api):
+        codigo = 503
+
+        def get(self, url, headers=None, **k):
+            self.pedidas.append(url)
+            return _Respuesta(self.codigo, _conversacion() if self.codigo == 200 else {})
+
+    api = _Caida(None)
+    for _ in range(t.MAX_INTENTOS):  # a la misma hora, como al descargar varias veces
+        t.recoger_pendientes(cliente=api)
+    reloj[0] += timedelta(hours=2)
+    api.codigo = 200
+    assert t.recoger_pendientes(cliente=api) == 1
+    assert t.de_la_llamada(llamada_id) is not None

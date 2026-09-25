@@ -46,6 +46,11 @@ API = "https://api.elevenlabs.io"
 TOLERANCIA_FIRMA_SEGUNDOS = 30 * 60
 MINUTOS_ANTES_DE_RECOGER = 10
 MAX_INTENTOS = 24  # una vez por hora: un dia intentandolo
+# Entre dos intentos de la misma llamada. Sin esto, cada descarga del JSONL gastaba un
+# intento y veinticuatro descargas seguidas con ElevenLabs caido la daban por perdida en
+# segundos (revision de Astra, 25-sep-2026). Algo menos de una hora para no saltarse la
+# pasada horaria del vigilante por unos segundos de desfase.
+MINUTOS_ENTRE_INTENTOS = 55
 ESTADOS_TERMINADOS = ("done", "failed")
 
 
@@ -176,15 +181,16 @@ def recoger_pendientes(*, cliente: Optional[httpx.Client] = None, limite: int = 
     se recogian nunca (revision de Astra, 25-sep-2026). Tras MAX_INTENTOS se dejan."""
     ahora = timeutils._utc_now()
     corte = (ahora - timedelta(minutes=MINUTOS_ANTES_DE_RECOGER)).isoformat(timespec="seconds")
+    reintento = (ahora - timedelta(minutes=MINUTOS_ENTRE_INTENTOS)).isoformat(timespec="seconds")
     with _db() as conn:
         pendientes = conn.execute(
             "SELECT l.id, l.conversation_id FROM llamadas_voz l "
             "LEFT JOIN llamadas_transcripcion_intentos i ON i.llamada_id = l.id "
             "WHERE l.conversation_id <> '' AND l.estado = 'terminada' AND l.actualizada <= ? "
-            "AND COALESCE(i.intentos, 0) < ? "
+            "AND COALESCE(i.intentos, 0) < ? AND COALESCE(i.ultimo, '') <= ? "
             "AND NOT EXISTS (SELECT 1 FROM llamadas_transcripcion t WHERE t.llamada_id = l.id) "
             "ORDER BY COALESCE(i.ultimo, ''), l.actualizada LIMIT ?",
-            (corte, MAX_INTENTOS, max(1, limite))).fetchall()
+            (corte, MAX_INTENTOS, reintento, max(1, limite))).fetchall()
     if not pendientes or not cuenta_elevenlabs.claves():
         return 0
     propio = cliente is None
