@@ -3842,8 +3842,8 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
             <div class="cap-table-wrap">
               <table class="cap-table">
-                <thead><tr><th>Fecha</th><th>Negocio</th><th>Teléfono</th><th>Origen</th><th>Resultado</th><th>Notas</th><th class="cap-table__action">Conversación</th></tr></thead>
-                <tbody id="llCallsBody"><tr><td colspan="7"><div class="cap-state cap-state--loading">Cargando llamadas…</div></td></tr></tbody>
+                <thead><tr><th>Fecha</th><th>Negocio</th><th>Teléfono</th><th>Origen</th><th>Resultado</th><th>Con quién</th><th>Notas</th><th class="cap-table__action">Conversación</th></tr></thead>
+                <tbody id="llCallsBody"><tr><td colspan="8"><div class="cap-state cap-state--loading">Cargando llamadas…</div></td></tr></tbody>
               </table>
             </div>
           </article>
@@ -8902,21 +8902,22 @@ tbody tr:last-child td { border-bottom: none; }
             <td>${esc(fecha(ll.creada))}</td>
             <td><div class="cap-company"><strong>${esc(ll.negocio || "—")}</strong><span>${esc(ll.sector || ll.prospecto || "")}</span></div></td>
             <td>${esc(ll.telefono)}</td>
-            <td>${ll.origen === "auto" ? "Automática" : "Manual"}</td>
+            <td>${ll.rellamada_de ? `Rellamada a ${esc(ll.responsable_nombre || "quien decide")}` : (ll.origen === "auto" ? "Automática" : "Manual")}</td>
             <td><span class="ll-result ${clave ? "ll-result--" + esc(clave) : ""}">${esc(texto)}</span></td>
-            <td>${esc(ll.notas || ll.email || "")}</td>
+            <td>${ll.interlocutor ? esc(ll.con_quien || "") : "—"}</td>
+            <td>${esc([ll.notas || ll.email || "", ll.responsable_nota || ""].filter(Boolean).join(" · "))}</td>
             <td class="cap-table__action">${boton}</td>
           </tr>`;
         });
         LQ("#llCallsBody").innerHTML = filas.length ? filas.join("")
-          : `<tr><td colspan="7"><div class="cap-state">Todavía no hay llamadas.</div></td></tr>`;
+          : `<tr><td colspan="8"><div class="cap-state">Todavía no hay llamadas.</div></td></tr>`;
       }
 
       async function cargar() {
         try {
           pintar(await api("/admin/captacion/llamadas?limit=100"));
         } catch (error) {
-          LQ("#llCallsBody").innerHTML = `<tr><td colspan="7"><div class="cap-state cap-state--error">${esc(error.message)}</div></td></tr>`;
+          LQ("#llCallsBody").innerHTML = `<tr><td colspan="8"><div class="cap-state cap-state--error">${esc(error.message)}</div></td></tr>`;
         }
       }
 

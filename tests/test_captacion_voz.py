@@ -116,7 +116,9 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
     assert cuerpo["agent_id"] == "agent_sara" and cuerpo["direction"] == "outbound"
     assert cuerpo["conversation_initiation_client_data"]["dynamic_variables"] == {
         "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": llamada,
-        "canal_envio": "pedir_email", "email_negocio": ""}
+        "canal_envio": "pedir_email", "email_negocio": "",
+        # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
+        "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio"}
 
 
 # --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------

@@ -46,7 +46,8 @@ try:
 except ImportError:  # pragma: no cover - Python 3.8
     from backports.zoneinfo import ZoneInfo
 
-from backend import captacion_voz, clients, cuenta_elevenlabs, lista_robinson, settings, timeutils, voz_elevenlabs
+from backend import (captacion_voz, clients, cuenta_elevenlabs, lista_robinson, settings, textnorm, timeutils,
+                     voz_elevenlabs)
 
 ZONA = ZoneInfo("Europe/Madrid")
 DIAS_DE_LLAMADA = (0, 1, 2, 3, 4)  # lunes a viernes
@@ -202,6 +203,96 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
     return elegidos[:limite]
 
 
+# --- Rellamada dirigida a quien decide (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md) -------
+
+HORAS_ANTES_DE_RELLAMAR = 2
+_DIAS = {"lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3, "viernes": 4}
+_HORAS_HABLADAS = {"una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7,
+                   "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12}
+
+
+def cuando_esta(cuando: str) -> Dict[str, Any]:
+    """"por las tardes", "el jueves a partir de las cuatro", "manana por la manana"...
+    -> {franja: 0 (manana) | 1 (tarde) | None, dia: 0-4 | None, otro_dia: bool}."""
+    texto = textnorm._strip_accents(str(cuando or "").lower())
+    franja: Optional[int] = None
+    if "tarde" in texto:
+        franja = 1
+    elif re.search(r"(por|de|a) la manana|primera hora|mediodia", texto):
+        franja = 0
+    else:
+        hora = re.search(r"\b(\d{1,2})\b|\b(" + "|".join(_HORAS_HABLADAS) + r")\b", texto)
+        if hora:
+            numero = int(hora.group(1)) if hora.group(1) else _HORAS_HABLADAS[hora.group(2)]
+            franja = 1 if (1 <= numero <= 7 or 13 <= numero <= 19) else 0 if 8 <= numero <= 12 else None
+    dia = next((n for nombre, n in _DIAS.items() if nombre in texto), None)
+    # "manana" suelto es el dia siguiente, no la franja de la manana.
+    otro_dia = bool(re.search(r"\bmanana\b", re.sub(r"(por|de|a) la manana", "", texto)))
+    return {"franja": franja, "dia": dia, "otro_dia": otro_dia}
+
+
+def _franja_de(ahora: datetime) -> Optional[int]:
+    local = ahora.astimezone(ZONA).time()
+    return next((i for i, (desde, hasta) in enumerate(FRANJAS) if desde <= local < hasta), None)
+
+
+def _rechazos_por_la_transcripcion() -> set:
+    """Llamadas que la clasificacion de ElevenLabs dio por "rechazo" (la guarda el modulo de
+    transcripciones cuando exista). Sin esa tabla, ninguna."""
+    try:
+        with _db() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='llamadas_transcripcion'"
+                                ).fetchone():
+                return set()
+            filas = conn.execute("SELECT llamada_id, analisis_json FROM llamadas_transcripcion").fetchall()
+    except sqlite3.Error:
+        return set()
+    rechazos = set()
+    for fila in filas:
+        if re.search(r'"desenlace"[^}]*"rechazo"', fila["analisis_json"] or ""):
+            rechazos.add(fila["llamada_id"])
+    return rechazos
+
+
+def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
+    """Llamadas en las que cogio alguien del equipo y dio el nombre de quien decide: se
+    vuelve a llamar UNA vez, al fijo del negocio (nunca a un movil que dieran), en la
+    franja y el dia que dijeron, y preguntando por esa persona."""
+    hace_rato = _iso(ahora - timedelta(hours=HORAS_ANTES_DE_RELLAMAR))
+    marcadores = ",".join("?" * len(ESTADOS_QUE_NO_SE_LLAMAN))
+    with _db() as conn:
+        filas = conn.execute(
+            "SELECT l.* FROM llamadas_voz l "
+            "WHERE l.origen = 'auto' AND l.interlocutor = 'empleado' AND l.responsable_nombre <> '' "
+            "AND l.rellamada_de = '' AND l.resultado NOT IN ('no_llamar', 'interesado') AND l.creada <= ? "
+            "AND NOT EXISTS (SELECT 1 FROM llamadas_voz r WHERE r.rellamada_de = l.id) "
+            "AND NOT EXISTS (SELECT 1 FROM no_llamar n WHERE n.telefono = l.telefono) "
+            "AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = l.prospecto) "
+            "AND NOT EXISTS (SELECT 1 FROM prospects p WHERE p.email = l.prospecto "
+            "                AND COALESCE(p.status, '') IN (%s)) "
+            "ORDER BY l.creada" % marcadores,
+            (hace_rato,) + ESTADOS_QUE_NO_SE_LLAMAN).fetchall()
+    rechazos = _rechazos_por_la_transcripcion()
+    local = ahora.astimezone(ZONA)
+    franja_actual = _franja_de(ahora)
+    salida: List[Dict[str, Any]] = []
+    for fila in filas:
+        if fila["id"] in rechazos or not es_fijo(fila["telefono"]):
+            continue
+        preferencia = cuando_esta(fila["responsable_cuando"])
+        if preferencia["franja"] is not None and preferencia["franja"] != franja_actual:
+            continue
+        if preferencia["dia"] is not None and preferencia["dia"] != local.weekday():
+            continue
+        dia_de_la_llamada = datetime.fromisoformat(fila["creada"]).astimezone(ZONA).date()
+        if preferencia["otro_dia"] and local.date() <= dia_de_la_llamada:
+            continue
+        salida.append({"telefono": fila["telefono"], "negocio": fila["negocio"], "sector": fila["sector"],
+                       "prospecto": fila["prospecto"], "responsable": fila["responsable_nombre"],
+                       "rellamada_de": fila["id"], "intentos": 0, "calor": 0})
+    return salida
+
+
 def fuera_de_robinson(lista: List[Dict[str, Any]], ahora: datetime,
                       consultar: Callable[[List[str]], Dict[str, bool]] = None) -> List[Dict[str, Any]]:
     """Los candidatos que NO estan en la Lista Robinson. Lanza si no se puede saber."""
@@ -286,7 +377,10 @@ def _ronda(reloj: Callable[[], datetime], llamar: Callable[..., Dict[str, Any]],
     motivo = _impedimento(ahora)
     if motivo:
         return _motivo(motivo, ahora)
-    lista = candidatos(ahora)
+    # Primero las rellamadas a quien decide (ya hablamos con su negocio); luego, en frio.
+    dirigidas = rellamadas_dirigidas(ahora)
+    ya = {c["telefono"] for c in dirigidas}
+    lista = dirigidas + [c for c in candidatos(ahora) if c["telefono"] not in ya]
     if not lista:
         return _motivo("No quedan negocios a los que llamar.", ahora)
     try:
@@ -302,9 +396,10 @@ def _ronda(reloj: Callable[[], datetime], llamar: Callable[..., Dict[str, Any]],
     if motivo:
         return _motivo(motivo, ahora)
     elegido = libres[0]
+    dirigida = {k: elegido[k] for k in ("responsable", "rellamada_de") if elegido.get(k)}
     try:
         hecho = llamar(elegido["telefono"], elegido["negocio"], elegido["sector"],
-                       elegido["prospecto"], origen="auto")
+                       elegido["prospecto"], origen="auto", **dirigida)
     except Exception as exc:  # noqa: BLE001 - un fallo de Twilio no tumba el hilo
         error = cuenta_elevenlabs.censurar(exc)
         settings.logger.warning("[lanzador_llamadas] no se pudo llamar a %s: %s", elegido["telefono"], error)
@@ -393,9 +488,10 @@ def resumen(limite: int = 100) -> Dict[str, Any]:
     """Lo que ensena el panel: ajustes, que falta, como va hoy y las ultimas llamadas."""
     ahora = timeutils._utc_now()
     with _db() as conn:
-        llamadas = [dict(f) for f in conn.execute(
+        llamadas = [dict(f, con_quien=captacion_voz.con_quien_hablo(f)) for f in conn.execute(
             "SELECT id, telefono, negocio, sector, prospecto, estado, resultado, email, notas, origen, "
-            "conversation_id, creada, actualizada FROM llamadas_voz ORDER BY creada DESC LIMIT ?",
+            "conversation_id, interlocutor, responsable_nombre, responsable_cuando, responsable_nota, "
+            "rellamada_de, creada, actualizada FROM llamadas_voz ORDER BY creada DESC LIMIT ?",
             (max(1, min(500, limite)),))]
         hoy = conn.execute("SELECT origen, COUNT(*) FROM llamadas_voz WHERE creada >= ? GROUP BY origen",
                            (_iso(_inicio_del_dia(ahora)),)).fetchall()

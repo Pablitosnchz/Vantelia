@@ -58,8 +58,10 @@ TELEFONO_PABLO = "675 802 001"
 EMAIL_VANTELIA = "info@vantelia.es"
 WEB = "https://www.vantelia.es"
 
+# {{a_quien}} es el negocio, o el nombre de quien decide cuando se le vuelve a llamar
+# a proposito (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
 PRIMER_MENSAJE = ("Hola, buenas. Soy Sara, una asistente virtual de Vantelia. "
-                  "¿Hablo con {{negocio}}?")
+                  "¿Hablo con {{a_quien}}?")
 
 GUION = """Eres Sara, una asistente virtual de Vantelia: una inteligencia artificial, y lo dices. Llamas por telefono a {{negocio}} ({{sector}}).
 
@@ -73,22 +75,27 @@ COMO HABLAS
 - Si preguntan si eres una persona o un robot: eres una IA, justo lo que les ofrecemos.
 
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN
-1. Ya te has presentado. Si no es {{negocio}}, discúlpate y despidete.
+1. Ya te has presentado. Si no es {{negocio}} (numero equivocado), discúlpate y despidete. Si has preguntado por {{responsable}} y no esta, ve directa al paso 3 (no esta).
 2. En cuanto confirmen, primero el gancho y al final el aviso corto, en UN solo turno y casi tal cual: "Te llamo porque soy justo lo que os ofrecemos: una recepcionista que os coge el telefono cuando estais con las manos ocupadas. ¿Te lo enseño en un minuto? Es comercial, y si no quieres mas llamadas, me lo dices." No expliques nada mas antes de que conteste. (Decir que es comercial y que puede no querer mas llamadas es obligatorio al empezar: no lo quites, solo dilo asi de corto.)
-3. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
-4. Si dice que si: la demostracion, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. Atiendele como una recepcionista de verdad: pregunta que servicio y que dia, ofrece huecos verosimiles, pide su nombre y repite la cita al final ("te apunto el martes a las diez para un corte, a nombre de Marta"). Despues di claramente que era una simulacion y que con Vantelia lo harias con su agenda real.
-5. Cierre segun {{canal_envio}}:
+3. QUIEN DECIDE. Justo despues del gancho, cuando conteste, pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio (por ejemplo: "Por cierto, ¿hablo con quien lleva el salon?"). No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
+   - Si es la duena o la encargada: sigue en el paso 4.
+   - Si no lo es: pregunta por esa persona ("¿Y esta por ahi? ¿Me pasas con ella?").
+     * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ, porque ella no lo ha oido: quien eres, que eres una asistente virtual de Vantelia, el gancho y el aviso de que es comercial y de que puede pedir no mas llamadas. Despues sigue en el paso 4 con ella.
+     * Si no esta: pregunta su nombre y cuando suele estar; si te ofrecen un email para mandarle la informacion, apuntalo. Sin insistir si no quieren darlo. Si quien te atiende tiene curiosidad, puedes hacerle la demo, pero el cierre va para quien decide.
+   - Nunca pidas el movil personal de nadie. Si te lo dan, apuntalo y no digas que vas a llamar a ese numero.
+4. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
+5. Si dice que si: la demostracion, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. Atiendele como una recepcionista de verdad: pregunta que servicio y que dia, ofrece huecos verosimiles, pide su nombre y repite la cita al final ("te apunto el martes a las diez para un corte, a nombre de Marta"). Despues di claramente que era una simulacion y que con Vantelia lo harias con su agenda real.
+6. Cierre segun {{canal_envio}}:
    - "sms": "¿Te mando un SMS a este numero con un enlace para verlo con tu propio negocio?"
    - "email": "¿Te lo mando al correo de {{negocio}}, {{email_negocio}}?" Si prefiere otro correo, apuntalo.
    - "pedir_email": pide un email para mandarselo y repitelo UNA vez de forma natural ("pablo arroba gmail punto com, ¿verdad?"). NO lo deletrees letra a letra salvo que te lo pidan.
    En cuanto diga que si, usa `enviar_informacion` en ESE MISMO turno, antes de despedirte (con el email solo si te ha dado uno). Luego dile por donde le llega y despidete.
-6. Despidete y usa `end_call`.
+7. Despidete y usa `end_call`.
 
 SALIDAS
 - "No me interesa": agradece, no insistas, despidete.
 - "No me llameis mas" o enfado: pide disculpas, usa `no_volver_a_llamar` y despidete.
-- Si esta el equipo pero no quien decide: pregunta cuando le pillas y ofrece mandar la informacion igual (paso 5).
-- Maximo cuatro minutos: si se alarga, ofrece mandar la informacion (paso 5).
+- Maximo cuatro minutos: si se alarga, ofrece mandar la informacion (paso 6).
 
 DATOS DE VANTELIA (no inventes nada fuera de esto; si no lo sabes, lo confirma Pablo, el fundador)
 - Planes: Free (0 euros), Starter (49 euros al mes), Pro (129 euros al mes, con WhatsApp), Business (299 euros al mes, con recepcionista de voz por telefono como tu). Diez dias de prueba.
@@ -116,6 +123,18 @@ _HERRAMIENTAS = {
         {"type": "object", "description": "Motivo", "properties": {
             "motivo": {"type": "string", "description": "Lo que ha dicho, en pocas palabras"}},
          "required": []}),
+    "anotar_responsable": (
+        "Apunta con quien hablas y, si no es quien decide, lo que sepas de esa persona. Usala en "
+        "cuanto lo sepas (y otra vez si se pone al telefono quien decide).",
+        {"type": "object", "description": "Con quien hablas y quien decide", "properties": {
+            "interlocutor": {"type": "string",
+                             "description": "duena_o_encargada, empleado o no_se_sabe: la persona con la que hablas AHORA"},
+            "nombre": {"type": "string", "description": "Nombre de quien decide, si lo han dicho"},
+            "cuando": {"type": "string", "description": "Cuando suele estar quien decide, tal cual lo han dicho"},
+            "email": {"type": "string", "description": "Email para mandarle la informacion, solo si lo han ofrecido"},
+            "telefono": {"type": "string", "description": "Solo si te han dado un telefono suyo sin pedirlo"},
+            "se_pone_ahora": {"type": "boolean", "description": "true si te han dicho que se pone ahora al telefono"}},
+         "required": ["interlocutor"]}),
 }
 
 
@@ -134,8 +153,17 @@ def _db():
     columnas = {f[1] for f in conn.execute("PRAGMA table_info(llamadas_voz)")}
     # origen: 'manual' (prueba desde el panel) o 'auto' (lanzador_llamadas).
     # conversation_id: la conversacion de ElevenLabs, para leer la transcripcion.
+    # Con quien hablo Sara y quien decide (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
+    # rellamada_de: id de la llamada de la que sale una rellamada dirigida a quien decide.
     for columna, tipo in (("origen", "TEXT NOT NULL DEFAULT 'manual'"),
-                          ("conversation_id", "TEXT NOT NULL DEFAULT ''")):
+                          ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+                          ("interlocutor", "TEXT NOT NULL DEFAULT ''"),
+                          ("responsable_nombre", "TEXT NOT NULL DEFAULT ''"),
+                          ("responsable_cuando", "TEXT NOT NULL DEFAULT ''"),
+                          ("responsable_email", "TEXT NOT NULL DEFAULT ''"),
+                          ("responsable_nota", "TEXT NOT NULL DEFAULT ''"),
+                          ("se_pone_ahora", "INTEGER NOT NULL DEFAULT 0"),
+                          ("rellamada_de", "TEXT NOT NULL DEFAULT ''")):
         if columna not in columnas:
             conn.execute("ALTER TABLE llamadas_voz ADD COLUMN %s %s" % (columna, tipo))
     return conn
@@ -206,13 +234,39 @@ BUZON_SIN_MENSAJE = {
 }
 
 
+# "Un segundo, ahora se pone": esperar callada hasta que hable alguien. Sin esto, a los
+# 7 s de silencio Sara preguntaba "¿sigues ahi?" mientras iban a buscar a quien decide.
+ESPERAR_CALLADA = {
+    "type": "system", "name": "skip_turn",
+    "description": "Si te piden que esperes un momento (van a pasar el telefono a otra persona), "
+                   "espera callada hasta que vuelvan a hablar.",
+    "params": {"system_tool_type": "skip_turn"},
+}
+# Si mientras espera no habla nadie en este rato, la llamada se corta.
+SEGUNDOS_DE_SILENCIO_PARA_COLGAR = 75
+
+# Lo que ElevenLabs saca de cada conversacion al terminar (lo guarda el aviso de fin de
+# llamada con la transcripcion). Los nombres los comparten los dos planes: el de hablar
+# con quien decide y el de la segunda oportunidad.
+DATOS_AL_TERMINAR = {
+    "interlocutor": {"type": "string", "description": (
+        "Con quien hablo Sara al final: duena_o_encargada, empleado o no_se_sabe.")},
+    "desenlace": {"type": "string", "description": (
+        "Como acabo: interesado, volver_a_llamar, rechazo (dijo que no o que no llamemos), "
+        "ocupado_sin_rechazo (no era buen momento pero no dijo que no), colgo_al_principio, "
+        "buzon o persona_equivocada.")},
+    "escucho_la_demo": {"type": "boolean", "description": "true si llego a oir o hacer la demostracion."},
+    "responsable_nombre": {"type": "string", "description": "Nombre de quien decide en el negocio, si salio."},
+}
+
+
 def agente_de_captacion(base_url: str) -> Dict[str, Any]:
     base = base_url.rstrip("/")
     herramientas = [
         voz_elevenlabs.herramienta_webhook(nombre, descripcion, "%s%s/tool/%s" % (base, RUTA, nombre),
                                            esquema, {CAMPO_LLAMADA: VARIABLE_LLAMADA})
         for nombre, (descripcion, esquema) in _HERRAMIENTAS.items()
-    ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte."), BUZON_SIN_MENSAJE]
+    ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte."), BUZON_SIN_MENSAJE, ESPERAR_CALLADA]
     audio = voz_elevenlabs.formato_de_audio(telefono=True)
     return {
         "name": "Sara - captacion Vantelia (telefono)",
@@ -222,15 +276,17 @@ def agente_de_captacion(base_url: str) -> Dict[str, Any]:
                 "language": "es",
                 "dynamic_variables": {"dynamic_variable_placeholders": {
                     "negocio": "tu negocio", "sector": "un negocio con citas", VARIABLE_LLAMADA: "",
-                    "canal_envio": "pedir_email", "email_negocio": ""}},
+                    "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio",
+                    "responsable": "quien lleva el negocio"}},
                 "prompt": {"prompt": GUION, "llm": voz_elevenlabs.LLM_POR_DEFECTO, "temperature": 0.4,
                            "tools": herramientas},
             },
             "asr": audio["asr"],
             "tts": dict({"voice_id": settings.ELEVENLABS_VOICE_ID, "model_id": voz_elevenlabs.MODELO_VOZ},
                         **audio["tts"]),
-            "turn": {"speculative_turn": True},
+            "turn": {"speculative_turn": True, "silence_end_call_timeout": SEGUNDOS_DE_SILENCIO_PARA_COLGAR},
         },
+        "platform_settings": {"data_collection": DATOS_AL_TERMINAR},
     }
 
 
@@ -258,9 +314,12 @@ def _numero_de_salida() -> str:
 
 
 def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *,
-           origen: str = "manual", base_url: str = "",
+           origen: str = "manual", responsable: str = "", rellamada_de: str = "", base_url: str = "",
            cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
-    """Apunta la llamada y pide a Twilio que marque. No marca si ese telefono pidio que no."""
+    """Apunta la llamada y pide a Twilio que marque. No marca si ese telefono pidio que no.
+
+    Con `responsable` (y `rellamada_de`) es una rellamada dirigida: Sara pregunta por esa
+    persona al descolgar."""
     numero = telefono_e164(telefono)
     if not numero:
         raise ValueError("Telefono no valido.")
@@ -276,10 +335,11 @@ def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *
     ahora = _ahora()
     with _db() as conn:
         conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, "
-                     "creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?)",
+                     "responsable_nombre, rellamada_de, creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                      (llamada_id, numero, textnorm._sanitize_text(negocio)[:120],
                       textnorm._sanitize_text(sector)[:80], str(prospecto or "")[:200], "marcando",
-                      "auto" if origen == "auto" else "manual", ahora, ahora))
+                      "auto" if origen == "auto" else "manual",
+                      textnorm._sanitize_text(responsable)[:80], str(rellamada_de or "")[:40], ahora, ahora))
         conn.commit()
     base = (base_url or settings.APP_BASE_URL).rstrip("/")
     propio = cliente is None
@@ -352,11 +412,15 @@ def twiml_al_descolgar(llamada_id: str, respondio: str, desde: str, hacia: str,
         _actualizar(llamada_id, estado="fallida", notas="sin agente de captacion")
         return _COLGAR
     email_negocio = str(fila["prospecto"] or "")
+    negocio = fila["negocio"] or "tu negocio"
+    # En una rellamada dirigida se pregunta por quien decide; si no, por el negocio.
+    responsable = str(fila["responsable_nombre"] or "") if fila["rellamada_de"] else ""
     twiml = voz_elevenlabs.twiml_registrar_llamada(
         agente, desde, hacia, "outbound",
-        {"negocio": fila["negocio"] or "tu negocio", "sector": fila["sector"] or "un negocio con citas",
+        {"negocio": negocio, "sector": fila["sector"] or "un negocio con citas",
          VARIABLE_LLAMADA: llamada_id, "canal_envio": canal_de_envio(fila["telefono"], email_negocio),
-         "email_negocio": email_hablado(email_negocio)}, cliente=cliente)
+         "email_negocio": email_hablado(email_negocio), "a_quien": responsable or negocio,
+         "responsable": responsable or "quien lleva el negocio"}, cliente=cliente)
     _actualizar(llamada_id, estado="en_curso",
                 conversation_id=voz_elevenlabs.id_de_conversacion(twiml))
     return twiml
@@ -490,7 +554,59 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
             conn.commit()
         _actualizar(llamada_id, resultado="no_llamar", notas=motivo)
         return {"ok": True, "mensaje": "Apuntado: no se le vuelve a llamar. Pide disculpas y despidete."}
+    if nombre == "anotar_responsable":
+        return _anotar_responsable(fila, cuerpo)
     return {"ok": False, "error": "Herramienta desconocida."}
+
+
+INTERLOCUTORES = ("duena_o_encargada", "empleado", "no_se_sabe")
+
+
+def con_quien_hablo(fila) -> str:
+    """En una frase, para el aviso a Pablo y el panel."""
+    claves = fila.keys() if hasattr(fila, "keys") else []
+    interlocutor = fila["interlocutor"] if "interlocutor" in claves else ""
+    nombre = fila["responsable_nombre"] if "responsable_nombre" in claves else ""
+    cuando = fila["responsable_cuando"] if "responsable_cuando" in claves else ""
+    if interlocutor == "duena_o_encargada":
+        return "la duena o encargada" + ((" (" + nombre + ")") if nombre else "")
+    if interlocutor == "empleado":
+        detalle = ", ".join(p for p in (nombre, cuando) if p)
+        return "alguien del equipo" + ((" - decide: " + detalle) if detalle else "")
+    return "sin saber si decide"
+
+
+def _anotar_responsable(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
+    """Con quien habla Sara y, si no es quien decide, lo que se sabe de esa persona."""
+    interlocutor = str(cuerpo.get("interlocutor") or "").strip().lower()
+    if interlocutor not in INTERLOCUTORES:
+        interlocutor = "no_se_sabe"
+    campos: Dict[str, Any] = {"interlocutor": interlocutor}
+    nombre = textnorm._sanitize_text(str(cuerpo.get("nombre") or ""))[:80]
+    cuando = textnorm._sanitize_text(str(cuerpo.get("cuando") or ""))[:120]
+    email = str(cuerpo.get("email") or "").strip().lower()
+    if nombre:
+        campos["responsable_nombre"] = nombre
+    if cuando:
+        campos["responsable_cuando"] = cuando
+    if email and _EMAIL.match(email):
+        campos["responsable_email"] = email[:200]
+    # Un movil que da un empleado NO se usa para llamar solos: sin permiso de su dueno es
+    # otro riesgo legal. Queda como nota para Pablo (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
+    telefono = telefono_e164(str(cuerpo.get("telefono") or ""))
+    if telefono:
+        campos["responsable_nota"] = "Telefono facilitado en la llamada (no se usa para llamar solos): " + telefono
+    se_pone = bool(cuerpo.get("se_pone_ahora"))
+    campos["se_pone_ahora"] = 1 if se_pone else 0
+    _actualizar(fila["id"], **campos)
+    if interlocutor == "duena_o_encargada":
+        return {"ok": True, "mensaje": "Apuntado. Hablas con quien decide: sigue con la demostracion."}
+    if se_pone:
+        return {"ok": True, "mensaje": ("Apuntado. Di 'claro, espero' y espera callada. Cuando hable la persona "
+                                        "nueva, presentate entera otra vez: quien eres, que eres una asistente "
+                                        "virtual, el gancho y el aviso de que es comercial.")}
+    return {"ok": True, "mensaje": ("Apuntado. Ofrece mandar la informacion para quien decide y despidete; si "
+                                    "quien te atiende tiene curiosidad, puedes hacerle la demo.")}
 
 
 def _avisar_interes(fila, destino: str, nombre: str, notas: str, canal: str, enviado: bool,
@@ -500,15 +616,16 @@ def _avisar_interes(fila, destino: str, nombre: str, notas: str, canal: str, env
     negocio = fila["negocio"] or fila["telefono"]
     estado = ("Le hemos mandado el enlace por %s." % canal) if enviado else (
         "NO se pudo mandar el %s: escribele tu." % canal)
+    con_quien = con_quien_hablo(_fila(fila["id"]) or fila)
     asunto = "📞 Interesado por telefono: %s" % negocio
     texto = ("Sara ha hablado con un negocio interesado:\n\nNegocio:  %s\nTelefono: %s\nEnviado a: %s\n"
-             "Contacto: %s\nNotas:    %s\nEnlace:   %s\n\n%s\n"
-             % (negocio, fila["telefono"], destino, nombre or "-", notas or "-", enlace, estado))
+             "Contacto: %s\nHablo con: %s\nNotas:    %s\nEnlace:   %s\n\n%s\n"
+             % (negocio, fila["telefono"], destino, nombre or "-", con_quien, notas or "-", enlace, estado))
     html = ("<div style='font-family:sans-serif'><h2 style='color:#00b1d9'>📞 %s</h2>"
-            "<p>Telefono: %s<br>Enviado a: %s<br>Contacto: %s</p><p>%s</p>"
+            "<p>Telefono: %s<br>Enviado a: %s<br>Contacto: %s<br>Hablo con: %s</p><p>%s</p>"
             "<p><a href='%s'>Enlace enviado</a></p><p><strong>%s</strong></p></div>"
             % (escape(negocio), escape(fila["telefono"]), escape(destino), escape(nombre or "-"),
-               escape(notas or "-"), escape(enlace, quote=True), escape(estado)))
+               escape(con_quien), escape(notas or "-"), escape(enlace, quote=True), escape(estado)))
     try:
         outreach._outreach_notify_admin(asunto, texto, html)
     except Exception:  # noqa: BLE001 - el aviso nunca tumba la llamada
