@@ -72,7 +72,8 @@ Hoy solo se apunta interesado / volver a llamar / no llamar. Hace falta distingu
 ### 3. El correo
 
 - Corto, en nombre de Pablo, por el mismo canal que la captacion por email (Brevo),
-  con el pie legal, el enlace de baja y `List-Unsubscribe`.
+  con el mismo pie que el resto de la captacion (`OUTREACH_LEGAL_FOOTER`). Sin cabecera
+  `List-Unsubscribe` (decision de Pablo, 26-sep-2026). El correo promete no volver a escribir.
 - Tono: no pregunta "que te parecio" (muchos no llegaron a oir la demo). Esquema:
   "Hace un rato te llamo Sara, nuestra asistente con IA. Te pillamos en mal
   momento. Asi atenderia el telefono de {negocio}: [su demo]". Gancho distinto por

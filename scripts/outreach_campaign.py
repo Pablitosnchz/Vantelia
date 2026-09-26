@@ -5,7 +5,7 @@ Caracteristicas principales:
   - Estado persistente en SQLite (storage/outreach/outreach.db).
   - Secuencia multi-touch: cold -> fu1 -> fu2 -> breakup.
   - Plantillas en scripts/outreach_templates.py, con copy por nicho.
-  - Cumplimiento RGPD/LSSI: cabecera List-Unsubscribe, footer con baja, supresion.
+  - Cumplimiento RGPD/LSSI: footer con baja, supresion (sin cabecera List-Unsubscribe).
   - Throttle por dominio, ventana horaria laboral, jitter humano.
   - Modo dry-run, modo prueba (--test-to) y envio real (--send).
   - Estadisticas y gestion de bajas.

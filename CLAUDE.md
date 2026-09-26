@@ -603,8 +603,11 @@ Tokens firmados HMAC-SHA256 con `OUTREACH_TRACKING_SECRET`. Tracking es opt-in: 
 
 ### Compliance
 
-- Tratamiento bajo interes legitimo LSSI/RGPD: cada email lleva footer con razon social, finalidad y baja al instante.
-- Cabeceras `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click`.
+- Tratamiento bajo interes legitimo LSSI/RGPD. El pie legal (responsable, finalidad, base legal) solo sale con
+  `OUTREACH_LEGAL_FOOTER=true`; por defecto los correos van SIN pie ni linea de baja (`outreach_templates.footer_text`).
+  Quien responde "BAJA" se da de baja a mano en Captacion -> Bajas (o por el webhook de Brevo).
+- SIN cabecera `List-Unsubscribe` (decision de Pablo, 26-sep-2026; el codigo nunca la puso aunque esta
+  seccion lo decia).
 - Discovery solo extrae emails publicamente listados en webs corporativas. Respeta robots.txt y aplica rate limit.
 - No usar listas compradas. No suplantar identidad. No hacer scraping agresivo.
 - Para no caer en spam, configurar SPF/DKIM/DMARC en `vantelia.es` antes de envios reales.

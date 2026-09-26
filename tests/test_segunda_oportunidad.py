@@ -245,7 +245,7 @@ def test_el_correo_que_sale(so, captacion, envios):  # noqa: F811
     assert mensaje["Subject"] == "Lo de la llamada de ayer"
     assert "Ayer os llamó Sara" in texto and "Pelu Marta" in texto and "las peluquerías" in texto
     assert "no te volvemos a escribir" in texto
-    assert "BAJA" in mensaje["List-Unsubscribe"]
+    assert mensaje["List-Unsubscribe"] is None, "Pablo, 26-sep: sin List-Unsubscribe, como el resto"
     assert envios["demos"] == ["hola@pelu.es"], "su demo empieza a generarse al mandarlo"
     with outreach._outreach_db() as conn:
         envio = conn.execute("SELECT stage, mode FROM sends WHERE email='hola@pelu.es'").fetchone()

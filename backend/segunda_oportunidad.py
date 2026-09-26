@@ -252,7 +252,6 @@ def _mandar(candidato: Dict[str, Any], ahora: datetime) -> str:
         html = outreach.outreach_apply_tracking(html, email, ETAPA, outreach.OUTREACH_TRACKING_BASE_URL,
                                                 outreach.OUTREACH_TRACKING_SECRET)
     mensaje = outreach.outreach_build_message(email, contenido["asunto"], texto, html, ajustes)
-    mensaje["List-Unsubscribe"] = "<mailto:%s?subject=BAJA>" % baja
     outreach._outreach_send_email_object(mensaje)
     with _db() as conn:
         conn.execute("INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
