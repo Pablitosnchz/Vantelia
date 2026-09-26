@@ -1990,3 +1990,14 @@
   background: rgba(255,255,255,.04); padding: 3px 10px; border-radius: 999px;
 }
 .shot-frame img { border-radius: 10px; display: block; width: 100%; height: auto; }
+
+/* ── Audios demo de la asistente de voz ───────────── */
+.voz-demo { margin: 14px 0 22px; padding: 16px 18px; background: var(--surface-h); border: 1px solid var(--border); border-radius: 16px; }
+.voz-demo strong { display: block; margin-bottom: 10px; color: var(--text); font-family: var(--font-d); font-weight: 600; }
+.voz-demo audio { display: block; width: 100%; }
+.voz-demo figcaption { margin-top: 8px; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+.voz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; max-width: 1040px; margin: 36px auto 40px; }
+.voz-grid .voz-demo { margin: 0; }
+.voz-titulo { text-align: center; color: var(--muted); margin: 36px auto 0; font-size: 1rem; }
+.voz-grid + .voz-nota { text-align: center; color: var(--muted); font-size: .82rem; margin: -24px auto 40px; }
+.voz-titulo + .voz-grid { margin-top: 16px; }
