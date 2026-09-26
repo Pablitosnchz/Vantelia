@@ -267,6 +267,22 @@ def test_el_asunto_cuadra_con_el_dia(so):
         "Lo de la llamada de ayer", "Lo de la llamada del viernes", "Lo de la llamada de esta mañana")
 
 
+@pytest.mark.parametrize("sector,audio", [
+    ("peluqueria", "peluqueria"), ("Barbería - peluquería de caballero", "barberia"),
+    ("clinica dental", "clinica_dental"), ("Clínica de fisioterapia", "fisioterapia"),
+    ("centro de estetica", "estetica"), ("clinica estetica", "estetica"), ("masajes", "estetica"),
+    ("clinica veterinaria", None), ("gimnasio", None), ("", None),
+])
+def test_el_correo_lleva_la_llamada_de_ejemplo_de_su_sector(so, sector, audio):
+    """Audios de la web aprobados por Pablo (26-sep). Uno que no es de su sector confunde
+    mas que ayuda: sin audio que encaje, el correo va sin el."""
+    elegido = so.audio_de_su_sector(sector)
+    assert (elegido["url"].rsplit("/", 1)[1] if elegido else None) == (audio + ".mp3" if audio else None)
+    texto = so.correo("Pelu", sector, "https://demo", "ayer")["texto"]
+    assert ("vantelia.es/assets/audio/" in texto) is bool(audio)
+    assert texto.count("https://demo") == 1
+
+
 # --- El panel ----------------------------------------------------------------------------
 
 def test_el_panel_ensena_como_acabo_y_el_interruptor(so, captacion, client, monkeypatch):  # noqa: F811

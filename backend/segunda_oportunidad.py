@@ -198,6 +198,28 @@ def _cuando_fue(creada: datetime, ahora: datetime) -> str:
     return "el " + _DIAS_SEMANA[llamada.weekday()]
 
 
+# Llamadas de ejemplo publicadas en la web (aprobadas por Pablo el 26-sep-2026). El orden
+# importa: "barberia" antes que "peluqueria"; una clinica sin mas (veterinaria...) no tiene audio.
+AUDIOS_WEB = "https://www.vantelia.es/assets/audio/%s.mp3"
+_AUDIO_POR_SECTOR = (
+    (("barber",), "barberia", "una barbería"),
+    (("peluquer", "hairdress"), "peluqueria", "una peluquería"),
+    (("fisio", "osteopat", "quiropract"), "fisioterapia", "un centro de fisioterapia"),
+    (("dental", "dentist", "odontolog"), "clinica_dental", "una clínica dental"),
+    (("estetic", "belleza", "beauty", "depilac", "masaj", " spa", " unas", "nail"), "estetica",
+     "un centro de estética"),
+)
+
+
+def audio_de_su_sector(sector: str) -> Optional[Dict[str, str]]:
+    """La llamada de ejemplo de su sector, o None si no hay una que le encaje."""
+    texto = " " + textnorm._strip_accents(str(sector or "").lower())
+    for claves, archivo, donde in _AUDIO_POR_SECTOR:
+        if any(clave in texto for clave in claves):
+            return {"url": AUDIOS_WEB % archivo, "donde": donde}
+    return None
+
+
 def correo(negocio: str, sector: str, enlace: str, cuando: str, responsable: str = "") -> Dict[str, str]:
     """El correo, en nombre de Pablo. No pregunta "que te parecio": muchos no llegaron a
     oir la demo. Promete lo que se cumple: no se les vuelve a escribir."""
@@ -212,16 +234,21 @@ def correo(negocio: str, sector: str, enlace: str, cuando: str, responsable: str
         "Es lo que pasa en %s: %s." % (cuando[:1].upper() + cuando[1:], frases["sector"], frases["escena"]),
         "Para eso está Sara: coge el teléfono y el WhatsApp de %s cuando estáis %s, da citas, las "
         "cambia y las cancela." % (negocio, frases["atendiendo"]),
-        "Aquí la puedes probar con vuestro propio negocio:",
     ]
+    audio = audio_de_su_sector(sector)
+    escucha = ("Así atiende una llamada en %s (menos de un minuto):" % audio["donde"]) if audio else ""
+    prueba = ("Y aquí" if audio else "Aquí") + " la puedes probar con vuestro propio negocio:"
     cierre = [
         "Si te encaja, respóndeme a este correo y lo vemos. Y si no, tranquilo: no te volvemos a escribir.",
         "Un saludo,\nPablo Sánchez · Vantelia",
     ]
-    texto = "\n\n".join(parrafos + [enlace] + cierre) + "\n"
+    texto = "\n\n".join(parrafos + ([escucha, audio["url"]] if audio else []) + [prueba, enlace] + cierre) + "\n"
     html = (
         "<div style='font-family:sans-serif;max-width:560px;color:#1a1a2e;line-height:1.55'>"
         + "".join("<p>%s</p>" % escape(p) for p in parrafos)
+        + ("<p>%s <a href='%s'>escuchar la llamada</a></p>" % (escape(escucha), escape(audio["url"], quote=True))
+           if audio else "")
+        + "<p>%s</p>" % escape(prueba)
         + "<p><a href='%s' style='display:inline-block;padding:11px 20px;border-radius:999px;"
           "background:#00D1FF;color:#04101C;font-weight:700;text-decoration:none'>Probar con %s</a></p>"
         % (escape(enlace, quote=True), escape(negocio))
