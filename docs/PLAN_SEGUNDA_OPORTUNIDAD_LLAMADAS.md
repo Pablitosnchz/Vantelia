@@ -1,5 +1,10 @@
 # Plan: segunda oportunidad tras una llamada de Sara
 
+**Estado 26-sep-2026:** fases 1 a 4 hechas. Fase 1 con las transcripciones
+(`backend/transcripciones_llamadas.py`); fases 2-4 en `backend/segunda_oportunidad.py`
+(tests en `tests/test_segunda_oportunidad.py`), con interruptor propio en el panel
+"Llamadas", apagado de serie, y columna "Como acabo". Falta la prueba real con el 91.
+
 Idea de Pablo (25-sep-2026): a quien no se quedo con el interes en la llamada,
 escribirle despues con un mensaje personalizado para su tipo de negocio y volver a
 intentarlo. Acordado: **solo a quien no dijo que no**.

@@ -539,7 +539,9 @@ async def admin_captacion_llamadas_config(request: Request) -> Dict[str, Any]:
             lanzador_llamadas.guardar_config,
             activo=bool(datos["activo"]) if "activo" in datos else None,
             cupo_diario=int(datos["cupo_diario"]) if datos.get("cupo_diario") is not None else None,
-            minutos_entre=int(datos["minutos_entre"]) if datos.get("minutos_entre") is not None else None)
+            minutos_entre=int(datos["minutos_entre"]) if datos.get("minutos_entre") is not None else None,
+            segunda_oportunidad=(bool(datos["segunda_oportunidad"])
+                                 if "segunda_oportunidad" in datos else None))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Valores no validos.") from exc
 

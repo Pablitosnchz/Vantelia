@@ -3824,6 +3824,7 @@ tbody tr:last-child td { border-bottom: none; }
               <label class="ll-switch"><input id="llActive" type="checkbox"> <span>Llamar automáticamente</span></label>
               <label>Llamadas al día <input id="llQuota" type="number" min="1" max="40" step="1"></label>
               <label>Minutos entre llamadas <input id="llGap" type="number" min="5" max="120" step="1"></label>
+              <label class="ll-switch" title="Un único correo con su demo a quien colgó al principio o estaba ocupado sin decir que no. Nunca a quien rechazó."><input id="llSecond" type="checkbox"> <span>Correo de segunda oportunidad <small id="llSecondQueue"></small></span></label>
               <div class="ll-settings__actions">
                 <button class="secondary small" type="submit">Guardar ajustes</button>
                 <button id="llRoundBtn" class="ghost small" type="button">Hacer una ronda ahora</button>
@@ -3844,8 +3845,8 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
             <div class="cap-table-wrap">
               <table class="cap-table">
-                <thead><tr><th>Fecha</th><th>Negocio</th><th>Teléfono</th><th>Origen</th><th>Resultado</th><th>Con quién</th><th>Notas</th><th class="cap-table__action">Conversación</th></tr></thead>
-                <tbody id="llCallsBody"><tr><td colspan="8"><div class="cap-state cap-state--loading">Cargando llamadas…</div></td></tr></tbody>
+                <thead><tr><th>Fecha</th><th>Negocio</th><th>Teléfono</th><th>Origen</th><th>Resultado</th><th>Cómo acabó</th><th>Con quién</th><th>Notas</th><th class="cap-table__action">Conversación</th></tr></thead>
+                <tbody id="llCallsBody"><tr><td colspan="9"><div class="cap-state cap-state--loading">Cargando llamadas…</div></td></tr></tbody>
               </table>
             </div>
           </article>
@@ -8827,6 +8828,13 @@ tbody tr:last-child td { border-bottom: none; }
         interesado: "Interesado", volver_a_llamar: "Volver a llamar", no_llamar: "No llamar",
         no_contesta: "No contesta", ocupado: "Ocupado", contestador: "Contestador", fallida: "Fallida",
       };
+      // Como la clasifico ElevenLabs al terminar (backend/segunda_oportunidad.py).
+      const DESENLACES = {
+        interesado: "Interesado", volver_a_llamar: "Volver a llamar", rechazo: "Dijo que no",
+        ocupado_sin_rechazo: "Ocupado, sin decir que no", colgo_al_principio: "Colgó al principio",
+        buzon: "Buzón", persona_equivocada: "Número equivocado",
+      };
+      const SEGUNDA = { enviada: "Correo enviado", enviando: "Enviando correo" };
       const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
         (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const fecha = (iso) => {
@@ -8895,7 +8903,10 @@ tbody tr:last-child td { border-bottom: none; }
           LQ("#llActive").checked = activo;
           LQ("#llQuota").value = cfg.cupo_diario || 8;
           LQ("#llGap").value = cfg.minutos_entre || 12;
+          LQ("#llSecond").checked = !!cfg.segunda_oportunidad;
         }
+        const enCola = Number(d.segunda_oportunidad_en_cola || 0);
+        LQ("#llSecondQueue").textContent = enCola ? `· ${enCola} en cola` : "";
         const filas = (d.llamadas || []).map((ll) => {
           const [clave, texto] = etiqueta(ll);
           const boton = ll.conversation_id
@@ -8906,20 +8917,21 @@ tbody tr:last-child td { border-bottom: none; }
             <td>${esc(ll.telefono)}</td>
             <td>${ll.rellamada_de ? `Rellamada a ${esc(ll.responsable_nombre || "quien decide")}` : (ll.origen === "auto" ? "Automática" : "Manual")}</td>
             <td><span class="ll-result ${clave ? "ll-result--" + esc(clave) : ""}">${esc(texto)}</span></td>
+            <td>${esc(DESENLACES[ll.desenlace] || "—")}${ll.segunda_oportunidad ? `<br><small>✉ ${esc(SEGUNDA[ll.segunda_oportunidad] || ll.segunda_oportunidad)}</small>` : ""}</td>
             <td>${ll.interlocutor ? esc(ll.con_quien || "") : "—"}</td>
             <td>${esc([ll.notas || ll.email || "", ll.responsable_nota || ""].filter(Boolean).join(" · "))}</td>
             <td class="cap-table__action">${boton}</td>
           </tr>`;
         });
         LQ("#llCallsBody").innerHTML = filas.length ? filas.join("")
-          : `<tr><td colspan="8"><div class="cap-state">Todavía no hay llamadas.</div></td></tr>`;
+          : `<tr><td colspan="9"><div class="cap-state">Todavía no hay llamadas.</div></td></tr>`;
       }
 
       async function cargar() {
         try {
           pintar(await api("/admin/captacion/llamadas?limit=100"));
         } catch (error) {
-          LQ("#llCallsBody").innerHTML = `<tr><td colspan="8"><div class="cap-state cap-state--error">${esc(error.message)}</div></td></tr>`;
+          LQ("#llCallsBody").innerHTML = `<tr><td colspan="9"><div class="cap-state cap-state--error">${esc(error.message)}</div></td></tr>`;
         }
       }
 
@@ -8934,11 +8946,20 @@ tbody tr:last-child td { border-bottom: none; }
           });
           if (!ok) { LQ("#llActive").checked = false; return; }
         }
+        const segunda = LQ("#llSecond").checked;
+        if (segunda && !(ultimo && ultimo.config && ultimo.config.segunda_oportunidad)) {
+          const ok = await confirmDialog({
+            title: "¿Encender el correo de segunda oportunidad?",
+            bodyHtml: "A los negocios que colgaron al principio o estaban ocupados sin decir que no les llegará <b>un único correo</b> con su demo, en horario laborable. Nunca a quien dijo que no, respondió o está de baja.",
+            confirmLabel: "Encender",
+          });
+          if (!ok) { LQ("#llSecond").checked = false; return; }
+        }
         try {
           await api("/admin/captacion/llamadas/config", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ activo, cupo_diario: Number(LQ("#llQuota").value), minutos_entre: Number(LQ("#llGap").value) }),
+            body: JSON.stringify({ activo, segunda_oportunidad: segunda, cupo_diario: Number(LQ("#llQuota").value), minutos_entre: Number(LQ("#llGap").value) }),
           });
           toast("Ajustes guardados", "success");
           cargar();

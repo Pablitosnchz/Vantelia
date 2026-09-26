@@ -81,6 +81,9 @@ def _db():
         ultima_ronda TEXT NOT NULL DEFAULT '', ultimo_motivo TEXT NOT NULL DEFAULT '',
         actualizada TEXT NOT NULL DEFAULT '')""" % (CUPO_POR_DEFECTO, MINUTOS_ENTRE_POR_DEFECTO))
     conn.execute("INSERT OR IGNORE INTO llamadas_config (id) VALUES (1)")
+    # Interruptor aparte para el correo de segunda oportunidad (backend/segunda_oportunidad.py).
+    if "segunda_oportunidad" not in {f[1] for f in conn.execute("PRAGMA table_info(llamadas_config)")}:
+        conn.execute("ALTER TABLE llamadas_config ADD COLUMN segunda_oportunidad INTEGER NOT NULL DEFAULT 0")
     conn.execute("""CREATE TABLE IF NOT EXISTS robinson_consultas (
         telefono TEXT PRIMARY KEY, en_lista INTEGER NOT NULL, consultado TEXT NOT NULL)""")
     conn.row_factory = sqlite3.Row
@@ -97,10 +100,13 @@ def config() -> Dict[str, Any]:
 
 
 def guardar_config(*, activo: Optional[bool] = None, cupo_diario: Optional[int] = None,
-                   minutos_entre: Optional[int] = None) -> Dict[str, Any]:
+                   minutos_entre: Optional[int] = None,
+                   segunda_oportunidad: Optional[bool] = None) -> Dict[str, Any]:
     campos: Dict[str, Any] = {}
     if activo is not None:
         campos["activo"] = 1 if activo else 0
+    if segunda_oportunidad is not None:
+        campos["segunda_oportunidad"] = 1 if segunda_oportunidad else 0
     if cupo_diario is not None:
         campos["cupo_diario"] = max(1, min(40, int(cupo_diario)))
     if minutos_entre is not None:
@@ -569,6 +575,8 @@ def arrancar() -> Optional[threading.Thread]:
 
 def resumen(limite: int = 100) -> Dict[str, Any]:
     """Lo que ensena el panel: ajustes, que falta, como va hoy y las ultimas llamadas."""
+    from backend import segunda_oportunidad  # la importa ella a el: aqui, tarde
+
     ahora = timeutils._utc_now()
     with _db() as conn:
         llamadas = [dict(f, con_quien=captacion_voz.con_quien_hablo(f)) for f in conn.execute(
@@ -581,6 +589,9 @@ def resumen(limite: int = 100) -> Dict[str, Any]:
         por_resultado = conn.execute(
             "SELECT resultado, COUNT(*) FROM llamadas_voz GROUP BY resultado").fetchall()
         no_llamar = conn.execute("SELECT COUNT(*) FROM no_llamar").fetchone()[0]
+    detalle = segunda_oportunidad.por_llamada([f["id"] for f in llamadas])
+    for llamada in llamadas:
+        llamada.update(detalle.get(llamada["id"]) or {"desenlace": "", "segunda_oportunidad": ""})
     return {
         "config": config(), "bloqueos": bloqueos(), "en_horario": en_horario(ahora),
         "cuenta_voz": cuenta_elevenlabs.estado() if voz_elevenlabs.configurado() else {},
@@ -589,4 +600,7 @@ def resumen(limite: int = 100) -> Dict[str, Any]:
         "hoy": {str(o or "manual"): n for o, n in hoy},
         "por_resultado": {str(r or "sin_resultado"): n for r, n in por_resultado},
         "no_llamar": no_llamar, "llamadas": llamadas,
+        # Cuantos negocios recibirian ya el correo (sin esperar a su hora), para decidir
+        # si se enciende.
+        "segunda_oportunidad_en_cola": len(segunda_oportunidad.elegibles(ahora, contar_horario=False)),
     }

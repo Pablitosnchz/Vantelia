@@ -551,6 +551,13 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         with _db() as conn:
             conn.execute("INSERT OR IGNORE INTO no_llamar (telefono, motivo, creado) VALUES (?,?,?)",
                          (fila["telefono"], motivo, _ahora()))
+            # "No me llameis" es baja de TODO: tampoco se le escribe (ni la captacion por
+            # email ni la segunda oportunidad; docs/PLAN_SEGUNDA_OPORTUNIDAD_LLAMADAS.md).
+            email = str(fila["prospecto"] or "").strip().lower()
+            if email:
+                conn.execute("INSERT OR IGNORE INTO suppressions (email, reason, added_at) VALUES (?,?,?)",
+                             (email, "no_llamar_por_telefono", _ahora()))
+                conn.execute("UPDATE prospects SET status='baja', updated_at=? WHERE email=?", (_ahora(), email))
             conn.commit()
         _actualizar(llamada_id, resultado="no_llamar", notas=motivo)
         return {"ok": True, "mensaje": "Apuntado: no se le vuelve a llamar. Pide disculpas y despidete."}
