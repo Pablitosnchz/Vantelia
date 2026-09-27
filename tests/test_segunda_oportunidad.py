@@ -465,7 +465,12 @@ def test_el_envio_real_distingue_rechazo_de_duda(so, captacion, envios, monkeypa
         so._mandar(candidato, MARTES_1630)
 
 
-def test_un_limite_del_smtp_pausa_la_captacion_y_para_la_ronda(so, captacion, monkeypatch):  # noqa: F811
+@pytest.mark.parametrize("salio", [False, True])
+def test_un_limite_del_smtp_pausa_la_captacion_y_para_la_ronda(so, captacion, monkeypatch, salio):  # noqa: F811
+    """Con el limite antes de aceptar, no salio: se suelta la reserva. Con el limite al CERRAR
+    (el SMTP ya lo habia aceptado; revision de Astra, 27-sep) pudo salir: queda incierta y no
+    se reenvia al acabar la pausa. En los dos casos, pausa y la ronda para."""
+    import smtplib
     import sqlite3
 
     from backend import outreach
@@ -482,10 +487,13 @@ def test_un_limite_del_smtp_pausa_la_captacion_y_para_la_ronda(so, captacion, mo
 
     def limite(candidato, ahora):
         intentos.append(candidato["prospecto"])
+        if salio:
+            raise smtplib.SMTPResponseException(451, b"4.7.1 rate limit exceeded al cerrar")
         raise so.NoEnviado("451 4.7.1 rate limit exceeded, try again later")
 
     so.ronda(ahora=MARTES_1630, mandar=limite, esperar_turno=lambda: None)
     assert len(intentos) == 1, "la ronda para al primer limite"
     assert so.correo_en_pausa(), "y la captacion queda en pausa automatica"
     with so._db() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM segunda_oportunidad").fetchone()[0] == 0, "no salio: se suelta"
+        reservas = [tuple(f) for f in conn.execute("SELECT prospecto, estado FROM segunda_oportunidad")]
+    assert reservas == ([(intentos[0], "incierta")] if salio else []), "solo se suelta si seguro que no salio"

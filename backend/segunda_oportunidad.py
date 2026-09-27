@@ -413,21 +413,21 @@ def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any],
                 error = textnorm._sanitize_text(str(exc))[:200]
                 settings.logger.warning("[segunda_oportunidad] no se pudo mandar a %s: %s",
                                         candidato["prospecto"], error)
+                # Dos decisiones separadas (revisiones de Astra, 27-sep-2026):
+                # 1) la reserva solo se suelta si es SEGURO que no salio; si pudo salir (el SMTP
+                #    lo acepto y fallo despues, incluso con un "limite" al cerrar), queda
+                #    "incierta": mejor perder este correo que mandar dos al mismo negocio;
+                # 2) un limite del SMTP activa la pausa compartida y para la ronda, salga o no.
+                if isinstance(exc, NoEnviado):
+                    _apuntar(candidato["prospecto"], "", borrar=True)
+                else:
+                    _apuntar(candidato["prospecto"], "incierta", "Pudo salir; no se reintenta: " + error)
                 limite = outreach._outreach_smtp_ratelimit_reason(exc)
                 if limite:
-                    # El SMTP dice basta: la pausa compartida de la captacion protege al
-                    # remitente, y la ronda para (revision de Astra, 27-sep-2026).
-                    _apuntar(candidato["prospecto"], "", borrar=True)
                     with _db() as conn:
                         outreach._outreach_pause_autocapture_for_smtp_limit(
                             conn, reason=limite, email=candidato["prospecto"], stage=ETAPA)
                     break
-                if isinstance(exc, NoEnviado):
-                    _apuntar(candidato["prospecto"], "", borrar=True)  # seguro que no salio
-                else:
-                    # Pudo salir (el SMTP lo acepto y fallo despues, o fallo apuntarlo): mejor
-                    # perder este correo que mandar dos al mismo negocio.
-                    _apuntar(candidato["prospecto"], "incierta", "Pudo salir; no se reintenta: " + error)
                 continue
             enviadas += 1
             _apuntar(candidato["prospecto"], "enviada", message_id)
