@@ -287,17 +287,21 @@ def test_el_numero_se_importa_con_los_datos_del_proveedor(sip, api_module):  # n
     assert api_module.CONFIG_CLIENTES["vantelia"]["voice"][sip.CLAVE_NUMERO_SIP] == "phnum_nuevo"
 
 
-def test_el_numero_ya_importado_no_se_duplica(sip):
+def test_el_numero_ya_importado_no_se_duplica_y_se_pone_al_dia(sip, monkeypatch):
+    """Sin importarlo otra vez; pero Sara y la salida se reenvian siempre: tras rotar la
+    agente es otra, y una clave renovada en el proveedor tiene que llegar a ElevenLabs
+    (revision de Astra, 27-sep: antes solo se tocaba agent_id)."""
+    from backend import settings
+
+    monkeypatch.setattr(settings, "CAPTACION_SIP_CLAVE", "clave-renovada")
     el = _ElevenLabs({"GET /v1/convai/phone-numbers/phnum_1": (200, {
-        "phone_number": "+34910000001", "assigned_agent": {"agent_id": "agent_sara"}})})
-    assert sip.asegurar_numero_sip(el, "agent_sara") == "phnum_1"
-    assert [p[0] for p in el.peticiones] == ["GET"]
-    # Tras rotar de cuenta la agente es otra: se le asigna, sin importar de nuevo.
-    el = _ElevenLabs({"GET /v1/convai/phone-numbers/phnum_1": (200, {
-        "phone_number": "+34910000001", "assigned_agent": {"agent_id": "agent_vieja"}}),
+        "phone_number": "+34910000001", "assigned_agent": {"agent_id": "agent_sara"}}),
         "PATCH /v1/convai/phone-numbers/phnum_1": (200, {})})
     assert sip.asegurar_numero_sip(el, "agent_sara") == "phnum_1"
-    assert [(p[0], p[2].get("json")) for p in el.peticiones] == [("GET", None), ("PATCH", {"agent_id": "agent_sara"})]
+    assert [p[0] for p in el.peticiones] == ["GET", "PATCH"], "nada de importarlo otra vez"
+    cuerpo = el.peticiones[1][2]["json"]
+    assert cuerpo["agent_id"] == "agent_sara"
+    assert cuerpo["outbound_trunk_config"]["credentials"] == {"username": "910000001", "password": "clave-renovada"}
 
 
 def test_la_clave_sip_nunca_sale_en_un_error(sip, api_module):  # noqa: F811

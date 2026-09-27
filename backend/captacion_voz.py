@@ -546,6 +546,13 @@ def asegurar_aviso(cliente: httpx.Client, base_url: str = "") -> str:
     return datos["webhook_id"]
 
 
+def _salida_sip() -> Dict[str, Any]:
+    """Como sale ElevenLabs por el proveedor: servidor, transporte y la extension."""
+    return {"address": settings.CAPTACION_SIP_HOST, "transport": settings.CAPTACION_SIP_TRANSPORTE,
+            "media_encryption": "disabled",
+            "credentials": {"username": settings.CAPTACION_SIP_USUARIO, "password": settings.CAPTACION_SIP_CLAVE}}
+
+
 def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
     """El 91 del proveedor SIP importado en la cuenta activa y con Sara asignada. Devuelve su id."""
     from backend import clients
@@ -556,22 +563,21 @@ def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
                         headers=voz_elevenlabs._cabeceras())
         # 404 tras rotar de cuenta, o cambiaron el numero: se importa otra vez.
         if r.status_code == 200 and str((r.json() or {}).get("phone_number") or "") == settings.CAPTACION_SIP_NUMERO:
-            asignado = str(((r.json() or {}).get("assigned_agent") or {}).get("agent_id") or "")
-            if asignado != agent_id:
-                p = cliente.patch("%s/v1/convai/phone-numbers/%s" % (voz_elevenlabs.API, numero_id),
-                                  headers=voz_elevenlabs._cabeceras(), json={"agent_id": agent_id})
-                if p.status_code >= 400:
-                    raise RuntimeError("ElevenLabs no asigno Sara al numero SIP (%s): %s"
-                                       % (p.status_code, _sin_secretos(p.text[:200])))
+            # Siempre se reenvian Sara y la salida: ElevenLabs no devuelve la clave, asi que
+            # no se puede saber si cambio; sin esto, una clave renovada en el proveedor seguia
+            # fallando aunque se resincronizase (revision de Astra, 27-sep-2026).
+            p = cliente.patch("%s/v1/convai/phone-numbers/%s" % (voz_elevenlabs.API, numero_id),
+                              headers=voz_elevenlabs._cabeceras(),
+                              json={"agent_id": agent_id, "outbound_trunk_config": _salida_sip()})
+            if p.status_code >= 400:
+                raise RuntimeError("ElevenLabs no actualizo el numero SIP (%s): %s"
+                                   % (p.status_code, _sin_secretos(p.text[:200])))
             return numero_id
     r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(), json={
         "phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (SIP)",
         "provider": "sip_trunk", "agent_id": agent_id,
         "inbound_trunk_config": {"media_encryption": "disabled"},
-        "outbound_trunk_config": {
-            "address": settings.CAPTACION_SIP_HOST, "transport": settings.CAPTACION_SIP_TRANSPORTE,
-            "media_encryption": "disabled",
-            "credentials": {"username": settings.CAPTACION_SIP_USUARIO, "password": settings.CAPTACION_SIP_CLAVE}}})
+        "outbound_trunk_config": _salida_sip()})
     numero_id = str((r.json() if r.status_code < 400 else {}).get("phone_number_id") or "")
     if not numero_id:
         raise RuntimeError("ElevenLabs no importo el numero SIP (%s): %s"
