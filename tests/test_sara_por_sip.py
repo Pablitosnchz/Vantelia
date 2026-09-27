@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Sara marca desde un 91 de Netelip importado en ElevenLabs (via SIP).
+"""Sara marca desde un 91 de un proveedor espanol importado en ElevenLabs (via SIP).
 
 POR QUE EXISTE
 --------------
 27-sep-2026: Twilio aprobo el bundle pero no tiene numeros espanoles, y desde el
-17-oct-2026 no deja usar los locales para llamadas comerciales. Pablo eligio Netelip (91 de
-Madrid, SIP Trunk con guia propia para ElevenLabs). Con CAPTACION_VOZ_VIA=sip:
+17-oct-2026 no deja usar los locales para llamadas comerciales. Pablo eligio Zadarma (91 de
+Madrid, guia oficial para ElevenLabs; Netelip pedia firma FNMT y factura a su nombre). Con
+CAPTACION_VOZ_VIA=sip:
 
 - se marca por la API de ElevenLabs con las MISMAS variables del guion que por Twilio;
 - "comunicaba / no lo cogio" llega por el aviso `call_initiation_failure` y queda igual
@@ -68,13 +69,14 @@ class _ElevenLabs:
 
 @pytest.fixture()
 def sip(captacion, api_module, monkeypatch, tmp_path):  # noqa: F811
-    """Via SIP con Netelip, Sara creada y su 91 importado. Storage temporal."""
+    """Via SIP (Zadarma), Sara creada y su 91 importado. Storage temporal."""
     from backend import clients, settings
 
     monkeypatch.setattr(settings, "CAPTACION_VOZ_VIA", "sip")
     monkeypatch.setattr(settings, "CAPTACION_SIP_NUMERO", "+34910000001")
     monkeypatch.setattr(settings, "CAPTACION_SIP_USUARIO", "910000001")
     monkeypatch.setattr(settings, "CAPTACION_SIP_CLAVE", CLAVE_SIP)
+    monkeypatch.setattr(settings, "CAPTACION_SIP_HOST", "pbx.zadarma.com")
     monkeypatch.setattr(settings, "STORAGE_DIR", tmp_path)
     monkeypatch.setattr(clients, "_persist_configs_to_disk", lambda configs: None)
     voz = dict(api_module.CONFIG_CLIENTES.get("vantelia", {}).get("voice") or {})
@@ -233,7 +235,7 @@ def test_la_recogida_de_respaldo_encuentra_las_que_nadie_cerro(sip, monkeypatch)
 
 # --- El numero y el aviso en la cuenta activa ---------------------------------------------
 
-def test_el_numero_se_importa_con_la_guia_de_netelip(sip, api_module):  # noqa: F811
+def test_el_numero_se_importa_con_los_datos_del_proveedor(sip, api_module):  # noqa: F811
     api_module.CONFIG_CLIENTES["vantelia"]["voice"].pop(sip.CLAVE_NUMERO_SIP)
     el = _ElevenLabs()
     assert sip.asegurar_numero_sip(el, "agent_sara") == "phnum_nuevo"
@@ -242,7 +244,7 @@ def test_el_numero_se_importa_con_la_guia_de_netelip(sip, api_module):  # noqa: 
     cuerpo = k["json"]
     assert (cuerpo["phone_number"], cuerpo["provider"], cuerpo["agent_id"]) == ("+34910000001", "sip_trunk", "agent_sara")
     assert cuerpo["outbound_trunk_config"] == {
-        "address": "elevenlabs.netelip.com", "transport": "tcp", "media_encryption": "disabled",
+        "address": "pbx.zadarma.com", "transport": "tcp", "media_encryption": "disabled",
         "credentials": {"username": "910000001", "password": CLAVE_SIP}}
     assert api_module.CONFIG_CLIENTES["vantelia"]["voice"][sip.CLAVE_NUMERO_SIP] == "phnum_nuevo"
 
@@ -305,13 +307,13 @@ def test_sincronizar_por_sip_deja_aviso_agente_y_numero(sip, monkeypatch, api_mo
 
 # --- Lo que el lanzador exige por SIP ----------------------------------------------------
 
-def test_por_sip_el_lanzador_pide_netelip_y_el_aviso_no_el_numero_de_twilio(sip, api_module, monkeypatch):  # noqa: F811
+def test_por_sip_el_lanzador_pide_el_sip_y_el_aviso_no_el_numero_de_twilio(sip, api_module, monkeypatch):  # noqa: F811
     from backend import lanzador_llamadas, settings
 
     faltan = " ".join(lanzador_llamadas.bloqueos())
     assert "CAPTACION_TWILIO_NUMBER" not in faltan and "aviso de fin de llamada" in faltan
     monkeypatch.setattr(settings, "CAPTACION_SIP_CLAVE", "")
-    assert "SIP de Netelip" in " ".join(lanzador_llamadas.bloqueos())
+    assert "SIP de Sara" in " ".join(lanzador_llamadas.bloqueos())
     monkeypatch.setattr(settings, "CAPTACION_SIP_CLAVE", CLAVE_SIP)
     api_module.CONFIG_CLIENTES["vantelia"]["voice"].pop(sip.CLAVE_NUMERO_SIP)
     assert "no esta importado" in " ".join(lanzador_llamadas.bloqueos())

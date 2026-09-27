@@ -132,10 +132,10 @@ def bloqueos() -> List[str]:
     except Exception:  # noqa: BLE001 - sin el tenant de Sara, como si no hubiera nada creado
         voz = {}
     if captacion_voz.via_sip():
-        # Por SIP (91 de Netelip en ElevenLabs): sin el aviso de fin de llamada no se sabria
+        # Por SIP (91 de un proveedor espanol en ElevenLabs): sin el aviso de fin de llamada no se sabria
         # si no contestaron, y se dejaria de reintentar o se reintentaria a ciegas.
         if not captacion_voz.sip_configurado():
-            faltan.append("Faltan los datos del SIP de Netelip (CAPTACION_SIP_NUMERO, _USUARIO y _CLAVE).")
+            faltan.append("Faltan los datos del SIP de Sara (CAPTACION_SIP_NUMERO, _USUARIO, _CLAVE y _HOST).")
         elif not str(voz.get(captacion_voz.CLAVE_NUMERO_SIP) or ""):
             faltan.append("El numero SIP no esta importado en ElevenLabs: sincroniza la agente de captacion.")
         if not captacion_voz.secretos_de_aviso():

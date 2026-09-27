@@ -298,13 +298,13 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
 
 def sincronizar_agente(*, base_url: str = "", cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
     """Crea o actualiza a Sara en la cuenta activa. Por SIP, antes su aviso de fin de llamada
-    y despues el 91 de Netelip importado y con ella asignada."""
+    y despues el 91 del proveedor SIP importado y con ella asignada."""
     from backend import clients
 
     if not voz_elevenlabs.configurado():
         raise RuntimeError("Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
     if via_sip() and not sip_configurado():
-        raise RuntimeError("Faltan los datos del SIP de Netelip (CAPTACION_SIP_NUMERO, _USUARIO y _CLAVE).")
+        raise RuntimeError("Faltan los datos del SIP de Sara (CAPTACION_SIP_NUMERO, _USUARIO, _CLAVE y _HOST).")
     previo = str((clients._get_client_config(TENANT).get("voice") or {}).get(CLAVE_AGENTE) or "")
     base = base_url or settings.APP_BASE_URL
     propio = cliente is None
@@ -342,7 +342,7 @@ def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *
 
         voz = clients._get_client_config(TENANT).get("voice") or {}
         if not (sip_configurado() and voz.get(CLAVE_AGENTE) and voz.get(CLAVE_NUMERO_SIP)):
-            raise RuntimeError("El numero SIP de Sara no esta listo (datos de Netelip o importacion en ElevenLabs).")
+            raise RuntimeError("El numero SIP de Sara no esta listo (datos del SIP o importacion en ElevenLabs).")
     elif not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and _numero_de_salida()):
         raise RuntimeError("Twilio no esta configurado para llamar.")
     if not prospecto:
@@ -455,12 +455,12 @@ def _variables(fila) -> Dict[str, str]:
             "responsable": responsable or "quien lleva el negocio"}
 
 
-# --- Marcar por SIP (Netelip -> ElevenLabs) --------------------------------------------
+# --- Marcar por SIP (proveedor espanol -> ElevenLabs) -----------------------------------
 #
 # Twilio no tiene numeros espanoles y desde el 17-oct-2026 prohibe usar los locales para
-# llamadas comerciales (27-sep-2026). Con CAPTACION_VOZ_VIA=sip, Sara marca desde un 91 de
-# Netelip importado en ElevenLabs como SIP Trunk (su guia: elevenlabs.netelip.com, TCP, sin
-# cifrado de medios). El numero se importa en la cuenta de ElevenLabs activa y se vuelve a
+# llamadas comerciales (27-sep-2026). Con CAPTACION_VOZ_VIA=sip, Sara marca desde un 91 de un
+# proveedor espanol importado en ElevenLabs como SIP Trunk (Zadarma: pbx.zadarma.com, TCP, sin
+# cifrado de medios, credenciales de una extension de su centralita; docs/SARA_SIP.md). El numero se importa en la cuenta de ElevenLabs activa y se vuelve a
 # importar al rotar de cuenta (cuenta_elevenlabs.sincronizar_agentes -> sincronizar_agente).
 #
 # Sin Twilio no llega el "comunicaba" o "no lo cogio": lo cuenta ElevenLabs con su aviso
@@ -478,7 +478,8 @@ def via_sip() -> bool:
 
 
 def sip_configurado() -> bool:
-    return bool(settings.CAPTACION_SIP_NUMERO and settings.CAPTACION_SIP_USUARIO and settings.CAPTACION_SIP_CLAVE)
+    return bool(settings.CAPTACION_SIP_NUMERO and settings.CAPTACION_SIP_USUARIO
+                and settings.CAPTACION_SIP_CLAVE and settings.CAPTACION_SIP_HOST)
 
 
 def _sin_secretos(texto: str) -> str:
@@ -541,14 +542,14 @@ def asegurar_aviso(cliente: httpx.Client, base_url: str = "") -> str:
 
 
 def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
-    """El 91 de Netelip importado en la cuenta activa y con Sara asignada. Devuelve su id."""
+    """El 91 del proveedor SIP importado en la cuenta activa y con Sara asignada. Devuelve su id."""
     from backend import clients
 
     numero_id = str((clients._get_client_config(TENANT).get("voice") or {}).get(CLAVE_NUMERO_SIP) or "")
     if numero_id:
         r = cliente.get("%s/v1/convai/phone-numbers/%s" % (voz_elevenlabs.API, numero_id),
                         headers=voz_elevenlabs._cabeceras())
-        # 404 tras rotar de cuenta, o cambiaron el numero de Netelip: se importa otra vez.
+        # 404 tras rotar de cuenta, o cambiaron el numero: se importa otra vez.
         if r.status_code == 200 and str((r.json() or {}).get("phone_number") or "") == settings.CAPTACION_SIP_NUMERO:
             asignado = str(((r.json() or {}).get("assigned_agent") or {}).get("agent_id") or "")
             if asignado != agent_id:
@@ -559,7 +560,7 @@ def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
                                        % (p.status_code, _sin_secretos(p.text[:200])))
             return numero_id
     r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(), json={
-        "phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (Netelip)",
+        "phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (SIP)",
         "provider": "sip_trunk", "agent_id": agent_id,
         "inbound_trunk_config": {"media_encryption": "disabled"},
         "outbound_trunk_config": {
@@ -575,7 +576,7 @@ def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
 
 
 def _llamar_por_sip(llamada_id: str, cliente: httpx.Client) -> Dict[str, Any]:
-    """Pide a ElevenLabs que marque desde el 91 de Netelip. Lo que no conteste o comunique
+    """Pide a ElevenLabs que marque desde el 91 del proveedor SIP. Lo que no conteste o comunique
     llega despues por el aviso (`fallo_al_marcar`)."""
     from backend import clients
 
