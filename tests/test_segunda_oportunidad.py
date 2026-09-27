@@ -325,9 +325,10 @@ def test_lo_que_pasa_mientras_espera_el_turno_frena_el_envio(so, captacion, mien
 
 # --- El correo ---------------------------------------------------------------------------
 
-def test_el_correo_que_sale(so, captacion, envios):  # noqa: F811
+def test_el_correo_que_sale(so, captacion, envios, monkeypatch):  # noqa: F811
     from backend import outreach
 
+    monkeypatch.setattr(outreach, "_outreach_smtp_health", lambda: {"ok": True})
     _negocio()
     _llamada(captacion, creada=MARTES_1700)
     salida = so.ronda(ahora=MIERCOLES_1030, esperar_turno=lambda: None)
@@ -497,3 +498,79 @@ def test_un_limite_del_smtp_pausa_la_captacion_y_para_la_ronda(so, captacion, mo
     with so._db() as conn:
         reservas = [tuple(f) for f in conn.execute("SELECT prospecto, estado FROM segunda_oportunidad")]
     assert reservas == ([(intentos[0], "incierta")] if salio else []), "solo se suelta si seguro que no salio"
+
+
+# --- Presupuesto del dia y buzon caido (revision de Astra, 27-sep) ------------------------
+
+def _envios_de_hoy(etapa, cuantos, ahora=MARTES_1630):
+    from backend import outreach
+
+    with outreach._outreach_db() as conn:
+        for i in range(cuantos):
+            conn.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                         ("otro%d@x.es" % i, etapa, "x", ahora.isoformat(timespec="seconds"), "send"))
+        conn.commit()
+
+
+def test_tiene_su_propio_tope_diario(so, captacion):  # noqa: F811
+    _negocio()
+    _llamada(captacion)
+    _envios_de_hoy(so.ETAPA, so.MAX_POR_DIA)
+    registro, salida = _ronda(so, MARTES_1630)
+    assert registro == [] and salida["motivo"] == "tope_diario"
+
+
+def test_cuenta_contra_el_presupuesto_del_buzon(so, captacion):  # noqa: F811
+    """Comparte el warm-up con los correos en frio: si el buzon ya gasto su cupo hoy, espera."""
+    import sqlite3
+
+    from backend import outreach
+
+    _negocio()
+    _llamada(captacion)
+    with outreach._outreach_db() as conn:
+        conn.row_factory = sqlite3.Row
+        outreach._outreach_ensure_autopilot_config_columns(conn)
+        conn.execute("UPDATE autopilot_config SET daily_cold_cap=3 WHERE id=1")
+        conn.commit()
+    _envios_de_hoy("cold", 3)
+    registro, salida = _ronda(so, MARTES_1630)
+    assert registro == [] and salida["motivo"] == "presupuesto_del_buzon"
+
+
+def test_con_el_buzon_caido_no_se_gastan_candidatos(so, captacion, monkeypatch):  # noqa: F811
+    from backend import outreach
+
+    monkeypatch.setattr(outreach, "_outreach_smtp_health", lambda: {"ok": False, "error": "caido"})
+    _negocio()
+    _llamada(captacion)
+    salida = so.ronda(ahora=MARTES_1630, esperar_turno=lambda: None)
+    assert salida["motivo"] == "smtp_caido"
+    with so._db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM segunda_oportunidad").fetchone()[0] == 0
+
+
+def test_una_conexion_rechazada_es_seguro_que_no_salio(so, captacion, monkeypatch):  # noqa: F811
+    """Si el SMTP ni siquiera acepta la conexion, no salio nada: se reintenta (antes quedaba
+    incierta y el negocio se perdia para siempre)."""
+    import smtplib
+
+    from backend import outreach
+
+    monkeypatch.setattr(outreach, "_outreach_dedicated_smtp_config",
+                        lambda: {"host": "smtp.test.invalid", "port": 587, "starttls": True,
+                                 "username": "u", "password": "p"})
+
+    def rechaza(*a, **k):
+        raise ConnectionRefusedError(111, "Connection refused")
+
+    monkeypatch.setattr(smtplib, "SMTP", rechaza)
+    with pytest.raises(outreach.EnvioNoIniciado):
+        outreach._outreach_send_email_object(object())
+    _negocio()
+    _llamada(captacion)
+    candidato = so.elegibles(MARTES_1630)[0]
+    monkeypatch.setattr(outreach, "_outreach_maybe_pregenerate_demo", lambda email: None)
+    with pytest.raises(so.NoEnviado):
+        so._mandar(candidato, MARTES_1630)
+

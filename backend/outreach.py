@@ -1870,6 +1870,13 @@ def _outreach_dedicated_smtp_config() -> Optional[Dict[str, Any]]:
     }
 
 
+class EnvioNoIniciado(RuntimeError):
+    """Fallo al conectar o autenticarse con el SMTP: ningun mensaje llego a enviarse.
+    Quien necesite distinguir "seguro que no salio" de "pudo salir" (la segunda
+    oportunidad tras una llamada de Sara) lo usa; el resto lo trata como cualquier error
+    (el mensaje del SMTP se conserva para detectar limites)."""
+
+
 def _outreach_send_email_object(msg) -> None:
     """Envia un email de captacion: SMTP dedicado si esta configurado, si no el canal global."""
     cfg = _outreach_dedicated_smtp_config()
@@ -1878,13 +1885,23 @@ def _outreach_send_email_object(msg) -> None:
         return
     import smtplib
 
-    with smtplib.SMTP(cfg["host"], cfg["port"], timeout=20) as smtp:
+    smtp = None
+    try:
+        smtp = smtplib.SMTP(cfg["host"], cfg["port"], timeout=20)
         smtp.ehlo()
         if cfg["starttls"]:
             smtp.starttls()
             smtp.ehlo()
         if cfg["username"]:
             smtp.login(cfg["username"], cfg["password"])
+    except Exception as exc:  # noqa: BLE001 - antes de enviar nada
+        if smtp is not None:
+            try:
+                smtp.close()
+            except Exception:  # noqa: BLE001
+                pass
+        raise EnvioNoIniciado(str(exc)) from exc
+    with smtp:
         smtp.send_message(msg)
 
 

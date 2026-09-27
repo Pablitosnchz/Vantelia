@@ -34,7 +34,7 @@ import re
 import smtplib
 import sqlite3
 import threading
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from html import escape
 from typing import Any, Callable, Dict, List, Optional
 
@@ -49,6 +49,9 @@ DESENLACES_QUE_CIERRAN = ("rechazo", "interesado", "volver_a_llamar", "persona_e
 DIAS_SIN_OTRO_CORREO = 3
 DIAS_HACIA_ATRAS = 3
 MAX_POR_RONDA = 10
+# Tope propio al dia; ademas cuentan contra el presupuesto diario del buzon de captacion
+# (warm-up), que comparten con los correos en frio (revision de Astra, 27-sep-2026).
+MAX_POR_DIA = 10
 MINUTOS_ENTRE_RONDAS = 30
 HORA_TARDE = time(16, 30)
 HORA_MANANA = time(10, 30)
@@ -289,7 +292,7 @@ def _mandar(candidato: Dict[str, Any], ahora: datetime) -> str:
 
     try:
         outreach._outreach_send_email_object(mensaje)
-    except _RECHAZOS_SMTP as exc:
+    except _RECHAZOS_SMTP + (outreach.EnvioNoIniciado,) as exc:  # no llego a enviarse
         raise NoEnviado(str(exc)) from exc
     # A partir de aqui el correo pudo salir: un fallo apuntandolo NO permite reenviarlo.
     with _db() as conn:
@@ -347,6 +350,31 @@ def _apuntar(prospecto: str, estado: str, detalle: str = "", *, borrar: bool = F
         conn.commit()
 
 
+def sin_presupuesto(momento: datetime) -> str:
+    """Vacio si queda presupuesto hoy. Las entregas en duda cuentan: pudieron salir."""
+    from backend import outreach
+
+    dia = momento.astimezone(timezone.utc).date().isoformat()
+    try:
+        with _db() as conn:
+            dudosas = conn.execute("SELECT COUNT(*) FROM segunda_oportunidad WHERE estado='incierta' "
+                                   "AND date(momento)=?", (dia,)).fetchone()[0]
+            propias = conn.execute("SELECT COUNT(*) FROM sends WHERE mode='send' AND stage=? "
+                                   "AND date(sent_at)=?", (ETAPA, dia)).fetchone()[0]
+            if propias + dudosas >= MAX_POR_DIA:
+                return "tope_diario"
+            fila = conn.execute("SELECT daily_cold_cap FROM autopilot_config WHERE id=1").fetchone()
+            tope = outreach._outreach_warmup_effective_cap(conn, int((fila[0] if fila else 0) or 20),
+                                                           today=momento)
+            hoy = conn.execute("SELECT COUNT(*) FROM sends WHERE mode='send' AND date(sent_at)=?",
+                               (dia,)).fetchone()[0]
+            if hoy + dudosas >= tope:
+                return "presupuesto_del_buzon"
+    except Exception:  # noqa: BLE001 - sin saberlo, no se manda
+        return "presupuesto_desconocido"
+    return ""
+
+
 def correo_en_pausa() -> bool:
     """La pausa AUTOMATICA de la captacion por email (rebotes altos, limite del SMTP) protege
     al remitente, y esta segunda oportunidad sale por el mismo buzon: la respeta (revision de
@@ -366,6 +394,8 @@ def _sigue_en_pie(candidato: Dict[str, Any], momento: datetime) -> bool:
     de Astra, 27-sep-2026), "no llamar", la rellamada pendiente y las reglas del email."""
     if parar.is_set() or not activa() or not en_ventana(momento) or correo_en_pausa():
         return False
+    if sin_presupuesto(momento):
+        return False
     return any(c["llamada_id"] == candidato["llamada_id"]
                for c in elegibles(momento, solo=candidato["prospecto"], reserva_propia=candidato["llamada_id"]))
 
@@ -384,8 +414,14 @@ def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any],
         return {"enviadas": 0, "motivo": "fuera_de_horario"}
     if correo_en_pausa():
         return {"enviadas": 0, "motivo": "correo_en_pausa"}
+    motivo = sin_presupuesto(ahora)
+    if motivo:
+        return {"enviadas": 0, "motivo": motivo}
     from backend import outreach
 
+    if mandar is None and not outreach._outreach_smtp_health().get("ok"):
+        # Con el buzon caido no se gastan candidatos (revision de Astra, 27-sep-2026).
+        return {"enviadas": 0, "motivo": "smtp_caido"}
     mandar = mandar or _mandar
     esperar_turno = esperar_turno or outreach._outreach_wait_send_slot
     enviadas, fallidas = 0, 0
