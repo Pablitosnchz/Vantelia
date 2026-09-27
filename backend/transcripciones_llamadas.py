@@ -149,6 +149,10 @@ def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
         if nombre and nombre.lower() not in ("none", "null", "no", "desconocido"):
             conn.execute("UPDATE llamadas_voz SET responsable_nombre=? WHERE id=? AND responsable_nombre=''",
                          (nombre[:80], fila[0]))
+        # Por SIP no hay aviso de Twilio que la cierre: la cierra su transcripcion terminada.
+        conn.execute("UPDATE llamadas_voz SET estado='terminada', actualizada=? WHERE id=? "
+                     "AND estado IN ('marcando', 'en_curso')",
+                     (timeutils._utc_now().isoformat(timespec="seconds"), fila[0]))
         conn.commit()
     return fila[0]
 
@@ -186,7 +190,7 @@ def recoger_pendientes(*, cliente: Optional[httpx.Client] = None, limite: int = 
         pendientes = conn.execute(
             "SELECT l.id, l.conversation_id FROM llamadas_voz l "
             "LEFT JOIN llamadas_transcripcion_intentos i ON i.llamada_id = l.id "
-            "WHERE l.conversation_id <> '' AND l.estado = 'terminada' AND l.actualizada <= ? "
+            "WHERE l.conversation_id <> '' AND l.estado IN ('terminada', 'en_curso') AND l.actualizada <= ? "
             "AND COALESCE(i.intentos, 0) < ? AND COALESCE(i.ultimo, '') <= ? "
             "AND NOT EXISTS (SELECT 1 FROM llamadas_transcripcion t WHERE t.llamada_id = l.id) "
             "ORDER BY COALESCE(i.ultimo, ''), l.actualizada LIMIT ?",

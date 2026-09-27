@@ -260,7 +260,9 @@ DATOS_AL_TERMINAR = {
 }
 
 
-def agente_de_captacion(base_url: str) -> Dict[str, Any]:
+def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
+    """Sara en ElevenLabs. Con `aviso_id` (via SIP) lleva enganchado el aviso de fin de
+    llamada de su cuenta, con los fallos al marcar: sin el no se sabria si no contestaron."""
     base = base_url.rstrip("/")
     herramientas = [
         voz_elevenlabs.herramienta_webhook(nombre, descripcion, "%s%s/tool/%s" % (base, RUTA, nombre),
@@ -286,27 +288,37 @@ def agente_de_captacion(base_url: str) -> Dict[str, Any]:
                         **audio["tts"]),
             "turn": {"speculative_turn": True, "silence_end_call_timeout": SEGUNDOS_DE_SILENCIO_PARA_COLGAR},
         },
-        "platform_settings": {"data_collection": DATOS_AL_TERMINAR},
+        "platform_settings": dict(
+            {"data_collection": DATOS_AL_TERMINAR},
+            **({"workspace_overrides": {"webhooks": {"post_call_webhook_id": aviso_id, "events": EVENTOS_DEL_AVISO,
+                                                     "transcript_format": "json", "send_audio": False}}}
+               if aviso_id else {})),
     }
 
 
 def sincronizar_agente(*, base_url: str = "", cliente: Optional[httpx.Client] = None) -> Dict[str, Any]:
+    """Crea o actualiza a Sara en la cuenta activa. Por SIP, antes su aviso de fin de llamada
+    y despues el 91 de Netelip importado y con ella asignada."""
     from backend import clients
 
     if not voz_elevenlabs.configurado():
         raise RuntimeError("Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
+    if via_sip() and not sip_configurado():
+        raise RuntimeError("Faltan los datos del SIP de Netelip (CAPTACION_SIP_NUMERO, _USUARIO y _CLAVE).")
     previo = str((clients._get_client_config(TENANT).get("voice") or {}).get(CLAVE_AGENTE) or "")
+    base = base_url or settings.APP_BASE_URL
     propio = cliente is None
     cliente = cliente or httpx.Client(timeout=60.0)
     try:
-        agent_id = voz_elevenlabs.publicar_agente(cliente, agente_de_captacion(base_url or settings.APP_BASE_URL),
-                                                  previo)
+        aviso_id = asegurar_aviso(cliente, base) if via_sip() else ""
+        agent_id = voz_elevenlabs.publicar_agente(cliente, agente_de_captacion(base, aviso_id), previo)
+        if agent_id != previo:
+            voz_elevenlabs.guardar_en_voz(TENANT, CLAVE_AGENTE, agent_id)
+        numero_id = asegurar_numero_sip(cliente, agent_id) if via_sip() else ""
     finally:
         if propio:
             cliente.close()
-    if agent_id != previo:
-        voz_elevenlabs.guardar_en_voz(TENANT, CLAVE_AGENTE, agent_id)
-    return {"agent_id": agent_id}
+    return dict({"agent_id": agent_id}, **({"numero_sip": numero_id, "aviso": aviso_id} if via_sip() else {}))
 
 
 def _numero_de_salida() -> str:
@@ -325,7 +337,13 @@ def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *
         raise ValueError("Telefono no valido.")
     if not puede_llamarse(numero):
         return {"ok": False, "motivo": "no_llamar"}
-    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and _numero_de_salida()):
+    if via_sip():
+        from backend import clients
+
+        voz = clients._get_client_config(TENANT).get("voice") or {}
+        if not (sip_configurado() and voz.get(CLAVE_AGENTE) and voz.get(CLAVE_NUMERO_SIP)):
+            raise RuntimeError("El numero SIP de Sara no esta listo (datos de Netelip o importacion en ElevenLabs).")
+    elif not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and _numero_de_salida()):
         raise RuntimeError("Twilio no esta configurado para llamar.")
     if not prospecto:
         # El negocio de la captacion, si lo tenemos: su email es a donde se ofrece mandar.
@@ -344,6 +362,12 @@ def llamar(telefono: str, negocio: str, sector: str = "", prospecto: str = "", *
     base = (base_url or settings.APP_BASE_URL).rstrip("/")
     propio = cliente is None
     cliente = cliente or httpx.Client(timeout=30.0)
+    if via_sip():
+        try:
+            return _llamar_por_sip(llamada_id, cliente)
+        finally:
+            if propio:
+                cliente.close()
     try:
         r = cliente.post(
             "https://api.twilio.com/2010-04-01/Accounts/%s/Calls.json" % settings.TWILIO_ACCOUNT_SID,
@@ -411,19 +435,207 @@ def twiml_al_descolgar(llamada_id: str, respondio: str, desde: str, hacia: str,
     if not agente:
         _actualizar(llamada_id, estado="fallida", notas="sin agente de captacion")
         return _COLGAR
+    twiml = voz_elevenlabs.twiml_registrar_llamada(agente, desde, hacia, "outbound", _variables(fila),
+                                                   cliente=cliente)
+    _actualizar(llamada_id, estado="en_curso",
+                conversation_id=voz_elevenlabs.id_de_conversacion(twiml))
+    return twiml
+
+
+def _variables(fila) -> Dict[str, str]:
+    """Lo que Sara sabe de la llamada ({{negocio}}, {{a_quien}}...). Las mismas por Twilio y
+    por SIP: el guion no sabe por donde se ha marcado."""
     email_negocio = str(fila["prospecto"] or "")
     negocio = fila["negocio"] or "tu negocio"
     # En una rellamada dirigida se pregunta por quien decide; si no, por el negocio.
     responsable = str(fila["responsable_nombre"] or "") if fila["rellamada_de"] else ""
-    twiml = voz_elevenlabs.twiml_registrar_llamada(
-        agente, desde, hacia, "outbound",
-        {"negocio": negocio, "sector": fila["sector"] or "un negocio con citas",
-         VARIABLE_LLAMADA: llamada_id, "canal_envio": canal_de_envio(fila["telefono"], email_negocio),
-         "email_negocio": email_hablado(email_negocio), "a_quien": responsable or negocio,
-         "responsable": responsable or "quien lleva el negocio"}, cliente=cliente)
-    _actualizar(llamada_id, estado="en_curso",
-                conversation_id=voz_elevenlabs.id_de_conversacion(twiml))
-    return twiml
+    return {"negocio": negocio, "sector": fila["sector"] or "un negocio con citas",
+            VARIABLE_LLAMADA: fila["id"], "canal_envio": canal_de_envio(fila["telefono"], email_negocio),
+            "email_negocio": email_hablado(email_negocio), "a_quien": responsable or negocio,
+            "responsable": responsable or "quien lleva el negocio"}
+
+
+# --- Marcar por SIP (Netelip -> ElevenLabs) --------------------------------------------
+#
+# Twilio no tiene numeros espanoles y desde el 17-oct-2026 prohibe usar los locales para
+# llamadas comerciales (27-sep-2026). Con CAPTACION_VOZ_VIA=sip, Sara marca desde un 91 de
+# Netelip importado en ElevenLabs como SIP Trunk (su guia: elevenlabs.netelip.com, TCP, sin
+# cifrado de medios). El numero se importa en la cuenta de ElevenLabs activa y se vuelve a
+# importar al rotar de cuenta (cuenta_elevenlabs.sincronizar_agentes -> sincronizar_agente).
+#
+# Sin Twilio no llega el "comunicaba" o "no lo cogio": lo cuenta ElevenLabs con su aviso
+# `call_initiation_failure` (busy / no-answer / unknown) al mismo /fin que la transcripcion.
+# Por eso cada cuenta lleva su aviso (webhook) propio y su secreto se guarda en storage/,
+# nunca en git.
+
+CLAVE_NUMERO_SIP = "elevenlabs_numero_captacion"
+EVENTOS_DEL_AVISO = ["transcript", "call_initiation_failure"]
+_FALLO_AL_MARCAR = {"busy": "ocupado", "no-answer": "no_contesta"}
+
+
+def via_sip() -> bool:
+    return settings.CAPTACION_VOZ_VIA == "sip"
+
+
+def sip_configurado() -> bool:
+    return bool(settings.CAPTACION_SIP_NUMERO and settings.CAPTACION_SIP_USUARIO and settings.CAPTACION_SIP_CLAVE)
+
+
+def _sin_secretos(texto: str) -> str:
+    """Lo que devuelve ElevenLabs puede repetir lo enviado: fuera claves y la del SIP."""
+    from backend import cuenta_elevenlabs
+
+    texto = cuenta_elevenlabs.censurar(texto)
+    if settings.CAPTACION_SIP_CLAVE:
+        texto = texto.replace(settings.CAPTACION_SIP_CLAVE, "***")
+    return texto
+
+
+def _ruta_avisos():
+    return settings.STORAGE_DIR / "elevenlabs_avisos.json"
+
+
+def _avisos() -> Dict[str, Dict[str, str]]:
+    """{huella de la cuenta: {webhook_id, secreto}}. Fichero en storage/, fuera de git."""
+    import json
+
+    try:
+        return json.loads(_ruta_avisos().read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def secretos_de_aviso() -> list:
+    """Los secretos con los que puede venir firmado un aviso: el del entorno y el de cada
+    cuenta de la reserva (una llamada puede terminar justo despues de rotar)."""
+    secretos = [settings.ELEVENLABS_WEBHOOK_SECRET] + [a.get("secreto", "") for a in _avisos().values()]
+    return [s for s in secretos if s]
+
+
+def asegurar_aviso(cliente: httpx.Client, base_url: str = "") -> str:
+    """El aviso de fin de llamada (webhook con firma HMAC) en la cuenta activa. Devuelve su id."""
+    import json
+
+    from backend import cuenta_elevenlabs
+
+    avisos = _avisos()
+    cuenta = cuenta_elevenlabs.huella(settings.ELEVENLABS_API_KEY)
+    guardado = avisos.get(cuenta) or {}
+    if guardado.get("webhook_id") and guardado.get("secreto"):
+        r = cliente.get(voz_elevenlabs.API + "/v1/workspace/webhooks", headers=voz_elevenlabs._cabeceras())
+        if r.status_code == 200 and any(guardado["webhook_id"] in (w.get("webhook_id"), w.get("id"))
+                                        for w in (r.json() or {}).get("webhooks", [])):
+            return guardado["webhook_id"]
+    url = "%s%s/fin" % ((base_url or settings.APP_BASE_URL).rstrip("/"), RUTA)
+    r = cliente.post(voz_elevenlabs.API + "/v1/workspace/webhooks", headers=voz_elevenlabs._cabeceras(),
+                     json={"settings": {"auth_type": "hmac", "name": "Vantelia - fin de llamada de Sara",
+                                        "webhook_url": url}})
+    datos = r.json() if r.status_code < 400 else {}
+    if not (datos.get("webhook_id") and datos.get("webhook_secret")):
+        raise RuntimeError("ElevenLabs no creo el aviso de fin de llamada (%s): %s"
+                           % (r.status_code, _sin_secretos(r.text[:200])))
+    avisos[cuenta] = {"webhook_id": datos["webhook_id"], "secreto": datos["webhook_secret"]}
+    _ruta_avisos().parent.mkdir(parents=True, exist_ok=True)
+    _ruta_avisos().write_text(json.dumps(avisos), encoding="utf-8")
+    return datos["webhook_id"]
+
+
+def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
+    """El 91 de Netelip importado en la cuenta activa y con Sara asignada. Devuelve su id."""
+    from backend import clients
+
+    numero_id = str((clients._get_client_config(TENANT).get("voice") or {}).get(CLAVE_NUMERO_SIP) or "")
+    if numero_id:
+        r = cliente.get("%s/v1/convai/phone-numbers/%s" % (voz_elevenlabs.API, numero_id),
+                        headers=voz_elevenlabs._cabeceras())
+        # 404 tras rotar de cuenta, o cambiaron el numero de Netelip: se importa otra vez.
+        if r.status_code == 200 and str((r.json() or {}).get("phone_number") or "") == settings.CAPTACION_SIP_NUMERO:
+            asignado = str(((r.json() or {}).get("assigned_agent") or {}).get("agent_id") or "")
+            if asignado != agent_id:
+                p = cliente.patch("%s/v1/convai/phone-numbers/%s" % (voz_elevenlabs.API, numero_id),
+                                  headers=voz_elevenlabs._cabeceras(), json={"agent_id": agent_id})
+                if p.status_code >= 400:
+                    raise RuntimeError("ElevenLabs no asigno Sara al numero SIP (%s): %s"
+                                       % (p.status_code, _sin_secretos(p.text[:200])))
+            return numero_id
+    r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(), json={
+        "phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (Netelip)",
+        "provider": "sip_trunk", "agent_id": agent_id,
+        "inbound_trunk_config": {"media_encryption": "disabled"},
+        "outbound_trunk_config": {
+            "address": settings.CAPTACION_SIP_HOST, "transport": settings.CAPTACION_SIP_TRANSPORTE,
+            "media_encryption": "disabled",
+            "credentials": {"username": settings.CAPTACION_SIP_USUARIO, "password": settings.CAPTACION_SIP_CLAVE}}})
+    numero_id = str((r.json() if r.status_code < 400 else {}).get("phone_number_id") or "")
+    if not numero_id:
+        raise RuntimeError("ElevenLabs no importo el numero SIP (%s): %s"
+                           % (r.status_code, _sin_secretos(r.text[:200])))
+    voz_elevenlabs.guardar_en_voz(TENANT, CLAVE_NUMERO_SIP, numero_id)
+    return numero_id
+
+
+def _llamar_por_sip(llamada_id: str, cliente: httpx.Client) -> Dict[str, Any]:
+    """Pide a ElevenLabs que marque desde el 91 de Netelip. Lo que no conteste o comunique
+    llega despues por el aviso (`fallo_al_marcar`)."""
+    from backend import clients
+
+    fila = _fila(llamada_id)
+    voz = clients._get_client_config(TENANT).get("voice") or {}
+    try:
+        r = cliente.post(voz_elevenlabs.API + "/v1/convai/sip-trunk/outbound-call",
+                         headers=voz_elevenlabs._cabeceras(),
+                         json={"agent_id": str(voz.get(CLAVE_AGENTE) or ""),
+                               "agent_phone_number_id": str(voz.get(CLAVE_NUMERO_SIP) or ""),
+                               "to_number": fila["telefono"],
+                               "conversation_initiation_client_data": {"dynamic_variables": _variables(fila)}})
+    except httpx.HTTPError as exc:
+        # No se sabe si llego a sonar: sin resultado, el lanzador no reintenta solo.
+        _actualizar(llamada_id, estado="fallida", notas="ElevenLabs sin respuesta")
+        raise RuntimeError("ElevenLabs no respondio al marcar: %s" % _sin_secretos(str(exc))) from exc
+    datos = r.json() if r.status_code < 500 else {}
+    if r.status_code >= 400 or not datos.get("success"):
+        detalle = _sin_secretos(str(datos.get("message") or r.text)[:200])
+        # No se llego a marcar: nadie oyo nada, se puede reintentar como un "fallida" de Twilio.
+        _actualizar(llamada_id, estado="fallida", resultado="fallida", notas="SIP %s: %s" % (r.status_code, detalle))
+        if r.status_code in (401, 402, 403):
+            from backend import lanzador_llamadas  # la cuenta de voz esta caida: rotar o parar
+
+            lanzador_llamadas.fallo_de_voz(llamada_id, "ElevenLabs %s: %s" % (r.status_code, detalle))
+        raise RuntimeError("ElevenLabs no pudo llamar (%s): %s" % (r.status_code, detalle))
+    conversation_id = str(datos.get("conversation_id") or "")
+    _actualizar(llamada_id, estado="en_curso", conversation_id=conversation_id,
+                call_sid=str(datos.get("sip_call_id") or ""))
+    return {"ok": True, "llamada": llamada_id, "conversation_id": conversation_id}
+
+
+def _codigo_sip(metadatos: Any) -> str:
+    """El codigo SIP del fallo (486 comunicaba...), venga plano o dentro de `body`."""
+    if not isinstance(metadatos, dict):
+        return ""
+    for sitio in (metadatos, metadatos.get("body")):
+        if isinstance(sitio, dict) and sitio.get("sip_status_code"):
+            return str(sitio["sip_status_code"])[:10]
+    return ""
+
+
+def fallo_al_marcar(conversation_id: str, motivo: str, metadatos: Any = None) -> Optional[str]:
+    """Aviso `call_initiation_failure` de ElevenLabs: comunicaba, no lo cogieron o fallo.
+    Queda igual que con Twilio (resultado sin conversacion y SIN conversation_id), para que
+    el lanzador aplique las mismas reglas de reintento."""
+    if not conversation_id:
+        return None
+    detalle = _codigo_sip(metadatos)
+    with _db() as conn:
+        conn.row_factory = sqlite3.Row
+        fila = conn.execute("SELECT id, resultado FROM llamadas_voz WHERE conversation_id=?",
+                            (conversation_id,)).fetchone()
+    if fila is None:
+        return None
+    if not fila["resultado"]:  # lo que apunto Sara, si llego a hablar, manda
+        _actualizar(fila["id"], estado="terminada", conversation_id="",
+                    resultado=_FALLO_AL_MARCAR.get(str(motivo or "").strip().lower(), "fallida"),
+                    notas=("SIP: %s %s" % (textnorm._sanitize_text(str(motivo or ""))[:40], detalle)).strip())
+    return fila["id"]
 
 
 def enlace_de_demo(email_negocio: str) -> str:

@@ -57,6 +57,8 @@ CREDENCIALES_QUE_NO_ENTRAN_EN_TESTS = (
     "ROBINSON_API_KEY",
     "ROBINSON_API_SECRET",
     "CAPTACION_TWILIO_NUMBER",
+    # SIP de Netelip de Sara: una prueba nunca importa el numero real ni marca por el
+    "CAPTACION_VOZ_VIA", "CAPTACION_SIP_NUMERO", "CAPTACION_SIP_USUARIO", "CAPTACION_SIP_CLAVE",
 )
 
 for _clave in CREDENCIALES_QUE_NO_ENTRAN_EN_TESTS:

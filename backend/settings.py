@@ -167,6 +167,15 @@ ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uQw4jpKzMLrZuo0RLPS9").s
 # Numero desde el que Sara llama a los negocios de captacion (backend/captacion_voz.py).
 # Vacio = TWILIO_DEFAULT_PHONE_NUMBER. Para llamar a negocios, un 91 espanol.
 CAPTACION_TWILIO_NUMBER = os.getenv("CAPTACION_TWILIO_NUMBER", "").strip()
+# Por donde marca Sara: "twilio" (de serie) o "sip" (un 91 de Netelip importado en
+# ElevenLabs por SIP; Twilio no tiene numeros espanoles y desde el 17-oct-2026 no deja
+# usar los locales para llamadas comerciales). Ver backend/captacion_voz.py.
+CAPTACION_VOZ_VIA = os.getenv("CAPTACION_VOZ_VIA", "twilio").strip().lower()
+CAPTACION_SIP_NUMERO = os.getenv("CAPTACION_SIP_NUMERO", "").strip()
+CAPTACION_SIP_USUARIO = os.getenv("CAPTACION_SIP_USUARIO", "").strip()
+CAPTACION_SIP_CLAVE = os.getenv("CAPTACION_SIP_CLAVE", "").strip()
+CAPTACION_SIP_HOST = os.getenv("CAPTACION_SIP_HOST", "elevenlabs.netelip.com").strip()
+CAPTACION_SIP_TRANSPORTE = os.getenv("CAPTACION_SIP_TRANSPORTE", "tcp").strip().lower()
 # Lista Robinson (Adigital): credenciales de la API de empresa (backend/lista_robinson.py).
 # Sin ellas, Sara NO llama a nadie en frio.
 ROBINSON_API_KEY = os.getenv("ROBINSON_API_KEY", "").strip()

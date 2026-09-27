@@ -127,14 +127,27 @@ def bloqueos() -> List[str]:
         faltan.append("CAPTACION_LLAMADAS_ENABLED no esta a 'true' en el servidor.")
     if not lista_robinson.configurada():
         faltan.append("Faltan las credenciales de la Lista Robinson (ROBINSON_API_KEY / ROBINSON_API_SECRET).")
-    if not settings.CAPTACION_TWILIO_NUMBER:
-        faltan.append("Falta el numero espanol de captacion (CAPTACION_TWILIO_NUMBER).")
-    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN):
-        faltan.append("Twilio no esta configurado.")
+    try:
+        voz = clients._get_client_config(captacion_voz.TENANT).get("voice") or {}
+    except Exception:  # noqa: BLE001 - sin el tenant de Sara, como si no hubiera nada creado
+        voz = {}
+    if captacion_voz.via_sip():
+        # Por SIP (91 de Netelip en ElevenLabs): sin el aviso de fin de llamada no se sabria
+        # si no contestaron, y se dejaria de reintentar o se reintentaria a ciegas.
+        if not captacion_voz.sip_configurado():
+            faltan.append("Faltan los datos del SIP de Netelip (CAPTACION_SIP_NUMERO, _USUARIO y _CLAVE).")
+        elif not str(voz.get(captacion_voz.CLAVE_NUMERO_SIP) or ""):
+            faltan.append("El numero SIP no esta importado en ElevenLabs: sincroniza la agente de captacion.")
+        if not captacion_voz.secretos_de_aviso():
+            faltan.append("Falta el aviso de fin de llamada de ElevenLabs (se crea al sincronizar la agente).")
+    else:
+        if not settings.CAPTACION_TWILIO_NUMBER:
+            faltan.append("Falta el numero espanol de captacion (CAPTACION_TWILIO_NUMBER).")
+        if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN):
+            faltan.append("Twilio no esta configurado.")
     if not voz_elevenlabs.configurado():
         faltan.append("ElevenLabs no esta configurado.")
-    elif not str((clients._get_client_config(captacion_voz.TENANT).get("voice") or {})
-                 .get(captacion_voz.CLAVE_AGENTE) or ""):
+    elif not str(voz.get(captacion_voz.CLAVE_AGENTE) or ""):
         faltan.append("La agente de captacion no esta creada en ElevenLabs.")
     elif cuenta_elevenlabs.cambiando_de_cuenta():
         # A media rotacion la clave nueva puede no tener aun sus agentes.
