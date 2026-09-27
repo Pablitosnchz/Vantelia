@@ -366,9 +366,8 @@ def sin_presupuesto(momento: datetime) -> str:
             fila = conn.execute("SELECT daily_cold_cap FROM autopilot_config WHERE id=1").fetchone()
             tope = outreach._outreach_warmup_effective_cap(conn, int((fila[0] if fila else 0) or 20),
                                                            today=momento)
-            hoy = conn.execute("SELECT COUNT(*) FROM sends WHERE mode='send' AND date(sent_at)=?",
-                               (dia,)).fetchone()[0]
-            if hoy + dudosas >= tope:
+            # El mismo contador que el piloto de correos en frio: un solo presupuesto.
+            if outreach._outreach_presupuesto_gastado(conn, dia) >= tope:
                 return "presupuesto_del_buzon"
     except Exception:  # noqa: BLE001 - sin saberlo, no se manda
         return "presupuesto_desconocido"

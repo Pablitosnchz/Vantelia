@@ -503,6 +503,45 @@ def test_tick_completo_lanza_cold_con_warmup_y_sin_discovery(outreach_mod, monke
     assert "cold_budget" in events and "tick_end" in events
 
 
+def test_las_segundas_oportunidades_gastan_el_cupo_de_cold(outreach_mod, monkeypatch):
+    """Los correos de segunda oportunidad tras una llamada de Sara salen por el mismo buzon
+    y comparten su warm-up: con el cupo del dia gastado por ellos, el piloto no lanza cold
+    (revision de Astra, 27-sep-2026; antes solo contaba stage='cold')."""
+    outreach = outreach_mod
+    from backend import emailing
+
+    monkeypatch.setenv("OUTREACH_AUTONOMOUS_ENABLED", "true")
+    monkeypatch.setenv("OUTREACH_RESPECT_WINDOW", "false")
+    monkeypatch.setattr(emailing, "_email_delivery_configured", lambda cliente_id="": True)
+    monkeypatch.setattr(emailing, "_smtp_health_check",
+                        lambda force=False: {"ok": True, "error": "", "checked_at": "x"})
+    monkeypatch.setattr(outreach, "_outreach_smtp_health",
+                        lambda: {"ok": True, "error": "", "checked_at": "x", "dedicated": True})
+    launched = []
+    monkeypatch.setattr(outreach, "_outreach_run_send_job", lambda j, p: launched.append(("cold", p)))
+    monkeypatch.setattr(outreach, "_outreach_run_autopilot_job", lambda j, p: launched.append(("fu", p)))
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        conn.execute(
+            "UPDATE autopilot_config SET enabled=1, auto_followups=1, discovery_enabled=0, "
+            "daily_cold_cap=10, paused_until='', paused_reason='' WHERE id=1"
+        )
+        for i in range(40):
+            conn.execute(
+                "INSERT INTO prospects (email, business_name, status, created_at, updated_at) VALUES (?,?,?,?,?)",
+                (f"nuevo{i}@x.es", f"Negocio {i}", "new", now, now),
+            )
+        for i in range(10):  # warm-up sin racha: cupo 10, gastado entero por segundas oportunidades
+            _insert_send(conn, f"llamada{i}@x.es", days_ago=0, stage="llamada")
+        conn.commit()
+
+    outreach._outreach_autonomous_tick_inner()
+    time.sleep(0.2)
+
+    assert not any(kind == "cold" for kind, _ in launched), "sin cupo hoy, no sale cold"
+
+
 def test_tope_diario_total_limita_followups(outreach_mod, monkeypatch):
     """En dominio nuevo el warm-up limita el VOLUMEN total (cold + follow-ups),
     no solo el cold. Con el tope ya alcanzado hoy, el job de follow-ups no sale."""

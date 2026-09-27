@@ -1959,6 +1959,20 @@ def _outreach_wait_send_slot(sleep_fn=time.sleep) -> float:
     return wait_for
 
 
+def _outreach_presupuesto_gastado(conn: sqlite3.Connection, dia: str) -> int:
+    """Correos que cuentan contra el warm-up del buzon en `dia` (YYYY-MM-DD, UTC): los fríos,
+    las segundas oportunidades tras una llamada de Sara y las de entrega en duda (pudieron
+    salir). Lo usan los dos emisores, asi el presupuesto es uno (revision de Astra, 27-sep)."""
+    enviados = conn.execute(
+        "SELECT COUNT(*) FROM sends WHERE mode='send' AND stage IN ('cold', 'llamada') AND date(sent_at)=?",
+        (dia,),
+    ).fetchone()[0]
+    dudosos = conn.execute(
+        "SELECT COUNT(*) FROM segunda_oportunidad WHERE estado='incierta' AND date(momento)=?", (dia,)
+    ).fetchone()[0]
+    return int(enviados or 0) + int(dudosos or 0)
+
+
 def _outreach_warmup_effective_cap(conn: sqlite3.Connection, configured_cap: int, today: Optional[datetime] = None) -> int:
     """Cap diario efectivo con warm-up: tras >7 dias sin enviar, arranca en 10/dia
     y sube +5 por semana de envio continuado, hasta min(configured_cap, 30)."""
@@ -2919,9 +2933,9 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
         # ---- PRESUPUESTO DE COLD DEL DIA (warm-up + reparto entre ticks) ----
         with _outreach_db() as conn:
             effective_cap = _outreach_warmup_effective_cap(conn, daily_cold_cap)
-            cold_sent_today = conn.execute(
-                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold' AND date(sent_at)=date('now')"
-            ).fetchone()["c"]
+            # Lo que llevan gastado hoy los correos en frio Y las segundas oportunidades tras
+            # una llamada de Sara: comparten el warm-up del buzon (un solo contador).
+            cold_sent_today = _outreach_presupuesto_gastado(conn, datetime.now(timezone.utc).date().isoformat())
             sent_today_all = conn.execute(
                 "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND date(sent_at)=date('now')"
             ).fetchone()["c"]

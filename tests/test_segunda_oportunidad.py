@@ -574,3 +574,19 @@ def test_una_conexion_rechazada_es_seguro_que_no_salio(so, captacion, monkeypatc
     with pytest.raises(so.NoEnviado):
         so._mandar(candidato, MARTES_1630)
 
+
+def test_el_piloto_de_correos_en_frio_descuenta_las_segundas_oportunidades(so, captacion):  # noqa: F811
+    """Un solo contador para los dos emisores (revision de Astra, 27-sep): frios, segundas
+    oportunidades y entregas en duda del dia. Los seguimientos (fu1...) no cuentan, como antes."""
+    from backend import outreach
+
+    _envios_de_hoy("cold", 2)
+    _envios_de_hoy(so.ETAPA, 3)
+    _envios_de_hoy("fu1", 4)
+    with so._db() as conn:
+        conn.execute("INSERT INTO segunda_oportunidad (prospecto, llamada_id, estado, momento) VALUES (?,?,?,?)",
+                     ("dudosa@x.es", "ll_1", "incierta", MARTES_1630.isoformat(timespec="seconds")))
+        conn.commit()
+        assert outreach._outreach_presupuesto_gastado(conn, MARTES_1630.date().isoformat()) == 6
+    # Que el piloto lo use de verdad lo prueba tests/test_captacion_autonoma.py.
+
