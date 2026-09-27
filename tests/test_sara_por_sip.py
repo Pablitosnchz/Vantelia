@@ -195,6 +195,19 @@ def test_un_fallo_de_otra_conversacion_no_toca_ninguna_llamada(sip):
     assert sip._fila(hecho["llamada"])["estado"] == "en_curso"
 
 
+def test_la_vuelta_atras_de_una_rotacion_restaura_el_numero_sip(sip, api_module):  # noqa: F811
+    """Revision de Astra (27-sep): si una rotacion importa el numero en la cuenta nueva y
+    falla despues, la cuenta vieja no puede quedarse con el id de la nueva. Y el numero no
+    es un agente: no entra en lo que se borra de la cuenta que se deja."""
+    from backend import cuenta_elevenlabs, voz_elevenlabs
+
+    antes = cuenta_elevenlabs._ids_de_voz()
+    voz_elevenlabs.guardar_en_voz("vantelia", sip.CLAVE_NUMERO_SIP, "phnum_de_la_cuenta_nueva")
+    cuenta_elevenlabs._restaurar_ids(antes)
+    assert api_module.CONFIG_CLIENTES["vantelia"]["voice"][sip.CLAVE_NUMERO_SIP] == "phnum_1"
+    assert "phnum_1" not in cuenta_elevenlabs._agentes_guardados()
+
+
 def test_el_fallo_al_marcar_no_pisa_lo_que_apunto_sara(sip):
     hecho, _ = _marcar(sip)
     sip._actualizar(hecho["llamada"], resultado="interesado")

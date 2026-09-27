@@ -246,11 +246,14 @@ def _borrar_agentes(clave: str, ids: List[str], cliente: Optional[httpx.Client] 
 
 
 def _ids_de_voz() -> Dict[str, Dict[str, str]]:
-    """{negocio: {campo: agent_id}} de todos los agentes guardados, para poder volver atras."""
-    from backend import appstate
+    """{negocio: {campo: id}} de los agentes guardados y del numero SIP de Sara, para poder
+    volver atras. El numero no es un agente: se restaura pero nunca se borra como tal
+    (revision de Astra, 27-sep-2026: tras un fallo la cuenta vieja se quedaba con el
+    numero importado en la nueva)."""
+    from backend import appstate, captacion_voz
 
     return {cid: {campo: str(valor) for campo, valor in ((cfg or {}).get("voice") or {}).items()
-                  if campo.startswith("elevenlabs_agent") and valor}
+                  if (campo.startswith("elevenlabs_agent") or campo == captacion_voz.CLAVE_NUMERO_SIP) and valor}
             for cid, cfg in list(appstate.CONFIG_CLIENTES.items())}
 
 

@@ -284,12 +284,13 @@ def test_un_correo_que_sale_mientras_se_reserva_la_frena(so, captacion, monkeypa
         assert conn.execute("SELECT COUNT(*) FROM segunda_oportunidad").fetchone()[0] == 0, "se suelta la reserva"
 
 
-@pytest.mark.parametrize("mientras_espera", ["baja", "respuesta", "apagada", "se_pasa_la_hora"])
+@pytest.mark.parametrize("mientras_espera", ["baja", "respuesta", "apagada", "se_pasa_la_hora",
+                                             "rechazo_clasificado", "rechazo_por_sara"])
 def test_lo_que_pasa_mientras_espera_el_turno_frena_el_envio(so, captacion, mientras_espera):  # noqa: F811
     from backend import outreach
 
     _negocio()
-    _llamada(captacion)
+    llamada_id = _llamada(captacion)
     hora = [MARTES_1630.replace(hour=16, minute=55)]  # 18:55 en Madrid
 
     def esperar():
@@ -299,6 +300,12 @@ def test_lo_que_pasa_mientras_espera_el_turno_frena_el_envio(so, captacion, mien
                              ("hola@pelu.es", "BAJA", "x"))
             elif mientras_espera == "respuesta":
                 conn.execute("INSERT INTO events (email, type, ts) VALUES (?,?,?)", ("hola@pelu.es", "reply", "x"))
+            elif mientras_espera == "rechazo_clasificado":  # revision de Astra, 27-sep
+                conn.execute("UPDATE llamadas_transcripcion SET analisis_json=? WHERE llamada_id=?",
+                             (json.dumps({"data_collection_results": {"desenlace": {"value": "rechazo"}}}),
+                              llamada_id))
+            elif mientras_espera == "rechazo_por_sara":
+                conn.execute("UPDATE llamadas_voz SET resultado='no_llamar' WHERE id=?", (llamada_id,))
             conn.commit()
         if mientras_espera == "apagada":
             so.lanzador_llamadas.guardar_config(segunda_oportunidad=False)

@@ -157,14 +157,17 @@ def motivo_para_no_escribir(conn, email: str, ahora: datetime, *, reserva_propia
     return ""
 
 
-def elegibles(ahora: datetime, *, contar_horario: bool = True) -> List[Dict[str, Any]]:
-    """Los negocios a los que toca escribir ahora (sin mirar el interruptor)."""
+def elegibles(ahora: datetime, *, contar_horario: bool = True, solo: str = "",
+              reserva_propia: str = "") -> List[Dict[str, Any]]:
+    """Los negocios a los que toca escribir ahora (sin mirar el interruptor). Con `solo`, se
+    evalua un negocio entero otra vez (llamadas y email) justo antes de mandarle el correo."""
     desde = _iso(ahora - timedelta(days=DIAS_HACIA_ATRAS))
     with _db() as conn:
         filas = conn.execute(
             "SELECT l.*, COALESCE(t.analisis_json, '') AS analisis_json FROM llamadas_voz l "
             "LEFT JOIN llamadas_transcripcion t ON t.llamada_id = l.id "
-            "WHERE l.prospecto <> '' ORDER BY l.creada DESC").fetchall()
+            "WHERE l.prospecto <> '' AND (? = '' OR lower(trim(l.prospecto)) = ?) ORDER BY l.creada DESC",
+            (solo, solo)).fetchall()
         no_llamar = {f["telefono"] for f in conn.execute("SELECT telefono FROM no_llamar")}
         por_negocio: Dict[str, List[Any]] = {}
         for fila in filas:
@@ -184,7 +187,7 @@ def elegibles(ahora: datetime, *, contar_horario: bool = True) -> List[Dict[str,
                 continue
             if contar_horario and ahora < cuando_toca(datetime.fromisoformat(fila["creada"])):
                 continue
-            if motivo_para_no_escribir(conn, email, ahora):
+            if motivo_para_no_escribir(conn, email, ahora, reserva_propia=reserva_propia):
                 continue
             salida.append({"llamada_id": fila["id"], "prospecto": email, "negocio": fila["negocio"] or "",
                            "sector": fila["sector"] or "", "creada": fila["creada"],
@@ -318,12 +321,13 @@ def _apuntar(prospecto: str, estado: str, detalle: str = "", *, borrar: bool = F
 
 
 def _sigue_en_pie(candidato: Dict[str, Any], momento: datetime) -> bool:
-    """Interruptor, horario y reglas de envio con la hora de ESE momento."""
+    """Interruptor, horario y el negocio ENTERO otra vez con la hora de ESE momento: sus
+    llamadas (un "rechazo" clasificado mientras se esperaba el turno cierra la puerta; revision
+    de Astra, 27-sep-2026), "no llamar", la rellamada pendiente y las reglas del email."""
     if parar.is_set() or not activa() or not en_ventana(momento):
         return False
-    with _db() as conn:
-        return not motivo_para_no_escribir(conn, candidato["prospecto"], momento,
-                                           reserva_propia=candidato["llamada_id"])
+    return any(c["llamada_id"] == candidato["llamada_id"]
+               for c in elegibles(momento, solo=candidato["prospecto"], reserva_propia=candidato["llamada_id"]))
 
 
 def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any], datetime], str] = None,
