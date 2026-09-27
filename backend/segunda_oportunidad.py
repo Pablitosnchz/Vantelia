@@ -125,8 +125,12 @@ def _rellamada_pendiente(fila, llamadas_del_negocio: List[Any]) -> bool:
     return bool(lanzador_llamadas.cuando_esta(fila["responsable_cuando"])["entendido"])
 
 
-def motivo_para_no_escribir(conn, email: str, ahora: datetime) -> str:
-    """Vacio si se le puede escribir. Mismas reglas que la captacion por email."""
+def motivo_para_no_escribir(conn, email: str, ahora: datetime, *, reserva_propia: str = "") -> str:
+    """Vacio si se le puede escribir. Mismas reglas que la captacion por email.
+
+    `reserva_propia` es la llamada que YA reservo esta ronda: su propia fila no cuenta como
+    "ya tuvo su correo" (si contaba, tapaba el resto de comprobaciones y se mandaba igual
+    encima de un correo recien salido; revision de Astra, 27-sep-2026)."""
     from backend import outreach
 
     email = str(email or "").strip().lower()
@@ -142,7 +146,8 @@ def motivo_para_no_escribir(conn, email: str, ahora: datetime) -> str:
     estado = str(prospecto["status"] or "").strip().lower()
     if estado in outreach.OUTREACH_TERMINAL_STATUSES:
         return "estado_" + estado
-    if conn.execute("SELECT 1 FROM segunda_oportunidad WHERE prospecto=?", (email,)).fetchone() or conn.execute(
+    reservada = conn.execute("SELECT llamada_id FROM segunda_oportunidad WHERE prospecto=?", (email,)).fetchone()
+    if (reservada and not (reserva_propia and reservada[0] == reserva_propia)) or conn.execute(
             "SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send' LIMIT 1", (email, ETAPA)).fetchone():
         return "ya_tuvo_su_correo"
     reciente = _iso(ahora - timedelta(days=DIAS_SIN_OTRO_CORREO))
@@ -312,10 +317,22 @@ def _apuntar(prospecto: str, estado: str, detalle: str = "", *, borrar: bool = F
         conn.commit()
 
 
+def _sigue_en_pie(candidato: Dict[str, Any], momento: datetime) -> bool:
+    """Interruptor, horario y reglas de envio con la hora de ESE momento."""
+    if parar.is_set() or not activa() or not en_ventana(momento):
+        return False
+    with _db() as conn:
+        return not motivo_para_no_escribir(conn, candidato["prospecto"], momento,
+                                           reserva_propia=candidato["llamada_id"])
+
+
 def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any], datetime], str] = None,
-          esperar_turno: Callable[[], Any] = None) -> Dict[str, Any]:
+          esperar_turno: Callable[[], Any] = None, reloj: Callable[[], datetime] = None) -> Dict[str, Any]:
     """Manda las segundas oportunidades que tocan. Solo con el interruptor encendido y en
-    horario; una a una, respetando el espaciado de todos los correos de captacion."""
+    horario; una a una, respetando el espaciado de todos los correos de captacion.
+    `reloj` da la hora tras esperar el turno (en pruebas, la fija de `ahora`)."""
+    if reloj is None:
+        reloj = (lambda: ahora) if ahora is not None else timeutils._utc_now
     ahora = ahora or timeutils._utc_now()
     if not activa():
         return {"enviadas": 0, "motivo": "apagada"}
@@ -332,14 +349,19 @@ def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any],
                 break
             if not _reservar(candidato, ahora):
                 continue
-            with _db() as conn:  # entre elegirla y mandarla pudo llegar una baja o una respuesta
-                motivo = motivo_para_no_escribir(conn, candidato["prospecto"], ahora)
-            if motivo and motivo != "ya_tuvo_su_correo":
+            # Entre elegirla y mandarla pudo llegar una baja, una respuesta u otro correo; y
+            # esperar el turno de envio puede tardar minutos: se mira antes Y despues, con la
+            # hora de ese momento (revision de Astra, 27-sep-2026).
+            if not _sigue_en_pie(candidato, ahora):
                 _apuntar(candidato["prospecto"], "", borrar=True)
                 continue
             esperar_turno()
+            momento = reloj()
+            if not _sigue_en_pie(candidato, momento):
+                _apuntar(candidato["prospecto"], "", borrar=True)
+                continue
             try:
-                message_id = mandar(candidato, ahora)
+                message_id = mandar(candidato, momento)
             except Exception as exc:  # noqa: BLE001 - se reintenta en la siguiente ronda
                 fallidas += 1
                 settings.logger.warning("[segunda_oportunidad] no se pudo mandar a %s: %s",

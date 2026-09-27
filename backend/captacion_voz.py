@@ -41,6 +41,7 @@ import os
 import re
 import secrets
 import sqlite3
+from datetime import timedelta
 from html import escape
 from typing import Any, Dict, Optional
 
@@ -150,6 +151,10 @@ def _db():
         creada TEXT NOT NULL, actualizada TEXT NOT NULL)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS no_llamar (
         telefono TEXT PRIMARY KEY, motivo TEXT NOT NULL DEFAULT '', creado TEXT NOT NULL)""")
+    # Fallos al marcar por SIP que llegan antes de guardar la conversacion (fallo_al_marcar).
+    conn.execute("""CREATE TABLE IF NOT EXISTS llamadas_fallos_pendientes (
+        conversation_id TEXT PRIMARY KEY, motivo TEXT NOT NULL DEFAULT '',
+        detalle TEXT NOT NULL DEFAULT '', recibido TEXT NOT NULL)""")
     columnas = {f[1] for f in conn.execute("PRAGMA table_info(llamadas_voz)")}
     # origen: 'manual' (prueba desde el panel) o 'auto' (lanzador_llamadas).
     # conversation_id: la conversacion de ElevenLabs, para leer la transcripcion.
@@ -606,6 +611,8 @@ def _llamar_por_sip(llamada_id: str, cliente: httpx.Client) -> Dict[str, Any]:
     conversation_id = str(datos.get("conversation_id") or "")
     _actualizar(llamada_id, estado="en_curso", conversation_id=conversation_id,
                 call_sid=str(datos.get("sip_call_id") or ""))
+    # Un "comunicaba" pudo llegar mientras esperabamos esta respuesta: se aplica ahora.
+    _aplicar_fallo_pendiente(conversation_id)
     return {"ok": True, "llamada": llamada_id, "conversation_id": conversation_id}
 
 
@@ -625,17 +632,58 @@ def fallo_al_marcar(conversation_id: str, motivo: str, metadatos: Any = None) ->
     el lanzador aplique las mismas reglas de reintento."""
     if not conversation_id:
         return None
+    motivo = textnorm._sanitize_text(str(motivo or ""))[:40]
     detalle = _codigo_sip(metadatos)
+    fila = _llamada_por_conversacion(conversation_id)
+    if fila is None:
+        # Llego antes de que `_llamar_por_sip` guardase la conversacion (un "comunicaba"
+        # es casi instantaneo): se aparca, y se vuelve a mirar por si se guardo entremedias.
+        # Asi, llegue antes o despues, uno de los dos lados lo ve (revision de Astra, 27-sep).
+        with _db() as conn:
+            conn.execute("DELETE FROM llamadas_fallos_pendientes WHERE recibido < ?",
+                         ((timeutils._utc_now() - timedelta(days=1)).isoformat(timespec="seconds"),))
+            conn.execute("INSERT OR REPLACE INTO llamadas_fallos_pendientes (conversation_id, motivo, detalle, "
+                         "recibido) VALUES (?,?,?,?)", (conversation_id, motivo, detalle, _ahora()))
+            conn.commit()
+        return _aplicar_fallo_pendiente(conversation_id)
+    _marcar_fallo(fila, motivo, detalle)
+    return fila["id"]
+
+
+def _llamada_por_conversacion(conversation_id: str):
     with _db() as conn:
         conn.row_factory = sqlite3.Row
-        fila = conn.execute("SELECT id, resultado FROM llamadas_voz WHERE conversation_id=?",
+        return conn.execute("SELECT id, resultado FROM llamadas_voz WHERE conversation_id=?",
                             (conversation_id,)).fetchone()
-    if fila is None:
-        return None
+
+
+def _marcar_fallo(fila, motivo: str, detalle: str) -> None:
     if not fila["resultado"]:  # lo que apunto Sara, si llego a hablar, manda
         _actualizar(fila["id"], estado="terminada", conversation_id="",
-                    resultado=_FALLO_AL_MARCAR.get(str(motivo or "").strip().lower(), "fallida"),
-                    notas=("SIP: %s %s" % (textnorm._sanitize_text(str(motivo or ""))[:40], detalle)).strip())
+                    resultado=_FALLO_AL_MARCAR.get(motivo.strip().lower(), "fallida"),
+                    notas=("SIP: %s %s" % (motivo, detalle)).strip())
+
+
+def _aplicar_fallo_pendiente(conversation_id: str) -> Optional[str]:
+    """Si hay un fallo aparcado para esta conversacion y su llamada ya esta guardada, se
+    aplica. Lo reclama quien consiga borrarlo: nunca se aplica dos veces."""
+    if not conversation_id:
+        return None
+    fila = _llamada_por_conversacion(conversation_id)
+    if fila is None:
+        return None
+    with _db() as conn:
+        conn.row_factory = sqlite3.Row
+        pendiente = conn.execute("SELECT motivo, detalle FROM llamadas_fallos_pendientes WHERE conversation_id=?",
+                                 (conversation_id,)).fetchone()
+        if pendiente is None:
+            return None
+        reclamado = conn.execute("DELETE FROM llamadas_fallos_pendientes WHERE conversation_id=?",
+                                 (conversation_id,)).rowcount == 1
+        conn.commit()
+    if not reclamado:
+        return None
+    _marcar_fallo(fila, pendiente["motivo"], pendiente["detalle"])
     return fila["id"]
 
 

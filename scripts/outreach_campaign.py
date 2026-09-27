@@ -804,6 +804,12 @@ def revalidate_send_candidate(
     status = str(row["status"] or "").strip().lower()
     if status in {"replied", "client", "lost", "bounced", "baja"}:
         return None, f"status_{status}"
+    # El correo de segunda oportunidad tras una llamada de Sara cierra la secuencia
+    # ("no te volvemos a escribir"; backend/segunda_oportunidad.py).
+    if conn.execute(
+        "SELECT 1 FROM sends WHERE email=? AND stage='llamada' AND mode='send' LIMIT 1", (normalized,)
+    ).fetchone():
+        return None, "cerrada_tras_la_llamada"
 
     if stage == "cold":
         if conn.execute(
@@ -888,6 +894,9 @@ def fetch_candidates(
         )
         AND NOT EXISTS (
             SELECT 1 FROM sends s2 WHERE s2.email = p.email AND s2.stage = ? AND s2.mode='send'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM sends s3 WHERE s3.email = p.email AND s3.stage = 'llamada' AND s3.mode='send'
         )
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
         AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')

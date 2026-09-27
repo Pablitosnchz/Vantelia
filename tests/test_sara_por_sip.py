@@ -170,6 +170,31 @@ def test_el_fallo_al_marcar_queda_como_con_twilio(sip, motivo, resultado):
     assert resultado in lanzador_llamadas.SIN_CONVERSACION and "486" in fila["notas"]
 
 
+def test_un_comunicaba_que_llega_antes_de_guardar_la_conversacion_no_se_pierde(sip):
+    """Revision de Astra (27-sep): el aviso llega mientras ElevenLabs aun no ha respondido a
+    `outbound-call`; antes se descartaba con 200 y la llamada quedaba "en curso" sin reintento."""
+    el = _ElevenLabs()
+    responder = el._responder
+
+    def aviso_durante_la_peticion(metodo, url, k):
+        if "outbound-call" in url:
+            assert sip.fallo_al_marcar("conv_sip_1", "busy", {"sip_status_code": 486}) is None, "aun no hay llamada"
+        return responder(metodo, url, k)
+
+    el._responder = aviso_durante_la_peticion
+    hecho, _ = _marcar(sip, el)
+    fila = sip._fila(hecho["llamada"])
+    assert (fila["estado"], fila["resultado"], fila["conversation_id"]) == ("terminada", "ocupado", "")
+    with sip._db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM llamadas_fallos_pendientes").fetchone()[0] == 0
+
+
+def test_un_fallo_de_otra_conversacion_no_toca_ninguna_llamada(sip):
+    hecho, _ = _marcar(sip)
+    assert sip.fallo_al_marcar("conv_de_otro", "busy") is None
+    assert sip._fila(hecho["llamada"])["estado"] == "en_curso"
+
+
 def test_el_fallo_al_marcar_no_pisa_lo_que_apunto_sara(sip):
     hecho, _ = _marcar(sip)
     sip._actualizar(hecho["llamada"], resultado="interesado")

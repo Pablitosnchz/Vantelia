@@ -230,6 +230,87 @@ def test_si_falla_el_envio_se_reintenta(so, captacion):  # noqa: F811
     assert _ronda(so, MARTES_1630 + timedelta(minutes=30))[0] == ["hola@pelu.es"]
 
 
+# --- Revision de Astra (27-sep): coordinacion con la secuencia y con la espera -----------
+
+def test_tras_la_segunda_oportunidad_no_sale_ningun_correo_mas(so, captacion):  # noqa: F811
+    """Promete "no te volvemos a escribir": la secuencia de captacion (fu1, fu2...) tambien
+    se cierra, por el panel y por la linea de comandos."""
+    import outreach_campaign  # type: ignore
+    from backend import outreach
+
+    _negocio()
+    _llamada(captacion)
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                     ("hola@pelu.es", "cold", "x", "2026-09-20T08:00:00+00:00", "send"))
+        conn.commit()
+    registro, mandar = _enviados(so)
+
+    def mandar_y_apuntar(candidato, ahora):  # como el envio real: queda en `sends` con su etapa
+        with outreach._outreach_db() as conn:
+            conn.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                         (candidato["prospecto"], so.ETAPA, "x", ahora.isoformat(), "send"))
+            conn.commit()
+        return mandar(candidato, ahora)
+
+    so.ronda(ahora=MARTES_1630, mandar=mandar_y_apuntar, esperar_turno=lambda: None)
+    assert registro == ["hola@pelu.es"]
+    with outreach._outreach_db() as conn:
+        conn.row_factory = __import__("sqlite3").Row
+        assert outreach._outreach_send_eligibility(conn, "hola@pelu.es", "fu1", 0)["reason"] == "cerrada_tras_la_llamada"
+        assert outreach_campaign.revalidate_send_candidate(conn, "hola@pelu.es", "fu1", 0)[1] == "cerrada_tras_la_llamada"
+        assert outreach_campaign.fetch_candidates(conn, "fu1", 0, 50) == []
+
+
+def test_un_correo_que_sale_mientras_se_reserva_la_frena(so, captacion, monkeypatch):  # noqa: F811
+    """La reserva propia no puede tapar el "correo reciente" de otra campana."""
+    from backend import outreach
+
+    _negocio()
+    _llamada(captacion)
+    reservar = so._reservar
+
+    def reservar_y_cruzarse(candidato, ahora):
+        hecho = reservar(candidato, ahora)
+        with outreach._outreach_db() as conn:  # la campana de email manda un fu1 justo ahora
+            conn.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                         (candidato["prospecto"], "fu1", "x", ahora.isoformat(timespec="seconds"), "send"))
+            conn.commit()
+        return hecho
+
+    monkeypatch.setattr(so, "_reservar", reservar_y_cruzarse)
+    assert _ronda(so, MARTES_1630)[0] == []
+    with so._db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM segunda_oportunidad").fetchone()[0] == 0, "se suelta la reserva"
+
+
+@pytest.mark.parametrize("mientras_espera", ["baja", "respuesta", "apagada", "se_pasa_la_hora"])
+def test_lo_que_pasa_mientras_espera_el_turno_frena_el_envio(so, captacion, mientras_espera):  # noqa: F811
+    from backend import outreach
+
+    _negocio()
+    _llamada(captacion)
+    hora = [MARTES_1630.replace(hour=16, minute=55)]  # 18:55 en Madrid
+
+    def esperar():
+        with outreach._outreach_db() as conn:
+            if mientras_espera == "baja":
+                conn.execute("INSERT INTO suppressions (email, reason, added_at) VALUES (?,?,?)",
+                             ("hola@pelu.es", "BAJA", "x"))
+            elif mientras_espera == "respuesta":
+                conn.execute("INSERT INTO events (email, type, ts) VALUES (?,?,?)", ("hola@pelu.es", "reply", "x"))
+            conn.commit()
+        if mientras_espera == "apagada":
+            so.lanzador_llamadas.guardar_config(segunda_oportunidad=False)
+        if mientras_espera == "se_pasa_la_hora":
+            hora[0] = hora[0] + timedelta(minutes=10)  # 19:05: fuera de horario
+
+    registro, mandar = _enviados(so)
+    extra = {"reloj": lambda: hora[0]} if mientras_espera == "se_pasa_la_hora" else {}
+    so.ronda(ahora=hora[0], mandar=mandar, esperar_turno=esperar, **extra)
+    assert registro == []
+
+
 # --- El correo ---------------------------------------------------------------------------
 
 def test_el_correo_que_sale(so, captacion, envios):  # noqa: F811
