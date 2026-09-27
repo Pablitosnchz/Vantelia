@@ -8834,7 +8834,7 @@ tbody tr:last-child td { border-bottom: none; }
         ocupado_sin_rechazo: "Ocupado, sin decir que no", colgo_al_principio: "Colgó al principio",
         buzon: "Buzón", persona_equivocada: "Número equivocado",
       };
-      const SEGUNDA = { enviada: "Correo enviado", enviando: "Enviando correo" };
+      const SEGUNDA = { enviada: "Correo enviado", enviando: "Enviando correo", incierta: "Correo dudoso (no se reintenta)" };
       const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
         (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const fecha = (iso) => {

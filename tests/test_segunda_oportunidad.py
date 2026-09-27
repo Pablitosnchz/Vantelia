@@ -218,12 +218,12 @@ def test_dos_rondas_a_la_vez_mandan_uno(so, captacion):  # noqa: F811
     assert so._reservar(candidato, MARTES_1630) is False
 
 
-def test_si_falla_el_envio_se_reintenta(so, captacion):  # noqa: F811
+def test_si_es_seguro_que_no_salio_se_reintenta(so, captacion):  # noqa: F811
     _negocio()
     _llamada(captacion)
 
     def falla(candidato, ahora):
-        raise RuntimeError("SMTP caido")
+        raise so.NoEnviado("SMTP caido antes de aceptar el mensaje")
 
     salida = so.ronda(ahora=MARTES_1630, mandar=falla, esperar_turno=lambda: None)
     assert salida["fallidas"] == 1
@@ -408,3 +408,72 @@ def test_con_el_correo_en_pausa_automatica_no_sale_nada(so, captacion):  # noqa:
         outreach._outreach_set_auto_pause(conn, datetime.now(timezone.utc) + timedelta(hours=48), "smtp_ratelimit")
     registro, salida = _ronda(so, MARTES_1630)
     assert registro == [] and salida["motivo"] == "correo_en_pausa"
+
+
+# --- Errores del SMTP (revision de Astra, 27-sep) -------------------------------------------
+
+def test_si_pudo_salir_no_se_manda_otra_vez(so, captacion):  # noqa: F811
+    """El SMTP acepto el mensaje y fallo despues (QUIT, apuntarlo...): no se sabe si llego.
+    Mejor perder este correo que mandar dos al mismo negocio."""
+    import smtplib
+
+    _negocio()
+    _llamada(captacion)
+
+    def acepta_y_falla(candidato, ahora):
+        raise smtplib.SMTPServerDisconnected("se cerro la conexion tras aceptar el mensaje")
+
+    so.ronda(ahora=MARTES_1630, mandar=acepta_y_falla, esperar_turno=lambda: None)
+    assert _ronda(so, MARTES_1630 + timedelta(minutes=30))[0] == []
+    with so._db() as conn:
+        assert conn.execute("SELECT estado FROM segunda_oportunidad").fetchone()[0] == "incierta"
+
+
+def test_el_envio_real_distingue_rechazo_de_duda(so, captacion, envios, monkeypatch):  # noqa: F811
+    import smtplib
+
+    from backend import outreach
+
+    _negocio()
+    _llamada(captacion)
+    candidato = so.elegibles(MARTES_1630)[0]
+
+    def rechaza(msg):
+        raise smtplib.SMTPRecipientsRefused({"hola@pelu.es": (550, b"no existe")})
+
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", rechaza)
+    with pytest.raises(so.NoEnviado):
+        so._mandar(candidato, MARTES_1630)
+
+    def se_corta(msg):
+        raise smtplib.SMTPServerDisconnected("QUIT sin respuesta")
+
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", se_corta)
+    with pytest.raises(smtplib.SMTPServerDisconnected):
+        so._mandar(candidato, MARTES_1630)
+
+
+def test_un_limite_del_smtp_pausa_la_captacion_y_para_la_ronda(so, captacion, monkeypatch):  # noqa: F811
+    import sqlite3
+
+    from backend import outreach
+
+    monkeypatch.setattr(outreach, "_outreach_notify_admin", lambda *a, **k: True)
+    _negocio("uno@pelu.es", "Pelu Uno")
+    _negocio("dos@pelu.es", "Pelu Dos")
+    _llamada(captacion, email="uno@pelu.es", telefono="911111111")
+    _llamada(captacion, email="dos@pelu.es", telefono="912222222")
+    with outreach._outreach_db() as conn:
+        conn.row_factory = sqlite3.Row
+        outreach._outreach_ensure_autopilot_config_columns(conn)
+    intentos = []
+
+    def limite(candidato, ahora):
+        intentos.append(candidato["prospecto"])
+        raise so.NoEnviado("451 4.7.1 rate limit exceeded, try again later")
+
+    so.ronda(ahora=MARTES_1630, mandar=limite, esperar_turno=lambda: None)
+    assert len(intentos) == 1, "la ronda para al primer limite"
+    assert so.correo_en_pausa(), "y la captacion queda en pausa automatica"
+    with so._db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM segunda_oportunidad").fetchone()[0] == 0, "no salio: se suelta"

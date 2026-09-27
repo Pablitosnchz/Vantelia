@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+import smtplib
 import sqlite3
 import threading
 from datetime import datetime, time, timedelta
@@ -266,8 +267,43 @@ def correo(negocio: str, sector: str, enlace: str, cuando: str, responsable: str
     return {"asunto": asunto, "texto": texto, "html": html}
 
 
+class NoEnviado(Exception):
+    """El correo seguro que NO salio (fallo antes de enviarlo o rechazo claro del SMTP):
+    se puede reintentar. Cualquier otro error puede ser un correo que SI salio."""
+
+
+# Rechazos del SMTP antes de aceptar el mensaje: con ellos no ha llegado nada.
+_RECHAZOS_SMTP = (smtplib.SMTPConnectError, smtplib.SMTPAuthenticationError, smtplib.SMTPHeloError,
+                  smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError,
+                  smtplib.SMTPNotSupportedError)
+
+
 def _mandar(candidato: Dict[str, Any], ahora: datetime) -> str:
-    """Manda el correo y lo apunta en `sends`. Devuelve el Message-ID."""
+    """Manda el correo y lo apunta en `sends`. Devuelve el Message-ID. Lanza `NoEnviado`
+    solo si es seguro que no salio; cualquier otra excepcion deja la entrega en duda."""
+    try:
+        email, contenido, texto, html, mensaje = _preparar(candidato, ahora)
+    except Exception as exc:  # noqa: BLE001 - antes de enviar: no salio nada
+        raise NoEnviado("no se pudo preparar: %s" % exc) from exc
+    from backend import outreach
+
+    try:
+        outreach._outreach_send_email_object(mensaje)
+    except _RECHAZOS_SMTP as exc:
+        raise NoEnviado(str(exc)) from exc
+    # A partir de aqui el correo pudo salir: un fallo apuntandolo NO permite reenviarlo.
+    with _db() as conn:
+        conn.execute("INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
+                     "VALUES (?,?,?,?,?,?,?,?)",
+                     (email, ETAPA, contenido["asunto"], texto, html, _iso(ahora), "send",
+                      mensaje["Message-ID"] or ""))
+        conn.execute("UPDATE prospects SET status=CASE WHEN COALESCE(status,'new') IN ('','new') "
+                     "THEN 'contacted' ELSE status END, updated_at=? WHERE email=?", (_iso(ahora), email))
+        conn.commit()
+    return str(mensaje["Message-ID"] or "")
+
+
+def _preparar(candidato: Dict[str, Any], ahora: datetime):
     from backend import outreach
     import outreach_templates  # type: ignore
 
@@ -287,16 +323,7 @@ def _mandar(candidato: Dict[str, Any], ahora: datetime) -> str:
         html = outreach.outreach_apply_tracking(html, email, ETAPA, outreach.OUTREACH_TRACKING_BASE_URL,
                                                 outreach.OUTREACH_TRACKING_SECRET)
     mensaje = outreach.outreach_build_message(email, contenido["asunto"], texto, html, ajustes)
-    outreach._outreach_send_email_object(mensaje)
-    with _db() as conn:
-        conn.execute("INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
-                     "VALUES (?,?,?,?,?,?,?,?)",
-                     (email, ETAPA, contenido["asunto"], texto, html, _iso(ahora), "send",
-                      mensaje["Message-ID"] or ""))
-        conn.execute("UPDATE prospects SET status=CASE WHEN COALESCE(status,'new') IN ('','new') "
-                     "THEN 'contacted' ELSE status END, updated_at=? WHERE email=?", (_iso(ahora), email))
-        conn.commit()
-    return str(mensaje["Message-ID"] or "")
+    return email, contenido, texto, html, mensaje
 
 
 def _reservar(candidato: Dict[str, Any], ahora: datetime) -> bool:
@@ -381,11 +408,26 @@ def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any],
                 continue
             try:
                 message_id = mandar(candidato, momento)
-            except Exception as exc:  # noqa: BLE001 - se reintenta en la siguiente ronda
+            except Exception as exc:  # noqa: BLE001 - se decide abajo si se puede reintentar
                 fallidas += 1
+                error = textnorm._sanitize_text(str(exc))[:200]
                 settings.logger.warning("[segunda_oportunidad] no se pudo mandar a %s: %s",
-                                        candidato["prospecto"], textnorm._sanitize_text(str(exc))[:200])
-                _apuntar(candidato["prospecto"], "", borrar=True)
+                                        candidato["prospecto"], error)
+                limite = outreach._outreach_smtp_ratelimit_reason(exc)
+                if limite:
+                    # El SMTP dice basta: la pausa compartida de la captacion protege al
+                    # remitente, y la ronda para (revision de Astra, 27-sep-2026).
+                    _apuntar(candidato["prospecto"], "", borrar=True)
+                    with _db() as conn:
+                        outreach._outreach_pause_autocapture_for_smtp_limit(
+                            conn, reason=limite, email=candidato["prospecto"], stage=ETAPA)
+                    break
+                if isinstance(exc, NoEnviado):
+                    _apuntar(candidato["prospecto"], "", borrar=True)  # seguro que no salio
+                else:
+                    # Pudo salir (el SMTP lo acepto y fallo despues, o fallo apuntarlo): mejor
+                    # perder este correo que mandar dos al mismo negocio.
+                    _apuntar(candidato["prospecto"], "incierta", "Pudo salir; no se reintenta: " + error)
                 continue
             enviadas += 1
             _apuntar(candidato["prospecto"], "enviada", message_id)
