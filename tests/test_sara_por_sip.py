@@ -134,10 +134,15 @@ def test_si_elevenlabs_no_puede_marcar_se_puede_reintentar(sip):
     assert fila[1] in lanzador_llamadas.SIN_CONVERSACION, "nadie oyo nada: como un 'fallida' de Twilio"
 
 
-def test_si_no_se_sabe_si_sono_no_se_reintenta_solo(sip):
+@pytest.mark.parametrize("respuesta", [
+    (0, httpx.ReadTimeout("sin respuesta")),
+    (504, {"detail": "gateway timeout"}),  # revision de Astra (27-sep): pudo iniciarse
+    (502, {"detail": "bad gateway"}),
+])
+def test_si_no_se_sabe_si_sono_no_se_reintenta_solo(sip, respuesta):
     from backend import lanzador_llamadas
 
-    el = _ElevenLabs({"sip-trunk/outbound-call": (0, httpx.ReadTimeout("sin respuesta"))})
+    el = _ElevenLabs({"sip-trunk/outbound-call": respuesta})
     with pytest.raises(RuntimeError):
         _marcar(sip, el)
     with sip._db() as conn:

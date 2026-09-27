@@ -606,7 +606,18 @@ def _llamar_por_sip(llamada_id: str, cliente: httpx.Client) -> Dict[str, Any]:
         # No se sabe si llego a sonar: sin resultado, el lanzador no reintenta solo.
         _actualizar(llamada_id, estado="fallida", notas="ElevenLabs sin respuesta")
         raise RuntimeError("ElevenLabs no respondio al marcar: %s" % _sin_secretos(str(exc))[:200]) from exc
-    datos = r.json() if r.status_code < 500 else {}
+    try:
+        datos = r.json() if r.status_code < 500 else None
+    except ValueError:
+        datos = None
+    if r.status_code >= 500 or (r.status_code < 400 and not isinstance(datos, dict)):
+        # Un 5xx (o un 200 ilegible) no confirma que no sonara: pudo iniciarse y perderse la
+        # respuesta. Como un timeout, sin resultado: el lanzador no reintenta solo, porque
+        # volver a llamar a quien quiza ya hablo con Sara es peor (revision de Astra, 27-sep).
+        detalle = _sin_secretos(r.text)[:200]
+        _actualizar(llamada_id, estado="fallida", notas="ElevenLabs %s: %s" % (r.status_code, detalle))
+        raise RuntimeError("ElevenLabs no confirmo la llamada (%s): %s" % (r.status_code, detalle))
+    datos = datos if isinstance(datos, dict) else {}
     if r.status_code >= 400 or not datos.get("success"):
         detalle = _sin_secretos(str(datos.get("message") or r.text))[:200]
         # No se llego a marcar: nadie oyo nada, se puede reintentar como un "fallida" de Twilio.
