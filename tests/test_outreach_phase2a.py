@@ -231,3 +231,42 @@ def test_worker_revalidates_after_wait_before_smtp(outreach_mod, monkeypatch):
         job = conn.execute("SELECT status, log FROM jobs WHERE id=?", (job_id,)).fetchone()
     assert job["status"] == "done"
     assert "pre-SMTP (suppressed)" in job["log"]
+
+
+def test_el_job_de_cold_del_piloto_para_si_el_cupo_se_agota_mientras_espera(outreach_mod, monkeypatch):
+    """Mientras un job de cold espera su turno pueden salir segundas oportunidades tras
+    llamadas de Sara, que gastan el mismo warm-up del buzon: se revisa el cupo justo antes de
+    cada envio (revision de Astra, 27-sep-2026). Las campanas manuales no cambian."""
+    email = "cupo@example.com"
+    ahora = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach_mod._outreach_db() as conn:
+        _add_prospect(conn, email)
+        conn.execute("UPDATE autopilot_config SET daily_cold_cap=10, enabled=1 WHERE id=1")
+        cursor = conn.execute(
+            "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES ('send','queued','','',?)",
+            (ahora,),
+        )
+        job_id = int(cursor.lastrowid)
+        conn.commit()
+
+    def salen_segundas_oportunidades(*_args, **_kwargs):
+        with outreach_mod._outreach_db() as otra:
+            for i in range(10):  # warm-up sin racha: cupo 10, gastado entero
+                otra.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                             ("llamada%d@x.es" % i, "llamada", "x", ahora, "send"))
+            otra.commit()
+        return 0.0
+
+    monkeypatch.setattr(outreach_mod, "_outreach_wait_send_slot", salen_segundas_oportunidades)
+    monkeypatch.setattr(outreach_mod, "_outreach_send_email_object",
+                        lambda _msg: pytest.fail("no debe salir cold con el cupo del dia agotado"))
+    outreach_mod._outreach_run_send_job(
+        job_id,
+        {"stage": "cold", "max": 1, "send": True, "test_to": "", "email": "", "emails": [email],
+         "after_days": 4, "delay": 0, "jitter": 0, "force_window": True, "autopilot": True},
+    )
+    with outreach_mod._outreach_db() as conn:
+        assert conn.execute("SELECT COUNT(*) AS c FROM sends WHERE stage='cold'").fetchone()["c"] == 0
+        job = conn.execute("SELECT status, log FROM jobs WHERE id=?", (job_id,)).fetchone()
+    assert job["status"] == "done" and "Cupo diario del buzon agotado" in job["log"]
+

@@ -1973,6 +1973,13 @@ def _outreach_presupuesto_gastado(conn: sqlite3.Connection, dia: str) -> int:
     return int(enviados or 0) + int(dudosos or 0)
 
 
+def _outreach_cupo_de_cold_agotado(conn: sqlite3.Connection) -> bool:
+    """¿Gastado hoy el warm-up del buzon (frios + segundas oportunidades + en duda)?"""
+    fila = conn.execute("SELECT daily_cold_cap FROM autopilot_config WHERE id=1").fetchone()
+    tope = _outreach_warmup_effective_cap(conn, int((fila[0] if fila else 0) or 20))
+    return _outreach_presupuesto_gastado(conn, datetime.now(timezone.utc).date().isoformat()) >= tope
+
+
 def _outreach_warmup_effective_cap(conn: sqlite3.Connection, configured_cap: int, today: Optional[datetime] = None) -> int:
     """Cap diario efectivo con warm-up: tras >7 dias sin enviar, arranca en 10/dia
     y sube +5 por semana de envio continuado, hasta min(configured_cap, 30)."""
@@ -3668,6 +3675,16 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                             {"email": p.email, "reason": reason, "stage": stage},
                         )
                     continue
+                # El cupo del piloto se reparte al planificar, pero mientras este job espera
+                # su turno pueden salir segundas oportunidades tras llamadas de Sara, que
+                # gastan el mismo warm-up: se mira otra vez justo antes de cada envio
+                # (revision de Astra, 27-sep-2026). Las campañas manuales no cambian.
+                if stage == "cold" and is_autopilot and _outreach_cupo_de_cold_agotado(conn):
+                    _job_log(conn, job_id, "Cupo diario del buzon agotado (frios + segundas oportunidades): fin del job.")
+                    _autopilot_log("info", "cold_cap_reached_mid_job",
+                                   "Cold: cupo diario agotado mientras el job esperaba turno", {"stage": stage})
+                    _job_finish(conn, job_id, "done")
+                    return
             msg = outreach_build_message(recipient, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
             try:
                 _outreach_send_email_object(msg)
