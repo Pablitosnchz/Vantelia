@@ -306,10 +306,13 @@ def test_el_numero_ya_importado_no_se_duplica_y_se_pone_al_dia(sip, monkeypatch)
 
 def test_la_clave_sip_nunca_sale_en_un_error(sip, api_module):  # noqa: F811
     api_module.CONFIG_CLIENTES["vantelia"]["voice"].pop(sip.CLAVE_NUMERO_SIP)
-    el = _ElevenLabs({"POST /v1/convai/phone-numbers": (400, {"detail": "credenciales %s no validas" % CLAVE_SIP})})
-    with pytest.raises(RuntimeError) as error:
-        sip.asegurar_numero_sip(el, "agent_sara")
-    assert CLAVE_SIP not in str(error.value)
+    # La respuesta es JSON: '{"detail": "' son 12 caracteres, y con 178 de relleno la clave
+    # empieza en el 190 y cruza el recorte de 200 (revision de Astra, 27-sep).
+    for relleno in ("credenciales no validas: ", "x" * 178):
+        el = _ElevenLabs({"POST /v1/convai/phone-numbers": (400, {"detail": relleno + CLAVE_SIP})})
+        with pytest.raises(RuntimeError) as error:
+            sip.asegurar_numero_sip(el, "agent_sara")
+        assert CLAVE_SIP[:6] not in str(error.value)
 
 
 def test_el_aviso_se_crea_una_vez_por_cuenta_y_su_secreto_no_va_a_git(sip):

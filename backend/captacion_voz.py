@@ -488,7 +488,9 @@ def sip_configurado() -> bool:
 
 
 def _sin_secretos(texto: str) -> str:
-    """Lo que devuelve ElevenLabs puede repetir lo enviado: fuera claves y la del SIP."""
+    """Lo que devuelve ElevenLabs puede repetir lo enviado: fuera claves y la del SIP.
+    Siempre sobre el texto ENTERO y recortar despues: recortado antes, una clave que
+    cruzaba el corte dejaba a la vista su principio (revision de Astra, 27-sep-2026)."""
     from backend import cuenta_elevenlabs
 
     texto = cuenta_elevenlabs.censurar(texto)
@@ -539,7 +541,7 @@ def asegurar_aviso(cliente: httpx.Client, base_url: str = "") -> str:
     datos = r.json() if r.status_code < 400 else {}
     if not (datos.get("webhook_id") and datos.get("webhook_secret")):
         raise RuntimeError("ElevenLabs no creo el aviso de fin de llamada (%s): %s"
-                           % (r.status_code, _sin_secretos(r.text[:200])))
+                           % (r.status_code, _sin_secretos(r.text)[:200]))
     avisos[cuenta] = {"webhook_id": datos["webhook_id"], "secreto": datos["webhook_secret"]}
     _ruta_avisos().parent.mkdir(parents=True, exist_ok=True)
     _ruta_avisos().write_text(json.dumps(avisos), encoding="utf-8")
@@ -571,7 +573,7 @@ def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
                               json={"agent_id": agent_id, "outbound_trunk_config": _salida_sip()})
             if p.status_code >= 400:
                 raise RuntimeError("ElevenLabs no actualizo el numero SIP (%s): %s"
-                                   % (p.status_code, _sin_secretos(p.text[:200])))
+                                   % (p.status_code, _sin_secretos(p.text)[:200]))
             return numero_id
     r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(), json={
         "phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (SIP)",
@@ -581,7 +583,7 @@ def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
     numero_id = str((r.json() if r.status_code < 400 else {}).get("phone_number_id") or "")
     if not numero_id:
         raise RuntimeError("ElevenLabs no importo el numero SIP (%s): %s"
-                           % (r.status_code, _sin_secretos(r.text[:200])))
+                           % (r.status_code, _sin_secretos(r.text)[:200]))
     voz_elevenlabs.guardar_en_voz(TENANT, CLAVE_NUMERO_SIP, numero_id)
     return numero_id
 
@@ -603,10 +605,10 @@ def _llamar_por_sip(llamada_id: str, cliente: httpx.Client) -> Dict[str, Any]:
     except httpx.HTTPError as exc:
         # No se sabe si llego a sonar: sin resultado, el lanzador no reintenta solo.
         _actualizar(llamada_id, estado="fallida", notas="ElevenLabs sin respuesta")
-        raise RuntimeError("ElevenLabs no respondio al marcar: %s" % _sin_secretos(str(exc))) from exc
+        raise RuntimeError("ElevenLabs no respondio al marcar: %s" % _sin_secretos(str(exc))[:200]) from exc
     datos = r.json() if r.status_code < 500 else {}
     if r.status_code >= 400 or not datos.get("success"):
-        detalle = _sin_secretos(str(datos.get("message") or r.text)[:200])
+        detalle = _sin_secretos(str(datos.get("message") or r.text))[:200]
         # No se llego a marcar: nadie oyo nada, se puede reintentar como un "fallida" de Twilio.
         _actualizar(llamada_id, estado="fallida", resultado="fallida", notas="SIP %s: %s" % (r.status_code, detalle))
         if r.status_code in (401, 402, 403):
