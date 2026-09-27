@@ -2954,6 +2954,9 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                    WHERE COALESCE(status,'new')='new'
                      AND email NOT IN (SELECT email FROM suppressions)
                      AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')
+                     -- con segunda oportunidad (tambien en duda) ya no se le escribe: fuera ANTES
+                     -- de limitar, o ocupaban el cupo sin salir (revision de Astra, 27-sep)
+                     AND email NOT IN (SELECT prospecto FROM segunda_oportunidad)
                    ORDER BY score DESC, created_at ASC"""
             ).fetchall()
         cold_emails = [r["email"] for r in cold_rows]

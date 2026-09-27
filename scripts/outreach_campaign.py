@@ -875,6 +875,8 @@ def fetch_candidates(
         sql = """
         SELECT p.* FROM prospects p
         WHERE NOT EXISTS (SELECT 1 FROM sends s WHERE s.email = p.email AND s.mode='send')
+          -- con segunda oportunidad (tambien en duda) ya no se le escribe
+          AND NOT EXISTS (SELECT 1 FROM segunda_oportunidad so1 WHERE so1.prospecto = p.email)
           AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
           AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')

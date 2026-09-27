@@ -590,3 +590,20 @@ def test_el_piloto_de_correos_en_frio_descuenta_las_segundas_oportunidades(so, c
         assert outreach._outreach_presupuesto_gastado(conn, MARTES_1630.date().isoformat()) == 6
     # Que el piloto lo use de verdad lo prueba tests/test_captacion_autonoma.py.
 
+
+def test_una_segunda_oportunidad_dudosa_no_tapona_el_cold_de_la_linea_de_comandos(so, captacion):  # noqa: F811
+    """Revision de Astra (27-sep): el contacto en duda se excluye ANTES de limitar; si no,
+    ocupaba el hueco del limite y la ronda salia vacia aunque hubiera negocios validos."""
+    import outreach_campaign  # type: ignore
+    from backend import outreach
+
+    with outreach._outreach_db() as conn:
+        for email, puntos in (("dudosa@pelu.es", 99), ("valida@pelu.es", 1)):
+            conn.execute("INSERT INTO prospects (email, business_name, status, score, created_at, updated_at) "
+                         "VALUES (?,?,?,?,?,?)", (email, email, "new", puntos, "x", "x"))
+        conn.execute("INSERT INTO segunda_oportunidad (prospecto, llamada_id, estado, momento) VALUES (?,?,?,?)",
+                     ("dudosa@pelu.es", "ll_1", "incierta", "x"))
+        conn.commit()
+        elegidos = outreach_campaign.fetch_candidates(conn, "cold", 0, 1)
+    assert [p.email for p in elegidos] == ["valida@pelu.es"]
+
