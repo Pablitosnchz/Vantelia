@@ -320,11 +320,24 @@ def _apuntar(prospecto: str, estado: str, detalle: str = "", *, borrar: bool = F
         conn.commit()
 
 
+def correo_en_pausa() -> bool:
+    """La pausa AUTOMATICA de la captacion por email (rebotes altos, limite del SMTP) protege
+    al remitente, y esta segunda oportunidad sale por el mismo buzon: la respeta (revision de
+    Astra, 27-sep-2026). La pausa manual del piloto de correos no: esto tiene su interruptor."""
+    from backend import outreach
+
+    try:
+        with _db() as conn:
+            return bool(outreach._outreach_pause_state(conn)["auto"])
+    except Exception:  # noqa: BLE001 - sin saberlo, no se manda
+        return True
+
+
 def _sigue_en_pie(candidato: Dict[str, Any], momento: datetime) -> bool:
     """Interruptor, horario y el negocio ENTERO otra vez con la hora de ESE momento: sus
     llamadas (un "rechazo" clasificado mientras se esperaba el turno cierra la puerta; revision
     de Astra, 27-sep-2026), "no llamar", la rellamada pendiente y las reglas del email."""
-    if parar.is_set() or not activa() or not en_ventana(momento):
+    if parar.is_set() or not activa() or not en_ventana(momento) or correo_en_pausa():
         return False
     return any(c["llamada_id"] == candidato["llamada_id"]
                for c in elegibles(momento, solo=candidato["prospecto"], reserva_propia=candidato["llamada_id"]))
@@ -342,6 +355,8 @@ def ronda(*, ahora: Optional[datetime] = None, mandar: Callable[[Dict[str, Any],
         return {"enviadas": 0, "motivo": "apagada"}
     if not en_ventana(ahora):
         return {"enviadas": 0, "motivo": "fuera_de_horario"}
+    if correo_en_pausa():
+        return {"enviadas": 0, "motivo": "correo_en_pausa"}
     from backend import outreach
 
     mandar = mandar or _mandar

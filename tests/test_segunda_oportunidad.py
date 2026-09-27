@@ -285,7 +285,8 @@ def test_un_correo_que_sale_mientras_se_reserva_la_frena(so, captacion, monkeypa
 
 
 @pytest.mark.parametrize("mientras_espera", ["baja", "respuesta", "apagada", "se_pasa_la_hora",
-                                             "rechazo_clasificado", "rechazo_por_sara"])
+                                             "rechazo_clasificado", "rechazo_por_sara",
+                                             "pausa_del_correo"])
 def test_lo_que_pasa_mientras_espera_el_turno_frena_el_envio(so, captacion, mientras_espera):  # noqa: F811
     from backend import outreach
 
@@ -306,6 +307,10 @@ def test_lo_que_pasa_mientras_espera_el_turno_frena_el_envio(so, captacion, mien
                               llamada_id))
             elif mientras_espera == "rechazo_por_sara":
                 conn.execute("UPDATE llamadas_voz SET resultado='no_llamar' WHERE id=?", (llamada_id,))
+            elif mientras_espera == "pausa_del_correo":  # rebotes altos o limite del SMTP
+                conn.row_factory = __import__("sqlite3").Row
+                outreach._outreach_set_auto_pause(conn, datetime.now(timezone.utc) + timedelta(hours=48),
+                                                  "bounce_rate")
             conn.commit()
         if mientras_espera == "apagada":
             so.lanzador_llamadas.guardar_config(segunda_oportunidad=False)
@@ -386,3 +391,20 @@ def test_el_panel_ensena_como_acabo_y_el_interruptor(so, captacion, client, monk
     fila = next(ll for ll in datos["llamadas"] if ll["id"] == llamada_id)
     assert fila["desenlace"] == "ocupado_sin_rechazo" and fila["segunda_oportunidad"] == ""
     assert "segunda_oportunidad_en_cola" in datos
+
+
+def test_con_el_correo_en_pausa_automatica_no_sale_nada(so, captacion):  # noqa: F811
+    """Revision de Astra (27-sep): la pausa por rebotes o por el limite del SMTP protege al
+    remitente, y la segunda oportunidad sale por el mismo buzon."""
+    import sqlite3
+
+    from backend import outreach
+
+    _negocio()
+    _llamada(captacion)
+    with outreach._outreach_db() as conn:
+        conn.row_factory = sqlite3.Row
+        outreach._outreach_ensure_autopilot_config_columns(conn)  # en produccion ya existen
+        outreach._outreach_set_auto_pause(conn, datetime.now(timezone.utc) + timedelta(hours=48), "smtp_ratelimit")
+    registro, salida = _ronda(so, MARTES_1630)
+    assert registro == [] and salida["motivo"] == "correo_en_pausa"
