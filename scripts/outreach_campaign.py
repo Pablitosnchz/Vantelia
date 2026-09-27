@@ -140,6 +140,16 @@ CREATE TABLE IF NOT EXISTS suppressions (
     added_at  TEXT NOT NULL
 );
 
+-- Segunda oportunidad tras una llamada de Sara (backend/segunda_oportunidad.py): una
+-- fila por negocio (enviando / incierta / enviada) cierra su secuencia de correos.
+CREATE TABLE IF NOT EXISTS segunda_oportunidad (
+    prospecto  TEXT PRIMARY KEY,
+    llamada_id TEXT NOT NULL,
+    estado     TEXT NOT NULL,
+    detalle    TEXT NOT NULL DEFAULT '',
+    momento    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     email   TEXT NOT NULL,
@@ -808,6 +818,8 @@ def revalidate_send_candidate(
     # ("no te volvemos a escribir"; backend/segunda_oportunidad.py).
     if conn.execute(
         "SELECT 1 FROM sends WHERE email=? AND stage='llamada' AND mode='send' LIMIT 1", (normalized,)
+    ).fetchone() or conn.execute(
+        "SELECT 1 FROM segunda_oportunidad WHERE prospecto=? LIMIT 1", (normalized,)
     ).fetchone():
         return None, "cerrada_tras_la_llamada"
 
@@ -898,6 +910,7 @@ def fetch_candidates(
         AND NOT EXISTS (
             SELECT 1 FROM sends s3 WHERE s3.email = p.email AND s3.stage = 'llamada' AND s3.mode='send'
         )
+        AND NOT EXISTS (SELECT 1 FROM segunda_oportunidad so2 WHERE so2.prospecto = p.email)
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
         AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
         AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')

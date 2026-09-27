@@ -427,6 +427,18 @@ def test_si_pudo_salir_no_se_manda_otra_vez(so, captacion):  # noqa: F811
     assert _ronda(so, MARTES_1630 + timedelta(minutes=30))[0] == []
     with so._db() as conn:
         assert conn.execute("SELECT estado FROM segunda_oportunidad").fetchone()[0] == "incierta"
+    # Y como pudo llegar, la secuencia de captacion tambien se cierra (revision de Astra):
+    # no hay fila en `sends`, pero la reserva basta.
+    import outreach_campaign  # type: ignore
+    from backend import outreach
+
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                     ("hola@pelu.es", "cold", "x", "2026-09-20T08:00:00+00:00", "send"))
+        conn.commit()
+        assert outreach._outreach_send_eligibility(conn, "hola@pelu.es", "fu1", 0)["reason"] == "cerrada_tras_la_llamada"
+        assert outreach_campaign.revalidate_send_candidate(conn, "hola@pelu.es", "fu1", 0)[1] == "cerrada_tras_la_llamada"
+        assert outreach_campaign.fetch_candidates(conn, "fu1", 0, 50) == []
 
 
 def test_el_envio_real_distingue_rechazo_de_duda(so, captacion, envios, monkeypatch):  # noqa: F811

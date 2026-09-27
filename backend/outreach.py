@@ -1088,10 +1088,13 @@ def _outreach_send_eligibility(
 
     # El correo de segunda oportunidad tras una llamada de Sara promete "no te volvemos a
     # escribir": cierra la secuencia (backend/segunda_oportunidad.py; revision de Astra,
-    # 27-sep-2026: un fu1 salia justo detras).
+    # 27-sep-2026: un fu1 salia justo detras). Tambien con la entrega en duda: la reserva
+    # queda "incierta" sin fila en sends, y el correo pudo llegar.
     if conn.execute(
         "SELECT 1 FROM sends WHERE email=? AND stage='llamada' AND mode='send' LIMIT 1",
         (email_clean,),
+    ).fetchone() or conn.execute(
+        "SELECT 1 FROM segunda_oportunidad WHERE prospecto=? LIMIT 1", (email_clean,)
     ).fetchone():
         result["reason"] = "cerrada_tras_la_llamada"
         return result
