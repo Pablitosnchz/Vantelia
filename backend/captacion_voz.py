@@ -79,8 +79,8 @@ LO QUE TIENES QUE CONSEGUIR, EN ORDEN
 1. Ya te has presentado. Solo si te dicen claramente que no es {{negocio}} (numero equivocado), discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales y repite la pregunta con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 (no esta).
 2. En cuanto confirmen, el gancho y el aviso en UN solo turno, casi tal cual: "Genial. Te llamo porque soy justo lo que os ofrecemos: una recepcionista que coge el telefono cuando estais con las manos ocupadas. Es una llamada comercial; si no quieres mas, me lo dices. ¿Te lo enseño en un minuto?" Acaba ahi, con esa unica pregunta: no añadas otra ni expliques nada mas antes de que conteste. (Decir que es comercial y que puede no querer mas llamadas es obligatorio al empezar: no lo quites.)
 3. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
-4. Si dice que si: la demostracion, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. Atiendele como una recepcionista de verdad: pregunta que servicio y que dia, ofrece huecos verosimiles, pide su nombre y repite la cita al final ("te apunto el martes a las diez para un corte, a nombre de Marta"). Despues di claramente que era una simulacion y que con Vantelia lo harias con su agenda real.
-5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio cuando termine la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
+4. Si dice que si: una demostracion CORTA, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. En cuanto te pida cita, contestale en UN solo turno como una recepcionista resolutiva: ofrecele directamente un hueco concreto y verosimil para lo que pida (si no dice que servicio, uno tipico de su sector) y pregunta si se lo apuntas ("Claro, mañana a las diez y media tengo hueco para un corte, ¿te lo apunto?"). NO le preguntes por separado el servicio, el dia ni el nombre. Cuando diga que si: "Hecho, apuntado", y di claramente que era una simulacion y que con Vantelia lo harias con su agenda real. Termina ahi el turno y espera a que conteste.
+5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio despues de la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). Esa pregunta va SOLA, en su propio turno: nunca en el mismo turno en que cierras la demostracion. No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
    - Si es la duena o la encargada: sigue en el paso 6.
    - Si no lo es: pregunta por esa persona ("¿Y esta por ahi? ¿Me pasas con ella?").
      * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ, porque ella no lo ha oido: quien eres, que eres una asistente virtual de Vantelia, el gancho y el aviso de que es comercial y de que puede pedir no mas llamadas. Despues sigue con ella (demostracion si no la ha oido, y el paso 6).
@@ -90,7 +90,7 @@ LO QUE TIENES QUE CONSEGUIR, EN ORDEN
    - "sms": "¿Te mando un SMS a este numero con un enlace para verlo con tu propio negocio?"
    - "email": "¿Te lo mando al correo de {{negocio}}, {{email_negocio}}?" Si prefiere otro correo, apuntalo.
    - "pedir_email": pide un email para mandarselo y repitelo UNA vez de forma natural ("pablo arroba gmail punto com, ¿verdad?"). NO lo deletrees letra a letra salvo que te lo pidan.
-   En cuanto diga que si, usa `enviar_informacion` en ESE MISMO turno, antes de despedirte (con el email solo si te ha dado uno). Luego dile por donde le llega y despidete.
+   En cuanto diga que si, usa `enviar_informacion` en ESE MISMO turno, antes de despedirte (con el email solo si te ha dado uno). Luego dile por donde le llega y despidete. Nunca digas que se lo mandas sin haber usado antes `enviar_informacion`.
 7. Despidete y usa `end_call`.
 
 SALIDAS
@@ -267,6 +267,16 @@ DATOS_AL_TERMINAR = {
         "buzon o persona_equivocada.")},
     "escucho_la_demo": {"type": "boolean", "description": "true si llego a oir o hacer la demostracion."},
     "responsable_nombre": {"type": "string", "description": "Nombre de quien decide en el negocio, si salio."},
+    # Para el respaldo de `enviar_de_respaldo`: lo que Sara prometio y no hizo con sus tools.
+    "responsable_cuando": {"type": "string", "description": (
+        "Cuando suele estar quien decide, tal cual lo dijeron (por ejemplo 'mañana sobre las 8'). "
+        "Vacio si no salio.")},
+    "quiere_informacion": {"type": "boolean", "description": (
+        "true SOLO si la persona dijo claramente que si a que le mandemos la informacion "
+        "(por SMS o por correo). false si dijo que no, si no se le pregunto o si no quedo claro.")},
+    "email_para_informacion": {"type": "string", "description": (
+        "El correo que dicto para mandarle la informacion, escrito como email (usuario@dominio). "
+        "Vacio si no dio ninguno.")},
 }
 
 
@@ -855,6 +865,68 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     if nombre == "anotar_responsable":
         return _anotar_responsable(fila, cuerpo)
     return {"ok": False, "error": "Herramienta desconocida."}
+
+
+# --- Lo que Sara dijo que haria y no hizo ----------------------------------------------
+#
+# 28-sep-2026, llamada de prueba de Pablo: Sara dijo "te mando ahora mismo un correo" y no
+# llamo a `enviar_informacion`; tampoco a `anotar_responsable` al saber quien decidia y
+# cuando. Lo que el modelo puede hacer mal lo cubre el codigo: con el analisis de
+# ElevenLabs al terminar (DATOS_AL_TERMINAR) se manda la informacion si la acepto.
+# Como mucho UNA vez por llamada: la herramienta y el respaldo comparten el sello
+# (`resultado`), y el aviso de fin puede llegar dos veces (aviso y recogida horaria).
+# Ante la duda, no se manda (docs/PLAN_RESPALDO_DE_SARA.md, con la tabla de fallos).
+
+DESENLACES_SIN_ENVIO = ("rechazo", "persona_equivocada", "buzon", "colgo_al_principio")
+
+
+def _es_si(valor: Any) -> bool:
+    if isinstance(valor, bool):
+        return valor
+    return str(valor or "").strip().lower() in ("true", "si", "sí", "yes")
+
+
+def _no_se_le_escribe(email: str) -> bool:
+    """Dado de baja, rebotado o suprimido: a ese correo no se le escribe nada."""
+    if not email:
+        return False
+    with _db() as conn:
+        if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (email,)).fetchone():
+            return True
+        fila = conn.execute("SELECT status FROM prospects WHERE email=?", (email,)).fetchone()
+    return bool(fila and str(fila[0] or "") in ("baja", "bounced"))
+
+
+def enviar_de_respaldo(llamada_id: str, datos: Dict[str, Any]) -> bool:
+    """Manda la informacion si la acepto y Sara no llego a mandarla. True si se mando.
+
+    `datos` son los valores de DATOS_AL_TERMINAR ya sacados de su {"value": ...}."""
+    fila = _fila(llamada_id)
+    if fila is None or fila["resultado"]:
+        return False  # ya tiene resultado: actuo la herramienta, o pidio no mas llamadas
+    if not _es_si(datos.get("quiere_informacion")):
+        return False
+    if str(datos.get("desenlace") or "").strip().lower() in DESENLACES_SIN_ENVIO:
+        return False
+    if not puede_llamarse(fila["telefono"]):
+        return False
+    dado = str(datos.get("email_para_informacion") or "").strip().lower().replace(" ", "")
+    if not _EMAIL.match(dado):
+        dado = ""
+    email_negocio = str(fila["prospecto"] or "").strip().lower()
+    destino = dado or ("" if es_movil(fila["telefono"]) else email_negocio)
+    if not destino and not es_movil(fila["telefono"]):
+        return False  # un fijo sin correo: no hay a donde mandarlo
+    if _no_se_le_escribe(destino) or _no_se_le_escribe(email_negocio):
+        return False
+    with _db() as conn:
+        reclamada = conn.execute("UPDATE llamadas_voz SET resultado='interesado', actualizada=? "
+                                 "WHERE id=? AND resultado=''", (_ahora(), llamada_id)).rowcount
+        conn.commit()
+    if reclamada != 1:
+        return False  # otro camino se le adelanto
+    _enviar_informacion(fila, {"email": dado, "notas": "De respaldo: Sara dijo que lo mandaba y no lo hizo."})
+    return True
 
 
 INTERLOCUTORES = ("duena_o_encargada", "empleado", "no_se_sabe")

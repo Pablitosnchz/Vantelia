@@ -40,7 +40,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
 
-from backend import captacion_voz, cuenta_elevenlabs, settings, timeutils
+from backend import captacion_voz, cuenta_elevenlabs, settings, textnorm, timeutils
 
 API = "https://api.elevenlabs.io"
 TOLERANCIA_FIRMA_SEGUNDOS = 30 * 60
@@ -52,6 +52,8 @@ MAX_INTENTOS = 24  # una vez por hora: un dia intentandolo
 # pasada horaria del vigilante por unos segundos de desfase.
 MINUTOS_ENTRE_INTENTOS = 55
 ESTADOS_TERMINADOS = ("done", "failed")
+# Lo que ElevenLabs pone cuando un dato no salio en la conversacion.
+_NADA = ("none", "null", "no", "desconocido", "n/a", "-")
 
 
 def _db():
@@ -142,18 +144,30 @@ def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
     # pisaba lo que la herramienta escribiera entremedias (revision de Astra, 25-sep-2026).
     interlocutor = str(_valor(datos.get("interlocutor")) or "").strip().lower()
     nombre = str(_valor(datos.get("responsable_nombre")) or "").strip()
+    # Cuando suele estar quien decide: el lanzador lo interpreta con `cuando_esta` y, si no
+    # lo entiende, no rellama (28-sep-2026: Sara lo oyo y no llamo a `anotar_responsable`).
+    cuando = textnorm._sanitize_text(str(_valor(datos.get("responsable_cuando")) or ""))[:120].strip()
     with _db() as conn:
         if interlocutor in captacion_voz.INTERLOCUTORES:
             conn.execute("UPDATE llamadas_voz SET interlocutor=? WHERE id=? AND interlocutor=''",
                          (interlocutor, fila[0]))
-        if nombre and nombre.lower() not in ("none", "null", "no", "desconocido"):
+        if nombre and nombre.lower() not in _NADA:
             conn.execute("UPDATE llamadas_voz SET responsable_nombre=? WHERE id=? AND responsable_nombre=''",
                          (nombre[:80], fila[0]))
+        if cuando and cuando.lower() not in _NADA:
+            conn.execute("UPDATE llamadas_voz SET responsable_cuando=? WHERE id=? AND responsable_cuando=''",
+                         (cuando, fila[0]))
         # Por SIP no hay aviso de Twilio que la cierre: la cierra su transcripcion terminada.
         conn.execute("UPDATE llamadas_voz SET estado='terminada', actualizada=? WHERE id=? "
                      "AND estado IN ('marcando', 'en_curso')",
                      (timeutils._utc_now().isoformat(timespec="seconds"), fila[0]))
         conn.commit()
+    # Lo que Sara dijo que mandaba y no mando. Como mucho una vez: este guardado se repite
+    # (aviso y recogida) y el respaldo reclama su sello antes de enviar.
+    try:
+        captacion_voz.enviar_de_respaldo(fila[0], {k: _valor(v) for k, v in datos.items()})
+    except Exception:  # noqa: BLE001 - el respaldo nunca tumba el guardado de la transcripcion
+        settings.logger.exception("[transcripciones] fallo el respaldo de la llamada %s", fila[0])
     return fila[0]
 
 

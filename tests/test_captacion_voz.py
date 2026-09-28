@@ -88,7 +88,7 @@ def test_tras_el_si_una_sola_pregunta_y_quien_decide_despues(captacion):
     guion = agente["agent"]["prompt"]["prompt"]
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
     assert paso_2.count("?") == 1 and "quien lleva" not in paso_2
-    assert guion.index("la demostracion, con los papeles claros") < guion.index("QUIEN DECIDE")
+    assert guion.index("con los papeles claros") < guion.index("QUIEN DECIDE")
     assert "nunca des por hecho que te has equivocado de numero" in guion
     assert agente["tts"]["stability"] >= 0.9, "sin trozos con otra voz"
 
