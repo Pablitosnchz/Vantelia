@@ -78,6 +78,10 @@ client_uri=sip:__ZADARMA_USUARIO__@pbx.zadarma.com
 contact_user=__ZADARMA_USUARIO__
 retry_interval=60
 forbidden_retry_interval=600
+; Sin esto Asterisk deja de reintentar tras 10 fallos y el puente se queda vivo pero sin
+; registrar si Zadarma cae un rato (revision de Astra, 28-sep-2026).
+max_retries=100000
+auth_rejection_permanent=no
 expiration=300
 
 [zadarma]
