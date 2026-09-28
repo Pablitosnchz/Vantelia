@@ -21,6 +21,8 @@ REGLAS (Circular AEPD 1/2023 y sentido comun)
   nadie: sin respuesta de la lista no hay llamada. La respuesta vale 30 dias.
 - Solo FIJOS (8xx/9xx). Un movil de negocio suele ser el de un autonomo, que la
   Circular trata como particular (art. 5): esos, a mano y con cuidado, no en lote.
+- Solo negocios que trabajan con citas (`es_negocio_con_citas`, por el sector): el
+  guion es el de una recepcionista que da citas.
 - Nunca a quien pidio que no (`no_llamar`), ni a prospectos dados de baja, que ya
   respondieron, son clientes o se descartaron.
 - Maximo 2 intentos por telefono, separados 2 dias, y solo si el primero no lo cogio
@@ -171,6 +173,21 @@ def es_fijo(telefono: str) -> bool:
     return bool(re.fullmatch(r"\+34[89]\d{8}", captacion_voz.telefono_e164(telefono)))
 
 
+# Solo negocios que trabajan con CITAS (Pablo, 28-sep-2026): el guion de Sara es el de una
+# recepcionista que da citas ("pideme cita", "¿llevas el salon?"), y a una consultoria o una
+# aseguradora le suena raro y se gasta una llamada del cupo. Se casa por raiz de palabra sobre
+# el sector (`prospects.niche`) sin tildes; un sector vacio o desconocido NO se llama solo.
+# Ampliar aqui si Pablo capta otro tipo de negocio con citas.
+_SECTORES_CON_CITAS = re.compile(
+    r"\b(?:peluquer|barber|estetic|belleza|spas?\b|masaj|manicur|depilac|dental|dentist|odontolog|"
+    r"fisio|osteopat|podolog|quiropract|clinic|psicolog|nutricion|veterinar|optic|auditiv|"
+    r"fertilidad|tatuaj)")
+
+
+def es_negocio_con_citas(sector: str) -> bool:
+    return bool(_SECTORES_CON_CITAS.search(textnorm._strip_accents(str(sector or "")).lower()))
+
+
 def _inicio_del_dia(ahora: datetime) -> datetime:
     local = ahora.astimezone(ZONA)
     return datetime.combine(local.date(), time(0, 0), tzinfo=ZONA)
@@ -205,6 +222,8 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
     for p in prospectos:
         telefono = captacion_voz.telefono_e164(p["phone"])
         if not telefono or telefono in vistos or telefono in vetados or not es_fijo(telefono):
+            continue
+        if not es_negocio_con_citas(p["niche"]):
             continue
         previos = intentos.get(telefono, [])
         if len(previos) >= MAX_INTENTOS:

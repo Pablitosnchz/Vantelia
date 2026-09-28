@@ -44,11 +44,12 @@ def lanzador(api_module, monkeypatch, tmp_path):  # noqa: F811
     return lanzador_llamadas
 
 
-def _prospecto(lanzador, email, telefono, estado="new", negocio="", creado="2026-09-01T00:00:00+00:00"):
+def _prospecto(lanzador, email, telefono, estado="new", negocio="", creado="2026-09-01T00:00:00+00:00",
+               sector="peluqueria"):
     with lanzador._db() as conn:
         conn.execute("INSERT INTO prospects (email, business_name, niche, phone, status, created_at, updated_at) "
                      "VALUES (?,?,?,?,?,?,?)",
-                     (email, negocio or email.split("@")[0], "peluqueria", telefono, estado, creado, creado))
+                     (email, negocio or email.split("@")[0], sector, telefono, estado, creado, creado))
         conn.commit()
 
 
@@ -236,6 +237,29 @@ def test_solo_fijos_y_nunca_a_quien_no_toca(lanzador):
         conn.commit()
     telefonos = [c["telefono"] for c in lanzador.candidatos(MARTES_10_30)]
     assert telefonos == ["+34918888888"]
+
+
+def test_solo_negocios_que_trabajan_con_citas(lanzador):
+    """Pablo, 28-sep-2026: la cola del primer dia real eran 4 consultorias informaticas de 8.
+    El guion es el de una recepcionista que da citas: a esos no los llama sola."""
+    lanzador.guardar_config(activo=True)
+    sectores = {"911000001": "Peluquería", "911000002": "clinica dental", "911000003": "centro veterinario",
+                "911000004": "Centro de Estética", "911000005": "spa", "911000006": "fisioterapia",
+                "911000011": "consultoria informatica", "911000012": "agencia seguros",
+                "911000013": "restaurante", "911000014": "", "911000015": "agencia marketing digital",
+                "911000016": "especialistas en espacios", "911000017": "spazio interiorismo"}
+    for telefono, sector in sectores.items():
+        _prospecto(lanzador, "n%s@negocio.es" % telefono, telefono, sector=sector)
+    llamables = sorted(c["telefono"][3:] for c in lanzador.candidatos(MARTES_10_30))
+    assert llamables == ["911000001", "911000002", "911000003", "911000004", "911000005", "911000006"]
+
+    # Y el lanzador de verdad, ronda a ronda toda la manana (una llamada cada 16 min):
+    # llama a los seis con citas y a ninguno mas.
+    marcador = _Marcador(lanzador, MARTES_10_30)
+    for _vez in range(8):
+        _ronda(lanzador, ahora=marcador.ahora, marcador=marcador)
+        marcador.ahora += timedelta(minutes=16)
+    assert sorted(t[3:] for t in marcador.llamados) == llamables
 
 
 @pytest.mark.parametrize("ahora,llama", [
