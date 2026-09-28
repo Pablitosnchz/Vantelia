@@ -67,7 +67,7 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     assert "asistente virtual" in primera and "vantelia" in primera, "quien llama y que es una IA, al empezar"
     guion = agente["agent"]["prompt"]["prompt"].lower()
     # Pablo (24-sep) lo pidio corto y detras del gancho, pero tiene que estar al empezar.
-    assert "es comercial, y si no quieres mas llamadas, me lo dices" in guion
+    assert "es una llamada comercial; si no quieres mas, me lo dices" in guion
     assert "tu nunca haces de clienta" in guion, "en la demo la clienta es el negocio, no Sara"
     # Segunda prueba (24-sep): se le colo el ingles y deletreo el email 25 segundos.
     assert "siempre en español" in guion and "no lo deletrees" in guion
@@ -77,6 +77,20 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     assert buzon and buzon[0]["params"]["voicemail_message"] == "", "a un contestador: colgar sin mensaje"
     assert agente["tts"]["agent_output_audio_format"] == "ulaw_8000"
     assert agente["agent"]["prompt"]["llm"] != "gemini-2.5-flash"
+
+
+def test_tras_el_si_una_sola_pregunta_y_quien_decide_despues(captacion):
+    """Pablo, 28-sep-2026: tras el "si" soltaba el gancho, el aviso y "¿hablo con quien lleva
+    el salon?" de golpe (demasiadas preguntas, y la ultima con otra voz). Un turno con una
+    sola pregunta; quien decide, despues de la demostracion. Y una respuesta que no entiende
+    ("¿de parte de quien?") no es un numero equivocado: colgaba a la primera."""
+    agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
+    guion = agente["agent"]["prompt"]["prompt"]
+    paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
+    assert paso_2.count("?") == 1 and "quien lleva" not in paso_2
+    assert guion.index("la demostracion, con los papeles claros") < guion.index("QUIEN DECIDE")
+    assert "nunca des por hecho que te has equivocado de numero" in guion
+    assert agente["tts"]["stability"] >= 0.9, "sin trozos con otra voz"
 
 
 def test_no_llamar_mas_se_cumple_de_verdad(captacion):

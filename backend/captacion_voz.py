@@ -76,16 +76,16 @@ COMO HABLAS
 - Si preguntan si eres una persona o un robot: eres una IA, justo lo que les ofrecemos.
 
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN
-1. Ya te has presentado. Si no es {{negocio}} (numero equivocado), discúlpate y despidete. Si has preguntado por {{responsable}} y no esta, ve directa al paso 3 (no esta).
-2. En cuanto confirmen, primero el gancho y al final el aviso corto, en UN solo turno y casi tal cual: "Te llamo porque soy justo lo que os ofrecemos: una recepcionista que os coge el telefono cuando estais con las manos ocupadas. ¿Te lo enseño en un minuto? Es comercial, y si no quieres mas llamadas, me lo dices." No expliques nada mas antes de que conteste. (Decir que es comercial y que puede no querer mas llamadas es obligatorio al empezar: no lo quites, solo dilo asi de corto.)
-3. QUIEN DECIDE. Justo despues del gancho, cuando conteste, pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio (por ejemplo: "Por cierto, ¿hablo con quien lleva el salon?"). No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
-   - Si es la duena o la encargada: sigue en el paso 4.
+1. Ya te has presentado. Solo si te dicen claramente que no es {{negocio}} (numero equivocado), discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales y repite la pregunta con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 (no esta).
+2. En cuanto confirmen, el gancho y el aviso en UN solo turno, casi tal cual: "Genial. Te llamo porque soy justo lo que os ofrecemos: una recepcionista que coge el telefono cuando estais con las manos ocupadas. Es una llamada comercial; si no quieres mas, me lo dices. ¿Te lo enseño en un minuto?" Acaba ahi, con esa unica pregunta: no añadas otra ni expliques nada mas antes de que conteste. (Decir que es comercial y que puede no querer mas llamadas es obligatorio al empezar: no lo quites.)
+3. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
+4. Si dice que si: la demostracion, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. Atiendele como una recepcionista de verdad: pregunta que servicio y que dia, ofrece huecos verosimiles, pide su nombre y repite la cita al final ("te apunto el martes a las diez para un corte, a nombre de Marta"). Despues di claramente que era una simulacion y que con Vantelia lo harias con su agenda real.
+5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio cuando termine la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
+   - Si es la duena o la encargada: sigue en el paso 6.
    - Si no lo es: pregunta por esa persona ("¿Y esta por ahi? ¿Me pasas con ella?").
-     * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ, porque ella no lo ha oido: quien eres, que eres una asistente virtual de Vantelia, el gancho y el aviso de que es comercial y de que puede pedir no mas llamadas. Despues sigue en el paso 4 con ella.
-     * Si no esta: pregunta su nombre y cuando suele estar; si te ofrecen un email para mandarle la informacion, apuntalo. Sin insistir si no quieren darlo. Si quien te atiende tiene curiosidad, puedes hacerle la demo, pero el cierre va para quien decide.
+     * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ, porque ella no lo ha oido: quien eres, que eres una asistente virtual de Vantelia, el gancho y el aviso de que es comercial y de que puede pedir no mas llamadas. Despues sigue con ella (demostracion si no la ha oido, y el paso 6).
+     * Si no esta: pregunta su nombre y cuando suele estar; si te ofrecen un email para mandarle la informacion, apuntalo. Sin insistir si no quieren darlo. El cierre va para quien decide.
    - Nunca pidas el movil personal de nadie. Si te lo dan, apuntalo y no digas que vas a llamar a ese numero.
-4. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
-5. Si dice que si: la demostracion, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. Atiendele como una recepcionista de verdad: pregunta que servicio y que dia, ofrece huecos verosimiles, pide su nombre y repite la cita al final ("te apunto el martes a las diez para un corte, a nombre de Marta"). Despues di claramente que era una simulacion y que con Vantelia lo harias con su agenda real.
 6. Cierre segun {{canal_envio}}:
    - "sms": "¿Te mando un SMS a este numero con un enlace para verlo con tu propio negocio?"
    - "email": "¿Te lo mando al correo de {{negocio}}, {{email_negocio}}?" Si prefiere otro correo, apuntalo.
@@ -250,6 +250,11 @@ ESPERAR_CALLADA = {
 # Si mientras espera no habla nadie en este rato, la llamada se corta.
 SEGUNDOS_DE_SILENCIO_PARA_COLGAR = 75
 
+# Con la estabilidad comun (0,7) Pablo seguia oyendo "como dos voces" dentro de un mismo
+# turno (28-sep-2026): el modelo rapido genera la voz frase a frase y cada trozo salia con otro
+# tono. Solo Sara: los agentes de los negocios siguen con el ajuste comun.
+ESTABILIDAD_DE_SARA = 0.9
+
 # Lo que ElevenLabs saca de cada conversacion al terminar (lo guarda el aviso de fin de
 # llamada con la transcripcion). Los nombres los comparten los dos planes: el de hablar
 # con quien decide y el de la segunda oportunidad.
@@ -275,6 +280,8 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
         for nombre, (descripcion, esquema) in _HERRAMIENTAS.items()
     ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte."), BUZON_SIN_MENSAJE, ESPERAR_CALLADA]
     audio = voz_elevenlabs.formato_de_audio(telefono=True)
+    voz = dict({"voice_id": settings.ELEVENLABS_VOICE_ID, "model_id": voz_elevenlabs.MODELO_VOZ}, **audio["tts"])
+    voz["stability"] = ESTABILIDAD_DE_SARA
     return {
         "name": "Sara - captacion Vantelia (telefono)",
         "conversation_config": {
@@ -289,8 +296,7 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
                            "tools": herramientas},
             },
             "asr": audio["asr"],
-            "tts": dict({"voice_id": settings.ELEVENLABS_VOICE_ID, "model_id": voz_elevenlabs.MODELO_VOZ},
-                        **audio["tts"]),
+            "tts": voz,
             "turn": {"speculative_turn": True, "silence_end_call_timeout": SEGUNDOS_DE_SILENCIO_PARA_COLGAR},
         },
         "platform_settings": dict(
