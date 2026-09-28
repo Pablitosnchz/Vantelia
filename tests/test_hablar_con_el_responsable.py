@@ -138,9 +138,10 @@ def _hablo_con_un_empleado(lanzador, cuando="por las tardes", telefono="+3491111
     campos = dict({"interlocutor": "empleado", "responsable_nombre": "Marta", "responsable_cuando": cuando,
                    "resultado": "", "conversation_id": "conv_1"}, **mas)
     with lanzador._db() as conn:
-        conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, prospecto, estado, origen, creada, actualizada) "
-                     "VALUES ('ll_original', ?, 'Pelu Marta', 'hola@pelu.es', 'terminada', 'auto', ?, ?)",
-                     (telefono, creada, creada))
+        # Una llamada del lanzador lleva siempre el sector del prospecto (y solo llama a negocios con citas).
+        conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, creada, "
+                     "actualizada) VALUES ('ll_original', ?, 'Pelu Marta', 'peluqueria', 'hola@pelu.es', 'terminada', "
+                     "'auto', ?, ?)", (telefono, creada, creada))
         conn.execute("UPDATE llamadas_voz SET %s WHERE id='ll_original'" % ", ".join("%s=?" % c for c in campos),
                      tuple(campos.values()))
         conn.commit()
@@ -184,6 +185,15 @@ def test_solo_una_rellamada_por_negocio(lanzador):  # noqa: F811
 def test_no_se_rellama_si_no_toca(lanzador, variante):  # noqa: F811
     _hablo_con_un_empleado(lanzador, **variante)
     assert lanzador.rellamadas_dirigidas(MARTES_16_30) == []
+
+
+def test_la_rellamada_tampoco_va_a_un_negocio_sin_citas(lanzador):  # noqa: F811
+    """Astra, 28-sep: el filtro de sectores valia para las nuevas y no para la rellamada a
+    quien decide, que va por delante en la ronda."""
+    lanzador.guardar_config(activo=True)
+    _hablo_con_un_empleado(lanzador, sector="consultoria informatica")
+    assert lanzador.rellamadas_dirigidas(MARTES_16_30) == []
+    assert _ronda(lanzador, MARTES_16_30).llamadas == []
 
 
 def test_nunca_a_un_movil(lanzador):  # noqa: F811

@@ -383,6 +383,8 @@ def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
     for fila in filas:
         if fila["id"] in rechazos or not es_fijo(fila["telefono"]):
             continue
+        if not es_negocio_con_citas(fila["sector"]):
+            continue  # el mismo filtro que las nuevas: sola, solo a negocios con citas
         preferencia = cuando_esta(fila["responsable_cuando"])
         if not preferencia["entendido"]:
             continue  # sin saber cuando esta, no se vuelve a llamar solos
