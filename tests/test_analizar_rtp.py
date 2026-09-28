@@ -108,6 +108,22 @@ def test_el_jitter_no_se_come_audio_en_el_wav(tmp_path):
     assert all(wav[i] > 30000 for i in range(160)), "la voz del primero entera"
 
 
+def test_paquetes_desordenados_al_principio_no_revientan_el_wav(tmp_path):
+    """Revision de Astra: si el primero que llega es el segundo (timestamp 160 y luego 0), la
+    resta sin signo lo mandaba a 4.294.967.136 y el WAV pedia 32 GiB. Una marca imposible
+    (media hora mas alla) tampoco puede estirar el WAV."""
+    segundo = struct.pack(">BBHII", 0x80, 8, 1, 160, 9) + bytes([SILENCIO]) * 160
+    primero = struct.pack(">BBHII", 0x80, 8, 0, 0, 9) + bytes([VOZ]) * 160
+    loco = struct.pack(">BBHII", 0x80, 8, 2, 160 + 2 ** 31, 9) + bytes([VOZ]) * 160
+    r = _captura(tmp_path, [(100.0, _registro(100.0, ZADARMA, 16000, PUENTE, 10000, segundo)),
+                            (100.001, _registro(100.001, ZADARMA, 16000, PUENTE, 10000, primero)),
+                            (100.002, _registro(100.002, ZADARMA, 16000, PUENTE, 10000, loco))])
+    wav = r["wav"]["negocio"]
+    assert min(wav) == 0 and max(wav) == 319, "320 muestras, en su orden"
+    assert all(wav[i] > 30000 for i in range(160)), "el que llego tarde va delante"
+    assert r["inicio_wav"] == pytest.approx(-0.02)
+
+
 @pytest.mark.parametrize("con_200ok", [True, False])
 def test_cuenta_desde_que_descuelgan(tmp_path, con_200ok):
     sip = []

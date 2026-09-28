@@ -22,6 +22,7 @@ PUENTE = "72.62.188.104"
 ZADARMA = "185.45."  # prefijo de los servidores de Zadarma
 UMBRAL = -40.0  # dBFS: por encima, alguien habla (heuristica, no deteccion de turnos)
 PASO = 0.5  # segundos por casilla
+MAX_SALTO_RTP = 8000 * 3600  # una hora en muestras: mas que eso no es la misma llamada
 
 
 def alaw(a):
@@ -136,9 +137,21 @@ def analizar(ruta):
             valores = [tabla[b] for b in carga]
             casilla = round(PASO * math.floor((t - cero) / PASO), 1)
             muestras[nombre].setdefault(casilla, []).extend(valores)
-            inicio = base + ((ts_rtp - ts0) & 0xFFFFFFFF)
+            # Con signo: un paquete que llega desordenado ANTES que el primero queda justo antes,
+            # no a 4.000 millones de muestras (un WAV de 32 GiB; revision de Astra).
+            desfase = (ts_rtp - ts0) & 0xFFFFFFFF
+            if desfase >= 0x80000000:
+                desfase -= 0x100000000
+            if abs(desfase) > MAX_SALTO_RTP:
+                continue  # marca de tiempo imposible en una llamada: al WAV no va
+            inicio = base + desfase
             for i, v in enumerate(valores):
                 wav[nombre][inicio + i] = v
+    # Si algo quedo antes del primer paquete, se mueven los dos WAV a la vez: siguen alineados.
+    minimo = min([min(m) for m in wav.values() if m] or [0])
+    if minimo < 0:
+        wav = {n: {i - minimo: v for i, v in m.items()} for n, m in wav.items()}
+    inicio_wav = primer_rtp - cero + min(minimo, 0) / 8000.0
     niveles = {n: {c: dbfs(v) for c, v in m.items()} for n, m in muestras.items()}
 
     # Una casilla sin paquetes cuenta como "no habla": es precisamente lo que hay que ver.
@@ -168,7 +181,8 @@ def analizar(ruta):
             actual = []
     if actual:
         tramos.append(actual)
-    return {"cero_es_200ok": t_ok is not None, "primer_rtp": primer_rtp - cero, "flujos": descripcion,
+    return {"cero_es_200ok": t_ok is not None, "primer_rtp": primer_rtp - cero, "inicio_wav": inicio_wav,
+            "flujos": descripcion,
             "casillas": casillas, "niveles": niveles, "esperas": esperas, "solapes": solapes,
             "tramos_sara": tramos, "wav": wav}
 
@@ -215,7 +229,7 @@ def main():
     for nombre, muestras in r["wav"].items():
         if muestras:
             escribir_wav(os.path.join(salida, "%s.wav" % nombre), muestras)
-    print("\nWAV alineados desde el primer paquete de audio (%+.1fs)." % r["primer_rtp"])
+    print("\nWAV alineados entre si; empiezan en %+.2fs." % r["inicio_wav"])
 
 
 if __name__ == "__main__":
