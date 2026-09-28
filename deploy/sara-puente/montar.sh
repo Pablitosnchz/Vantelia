@@ -14,8 +14,10 @@
 set -euo pipefail
 
 ORIGEN="$(cd "$(dirname "$0")" && pwd)"
-DESTINO=/srv/sara-puente
-ENV_APP=/srv/vantelia/.env
+# Las tres se cambian solo en tests/test_montar_puente.py.
+DESTINO="${SARA_PUENTE_DESTINO:-/srv/sara-puente}"
+ENV_APP="${SARA_PUENTE_ENV:-/srv/vantelia/.env}"
+ESPERA="${SARA_PUENTE_ESPERA:-3}"
 # Imagen fijada por su huella: con "latest", una version nueva podia cambiar el puente sin
 # que nadie lo decidiera (revision de Astra, 28-sep-2026). Asterisk 22.10.1.
 IMAGEN="${SARA_PUENTE_IMAGEN:-andrius/asterisk@sha256:6ef1eb2dd14f34c4b5d226cd05a98aeda000bcaf4ac05f49c6c199a09249f8b7}"
@@ -55,7 +57,7 @@ arrancar() {  # $1 = imagen
 
 registrado() {  # espera hasta 60 s a que la extension quede "Registered" en Zadarma
   for _ in $(seq 1 20); do
-    sleep 3
+    sleep "$ESPERA"
     if docker exec sara-puente asterisk -rx "pjsip show registrations" 2>/dev/null | grep -q "Registered"; then
       return 0
     fi
@@ -76,13 +78,16 @@ cp "$ORIGEN/extensions.conf" "$ORIGEN/modules.conf" "$ORIGEN/rtp.conf" "$DESTINO
 chown "$UID_A:$GID_A" "$DESTINO/pjsip.conf"
 chmod 600 "$DESTINO/pjsip.conf"
 
-arrancar "$IMAGEN"
-if ! registrado; then
-  echo "!! El puente nuevo no se ha registrado en Zadarma en 60 s." >&2
+# El arranque va DENTRO de la condicion: con set -e, un "docker run" que fallara fuera de
+# ella cortaba el script antes de volver a la version anterior y el puente se quedaba caido
+# (revision de Astra, 28-sep-2026).
+if ! { arrancar "$IMAGEN" && registrado; }; then
+  echo "!! El puente nuevo no arranca o no se registra en Zadarma en 60 s." >&2
   if [ -n "$IMAGEN_ANTERIOR" ] && [ -f "$DESTINO/anterior/pjsip.conf" ]; then
-    for f in $FICHEROS; do cp -p "$DESTINO/anterior/$f" "$DESTINO/$f"; done
-    arrancar "$IMAGEN_ANTERIOR"
-    if registrado; then
+    for f in $FICHEROS; do
+      if [ -f "$DESTINO/anterior/$f" ]; then cp -p "$DESTINO/anterior/$f" "$DESTINO/$f"; fi
+    done
+    if arrancar "$IMAGEN_ANTERIOR" && registrado; then
       echo "!! Vuelto a la version anterior ($IMAGEN_ANTERIOR), que si se registra." >&2
     else
       echo "!! La version anterior tampoco se registra: revisar Zadarma y el .env." >&2
@@ -93,4 +98,4 @@ fi
 
 docker exec sara-puente asterisk -rx "pjsip show registrations" | grep -E "Registered|Rejected|Unregistered"
 echo "Puertos del puente (solo deberia salir 5099, mas algun puerto alto de consultas DNS):"
-ss -lntup | grep -i asterisk | awk '{print $1, $5}' | sort -u
+ss -lntup | grep -i asterisk | awk '{print $1, $5}' | sort -u || true

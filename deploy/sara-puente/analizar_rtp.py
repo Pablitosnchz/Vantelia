@@ -46,7 +46,7 @@ TABLAS = {8: [alaw(i) for i in range(256)], 0: [ulaw(i) for i in range(256)]}
 
 
 def leer(ruta):
-    """(flujos, sip). flujos: {(ip_o, puerto_o, ip_d, puerto_d, ssrc): [(t, tipo, carga)]}.
+    """(flujos, sip). flujos: {(ip_o, puerto_o, ip_d, puerto_d, ssrc): [(t, tipo, carga, ts_rtp)]}.
     sip: [(t, ip_o, texto)] de los mensajes SIP por UDP."""
     flujos, sip = {}, []
     with open(ruta, "rb") as f:
@@ -78,11 +78,11 @@ def leer(ruta):
             tipo = rtp[1] & 0x7F
             if tipo not in TABLAS:
                 continue
-            ssrc = struct.unpack(">I", rtp[8:12])[0]
+            ts_rtp, ssrc = struct.unpack(">II", rtp[4:12])
             off = 12 + 4 * (rtp[0] & 0x0F)
             if rtp[0] & 0x10:
                 off += 4 + 4 * struct.unpack(">H", rtp[off + 2:off + 4])[0]
-            flujos.setdefault((src, sport, dst, dport, ssrc), []).append((t, tipo, rtp[off:]))
+            flujos.setdefault((src, sport, dst, dport, ssrc), []).append((t, tipo, rtp[off:], ts_rtp))
     return flujos, sip
 
 
@@ -127,12 +127,16 @@ def analizar(ruta):
         paquetes = medibles[clave]
         tabla = TABLAS[paquetes[0][1]]
         descripcion.append((nombre, clave, paquetes[0][1], paquetes[0][0] - cero, len(paquetes)))
-        for t, _, carga in paquetes:
+        # En el WAV, cada paquete va donde dice su marca de tiempo RTP, a partir de la llegada
+        # del primero del flujo: un hueco (paquetes perdidos o sin enviar) queda como hueco, y
+        # dos paquetes que llegan casi a la vez por el jitter no se pisan (revision de Astra).
+        base = int(round((paquetes[0][0] - primer_rtp) * 8000))
+        ts0 = paquetes[0][3]
+        for t, _, carga, ts_rtp in paquetes:
             valores = [tabla[b] for b in carga]
             casilla = round(PASO * math.floor((t - cero) / PASO), 1)
             muestras[nombre].setdefault(casilla, []).extend(valores)
-            # Cada paquete en su sitio: un hueco de red queda como hueco en el WAV.
-            inicio = int(round((t - primer_rtp) * 8000))
+            inicio = base + ((ts_rtp - ts0) & 0xFFFFFFFF)
             for i, v in enumerate(valores):
                 wav[nombre][inicio + i] = v
     niveles = {n: {c: dbfs(v) for c, v in m.items()} for n, m in muestras.items()}

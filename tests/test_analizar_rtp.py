@@ -96,6 +96,18 @@ def test_si_el_negocio_vuelve_a_hablar_no_hay_espera_falsa(tmp_path):
     assert r["solapes"] == [2.5]
 
 
+def test_el_jitter_no_se_come_audio_en_el_wav(tmp_path):
+    """Dos paquetes seguidos que llegan con 1 ms de diferencia no se pisan en el WAV: van
+    donde dice su marca de tiempo RTP, no donde cayo su llegada."""
+    voz = struct.pack(">BBHII", 0x80, 8, 0, 0, 5) + bytes([VOZ]) * 160
+    silencio = struct.pack(">BBHII", 0x80, 8, 1, 160, 5) + bytes([SILENCIO]) * 160
+    r = _captura(tmp_path, [(100.0, _registro(100.0, ZADARMA, 16000, PUENTE, 10000, voz)),
+                            (100.001, _registro(100.001, ZADARMA, 16000, PUENTE, 10000, silencio))])
+    wav = r["wav"]["negocio"]
+    assert len(wav) == 320
+    assert all(wav[i] > 30000 for i in range(160)), "la voz del primero entera"
+
+
 @pytest.mark.parametrize("con_200ok", [True, False])
 def test_cuenta_desde_que_descuelgan(tmp_path, con_200ok):
     sip = []
