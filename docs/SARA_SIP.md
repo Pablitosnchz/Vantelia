@@ -99,3 +99,11 @@ llamar al `4444` de Zadarma con un agente temporal de 60 s como máximo.
   Es lo conservador.
 - Con SIP, el buzón de voz lo detecta Sara dentro de la conversación: esa llamada no se
   reintenta (con Twilio sí, porque colgaba antes de conectar).
+- **El saludo se solapa con el «dígame» del negocio.** Por SIP la llamada llega a Sara
+  justo al descolgar (Twilio tardaba unos segundos en decidir si era un contestador) y
+  empieza a hablar en el segundo 0. Se probó el 28-sep dejar vacío el primer mensaje
+  (ElevenLabs espera a que hablen; `turn.initial_wait_time` = 4 s) y poner la presentación
+  literal en el paso 1 del guion: esperó bien, pero **se presentó dos veces**, porque el
+  guion decía «si ya han dicho que son el negocio, di solo "Hola, buenas, soy Sara…" y
+  sigue» y tomó el «sí» de Pablo por esa confirmación. Pablo pidió quitarlo. Si se
+  reintenta, sin esa frase y con la presentación una sola vez.
