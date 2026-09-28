@@ -4252,12 +4252,22 @@ async def responder(
             # no se sugiere: se obliga. Pedirselo "con enfasis" seguia siendo
             # prompt, y el modelo se escaqueaba volviendo a consultar huecos.
             remate = reserva.tool_que_remata(estado, conocido)
+            # Viene a cancelar o a cambiar una cita que aun no se sabe cual es: lo
+            # primero es BUSCARLA (por su telefono si no da el numero). Sin esto,
+            # "quiero cancelar mi cita" caia en la regla de abajo -su frase tambien se
+            # acumula como si describiera un servicio- y se obligaba a mirar el
+            # catalogo: le pedia fecha y hora y la cita seguia viva (humo del
+            # despliegue del 28-sep-2026, dos de dos).
+            gestiona_una_cita = estado.intencion in ("cancelar", "reprogramar")
+            if (not remate and gestiona_una_cita and not estado.codigo
+                    and not mirada_la_cita):
+                remate = "consultar_cita"
             # Ha dicho que se quiere hacer, pero aun no hay servicio elegido: lo
             # primero es MIRAR EL CATALOGO con lo que ha dicho. Preguntarle de
             # nuevo sin haberlo mirado es como se repetia la misma pregunta turno
             # tras turno (26 conversaciones de 100).
-            if (not remate and not estado.servicio and estado.servicio_texto
-                    and not catalogo_mirado):
+            if (not remate and not gestiona_una_cita and not estado.servicio
+                    and estado.servicio_texto and not catalogo_mirado):
                 remate = "buscar_servicio"
             # Pregunta por una norma del negocio: se mira lo que ESTE negocio ha
             # escrito, no lo que el modelo recuerde de otras peluquerias.
