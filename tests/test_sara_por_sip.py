@@ -107,6 +107,13 @@ def test_por_sip_marca_elevenlabs_con_las_variables_de_siempre(sip):
     assert (fila["estado"], fila["conversation_id"], fila["call_sid"]) == ("en_curso", "conv_sip_1", "sip_abc")
 
 
+def test_por_sip_espera_a_que_descuelguen(sip):
+    """La API de ElevenLabs no contesta hasta que descuelgan (27 s con un buzon, 28-sep-2026).
+    Con la espera de Twilio (30 s), un negocio lento quedaba 'fallida' y sin transcripcion."""
+    _, el = _marcar(sip)
+    assert el.peticiones[0][2].get("timeout", 0) >= 90
+
+
 def test_la_rellamada_pregunta_por_quien_decide_tambien_por_sip(sip):
     el = _ElevenLabs()
     hecho = sip.llamar("911234561", "Pelu Marta", "peluqueria", responsable="Marta", rellamada_de="ll_x", cliente=el)

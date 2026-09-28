@@ -476,6 +476,11 @@ def _variables(fila) -> Dict[str, str]:
 CLAVE_NUMERO_SIP = "elevenlabs_numero_captacion"
 EVENTOS_DEL_AVISO = ["transcript", "call_initiation_failure"]
 _FALLO_AL_MARCAR = {"busy": "ocupado", "no-answer": "no_contesta"}
+# La API de ElevenLabs no contesta al marcar hasta que descuelgan (primera llamada por la
+# centralita de Zadarma, 28-sep-2026: 27 s, hasta que salto el buzon). Con los 30 s de Twilio,
+# un negocio que tardaba en coger quedaba "fallida" sin conversation_id: su transcripcion y su
+# resultado se perdian y el lanzador no lo reintentaba. Mas de lo que suena un telefono.
+ESPERA_AL_MARCAR_SIP_S = 120.0
 
 
 def via_sip() -> bool:
@@ -597,7 +602,7 @@ def _llamar_por_sip(llamada_id: str, cliente: httpx.Client) -> Dict[str, Any]:
     voz = clients._get_client_config(TENANT).get("voice") or {}
     try:
         r = cliente.post(voz_elevenlabs.API + "/v1/convai/sip-trunk/outbound-call",
-                         headers=voz_elevenlabs._cabeceras(),
+                         headers=voz_elevenlabs._cabeceras(), timeout=ESPERA_AL_MARCAR_SIP_S,
                          json={"agent_id": str(voz.get(CLAVE_AGENTE) or ""),
                                "agent_phone_number_id": str(voz.get(CLAVE_NUMERO_SIP) or ""),
                                "to_number": fila["telefono"],

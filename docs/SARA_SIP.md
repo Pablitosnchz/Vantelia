@@ -55,9 +55,10 @@ Código: `backend/captacion_voz.py` (sección «Marcar por SIP»). Tests:
 3. **En el `.env` del VPS** (copia previa en `/srv/vantelia-backups/`):
    - `CAPTACION_VOZ_VIA=sip`
    - `CAPTACION_SIP_NUMERO=+3491…`
-   - `CAPTACION_SIP_HOST=sip.zadarma.com` (cuenta SIP; con una extensión de centralita sería `pbx.zadarma.com`)
+   - `CAPTACION_SIP_HOST=pbx.zadarma.com` (la extensión de la centralita, **no** la cuenta
+     SIP `sip.zadarma.com`: ver «Lo medido el 28-sep»)
    - `CAPTACION_SIP_TRANSPORTE=tcp`
-   - `CAPTACION_SIP_USUARIO` y `CAPTACION_SIP_CLAVE` (los de la extensión)
+   - `CAPTACION_SIP_USUARIO` y `CAPTACION_SIP_CLAVE` (los de la extensión, `594819-100`)
    - `CAPTACION_LLAMADAS_ENABLED=true` cuando Pablo lo diga
 
    Después, recrear el contenedor.
@@ -68,6 +69,28 @@ Código: `backend/captacion_voz.py` (sección «Marcar por SIP»). Tests:
    - Una cogiéndola: tiene que ver el 91, oírse bien y aparecer la transcripción.
    - Otra dejando que suene: tiene que quedar «No contesta».
 7. Encender «Llamar automáticamente».
+
+## Lo medido el 28-sep-2026
+
+- **Por la cuenta SIP (`sip.zadarma.com`) el audio del negocio no llegaba a Sara** en 3 de
+  cada 4 llamadas: en la grabación, silencio digital exacto entre sus frases. El negocio la
+  oía a ella. Por la centralita (`pbx.zadarma.com`), el eco de Zadarma (llamar al `4444`)
+  vuelve desde el segundo 4. Por eso va la extensión.
+- **Durante una hora Zadarma no aceptó conexiones desde las IP de ElevenLabs** (`connect:
+  connection timed out` contra 185.45.155.14 y .17; desde el VPS sí conectaban). Ticket
+  #892773; después volvió a aceptar. Las IP de ElevenLabs cambian en cada llamada (Google
+  Cloud 34.x / 35.x) y solo son fijas en su plan Enterprise: no se pueden autorizar por IP.
+- **ElevenLabs sigue el NAPTR del DNS**: `pbx.zadarma.com` le lleva a `pbxfr1`
+  (185.45.155.14), no a la IP que da una consulta normal. Para probar a mano, usar la IP que
+  sale en `remote_address` de los mensajes SIP.
+- **La API de marcar no contesta hasta que descuelgan** (27 s cuando saltó un buzón). Por eso
+  `ESPERA_AL_MARCAR_SIP_S` (120 s) en lugar de los 30 s de Twilio.
+- El buzón del móvil lo detecta Sara: la llamada queda con desenlace `buzon`.
+
+Cómo diagnosticar: activar «Mensajes SIP» en la página del número (Agents → Phone
+Numbers) y leer `GET /v1/convai/conversations/{id}/sip-messages` (tarda ~1 min) y la
+grabación `GET /v1/convai/conversations/{id}/audio`. Para probar sin molestar a nadie,
+llamar al `4444` de Zadarma con un agente temporal de 60 s como máximo.
 
 ## Pendiente de medir en real
 
