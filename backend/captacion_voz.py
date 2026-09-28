@@ -808,6 +808,22 @@ def _reclamar_envio(llamada_id: str) -> bool:
     return reclamada == 1
 
 
+def _estado_del_envio(llamada_id: str) -> str:
+    with _db() as conn:
+        fila = conn.execute("SELECT informacion FROM llamadas_voz WHERE id=?", (llamada_id,)).fetchone()
+    return str(fila[0] or "") if fila else ""
+
+
+# Si el sello ya estaba puesto. Nunca "ya se le ha mandado" sin que el canal lo aceptara
+# (docs/NORMAS_AGENTE_IA.md, regla 4): enviando = aun no se sabe; no_enviada = fallo, y
+# Pablo ya tiene el aviso para escribirle el.
+_MENSAJE_YA_RECLAMADO = {
+    "enviada": "Ya se le ha mandado la informacion. Diselo en una frase y despidete.",
+    "enviando": "Se le esta mandando ahora mismo. Dile que le llegara en un rato y despidete.",
+    "no_enviada": "Apuntado. Dile que se lo mandamos en un rato y despidete.",
+}
+
+
 def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     dado = str(cuerpo.get("email") or "").strip().lower().replace(" ", "")
     if dado and not _EMAIL.match(dado):
@@ -818,9 +834,10 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "error": "No tengo a donde mandarlo: pidele un email."}
     if not _reclamar_envio(fila["id"]):
         # Ya lo mando otro camino (la herramienta dos veces, o el respaldo al colgar
-        # mientras la herramienta seguia): como mucho un envio por llamada.
-        return {"ok": True, "reclamada": False,
-                "mensaje": "Ya se le ha mandado la informacion. Diselo en una frase y despidete."}
+        # mientras la herramienta seguia): como mucho un envio por llamada. Lo que se le
+        # dice depende de como quedo: solo "ya se le ha mandado" si de verdad salio.
+        return {"ok": True, "reclamada": False, "mensaje": _MENSAJE_YA_RECLAMADO.get(
+            _estado_del_envio(fila["id"]), _MENSAJE_YA_RECLAMADO["no_enviada"])}
     negocio = fila["negocio"] or "tu negocio"
     enlace = enlace_de_demo(email_negocio)
     if email_negocio:

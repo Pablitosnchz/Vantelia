@@ -81,6 +81,30 @@ def test_si_sara_llama_dos_veces_a_la_herramienta_sale_un_correo(llamada, envios
     assert len(envios["avisos"]) == 1
 
 
+def test_si_el_primer_envio_fallo_no_le_dice_que_ya_se_lo_mando(llamada, envios, captacion, monkeypatch):  # noqa: F811
+    """Astra, 28-sep: el sello no puede convertir un fallo en "ya se le ha mandado"."""
+    from backend import outreach
+
+    def buzon_caido(mensaje):
+        raise RuntimeError("SMTP caido")
+
+    llamada_id, _ = llamada
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", buzon_caido)
+    captacion.herramienta("enviar_informacion", {"_llamada": llamada_id, "email": "jose@pelu.es"})
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada_id, "email": "jose@pelu.es"})
+    assert "Ya se le ha mandado" not in r["mensaje"] and "mandamos en un rato" in r["mensaje"]
+    assert captacion._fila(llamada_id)["informacion"] == "no_enviada"
+    assert len(envios["avisos"]) == 1, "Pablo ya tiene el aviso de que le toca escribirle"
+
+
+def test_si_el_envio_sigue_en_marcha_no_le_dice_que_ya_salio(llamada, envios, captacion):  # noqa: F811
+    llamada_id, _ = llamada
+    captacion._actualizar(llamada_id, informacion="enviando")
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada_id, "email": "jose@pelu.es"})
+    assert "Ya se le ha mandado" not in r["mensaje"] and "ahora mismo" in r["mensaje"]
+    assert envios["email"] == []
+
+
 @pytest.mark.parametrize("cambio", [
     {"quiere_informacion": False},
     {"quiere_informacion": "no se"},

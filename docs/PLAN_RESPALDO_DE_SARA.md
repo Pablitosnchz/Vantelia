@@ -35,7 +35,7 @@ Regla: **como mucho un envío por llamada; ante la duda, no se manda.**
 |---|---|---|
 | Sara sí llamó a `enviar_informacion` | Doble envío | Sello compartido: `_enviar_informacion` (la usan la herramienta y el respaldo) reclama la columna `informacion` con `UPDATE ... WHERE informacion=''` ANTES de mandar; solo un camino gana |
 | El análisis llega mientras la herramienta aún manda (timeout de ElevenLabs) | Doble envío (lo cazó Astra en la primera versión, que sellaba `resultado` después de enviar) | El mismo sello: la herramienta ya lo tiene en `enviando` y el respaldo no manda |
-| Sara llama dos veces a la herramienta | Dos correos | El mismo sello; la segunda vez responde «ya se le ha mandado» |
+| Sara llama dos veces a la herramienta | Dos correos | El mismo sello; la segunda vez se le dice lo que pasó de verdad: «ya se le ha mandado» solo si salió (`enviada`), «se le está mandando» si sigue `enviando`, «se lo mandamos en un rato» si falló (Astra: nunca convertir un fallo en éxito, `NORMAS_AGENTE_IA.md` regla 4) |
 | El análisis llega dos veces (aviso y recogida horaria) o a la vez | Doble envío | El mismo sello |
 | El proceso muere a mitad del envío | ¿Reintentar? | Queda en `enviando` y no se reintenta: antes uno de menos que dos |
 | Corrige el correo después de mandado | Se queda con el primero | Aceptado: el aviso a Pablo lleva el correo al que salió |
