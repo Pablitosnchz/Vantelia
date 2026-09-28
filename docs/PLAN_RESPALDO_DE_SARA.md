@@ -33,8 +33,12 @@ Regla: **como mucho un envío por llamada; ante la duda, no se manda.**
 
 | Situación | Riesgo | Regla |
 |---|---|---|
-| Sara sí llamó a `enviar_informacion` | Doble envío | La herramienta pone `resultado`; el respaldo solo actúa con `resultado` vacío |
-| El análisis llega dos veces (aviso y recogida horaria) o a la vez | Doble envío | El respaldo reclama el sello con `UPDATE ... WHERE resultado=''` antes de enviar: solo uno gana |
+| Sara sí llamó a `enviar_informacion` | Doble envío | Sello compartido: `_enviar_informacion` (la usan la herramienta y el respaldo) reclama la columna `informacion` con `UPDATE ... WHERE informacion=''` ANTES de mandar; solo un camino gana |
+| El análisis llega mientras la herramienta aún manda (timeout de ElevenLabs) | Doble envío (lo cazó Astra en la primera versión, que sellaba `resultado` después de enviar) | El mismo sello: la herramienta ya lo tiene en `enviando` y el respaldo no manda |
+| Sara llama dos veces a la herramienta | Dos correos | El mismo sello; la segunda vez responde «ya se le ha mandado» |
+| El análisis llega dos veces (aviso y recogida horaria) o a la vez | Doble envío | El mismo sello |
+| El proceso muere a mitad del envío | ¿Reintentar? | Queda en `enviando` y no se reintenta: antes uno de menos que dos |
+| Corrige el correo después de mandado | Se queda con el primero | Aceptado: el aviso a Pablo lleva el correo al que salió |
 | El análisis dice «sí» pero el desenlace es rechazo, número equivocado, buzón o colgó | Escribir a quien no quería | No se manda |
 | El teléfono está en «no llamar», o el correo en bajas, rebotado o dado de baja | Escribir a una baja | No se manda |
 | Ya hay otro resultado (volver a llamar, no llamar) | Contradecir lo que se acordó | No se manda |

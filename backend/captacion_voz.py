@@ -168,7 +168,10 @@ def _db():
                           ("responsable_email", "TEXT NOT NULL DEFAULT ''"),
                           ("responsable_nota", "TEXT NOT NULL DEFAULT ''"),
                           ("se_pone_ahora", "INTEGER NOT NULL DEFAULT 0"),
-                          ("rellamada_de", "TEXT NOT NULL DEFAULT ''")):
+                          ("rellamada_de", "TEXT NOT NULL DEFAULT ''"),
+                          # informacion: sello del envio ('' / enviando / enviada / no_enviada).
+                          # Lo reclaman la herramienta y el respaldo ANTES de mandar.
+                          ("informacion", "TEXT NOT NULL DEFAULT ''")):
         if columna not in columnas:
             conn.execute("ALTER TABLE llamadas_voz ADD COLUMN %s %s" % (columna, tipo))
     return conn
@@ -793,6 +796,18 @@ def _mandar_correo(email: str, contenido: Dict[str, str]) -> bool:
     return True
 
 
+def _reclamar_envio(llamada_id: str) -> bool:
+    """El sello del envio, atomico: True solo para el primer camino que llega.
+
+    Se reclama ANTES de mandar. Si el proceso muere a mitad, queda en 'enviando' y no
+    se reintenta: antes un envio de menos (Pablo ve la llamada) que dos correos."""
+    with _db() as conn:
+        reclamada = conn.execute("UPDATE llamadas_voz SET informacion='enviando', actualizada=? "
+                                 "WHERE id=? AND informacion=''", (_ahora(), llamada_id)).rowcount
+        conn.commit()
+    return reclamada == 1
+
+
 def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     dado = str(cuerpo.get("email") or "").strip().lower().replace(" ", "")
     if dado and not _EMAIL.match(dado):
@@ -801,6 +816,11 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     destino_email = dado or ("" if es_movil(fila["telefono"]) else email_negocio)
     if not destino_email and not es_movil(fila["telefono"]):
         return {"ok": False, "error": "No tengo a donde mandarlo: pidele un email."}
+    if not _reclamar_envio(fila["id"]):
+        # Ya lo mando otro camino (la herramienta dos veces, o el respaldo al colgar
+        # mientras la herramienta seguia): como mucho un envio por llamada.
+        return {"ok": True, "reclamada": False,
+                "mensaje": "Ya se le ha mandado la informacion. Diselo en una frase y despidete."}
     negocio = fila["negocio"] or "tu negocio"
     enlace = enlace_de_demo(email_negocio)
     if email_negocio:
@@ -823,7 +843,8 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         canal, enviado = ("email" if destino_email else "sms"), False
     notas = textnorm._sanitize_text(str(cuerpo.get("notas") or ""), allow_multiline=True)[:500]
     nombre_contacto = textnorm._sanitize_text(str(cuerpo.get("nombre") or ""))[:80]
-    _actualizar(fila["id"], resultado="interesado", email=destino_email,
+    _actualizar(fila["id"], informacion="enviada" if enviado else "no_enviada",
+                resultado="interesado", email=destino_email,
                 notas=("%s. %s. %s" % (canal + (" enviado" if enviado else " NO enviado"),
                                        nombre_contacto, notas)).strip(". "))
     _avisar_interes(fila, destino_email or fila["telefono"], nombre_contacto, notas, canal, enviado, enlace)
@@ -874,7 +895,8 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
 # cuando. Lo que el modelo puede hacer mal lo cubre el codigo: con el analisis de
 # ElevenLabs al terminar (DATOS_AL_TERMINAR) se manda la informacion si la acepto.
 # Como mucho UNA vez por llamada: la herramienta y el respaldo comparten el sello
-# (`resultado`), y el aviso de fin puede llegar dos veces (aviso y recogida horaria).
+# (columna `informacion`, `_reclamar_envio`, dentro de `_enviar_informacion`), y el
+# aviso de fin puede llegar dos veces (aviso y recogida horaria).
 # Ante la duda, no se manda (docs/PLAN_RESPALDO_DE_SARA.md, con la tabla de fallos).
 
 DESENLACES_SIN_ENVIO = ("rechazo", "persona_equivocada", "buzon", "colgo_al_principio")
@@ -919,14 +941,11 @@ def enviar_de_respaldo(llamada_id: str, datos: Dict[str, Any]) -> bool:
         return False  # un fijo sin correo: no hay a donde mandarlo
     if _no_se_le_escribe(destino) or _no_se_le_escribe(email_negocio):
         return False
-    with _db() as conn:
-        reclamada = conn.execute("UPDATE llamadas_voz SET resultado='interesado', actualizada=? "
-                                 "WHERE id=? AND resultado=''", (_ahora(), llamada_id)).rowcount
-        conn.commit()
-    if reclamada != 1:
-        return False  # otro camino se le adelanto
-    _enviar_informacion(fila, {"email": dado, "notas": "De respaldo: Sara dijo que lo mandaba y no lo hizo."})
-    return True
+    # El sello (_reclamar_envio) lo pone _enviar_informacion, el MISMO que usa la
+    # herramienta: si esta sigue mandando cuando llega el analisis, aqui no se manda.
+    respuesta = _enviar_informacion(
+        fila, {"email": dado, "notas": "De respaldo: Sara dijo que lo mandaba y no lo hizo."})
+    return bool(respuesta.get("ok")) and respuesta.get("reclamada", True) is not False
 
 
 INTERLOCUTORES = ("duena_o_encargada", "empleado", "no_se_sabe")

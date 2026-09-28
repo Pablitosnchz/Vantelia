@@ -46,6 +46,41 @@ def test_si_sara_ya_lo_mando_no_se_repite(llamada, envios, captacion):  # noqa: 
     assert _correos(envios) == ["jose@pelu.es"]
 
 
+def test_si_el_analisis_llega_mientras_la_herramienta_manda_sale_un_correo(llamada, envios, monkeypatch):  # noqa: F811
+    """Astra, 28-sep: la herramienta tarda (timeout de ElevenLabs) y el analisis llega a
+    mitad del envio. Sin sello compartido ANTES de mandar, salian dos correos."""
+    from backend import outreach
+
+    llamada_id, transcripciones = llamada
+    anotar = outreach._outreach_send_email_object
+
+    def mandar_y_que_llegue_el_analisis(mensaje):
+        if not envios["email"]:
+            transcripciones.guardar(_analisis(), "aviso")  # el respaldo, en mitad del envio
+        anotar(mensaje)
+
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", mandar_y_que_llegue_el_analisis)
+    transcripciones.captacion_voz.herramienta("enviar_informacion", {"_llamada": llamada_id, "email": "jose@pelu.es"})
+    assert _correos(envios) == ["jose@pelu.es"]
+    assert transcripciones.captacion_voz._fila(llamada_id)["informacion"] == "enviada"
+
+
+def test_si_el_respaldo_ya_lo_mando_la_herramienta_no_repite(llamada, envios, captacion):  # noqa: F811
+    llamada_id, transcripciones = llamada
+    transcripciones.guardar(_analisis(), "aviso")
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada_id, "email": "jose@pelu.es"})
+    assert r["ok"] is True and "Ya se le ha mandado" in r["mensaje"]
+    assert _correos(envios) == ["jose@pelu.es"]
+
+
+def test_si_sara_llama_dos_veces_a_la_herramienta_sale_un_correo(llamada, envios, captacion):  # noqa: F811
+    llamada_id, _ = llamada
+    for _vez in range(2):
+        captacion.herramienta("enviar_informacion", {"_llamada": llamada_id, "email": "jose@pelu.es"})
+    assert _correos(envios) == ["jose@pelu.es"]
+    assert len(envios["avisos"]) == 1
+
+
 @pytest.mark.parametrize("cambio", [
     {"quiere_informacion": False},
     {"quiere_informacion": "no se"},
