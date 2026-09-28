@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Monta (o rehace) el puente SIP de Sara en el VPS: ElevenLabs -> este Asterisk -> Zadarma.
+# Por que existe y como se comprueba: docs/SARA_SIP.md, "El puente".
+#
+# Uso, como root en el VPS:   bash /srv/vantelia/deploy/sara-puente/montar.sh
+#
+# Lee del .env de la app las credenciales de la extension de Zadarma
+# (ZADARMA_EXTENSION_USUARIO / _CLAVE). La clave con la que entra ElevenLabs se genera la
+# primera vez y se guarda en /srv/sara-puente/clave_elevenlabs (va tambien en el .env de la
+# app como CAPTACION_SIP_CLAVE). Nada de esto va a git.
+set -euo pipefail
+
+ORIGEN="$(cd "$(dirname "$0")" && pwd)"
+DESTINO=/srv/sara-puente
+ENV_APP=/srv/vantelia/.env
+IMAGEN="${SARA_PUENTE_IMAGEN:-andrius/asterisk:latest}"
+
+val() { grep "^$1=" "$ENV_APP" | tail -1 | cut -d= -f2- | tr -d '"\r'; }
+ZU=$(val ZADARMA_EXTENSION_USUARIO)
+ZP=$(val ZADARMA_EXTENSION_CLAVE)
+if [ -z "$ZU" ] || [ -z "$ZP" ]; then
+  echo "Faltan ZADARMA_EXTENSION_USUARIO / ZADARMA_EXTENSION_CLAVE en $ENV_APP" >&2
+  exit 1
+fi
+
+mkdir -p "$DESTINO"
+chmod 700 "$DESTINO"
+[ -s "$DESTINO/clave_elevenlabs" ] || openssl rand -hex 16 > "$DESTINO/clave_elevenlabs"
+chmod 600 "$DESTINO/clave_elevenlabs"
+CL=$(cat "$DESTINO/clave_elevenlabs")
+
+# Las claves son alfanumericas (Zadarma) y hex (la nuestra): sed con '|' no las rompe.
+sed -e "s|__ZADARMA_USUARIO__|$ZU|g" -e "s|__ZADARMA_CLAVE__|$ZP|g" -e "s|__CLAVE_ELEVENLABS__|$CL|g" \
+  "$ORIGEN/pjsip.conf.plantilla" > "$DESTINO/pjsip.conf"
+cp "$ORIGEN/extensions.conf" "$ORIGEN/modules.conf" "$ORIGEN/rtp.conf" "$DESTINO/"
+
+docker pull -q "$IMAGEN" >/dev/null
+# Asterisk baja a su usuario 'asterisk': si pjsip.conf es solo de root no lo lee y el puente
+# arranca sin SIP ("Permission denied", 28-sep-2026). Sigue siendo 600: nadie mas lo lee.
+UID_A=$(docker run --rm --entrypoint id "$IMAGEN" -u asterisk)
+GID_A=$(docker run --rm --entrypoint id "$IMAGEN" -g asterisk)
+chown "$UID_A:$GID_A" "$DESTINO/pjsip.conf"
+chmod 600 "$DESTINO/pjsip.conf"
+
+docker rm -f sara-puente >/dev/null 2>&1 || true
+# Red del host: el audio va por 10000-10100/udp y mapear ese rango en docker no aporta nada.
+docker run -d --name sara-puente --network host --restart unless-stopped \
+  -v "$DESTINO/pjsip.conf:/etc/asterisk/pjsip.conf:ro" \
+  -v "$DESTINO/extensions.conf:/etc/asterisk/extensions.conf:ro" \
+  -v "$DESTINO/modules.conf:/etc/asterisk/modules.conf:ro" \
+  -v "$DESTINO/rtp.conf:/etc/asterisk/rtp.conf:ro" \
+  "$IMAGEN" >/dev/null
+
+sleep 15
+docker exec sara-puente asterisk -rx "pjsip show registrations"
+echo "Puertos del puente (solo deberia salir 5099, mas algun puerto alto de consultas DNS):"
+ss -lntup | grep -i asterisk | awk '{print $1, $5}' | sort -u

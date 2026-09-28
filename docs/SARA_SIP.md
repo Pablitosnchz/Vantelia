@@ -107,3 +107,56 @@ llamar al `4444` de Zadarma con un agente temporal de 60 s como máximo.
   guion decía «si ya han dicho que son el negocio, di solo "Hola, buenas, soy Sara…" y
   sigue» y tomó el «sí» de Pablo por esa confirmación. Pablo pidió quitarlo. Si se
   reintenta, sin esa frase y con la presentación una sola vez.
+
+## El puente (28-sep-2026)
+
+**Por qué.** Con ElevenLabs marcando directo a Zadarma, el audio del negocio llegaba a
+Sara tarde (5-25 s) o nunca: en la grabación, silencio digital exacto entre sus frases.
+Llamando desde el teléfono web de Zadarma, el audio era instantáneo. Un Asterisk en el
+VPS (IP pública, en París, cerca de Zadarma) hace de teléfono registrado en la extensión:
+ElevenLabs llama al puente y el puente marca por Zadarma. Además deja **medir el audio de
+cada sentido** antes de que nadie lo toque.
+
+**Qué hay.**
+- Contenedor `sara-puente` (imagen `andrius/asterisk`, red del host), configuración en
+  `/srv/sara-puente` (fuera de `/srv/vantelia`, que el despliegue limpia). Se monta o se
+  rehace con `bash /srv/vantelia/deploy/sara-puente/montar.sh`.
+- Expuesto: solo el **5099** (TCP/UDP), por donde entra ElevenLabs con el usuario
+  `sara_el` y una clave aleatoria, y el audio **10000-10100/udp**. Los módulos que abrían
+  otros puertos (IAX2, DUNDi, UNISTIM…) están desactivados (`modules.conf`).
+- Solo marca `+34` seguido de 6, 7, 8 o 9: el puente no sirve para llamar fuera.
+- `.env` de la app: `CAPTACION_SIP_HOST=72.62.188.104:5099`, `CAPTACION_SIP_USUARIO=sara_el`,
+  `CAPTACION_SIP_CLAVE` (la de `/srv/sara-puente/clave_elevenlabs`),
+  `CAPTACION_SIP_TRANSPORTE=tcp`. Las credenciales de la extensión, que usa el puente, van en
+  `ZADARMA_EXTENSION_USUARIO` / `ZADARMA_EXTENSION_CLAVE`.
+- **Llamadas que entran al 91**: la extensión la tiene registrada el puente, que las rechaza
+  como «ocupado». En Zadarma, la extensión 100 tiene que desviar al móvil de Pablo.
+
+**Medir una llamada.** Durante la llamada,
+`tcpdump -i eth0 -n -s 0 -w llamada.pcap 'udp portrange 10000-10100'`; después,
+`python3 deploy/sara-puente/analizar_rtp.py llamada.pcap`: nivel de cada sentido cada
+0,5 s, esperas entre que habla el negocio y responde Sara, y volumen de Sara por tramo.
+Sin ElevenLabs:
+`docker exec sara-puente asterisk -rx "channel originate PJSIP/+34…@zadarma extension s@prueba-audio"`
+pita cada segundo y graba lo que dice quien contesta.
+
+**Lo medido.**
+- 16:43, por el puente: la voz del móvil llegó desde el segundo 0 (servidor de medios de
+  Zadarma 185.45.152.62), a 50 paquetes/s en los dos sentidos.
+- 17:05, por el puente: el servidor de medios 185.45.152.34 de Zadarma envió **silencio
+  digital (−72 dBFS) durante 16 s tras descolgar**; luego la voz llegó bien. El retraso no
+  viene de ElevenLabs.
+- 17:18-17:25, **sin ElevenLabs** (el puente origina la llamada, pone un mensaje al
+  descolgar y graba lo que llega): 4 de 4 bien, por la centralita y por la cuenta SIP.
+- 17:31-17:33, tres llamadas de Sara por el puente: una con **silencio digital puro
+  (−72,2 dBFS) durante 20 s** mientras Pablo hablaba (servidor .34) y dos bien (.18 y .34).
+  En las buenas, cuando el negocio calla se ve el ruido de la línea (−70); en las malas,
+  nada. En total, 2 de 9 llamadas por el puente con ese silencio, siempre en lo que manda
+  Zadarma, y no ligado a un servidor concreto.
+- Métricas de ElevenLabs por turno cuando el audio llega: el modelo empieza a responder en
+  0,6 s y la voz en 0,1 s (unos 2 s desde que el negocio calla).
+- Pendiente: separar Zadarma del operador del móvil (Orange) llamando a otro operador.
+  Ticket de Zadarma #892773.
+
+**Quitarlo.** `docker rm -f sara-puente` y devolver `CAPTACION_SIP_*` a la extensión de
+Zadarma (`pbx.zadarma.com`, TCP).
