@@ -1,0 +1,3 @@
+# Se ejecuta y se lee en el VPS (bash, Asterisk, python3): siempre con finales de linea LF,
+# aunque la copia de Windows tenga core.autocrlf=true. Con CRLF, montar.sh falla en bash.
+* text eol=lf
