@@ -77,6 +77,9 @@ def test_cancelar_obliga_a_buscar_la_cita_no_el_catalogo(api_module, monkeypatch
     assert estado.intencion == "cancelar"
     assert obligadas[:1] == ["consultar_cita"], "le pedia fecha y hora sin buscar su cita: %r" % obligadas
     assert "buscar_servicio" not in obligadas
+    # Revision de Astra: si no la encuentra (aqui la busqueda siempre falla), se busca UNA
+    # vez y se le deja pedir el numero; antes se obligaba a buscarla en las seis vueltas.
+    assert obligadas.count("consultar_cita") == 1, obligadas
 
 
 def test_pedir_un_servicio_sigue_mirando_el_catalogo(api_module, monkeypatch):  # noqa: F811

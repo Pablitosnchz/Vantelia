@@ -4147,6 +4147,9 @@ async def responder(
     # sin haberla creado. La clienta se va sin cita y creyendo que la tiene.
     creada = False      # una tool ha CREADO o movido una cita en este turno
     mirada_la_cita = False  # se ha consultado su cita en este turno
+    # Se ha INTENTADO buscar su cita (con o sin exito). Si no aparece, lo que toca es
+    # pedirle el numero, no volver a buscarla en cada vuelta (revision de Astra).
+    buscada_la_cita = False
     dias_mirados = 0
     ya_creadas: set = set()
     try:
@@ -4260,7 +4263,7 @@ async def responder(
             # despliegue del 28-sep-2026, dos de dos).
             gestiona_una_cita = estado.intencion in ("cancelar", "reprogramar")
             if (not remate and gestiona_una_cita and not estado.codigo
-                    and not mirada_la_cita):
+                    and not buscada_la_cita):
                 remate = "consultar_cita"
             # Ha dicho que se quiere hacer, pero aun no hay servicio elegido: lo
             # primero es MIRAR EL CATALOGO con lo que ha dicho. Preguntarle de
@@ -5095,6 +5098,8 @@ async def responder(
                         )
                 if llamada.function.name == "reprogramar_cita" and resultado.get("ok"):
                     estado.veces_movida = int(getattr(estado, "veces_movida", 0)) + 1
+                if llamada.function.name == "consultar_cita":
+                    buscada_la_cita = True
                 if resultado.get("ok"):
                     if llamada.function.name in ("crear_cita", "cancelar_cita",
                                                  "reprogramar_cita"):
