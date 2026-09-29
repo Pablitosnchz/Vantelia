@@ -80,10 +80,10 @@ def test_apagado_mientras_contesta_robinson_no_marca(lanzador):  # noqa: F811
 def test_si_la_franja_se_acaba_mientras_contesta_robinson_no_marca(lanzador):  # noqa: F811
     lanzador.guardar_config(activo=True)
     _prospecto(lanzador, "a@pelu.es", "911111111")
-    hora = [datetime(2026, 9, 29, 10, 29, 50, tzinfo=timezone.utc)]  # 12:29:50 en Madrid
+    hora = [datetime(2026, 9, 29, 11, 29, 50, tzinfo=timezone.utc)]  # 13:29:50 en Madrid
 
     def robinson(numeros):
-        hora[0] += timedelta(seconds=20)  # contesta a las 12:30:10, ya fuera de la franja
+        hora[0] += timedelta(seconds=20)  # contesta a las 13:30:10, ya fuera de la franja
         return {n: False for n in numeros}
 
     marcador = _Marcador(lanzador, hora[0])

@@ -28,10 +28,12 @@ REGLAS (Circular AEPD 1/2023 y sentido comun)
 - Maximo 2 intentos por telefono, separados 2 dias, y solo si el primero no lo cogio
   nadie. Si hubo conversacion, no se vuelve a llamar solo.
 - Nada de llamar a quien recibio un correo nuestro hace menos de 3 dias.
-- De lunes a viernes, 10:00-12:30 y 16:00-18:00 (hora de Madrid): a primera hora y a
+- De lunes a viernes, 9:30-13:30 y 16:00-19:30 (hora de Madrid): a primera hora y a
   mediodia estan con clientas. El lunes lo anadio Pablo (24-sep-2026); el criterio
   inicial lo dejaba fuera porque cierran muchas peluquerias, y a esas no les coge
-  nadie: la llamada se queda en "no contesta" y cuenta como intento.
+  nadie: la llamada se queda en "no contesta" y cuenta como intento. Ampliado el
+  29-sep-2026 (Pablo: "explotarlo lo que se pueda"; antes 10:00-12:30 y 16:00-18:00),
+  siempre dentro de 9-21 h laborables.
 - Una llamada cada vez, con un hueco minimo entre dos (config) y un cupo diario.
 """
 from __future__ import annotations
@@ -53,7 +55,7 @@ from backend import (captacion_voz, clients, cuenta_elevenlabs, lista_robinson, 
 
 ZONA = ZoneInfo("Europe/Madrid")
 DIAS_DE_LLAMADA = (0, 1, 2, 3, 4)  # lunes a viernes
-FRANJAS = ((time(10, 0), time(12, 30)), (time(16, 0), time(18, 0)))
+FRANJAS = ((time(9, 30), time(13, 30)), (time(16, 0), time(19, 30)))
 MAX_INTENTOS = 2
 DIAS_ENTRE_INTENTOS = 2
 DIAS_TRAS_UN_CORREO = 3
@@ -472,7 +474,7 @@ def _impedimento(ahora: datetime) -> str:
     if faltan:
         return faltan[0]
     if not en_horario(ahora):
-        return "Fuera de horario (lunes a viernes, 10:00-12:30 y 16:00-18:00)."
+        return "Fuera de horario (lunes a viernes, 9:30-13:30 y 16:00-19:30)."
     with _db() as conn:
         hoy = conn.execute("SELECT COUNT(*) FROM llamadas_voz WHERE origen='auto' AND creada >= ?",
                            (_iso(_inicio_del_dia(ahora)),)).fetchone()[0]

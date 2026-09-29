@@ -265,11 +265,15 @@ def test_solo_negocios_que_trabajan_con_citas(lanzador):
 @pytest.mark.parametrize("ahora,llama", [
     (datetime(2026, 9, 28, 8, 30, tzinfo=timezone.utc), True),    # lunes 10:30 (Pablo lo anadio el 24-sep)
     (datetime(2026, 9, 27, 8, 30, tzinfo=timezone.utc), False),   # domingo 10:30
-    (datetime(2026, 9, 29, 11, 0, tzinfo=timezone.utc), False),   # martes 13:00
+    (datetime(2026, 9, 29, 11, 29, tzinfo=timezone.utc), True),   # martes 13:29 (ampliado el 29-sep)
+    (datetime(2026, 9, 29, 11, 30, tzinfo=timezone.utc), False),  # martes 13:30
+    (datetime(2026, 9, 29, 13, 59, tzinfo=timezone.utc), False),  # martes 15:59
     (datetime(2026, 9, 29, 14, 30, tzinfo=timezone.utc), True),   # martes 16:30
-    (datetime(2026, 9, 29, 16, 0, tzinfo=timezone.utc), False),   # martes 18:00
+    (datetime(2026, 9, 29, 17, 29, tzinfo=timezone.utc), True),   # martes 19:29
+    (datetime(2026, 9, 29, 17, 30, tzinfo=timezone.utc), False),  # martes 19:30
     (datetime(2026, 10, 3, 8, 30, tzinfo=timezone.utc), False),   # sabado 10:30
-    (datetime(2026, 10, 2, 7, 59, tzinfo=timezone.utc), False),   # viernes 9:59
+    (datetime(2026, 10, 2, 7, 29, tzinfo=timezone.utc), False),   # viernes 9:29
+    (datetime(2026, 10, 2, 7, 30, tzinfo=timezone.utc), True),    # viernes 9:30
 ])
 def test_solo_en_horario_de_madrid(lanzador, ahora, llama):
     lanzador.guardar_config(activo=True)
