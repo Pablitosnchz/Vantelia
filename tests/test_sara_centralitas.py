@@ -80,6 +80,35 @@ def test_el_guion_sabe_de_grabaciones_esperas_y_de_quien_esta_ocupado(captacion)
     assert "hablo_una_persona" in agente["platform_settings"]["data_collection"]
 
 
+# --- Revision de Astra (29-sep): coherencia del guion y tope de duracion --------------------
+
+def test_al_apuntar_a_la_duena_la_herramienta_no_manda_repetir_la_demo(captacion):  # noqa: F811
+    """El paso 5 pregunta por quien decide DESPUES de la demo, y la herramienta contestaba
+    "sigue con la demostracion": dos ordenes que chocan."""
+    hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "", origen="auto", cliente=_Falso())
+    r = captacion.herramienta("anotar_responsable", {"_llamada": hecho["llamada"], "interlocutor": "duena_o_encargada"})
+    assert r["ok"] is True and "demostracion" not in r["mensaje"]
+
+
+def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
+    guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
+    assert "las SALIDAS de abajo mandan sobre estos pasos" in guion
+    assert "\"No me interesa\": agradece, despidete y usa `end_call`" in guion
+    assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
+    assert "sin repetir el gancho entero" in guion
+    assert "Nunca finjas que le pasas la llamada" in guion
+    # Rellamada a quien decide que no esta: sin demo a quien coge.
+    assert "sin gancho ni demostracion a quien te ha cogido" in guion
+    # Menu que exige pulsar una tecla: no se puede navegar.
+    assert "no digas que has pulsado nada y cuelga con `end_call`" in guion
+
+
+def test_la_llamada_tiene_un_tope_de_duracion(captacion):  # noqa: F811
+    agente = captacion.agente_de_captacion("https://app.test")
+    assert agente["conversation_config"]["conversation"]["max_duration_seconds"] == 300
+    assert agente["conversation_config"]["turn"]["silence_end_call_timeout"] == 75, "el silencio, como estaba"
+
+
 # --- Si no hablo nadie: se reintenta y no hay correo --------------------------------------
 
 def _analisis(**datos):
