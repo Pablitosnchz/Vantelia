@@ -643,6 +643,50 @@ def _salida_sip() -> Dict[str, Any]:
             "credentials": {"username": settings.CAPTACION_SIP_USUARIO, "password": settings.CAPTACION_SIP_CLAVE}}
 
 
+def _hay_llamada_viva() -> bool:
+    """Una llamada marcando o en curso (y no muerta): no se le quita el numero debajo."""
+    from backend import lanzador_llamadas
+
+    hace = (timeutils._utc_now() - timedelta(minutes=lanzador_llamadas.MINUTOS_LLAMADA_VIVA)).isoformat(
+        timespec="seconds")
+    with _db() as conn:
+        return conn.execute("SELECT 1 FROM llamadas_voz WHERE estado IN ('marcando', 'en_curso') "
+                            "AND actualizada >= ? LIMIT 1", (hace,)).fetchone() is not None
+
+
+def _liberar_numero_de_otra_cuenta(cliente: httpx.Client) -> None:
+    """Quita el 91 de la cuenta de la reserva que lo tenga (no de la activa). Lanza si no
+    se puede: nunca con una llamada en curso, y nunca de una cuenta que no sea nuestra."""
+    from backend import cuenta_elevenlabs
+
+    if _hay_llamada_viva():
+        raise RuntimeError("El numero SIP esta en otra cuenta y hay una llamada en curso: se movera en la "
+                           "siguiente pasada.")
+    activa = settings.ELEVENLABS_API_KEY
+    for clave in cuenta_elevenlabs.claves():
+        if clave == activa:
+            continue
+        cabeceras = {"xi-api-key": clave}
+        r = cliente.get(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=cabeceras)
+        if r.status_code != 200:
+            continue
+        datos = r.json()
+        numeros = datos if isinstance(datos, list) else (datos or {}).get("phone_numbers") or []
+        for numero in numeros:
+            if str(numero.get("phone_number") or "") != settings.CAPTACION_SIP_NUMERO:
+                continue
+            quitado = cliente.delete("%s/v1/convai/phone-numbers/%s" % (voz_elevenlabs.API,
+                                                                        numero.get("phone_number_id")),
+                                     headers=cabeceras)
+            if quitado.status_code >= 400:
+                raise RuntimeError("No se pudo quitar el numero SIP de la cuenta %s (%s)"
+                                   % (cuenta_elevenlabs.huella(clave), quitado.status_code))
+            settings.logger.warning("[captacion_voz] numero SIP quitado de la cuenta %s para importarlo en %s",
+                                    cuenta_elevenlabs.huella(clave), cuenta_elevenlabs.huella(activa))
+            return
+    raise RuntimeError("El numero SIP ya esta en una cuenta de ElevenLabs que no es de la reserva: no se toca.")
+
+
 def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
     """El 91 del proveedor SIP importado en la cuenta activa y con Sara asignada. Devuelve su id."""
     from backend import clients
@@ -663,11 +707,18 @@ def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
                 raise RuntimeError("ElevenLabs no actualizo el numero SIP (%s): %s"
                                    % (p.status_code, _sin_secretos(p.text)[:200]))
             return numero_id
-    r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(), json={
-        "phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (SIP)",
-        "provider": "sip_trunk", "agent_id": agent_id,
-        "inbound_trunk_config": {"media_encryption": "disabled"},
-        "outbound_trunk_config": _salida_sip()})
+    cuerpo = {"phone_number": settings.CAPTACION_SIP_NUMERO, "label": "Sara - captacion (SIP)",
+              "provider": "sip_trunk", "agent_id": agent_id,
+              "inbound_trunk_config": {"media_encryption": "disabled"},
+              "outbound_trunk_config": _salida_sip()}
+    r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(), json=cuerpo)
+    if r.status_code == 409 and "already exists" in r.text:
+        # ElevenLabs no deja el mismo numero en dos cuentas: al rotar seguia en la vieja y la
+        # rotacion fallaba siempre (29-sep-2026). Se quita de la otra cuenta y se reintenta
+        # UNA vez.
+        _liberar_numero_de_otra_cuenta(cliente)
+        r = cliente.post(voz_elevenlabs.API + "/v1/convai/phone-numbers", headers=voz_elevenlabs._cabeceras(),
+                         json=cuerpo)
     numero_id = str((r.json() if r.status_code < 400 else {}).get("phone_number_id") or "")
     if not numero_id:
         raise RuntimeError("ElevenLabs no importo el numero SIP (%s): %s"

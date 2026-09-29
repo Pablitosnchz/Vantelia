@@ -382,3 +382,140 @@ def test_por_twilio_todo_sigue_igual(captacion, monkeypatch):  # noqa: F811
     monkeypatch.setattr(settings, "CAPTACION_VOZ_VIA", "")
     assert captacion.via_sip() is False
     assert "CAPTACION_TWILIO_NUMBER" in " ".join(lanzador_llamadas.bloqueos())
+
+
+# --- Cambiar de cuenta con el 91 (29-sep-2026) --------------------------------------------
+#
+# ElevenLabs no deja el mismo numero en dos cuentas ("Phone number ... already exists", 409),
+# y la rotacion importaba el 91 en la nueva ANTES de soltarlo de la vieja: fallaba siempre y
+# el vigilante lo reintentaba cada hora. Si la cuenta activa se hubiera quedado sin
+# creditos, Sara se habria quedado muda.
+
+NUMERO = "+34910000001"
+
+
+class _Cuentas:
+    """Varias cuentas de ElevenLabs de mentira: cada peticion va a la de su xi-api-key y un
+    numero solo puede estar en una cuenta a la vez."""
+
+    def __init__(self, numeros):
+        self.numeros = {clave: dict(ns) for clave, ns in numeros.items()}
+        self.peticiones = []
+        self._siguiente = 0
+
+    def _registrar(self, metodo, url, k):
+        clave = (k.get("headers") or {}).get("xi-api-key", "")
+        self.peticiones.append((metodo, url.rsplit("/v1/", 1)[-1], clave))
+        return clave, url.rsplit("/v1/", 1)[-1]
+
+    def get(self, url, **k):
+        clave, ruta = self._registrar("GET", url, k)
+        propios = self.numeros.get(clave, {})
+        if ruta == "convai/phone-numbers":
+            return _Respuesta(200, [{"phone_number_id": i, "phone_number": n} for i, n in propios.items()])
+        numero_id = ruta.rsplit("/", 1)[-1]
+        if ruta.startswith("convai/phone-numbers/") and numero_id in propios:
+            return _Respuesta(200, {"phone_number_id": numero_id, "phone_number": propios[numero_id]})
+        return _Respuesta(404, {}, texto='{"detail": "not found"}')
+
+    def post(self, url, **k):
+        clave, _ = self._registrar("POST", url, k)
+        numero = (k.get("json") or {}).get("phone_number")
+        if any(numero in ns.values() for ns in self.numeros.values()):
+            datos = {"detail": {"type": "conflict", "code": "resource_already_exists",
+                                "message": "Phone number %s already exists." % numero}}
+            return _Respuesta(409, datos, texto=json.dumps(datos))
+        self._siguiente += 1
+        numero_id = "phnum_%s_%d" % (clave, self._siguiente)
+        self.numeros.setdefault(clave, {})[numero_id] = numero
+        return _Respuesta(200, {"phone_number_id": numero_id})
+
+    def patch(self, url, **k):
+        self._registrar("PATCH", url, k)
+        return _Respuesta(200, {})
+
+    def delete(self, url, **k):
+        clave, ruta = self._registrar("DELETE", url, k)
+        numero_id = ruta.rsplit("/", 1)[-1]
+        if self.numeros.get(clave, {}).pop(numero_id, None) is None:
+            return _Respuesta(404, {})
+        return _Respuesta(200, {})
+
+    def close(self):
+        pass
+
+    def donde(self):
+        return {clave: sorted(ns.values()) for clave, ns in self.numeros.items() if ns}
+
+
+@pytest.fixture()
+def dos_cuentas(sip, monkeypatch):
+    """El 91 importado en la cuenta vieja (phnum_1); la activa pasa a ser la nueva."""
+    from backend import cuenta_elevenlabs, settings
+
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_nueva")
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_vieja", "k_nueva"])
+    monkeypatch.setattr(cuenta_elevenlabs, "estado", lambda **k: {"ok": True, "tipo": "", "problema": "", "aviso": ""})
+    monkeypatch.setattr(cuenta_elevenlabs, "_correo_rotacion", lambda *a, **k: None)
+    monkeypatch.setattr(cuenta_elevenlabs, "_correo_rotacion_fallida", lambda *a, **k: None)
+    return _Cuentas({"k_vieja": {"phnum_1": NUMERO}})
+
+
+def test_el_91_se_muda_de_la_cuenta_vieja_a_la_nueva(sip, dos_cuentas, api_module):  # noqa: F811
+    numero_id = sip.asegurar_numero_sip(dos_cuentas, "agent_nueva")
+    assert dos_cuentas.donde() == {"k_nueva": [NUMERO]}, "en una sola cuenta: la activa"
+    assert api_module.CONFIG_CLIENTES["vantelia"]["voice"][sip.CLAVE_NUMERO_SIP] == numero_id
+
+
+def test_con_una_llamada_en_curso_el_91_no_se_mueve(sip, dos_cuentas):
+    _marcar(sip)  # queda "en_curso"
+    with pytest.raises(RuntimeError) as error:
+        sip.asegurar_numero_sip(dos_cuentas, "agent_nueva")
+    assert "llamada en curso" in str(error.value)
+    assert dos_cuentas.donde() == {"k_vieja": [NUMERO]}
+    assert not [p for p in dos_cuentas.peticiones if p[0] == "DELETE"]
+
+
+def test_si_la_cuenta_vieja_no_lo_suelta_se_dice_claro(sip, dos_cuentas, monkeypatch):
+    monkeypatch.setattr(dos_cuentas, "delete", lambda url, **k: _Respuesta(500, {}))
+    with pytest.raises(RuntimeError) as error:
+        sip.asegurar_numero_sip(dos_cuentas, "agent_nueva")
+    assert "No se pudo quitar el numero SIP de la cuenta" in str(error.value)
+    assert dos_cuentas.donde() == {"k_vieja": [NUMERO]}
+
+
+def test_un_91_de_una_cuenta_ajena_no_se_toca(sip, dos_cuentas):
+    dos_cuentas.numeros = {"k_de_otro": {"phnum_x": NUMERO}}
+    with pytest.raises(RuntimeError) as error:
+        sip.asegurar_numero_sip(dos_cuentas, "agent_nueva")
+    assert "no es de la reserva" in str(error.value)
+    assert dos_cuentas.donde() == {"k_de_otro": [NUMERO]}
+
+
+def test_la_rotacion_se_lleva_el_91_a_la_cuenta_nueva(sip, dos_cuentas, monkeypatch):
+    from backend import cuenta_elevenlabs, settings
+
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_vieja")
+    salida = cuenta_elevenlabs.rotar("prueba", cliente=dos_cuentas, destino="k_nueva", sincronizar=lambda: {
+        "captacion (Sara)": sip.asegurar_numero_sip(dos_cuentas, "agent_sara") and "agent_sara"})
+    assert salida["rotada"] is True and settings.ELEVENLABS_API_KEY == "k_nueva"
+    assert dos_cuentas.donde() == {"k_nueva": [NUMERO]}
+
+
+def test_si_la_rotacion_falla_despues_el_91_vuelve_a_la_cuenta_vieja(sip, dos_cuentas, monkeypatch, api_module):  # noqa: F811
+    """El 91 ya se habia mudado a la nueva y falla otro agente: sin devolverlo, la cuenta vieja
+    (que sigue activa) se quedaba sin numero y Sara no podia marcar."""
+    from backend import cuenta_elevenlabs, settings
+
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_vieja")
+
+    def muda_el_numero_y_falla():
+        sip.asegurar_numero_sip(dos_cuentas, "agent_sara")
+        raise RuntimeError("fallo el agente de un negocio")
+
+    salida = cuenta_elevenlabs.rotar("prueba", cliente=dos_cuentas, destino="k_nueva",
+                                     sincronizar=muda_el_numero_y_falla)
+    assert salida["rotada"] is False and settings.ELEVENLABS_API_KEY == "k_vieja"
+    assert dos_cuentas.donde() == {"k_vieja": [NUMERO]}, "el 91 vuelve con la cuenta que sigue activa"
+    numero_id = api_module.CONFIG_CLIENTES["vantelia"]["voice"][sip.CLAVE_NUMERO_SIP]
+    assert numero_id in dos_cuentas.numeros["k_vieja"], "y la config apunta al que existe"

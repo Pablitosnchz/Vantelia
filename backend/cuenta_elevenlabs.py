@@ -288,6 +288,27 @@ def cambiando_de_cuenta() -> bool:
     return _rotando.locked()
 
 
+def _devolver_numero_sip(antes: Dict[str, Dict[str, str]], cliente: Optional[httpx.Client]) -> None:
+    """Tras una rotacion fallida, el 91 de Sara vuelve a la cuenta vieja con su agente. El
+    numero solo puede estar en una cuenta: si la rotacion llego a moverlo a la nueva, la vieja
+    se quedaba sin el y Sara no podia marcar. Si nunca se movio, solo se reenvia la salida
+    (inofensivo). Nunca lanza: lo que falle queda en el log y en el aviso de rotacion."""
+    from backend import captacion_voz
+
+    agente = (antes.get(captacion_voz.TENANT) or {}).get(captacion_voz.CLAVE_AGENTE, "")
+    if not (captacion_voz.via_sip() and agente):
+        return
+    propio = cliente is None
+    cliente = cliente or httpx.Client(timeout=30.0)
+    try:
+        captacion_voz.asegurar_numero_sip(cliente, agente)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[cuenta_elevenlabs] el numero SIP no volvio a la cuenta vieja: %s", censurar(exc))
+    finally:
+        if propio:
+            cliente.close()
+
+
 def rotar(motivo: str, *, cliente: Optional[httpx.Client] = None, destino: str = "",
           sincronizar: Optional[Callable[[], Dict[str, str]]] = None) -> Dict[str, Any]:
     """Pasa a `destino` o a la primera cuenta de la reserva que sirva. {rotada, de, a, agentes|motivo}.
@@ -322,6 +343,7 @@ def rotar(motivo: str, *, cliente: Optional[httpx.Client] = None, destino: str =
             settings.ELEVENLABS_API_KEY = vieja
             _restaurar_ids(antes)
             _borrar_agentes(nueva, sorted(creados), cliente=cliente)
+            _devolver_numero_sip(antes, cliente)
             _fallidas[huella(nueva)] = time.time()
             error = censurar(exc)[:300]
             settings.logger.warning("[cuenta_elevenlabs] no se pudo pasar a la cuenta %s: %s", huella(nueva), error)
