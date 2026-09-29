@@ -27,10 +27,16 @@ from test_transcripciones_llamadas import _conversacion, llamada  # noqa: F401
 @pytest.mark.parametrize("negocio,sector,hablado", [
     ("Miguel Guerrero", "peluqueria", "la peluquería Miguel Guerrero"),
     ("Carmen Navarro Sagasta", "peluqueria y estetica", "la peluquería Carmen Navarro Sagasta"),
-    ("Ginefiv San Sebastián de los Reyes", "clinica privada", "la clínica Ginefiv San Sebastián de los Reyes"),
     ("Lola Ruiz", "Centro de Estética", "el centro de estética Lola Ruiz"),
     ("Paco", "barberia", "la barbería Paco"),
-    ("Sonrisas Madrid", "clinica dental", "la clínica dental Sonrisas Madrid"),
+    ("Dra. López", "clinica dental", "la clínica dental Dra. López"),
+    # Una marca, no una persona: tal cual. 29-sep salio "la peluqueria Templa Medical" (una
+    # clinica mal etiquetada como peluqueria en la captacion).
+    ("Templa Medical", "peluqueria y estetica", "Templa Medical"),
+    ("Templa Wellness", "fisioterapia", "Templa Wellness"),
+    ("Laura Gil Medical", "clinica privada", "Laura Gil Medical"),  # nombre de pila, pero ya dice lo que es
+    ("Ginefiv San Sebastián de los Reyes", "clinica privada", "Ginefiv San Sebastián de los Reyes"),
+    ("Sonrisas Madrid", "clinica dental", "Sonrisas Madrid"),
     # Ya dice lo que es: tal cual.
     ("Clinica Montecarmelo", "clinica estetica", "Clinica Montecarmelo"),
     ("Marian Vivar Centro de estética", "centro estetica", "Marian Vivar Centro de estética"),
@@ -68,6 +74,9 @@ def test_el_guion_sabe_de_grabaciones_esperas_y_de_quien_esta_ocupado(captacion)
     assert "No cuelgues por estar en espera" in guion
     assert "presentate entera, como si empezara la llamada" in guion
     assert 'NO digas "genial"' in guion
+    # Div@, 29-sep: le dijeron que la encargada no estaba y, tras la demo, pregunto "¿eres tu
+    # quien lleva el salon?". Lo que toca es su nombre y cuando esta (la rellamada).
+    assert "Si ya te han dicho que quien decide no esta" in guion
     assert "hablo_una_persona" in agente["platform_settings"]["data_collection"]
 
 

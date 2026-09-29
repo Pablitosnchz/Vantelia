@@ -86,7 +86,7 @@ LO QUE TIENES QUE CONSEGUIR, EN ORDEN
    - Si en vez de confirmar te dicen que esa persona esta ocupada o no esta, NO digas "genial": es el sitio correcto, pero no has confirmado nada. Di "vale, no pasa nada", el mismo gancho con el aviso de que es comercial, y pregunta si le puedes contar en un minuto a quien te ha cogido o cuando es mejor llamar (paso 3).
 3. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
 4. Si dice que si: una demostracion CORTA, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. En cuanto te pida cita, contestale en UN solo turno como una recepcionista resolutiva: ofrecele directamente un hueco concreto y verosimil para lo que pida (si no dice que servicio, uno tipico de su sector) y pregunta si se lo apuntas ("Claro, mañana a las diez y media tengo hueco para un corte, ¿te lo apunto?"). NO le preguntes por separado el servicio, el dia ni el nombre. Cuando diga que si: "Hecho, apuntado", y di claramente que era una simulacion y que con Vantelia lo harias con su agenda real. Termina ahi el turno y espera a que conteste.
-5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio despues de la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). Esa pregunta va SOLA, en su propio turno: nunca en el mismo turno en que cierras la demostracion. No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
+5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio despues de la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). Esa pregunta va SOLA, en su propio turno: nunca en el mismo turno en que cierras la demostracion. No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. Si ya te han dicho que quien decide no esta o que no es con quien tienes que hablar, tampoco: ya sabes que no lo es, asi que pregunta directamente como se llama esa persona y cuando suele estar (lo de "Si no esta", abajo). En cuanto lo sepas, usa `anotar_responsable`.
    - Si es la duena o la encargada: sigue en el paso 6.
    - Si no lo es: pregunta por esa persona ("¿Y esta por ahi? ¿Me pasas con ella?").
      * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ, porque ella no lo ha oido: quien eres, que eres una asistente virtual de Vantelia, el gancho y el aviso de que es comercial y de que puede pedir no mas llamadas. Despues sigue con ella (demostracion si no la ha oido, y el paso 6).
@@ -480,11 +480,30 @@ def twiml_al_descolgar(llamada_id: str, respondio: str, desde: str, hacia: str,
 
 # "¿Hablo con Miguel Guerrero?" suena a que buscas a esa persona, no a su peluqueria: en el
 # primer dia real contestaron "ahora mismo esta ocupado" y colgaron (29-sep-2026). Si el
-# nombre no dice que es, se le antepone lo que es segun su sector.
+# nombre es el de una PERSONA (empieza por un nombre de pila) y no dice que es, se le
+# antepone lo que es segun su sector. Solo entonces: con cualquier nombre sin palabras de
+# negocio salio "la peluqueria Templa Medical" (una clinica mal etiquetada en la captacion).
 _YA_DICE_LO_QUE_ES = re.compile(
     r"\b(?:peluquer|barber|estetic|belleza|beauty|spa|salon|centro|clinic|policlinic|instituto|"
     r"gabinete|consulta|dental|dentist|odontolog|fisio|veterinar|optic|auditiv|masaj|nails|unas|"
-    r"hair|studio|estudio|hospital)")
+    r"hair|studio|estudio|hospital|medic)")
+_NOMBRES_DE_PILA = frozenset("""
+maria carmen ana isabel laura cristina marta lucia pilar elena paula sara raquel rosa sonia patricia
+beatriz silvia andrea alba irene julia eva nuria rocio monica mercedes teresa angela lorena susana
+noelia veronica natalia alicia sandra claudia marina esther montse montserrat rosario encarna dolores
+josefa antonia francisca manuela concha concepcion victoria yolanda ines olga marian mariana miriam
+gloria amparo inmaculada inma begona ainhoa nerea lidia rebeca sofia carla daniela martina emma
+valeria adriana celia estefania felicidad lola loli maite mari charo conchi puri rafaela soledad
+virginia vanesa vanessa tamara judith ruth belen blanca diana fatima gema gemma lourdes macarena
+milagros paloma remedios sheila pepa mamen chelo toni
+antonio jose manuel francisco david juan javier daniel carlos jesus alejandro miguel rafael pedro
+pablo angel sergio fernando jorge luis alberto alvaro adrian diego raul enrique ramon vicente ivan
+ruben oscar andres joaquin santiago eduardo victor roberto jaime marcos ignacio nacho alfonso jordi
+hugo mario salvador tomas emilio julio guillermo gabriel marc gonzalo julian agustin nicolas
+cristian ismael samuel felix mariano lorenzo xavier borja rodrigo hector ricardo josep joan iker
+aitor unai jon asier paco pepe manolo quique kike chema juanma
+dr dra doctor doctora
+""".split())
 _LO_QUE_ES = (
     ("peluquer", "la peluquería"), ("barber", "la barbería"),
     ("dental|dentist|odontolog", "la clínica dental"), ("fisio", "el centro de fisioterapia"),
@@ -500,6 +519,9 @@ def negocio_hablado(negocio: str, sector: str) -> str:
     llano = textnorm._strip_accents(negocio).lower()
     if not negocio or _YA_DICE_LO_QUE_ES.search(llano):
         return negocio
+    primera = re.match(r"[a-z]+", llano)
+    if not primera or primera.group(0) not in _NOMBRES_DE_PILA:
+        return negocio  # una marca ("Templa Medical", "Ginefiv"): tal cual, sin adivinar
     sector_llano = textnorm._strip_accents(str(sector or "")).lower()
     for raiz, que_es in _LO_QUE_ES:
         if re.search(r"\b(?:%s)" % raiz, sector_llano):
