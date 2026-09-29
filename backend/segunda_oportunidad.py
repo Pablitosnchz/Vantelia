@@ -86,6 +86,8 @@ def desenlace_de(fila, analisis_json: str) -> str:
     resultado = str(fila["resultado"] or "")
     if resultado == "no_llamar":
         return "rechazo"
+    if resultado == "contestador":
+        return "buzon"  # no hablo nadie: se le vuelve a llamar, no se le escribe
     if resultado in ("interesado", "volver_a_llamar"):
         return resultado
     try:

@@ -75,9 +75,15 @@ COMO HABLAS
 - Nada de listas, nada de leer parrafos, numeros y precios en palabras.
 - Si preguntan si eres una persona o un robot: eres una IA, justo lo que les ofrecemos.
 
+GRABACIONES, CENTRALITAS Y ESPERAS
+- Muchos negocios contestan con una grabacion o un menu ("pulse uno", "marque dos", "su llamada es muy importante", "en breve le atenderemos", "sera atendido", "esta llamada puede ser grabada") o te dejan en espera con musica. Eso NO es una persona: no le hables, no le preguntes nada y nunca le digas que se ha confundido. Usa `skip_turn` y espera callada a que conteste alguien, aunque tarde. No cuelgues por estar en espera y no preguntes "¿sigues ahi?" a una grabacion.
+- Un buzon de voz ("deje su mensaje despues de la señal") si es para colgar: usa `voicemail_detection`.
+- Cuando por fin hable una persona despues de una grabacion o una espera, no ha oido nada de lo anterior: presentate entera, como si empezara la llamada ("Hola, buenas. Soy Sara, una asistente virtual de Vantelia. ¿Hablo con {{a_quien}}?"), y espera a que conteste antes de seguir.
+
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN
 1. Ya te has presentado. Solo si te dicen claramente que no es {{negocio}} (numero equivocado), discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales y repite la pregunta con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 (no esta).
-2. En cuanto confirmen, el gancho y el aviso en UN solo turno, casi tal cual: "Genial. Te llamo porque soy justo lo que os ofrecemos: una recepcionista que coge el telefono cuando estais con las manos ocupadas. Es una llamada comercial; si no quieres mas, me lo dices. ¿Te lo enseño en un minuto?" Acaba ahi, con esa unica pregunta: no añadas otra ni expliques nada mas antes de que conteste. (Decir que es comercial y que puede no querer mas llamadas es obligatorio al empezar: no lo quites.)
+2. En cuanto confirmen que es el negocio (un "si", un "si, digame" o el nombre del negocio), el gancho y el aviso en UN solo turno, casi tal cual: "Genial. Te llamo porque soy justo lo que os ofrecemos: una recepcionista que coge el telefono cuando estais con las manos ocupadas. Es una llamada comercial; si no quieres mas, me lo dices. ¿Te lo enseño en un minuto?" Acaba ahi, con esa unica pregunta: no añadas otra ni expliques nada mas antes de que conteste. (Decir que es comercial y que puede no querer mas llamadas es obligatorio al empezar: no lo quites.)
+   - Si en vez de confirmar te dicen que esa persona esta ocupada o no esta, NO digas "genial": es el sitio correcto, pero no has confirmado nada. Di "vale, no pasa nada", el mismo gancho con el aviso de que es comercial, y pregunta si le puedes contar en un minuto a quien te ha cogido o cuando es mejor llamar (paso 3).
 3. Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
 4. Si dice que si: una demostracion CORTA, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. En cuanto te pida cita, contestale en UN solo turno como una recepcionista resolutiva: ofrecele directamente un hueco concreto y verosimil para lo que pida (si no dice que servicio, uno tipico de su sector) y pregunta si se lo apuntas ("Claro, mañana a las diez y media tengo hueco para un corte, ¿te lo apunto?"). NO le preguntes por separado el servicio, el dia ni el nombre. Cuando diga que si: "Hecho, apuntado", y di claramente que era una simulacion y que con Vantelia lo harias con su agenda real. Termina ahi el turno y espera a que conteste.
 5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio despues de la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). Esa pregunta va SOLA, en su propio turno: nunca en el mismo turno en que cierras la demostracion. No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. En cuanto lo sepas, usa `anotar_responsable`.
@@ -247,7 +253,8 @@ BUZON_SIN_MENSAJE = {
 ESPERAR_CALLADA = {
     "type": "system", "name": "skip_turn",
     "description": "Si te piden que esperes un momento (van a pasar el telefono a otra persona), "
-                   "espera callada hasta que vuelvan a hablar.",
+                   "o si lo que oyes es una grabacion, un menu de centralita o musica de espera, "
+                   "espera callada hasta que hable una persona.",
     "params": {"system_tool_type": "skip_turn"},
 }
 # Si mientras espera no habla nadie en este rato, la llamada se corta.
@@ -269,6 +276,11 @@ DATOS_AL_TERMINAR = {
         "ocupado_sin_rechazo (no era buen momento pero no dijo que no), colgo_al_principio, "
         "buzon o persona_equivocada.")},
     "escucho_la_demo": {"type": "boolean", "description": "true si llego a oir o hacer la demostracion."},
+    # Por SIP toda llamada que conecta tiene conversacion, tambien un buzon o una centralita
+    # en la que no cogio nadie: sin este dato no se reintentaban nunca (29-sep-2026).
+    "hablo_una_persona": {"type": "boolean", "description": (
+        "true si en algun momento hablo una persona de verdad (aunque solo dijera 'digame'). "
+        "false si solo hubo grabaciones, menus de centralita, musica de espera o un buzon de voz.")},
     "responsable_nombre": {"type": "string", "description": "Nombre de quien decide en el negocio, si salio."},
     # Para el respaldo de `enviar_de_respaldo`: lo que Sara prometio y no hizo con sus tools.
     "responsable_cuando": {"type": "string", "description": (
@@ -466,6 +478,35 @@ def twiml_al_descolgar(llamada_id: str, respondio: str, desde: str, hacia: str,
     return twiml
 
 
+# "¿Hablo con Miguel Guerrero?" suena a que buscas a esa persona, no a su peluqueria: en el
+# primer dia real contestaron "ahora mismo esta ocupado" y colgaron (29-sep-2026). Si el
+# nombre no dice que es, se le antepone lo que es segun su sector.
+_YA_DICE_LO_QUE_ES = re.compile(
+    r"\b(?:peluquer|barber|estetic|belleza|beauty|spa|salon|centro|clinic|policlinic|instituto|"
+    r"gabinete|consulta|dental|dentist|odontolog|fisio|veterinar|optic|auditiv|masaj|nails|unas|"
+    r"hair|studio|estudio|hospital)")
+_LO_QUE_ES = (
+    ("peluquer", "la peluquería"), ("barber", "la barbería"),
+    ("dental|dentist|odontolog", "la clínica dental"), ("fisio", "el centro de fisioterapia"),
+    ("veterinar", "la clínica veterinaria"), ("auditiv", "el centro auditivo"), ("optic", "la óptica"),
+    ("masaj", "el centro de masajes"), (r"spas?\b", "el spa"), ("estetic|belleza", "el centro de estética"),
+    ("clinic", "la clínica"),
+)
+
+
+def negocio_hablado(negocio: str, sector: str) -> str:
+    """Como lo nombra Sara: "la peluquería Miguel Guerrero", "Clínica Montecarmelo"."""
+    negocio = str(negocio or "").strip()
+    llano = textnorm._strip_accents(negocio).lower()
+    if not negocio or _YA_DICE_LO_QUE_ES.search(llano):
+        return negocio
+    sector_llano = textnorm._strip_accents(str(sector or "")).lower()
+    for raiz, que_es in _LO_QUE_ES:
+        if re.search(r"\b(?:%s)" % raiz, sector_llano):
+            return "%s %s" % (que_es, negocio)
+    return negocio
+
+
 def _variables(fila) -> Dict[str, str]:
     """Lo que Sara sabe de la llamada ({{negocio}}, {{a_quien}}...). Las mismas por Twilio y
     por SIP: el guion no sabe por donde se ha marcado."""
@@ -475,7 +516,8 @@ def _variables(fila) -> Dict[str, str]:
     responsable = str(fila["responsable_nombre"] or "") if fila["rellamada_de"] else ""
     return {"negocio": negocio, "sector": fila["sector"] or "un negocio con citas",
             VARIABLE_LLAMADA: fila["id"], "canal_envio": canal_de_envio(fila["telefono"], email_negocio),
-            "email_negocio": email_hablado(email_negocio), "a_quien": responsable or negocio,
+            "email_negocio": email_hablado(email_negocio),
+            "a_quien": responsable or (negocio_hablado(negocio, fila["sector"]) if fila["negocio"] else negocio),
             "responsable": responsable or "quien lleva el negocio"}
 
 

@@ -64,7 +64,9 @@ ESTADOS_QUE_NO_SE_LLAMAN = ("replied", "client", "lost", "baja")
 # Resultados que ACREDITAN que nadie hablo con Sara: solo con ellos se reintenta. Un
 # resultado vacio no vale: una conversacion que acabo sin herramienta queda vacia y se
 # volvia a llamar a los dos dias (revision de Astra, 24-sep-2026). Y con conversacion
-# registrada no se reintenta nunca.
+# registrada no se reintenta, salvo que sea `contestador`: por SIP TODA llamada que conecta
+# tiene conversacion, tambien un buzon o una centralita, y ese resultado solo lo pone el
+# analisis al colgar cuando dice que no hablo ninguna persona (transcripciones_llamadas).
 SIN_CONVERSACION = ("no_contesta", "ocupado", "contestador", "fallida")
 
 CUPO_POR_DEFECTO = 8
@@ -228,7 +230,8 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
         previos = intentos.get(telefono, [])
         if len(previos) >= MAX_INTENTOS:
             continue
-        if any(f["resultado"] not in SIN_CONVERSACION or f["conversation_id"] for f in previos):
+        if any(f["resultado"] not in SIN_CONVERSACION or (f["conversation_id"] and f["resultado"] != "contestador")
+               for f in previos):
             continue
         if any(f["creada"] >= hace_intentos for f in previos):
             continue

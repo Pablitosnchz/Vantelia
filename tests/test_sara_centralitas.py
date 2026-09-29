@@ -1,0 +1,137 @@
+# -*- coding: utf-8 -*-
+"""Sara ante centralitas, grabaciones y buzones, y como nombra al negocio.
+
+POR QUE EXISTE
+--------------
+29-sep-2026, primer dia de llamadas reales (10): ninguna llego a la demo. Cuatro dieron con
+una grabacion o un menu de centralita y Sara les hablaba (y colgo en plena espera); a la
+persona que cogio despues no se le presento; a "ahora mismo esta ocupado" contesto
+"Genial"; y "¿Hablo con Miguel Guerrero?" sonaba a buscar a una persona, no a su
+peluqueria. Ademas, por SIP toda llamada que conecta tiene conversacion, asi que un buzon
+o una centralita contaban como "hablamos" y ese negocio no se volvia a llamar nunca.
+"""
+from __future__ import annotations
+
+from datetime import timedelta
+
+import pytest
+
+from test_booking_exhaustive import api_module  # noqa: F401
+from test_captacion_voz import _Falso, captacion, envios  # noqa: F401
+from test_lanzador_llamadas import MARTES_10_30, _llamada_previa, _prospecto, lanzador  # noqa: F401
+from test_transcripciones_llamadas import _conversacion, llamada  # noqa: F401
+
+
+# --- Como se nombra al negocio ----------------------------------------------------------
+
+@pytest.mark.parametrize("negocio,sector,hablado", [
+    ("Miguel Guerrero", "peluqueria", "la peluquería Miguel Guerrero"),
+    ("Carmen Navarro Sagasta", "peluqueria y estetica", "la peluquería Carmen Navarro Sagasta"),
+    ("Ginefiv San Sebastián de los Reyes", "clinica privada", "la clínica Ginefiv San Sebastián de los Reyes"),
+    ("Lola Ruiz", "Centro de Estética", "el centro de estética Lola Ruiz"),
+    ("Paco", "barberia", "la barbería Paco"),
+    ("Sonrisas Madrid", "clinica dental", "la clínica dental Sonrisas Madrid"),
+    # Ya dice lo que es: tal cual.
+    ("Clinica Montecarmelo", "clinica estetica", "Clinica Montecarmelo"),
+    ("Marian Vivar Centro de estética", "centro estetica", "Marian Vivar Centro de estética"),
+    ("Peluquería Lola", "peluqueria", "Peluquería Lola"),
+    ("Estetica Natura", "centro estetica", "Estetica Natura"),
+    # Sector que no se reconoce: tal cual, sin inventar.
+    ("Miguel Guerrero", "", "Miguel Guerrero"),
+    ("Miguel Guerrero", "gestoria", "Miguel Guerrero"),
+])
+def test_como_nombra_al_negocio(captacion, negocio, sector, hablado):  # noqa: F811
+    assert captacion.negocio_hablado(negocio, sector) == hablado
+
+
+def test_el_saludo_pregunta_por_la_peluqueria_no_por_la_persona(captacion):  # noqa: F811
+    hecho = captacion.llamar("911111111", "Miguel Guerrero", "peluqueria", "", origen="auto", cliente=_Falso())
+    variables = captacion._variables(captacion._fila(hecho["llamada"]))
+    assert variables["a_quien"] == "la peluquería Miguel Guerrero"
+    assert variables["negocio"] == "Miguel Guerrero"
+    sin_nombre = captacion.llamar("911111112", "", "peluqueria", "", origen="auto", cliente=_Falso())
+    assert captacion._variables(captacion._fila(sin_nombre["llamada"]))["a_quien"] == "tu negocio"
+
+
+def test_en_la_rellamada_se_sigue_preguntando_por_quien_decide(captacion):  # noqa: F811
+    hecho = captacion.llamar("911111111", "Miguel Guerrero", "peluqueria", "", origen="auto", cliente=_Falso())
+    captacion._actualizar(hecho["llamada"], rellamada_de="ll_antes", responsable_nombre="Marta")
+    assert captacion._variables(captacion._fila(hecho["llamada"]))["a_quien"] == "Marta"
+
+
+# --- El guion -------------------------------------------------------------------------
+
+def test_el_guion_sabe_de_grabaciones_esperas_y_de_quien_esta_ocupado(captacion):  # noqa: F811
+    agente = captacion.agente_de_captacion("https://app.test")
+    guion = agente["conversation_config"]["agent"]["prompt"]["prompt"]
+    assert "Eso NO es una persona: no le hables" in guion
+    assert "No cuelgues por estar en espera" in guion
+    assert "presentate entera, como si empezara la llamada" in guion
+    assert 'NO digas "genial"' in guion
+    assert "hablo_una_persona" in agente["platform_settings"]["data_collection"]
+
+
+# --- Si no hablo nadie: se reintenta y no hay correo --------------------------------------
+
+def _analisis(**datos):
+    base = {"interlocutor": "no_se_sabe", "desenlace": "buzon", "hablo_una_persona": False}
+    base.update(datos)
+    return {"data_collection_results": {k: {"value": v} for k, v in base.items()}}
+
+
+@pytest.mark.parametrize("datos,resultado", [
+    ({}, "contestador"),                                                    # centralita o buzon
+    ({"hablo_una_persona": "false"}, "contestador"),                        # en texto
+    ({"desenlace": "colgo_al_principio"}, "contestador"),                   # Montecarmelo, 29-sep
+    ({"hablo_una_persona": True, "desenlace": "colgo_al_principio"}, ""),   # colgo una persona
+    ({"hablo_una_persona": None}, ""),                                      # no se sabe: no se toca
+    ({"desenlace": "rechazo"}, ""),                                         # contradice: ante la duda, no
+    ({"desenlace": "ocupado_sin_rechazo"}, ""),
+])
+def test_solo_un_no_claro_la_marca_como_contestador(llamada, envios, datos, resultado):  # noqa: F811
+    llamada_id, transcripciones = llamada
+    transcripciones.guardar(_conversacion(**_analisis(**datos)), "aviso")
+    assert transcripciones.captacion_voz._fila(llamada_id)["resultado"] == resultado
+
+
+def test_no_pisa_lo_que_apunto_sara(llamada, envios, captacion):  # noqa: F811
+    llamada_id, transcripciones = llamada
+    captacion.herramienta("no_volver_a_llamar", {"_llamada": llamada_id, "motivo": "no llameis"})
+    transcripciones.guardar(_conversacion(**_analisis()), "aviso")
+    assert captacion._fila(llamada_id)["resultado"] == "no_llamar"
+
+
+def test_si_no_hablo_nadie_no_se_manda_nada_aunque_el_analisis_diga_que_si(llamada, envios):  # noqa: F811
+    _, transcripciones = llamada
+    # Sin desenlace (con "buzon" el respaldo ya se frena solo): lo que frena es el orden,
+    # marcar "contestador" ANTES de mirar el respaldo.
+    transcripciones.guardar(_conversacion(**_analisis(desenlace="", quiere_informacion=True,
+                                                      email_para_informacion="jose@pelu.es")), "aviso")
+    assert envios["email"] == [] and envios["sms"] == []
+
+
+def test_un_buzon_o_una_centralita_se_vuelve_a_llamar(lanzador):  # noqa: F811
+    """Por SIP la llamada tiene conversacion aunque solo contestara una grabacion."""
+    _prospecto(lanzador, "centralita@clinica.es", "911111111", sector="clinica estetica")
+    _prospecto(lanzador, "persona@pelu.es", "912222222")
+    hace_tres_dias = MARTES_10_30 - timedelta(days=3)
+    _llamada_previa(lanzador, "+34911111111", hace_tres_dias, resultado="contestador")
+    _llamada_previa(lanzador, "+34912222222", hace_tres_dias, resultado="")
+    with lanzador._db() as conn:
+        conn.execute("UPDATE llamadas_voz SET conversation_id='conv_' || telefono")
+        conn.commit()
+    candidatos = lanzador.candidatos(MARTES_10_30)
+    assert [(c["telefono"], c["intentos"]) for c in candidatos] == [("+34911111111", 1)], (
+        "la centralita vuelve (segundo intento); con quien hablo una persona, no")
+
+    # Y como mucho dos intentos: si el segundo tambien es centralita, se acabo.
+    _llamada_previa(lanzador, "+34911111111", MARTES_10_30 - timedelta(days=1), resultado="contestador")
+    assert lanzador.candidatos(MARTES_10_30 + timedelta(days=3)) == []
+
+
+def test_si_no_hablo_nadie_no_hay_segunda_oportunidad(captacion):  # noqa: F811
+    from backend import segunda_oportunidad
+
+    analisis = '{"data_collection_results": {"desenlace": {"value": "colgo_al_principio"}}}'
+    assert segunda_oportunidad.desenlace_de({"resultado": "contestador"}, analisis) == "buzon"
+    assert segunda_oportunidad.desenlace_de({"resultado": ""}, analisis) == "colgo_al_principio"

@@ -54,6 +54,15 @@ MINUTOS_ENTRE_INTENTOS = 55
 ESTADOS_TERMINADOS = ("done", "failed")
 # Lo que ElevenLabs pone cuando un dato no salio en la conversacion.
 _NADA = ("none", "null", "no", "desconocido", "n/a", "-")
+# Desenlaces que solo se dan si hablo alguien: con ellos no se cree un "no hablo nadie".
+DESENLACES_CON_PERSONA = ("interesado", "volver_a_llamar", "rechazo", "ocupado_sin_rechazo", "persona_equivocada")
+
+
+def _es_no(valor: Any) -> bool:
+    """Un false explicito (booleano o texto). Vacio o dudoso no es un no."""
+    if isinstance(valor, bool):
+        return not valor
+    return str(valor or "").strip().lower() in ("false", "no")
 
 
 def _db():
@@ -161,6 +170,14 @@ def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
         conn.execute("UPDATE llamadas_voz SET estado='terminada', actualizada=? WHERE id=? "
                      "AND estado IN ('marcando', 'en_curso')",
                      (timeutils._utc_now().isoformat(timespec="seconds"), fila[0]))
+        # Solo grabaciones, un menu de centralita o un buzon: nadie oyo a Sara. Cuenta como
+        # contestador (sin conversacion): el lanzador la reintenta y no hay segunda
+        # oportunidad por correo (29-sep-2026: 4 de las 10 primeras llamadas reales). Solo
+        # con un "no" explicito y sin un desenlace que diga que si hablo alguien. Va antes
+        # del respaldo: si no hablo nadie, no se manda nada aunque el analisis diga que si.
+        desenlace = str(_valor(datos.get("desenlace")) or "").strip().lower()
+        if _es_no(_valor(datos.get("hablo_una_persona"))) and desenlace not in DESENLACES_CON_PERSONA:
+            conn.execute("UPDATE llamadas_voz SET resultado='contestador' WHERE id=? AND resultado=''", (fila[0],))
         conn.commit()
     # Lo que Sara dijo que mandaba y no mando. Como mucho una vez: este guardado se repite
     # (aviso y recogida) y el respaldo reclama su sello antes de enviar.
