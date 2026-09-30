@@ -11,11 +11,17 @@ nuestro puente rechaza las entrantes (`desde-zadarma` → `Hangup(17)`).
    `elevenlabs_entrada`, sin credenciales: el número admite `0.0.0.0/0`), con la
    cabecera `X-Caller-ID` = número de quien llama (ElevenLabs la da como
    `system__caller_id`). Mismo tope de 3 llamadas a la vez que las salientes.
-2. **Agente de entrada** «Sara - devoluciones», asignado al 91 (las salientes siguen
-   usando la Sara de siempre porque la llamada dice qué agente usar). Primer mensaje
-   fijo: «Hola, soy Sara, la asistente con inteligencia artificial de Vantelia. Te hemos
-   llamado antes, ¿verdad? ¿En qué te puedo ayudar?». Mismo guion desde la pregunta
-   (pasos 2-7), sin el aviso de «llamada comercial» (llaman ellos).
+2. **Agente de entrada** «Sara - devoluciones Vantelia (telefono)»
+   (`CLAVE_AGENTE_ENTRADA`), asignado al 91 (las salientes siguen usando la Sara de
+   siempre porque la llamada dice qué agente usar). Primer mensaje fijo
+   (`SALUDO_ENTRANTE`) y el mismo guion con sus variables ya puestas
+   (`guion_de_entrada`). **Trampa (30-sep-2026, primera prueba):** se hizo al principio con
+   UN solo agente y los valores por defecto de las variables, y ElevenLabs colgaba cada
+   entrante al segundo: «Missing required dynamic variables in first message». Los valores
+   por defecto solo valen para probar en su panel; en una llamada SIP que entra no los usa.
+   La Sara del 91 no puede llevar ninguna variable nuestra (solo `system__*`).
+   También: en la subrutina de cabeceras del puente `CALLERID(num)` vale «s» (es el canal
+   hacia ElevenLabs); quien llama se guarda antes de marcar (`__QUIEN`).
 3. **Su ficha**: las herramientas llevan `system__caller_id` en vez del id de la
    llamada; el servidor busca la última llamada nuestra a ese número y crea una fila
    `origen='entrante'` con el mismo negocio, sector y email (o una ficha sin negocio si
