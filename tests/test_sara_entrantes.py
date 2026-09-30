@@ -132,12 +132,13 @@ def test_una_saliente_con_id_equivocado_no_se_cuela_como_entrante(captacion):  #
         assert conn.execute("SELECT COUNT(*) FROM llamadas_voz WHERE origen='entrante'").fetchone()[0] == 0
 
 
-def _conversacion_entrante(agente="agent_sara", direccion="inbound", conversation_id="conv_in_9"):
+def _conversacion_entrante(agente="agent_sara", direccion="inbound", conversation_id="conv_in_9", numero=""):
     return {"conversation_id": conversation_id, "status": "done", "agent_id": agente,
             "transcript": [{"role": "agent", "message": "Hola, soy Sara.", "time_in_call_secs": 0},
                            {"role": "user", "message": "Me habeis llamado antes", "time_in_call_secs": 3}],
             "metadata": {"call_duration_secs": 20, "termination_reason": "end_call tool",
-                         "phone_call": {"direction": direccion, "external_number": "+34911234567"}},
+                         "phone_call": {"direction": direccion, "external_number": "+34911234567",
+                                        "agent_number": numero}},
             "analysis": {"data_collection_results": {"interlocutor": {"value": "empleado"}}}}
 
 
@@ -153,7 +154,16 @@ def test_la_entrante_sin_herramientas_llega_igual_al_panel(sip):  # noqa: F811
                             (llamada_id,)).fetchone()[0] == 1
 
 
-@pytest.mark.parametrize("cambio", [{"agente": "agent_de_otro"}, {"direccion": "outbound"}])
+def test_la_entrante_cuenta_aunque_se_haya_cambiado_de_cuenta(sip):  # noqa: F811
+    """Astra, 30-sep: el aviso llega con el agente de la cuenta vieja; el 91 es el mismo."""
+    from backend import transcripciones_llamadas
+
+    conversacion = _conversacion_entrante(agente="agent_de_la_cuenta_vieja", numero="+34910000001")
+    assert transcripciones_llamadas.guardar(conversacion, "aviso")
+
+
+@pytest.mark.parametrize("cambio", [{"agente": "agent_de_otro"}, {"direccion": "outbound"},
+                                    {"agente": "agent_de_otro", "numero": "+34911119999"}])
 def test_una_conversacion_ajena_se_sigue_ignorando(sip, cambio):  # noqa: F811
     from backend import transcripciones_llamadas
 

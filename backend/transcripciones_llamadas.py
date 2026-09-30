@@ -124,12 +124,17 @@ def _entrante_de_sara(conversacion: Dict[str, Any]):
 
     try:
         voz = clients._get_client_config(captacion_voz.TENANT).get("voice") or {}
-    except Exception:  # noqa: BLE001 - sin el tenant de Sara no hay entrantes suyas
-        return None
+    except Exception:  # noqa: BLE001 - sin el tenant de Sara, solo cuenta el numero
+        voz = {}
     agente = str(voz.get(captacion_voz.CLAVE_AGENTE) or "")
-    if not agente or str(conversacion.get("agent_id") or "") != agente:
-        return None
     telefonica = (conversacion.get("metadata") or {}).get("phone_call") or {}
+    # De Sara: su agente actual, o una llamada a SU 91 (tras cambiar de cuenta el aviso llega
+    # con el agente viejo; el numero es el mismo en todas; revision de Astra, 30-sep-2026).
+    numero_sara = captacion_voz.telefono_e164(settings.CAPTACION_SIP_NUMERO) if settings.CAPTACION_SIP_NUMERO else ""
+    llamado = captacion_voz.telefono_e164(str(telefonica.get("agent_number") or "")) if telefonica.get(
+        "agent_number") else ""
+    if not ((agente and str(conversacion.get("agent_id") or "") == agente) or (numero_sara and llamado == numero_sara)):
+        return None
     variables = ((conversacion.get("conversation_initiation_client_data") or {}).get("dynamic_variables") or {})
     entra = (str(telefonica.get("direction") or "").lower() == "inbound"
              or str(variables.get("sentido") or "") == "entrante")
