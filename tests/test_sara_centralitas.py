@@ -72,8 +72,8 @@ def test_el_guion_sabe_de_grabaciones_esperas_y_de_quien_esta_ocupado(captacion)
     guion = agente["conversation_config"]["agent"]["prompt"]["prompt"]
     assert "Eso NO es una persona: no le hables" in guion
     assert "No cuelgues por estar en espera" in guion
-    assert "presentate entera, como si empezara la llamada" in guion
-    assert 'NO digas "genial"' in guion
+    assert "presentate entera con la misma apertura del principio" in guion
+    assert "NO son permiso para la demostracion" in guion
     # Div@, 29-sep: le dijeron que la encargada no estaba y, tras la demo, pregunto "¿eres tu
     # quien lleva el salon?". Lo que toca es su nombre y cuando esta (la rellamada).
     assert "Si ya te han dicho que quien decide no esta" in guion
@@ -126,6 +126,25 @@ def test_traspasos_y_esperas_eternas(captacion):  # noqa: F811
     assert "se ha repetido cinco veces y no coge nadie" in guion  # Isaac Salido, 30-sep: 300 s en espera
 
 
+# --- Apertura A (30-sep): permiso y una pregunta antes de ofrecer nada ----------------------
+
+def test_apertura_permiso_y_pregunta_antes_de_ofrecer_nada(captacion):  # noqa: F811
+    """Pablo, 30-sep: "la llamada se ve demasiado comercial". 24 llamadas, 0 demos: se perdian
+    en el gancho de venta. Eligio la apertura A de Astra."""
+    agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
+    guion = agente["agent"]["prompt"]["prompt"]
+    assert captacion.APERTURA.endswith("¿Te hago una pregunta breve?")
+    paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
+    assert "¿como atendeis las llamadas?" in paso_2
+    assert "4. Solo si acepta claramente probarlo" in guion
+    assert "soy justo lo que os ofrecemos" not in guion, "el gancho de venta, fuera"
+    assert "Si quien contesta dice que es otra IA" in guion  # MARSYA, 29-sep
+    assert "no avances de paso solo por seguir el guion" in guion  # Div@, 29-sep
+    assert "Si es ella o se pone: pidele permiso para una pregunta breve" in guion  # rellamada: "¿Esta Marta?"
+    colgar = [t for t in agente["agent"]["prompt"]["tools"] if t["name"] == "end_call"][0]
+    assert "traspaso" in colgar["description"]  # Harmonie, 30-sep
+
+
 # --- Revision de Astra (29-sep): coherencia del guion y tope de duracion --------------------
 
 def test_al_apuntar_a_la_duena_la_herramienta_no_manda_repetir_la_demo(captacion):  # noqa: F811
@@ -141,10 +160,10 @@ def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
     assert "las SALIDAS de abajo mandan sobre estos pasos" in guion
     assert "\"No me interesa\": agradece, despidete y usa `end_call`" in guion
     assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
-    assert "sin repetir el gancho entero" in guion
+    assert "sin repetir la apertura entera" in guion
     assert "ni finjas que le pasas la llamada" in guion
     # Rellamada a quien decide que no esta: sin demo a quien coge.
-    assert "sin gancho ni demostracion a quien te ha cogido" in guion
+    assert "sin preguntas ni demostracion a quien te ha cogido" in guion
     # Menu que exige pulsar una tecla: no se puede navegar.
     assert "no digas que has pulsado nada y cuelga con `end_call`" in guion
 

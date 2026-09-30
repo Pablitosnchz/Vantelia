@@ -30,7 +30,7 @@ MARTES_16_30 = datetime(2026, 9, 29, 14, 30, tzinfo=timezone.utc)  # 16:30 en Ma
 def test_el_guion_pregunta_por_quien_decide_despues_del_gancho(captacion):  # noqa: F811
     agente = captacion.agente_de_captacion("https://app.test")
     guion = agente["conversation_config"]["agent"]["prompt"]["prompt"]
-    assert guion.index("el gancho") < guion.index("QUIEN DECIDE"), "la pregunta va despues del gancho"
+    assert guion.index("LA PREGUNTA") < guion.index("QUIEN DECIDE"), "quien decide, despues de la pregunta"
     assert "UNA sola vez" in guion and "No lo preguntes si ya lo ha dicho" in guion
     assert "PRESENTATE ENTERA OTRA VEZ" in guion, "a quien se pone despues hay que decirle que es una IA"
     assert "Nunca pidas el movil personal" in guion
@@ -41,9 +41,14 @@ def test_el_guion_pregunta_por_quien_decide_despues_del_gancho(captacion):  # no
 
 def test_el_saludo_pregunta_por_el_negocio_o_por_quien_decide(captacion):  # noqa: F811
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
-    assert "{{a_quien}}" in agente["first_message"] and "asistente virtual" in agente["first_message"]
+    assert agente["first_message"] == "{{saludo}}"
     variables = agente["dynamic_variables"]["dynamic_variable_placeholders"]
-    assert {"a_quien", "responsable"} <= set(variables)
+    assert {"a_quien", "responsable", "saludo"} <= set(variables)
+    fila = {"id": "ll_1", "telefono": "+34911111111", "prospecto": "", "negocio": "Pelu Marta", "sector": "peluqueria",
+            "responsable_nombre": "Marta", "rellamada_de": "ll_antes"}
+    assert captacion._variables(fila)["saludo"].endswith("¿Está Marta?"), "en la rellamada, por quien decide"
+    fila["rellamada_de"] = ""
+    assert captacion._variables(fila)["saludo"] == captacion.APERTURA
 
 
 def test_elevenlabs_clasifica_cada_llamada_al_terminar(captacion):  # noqa: F811

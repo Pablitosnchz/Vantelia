@@ -63,11 +63,13 @@ def test_telefonos_en_formato_internacional(captacion, dado, esperado):
 
 def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
-    primera = agente["agent"]["first_message"].lower()
-    assert "asistente virtual" in primera and "vantelia" in primera, "quien llama y que es una IA, al empezar"
+    # La primera frase la calcula el servidor por llamada ({{saludo}}, apertura A del 30-sep): en
+    # las dos aperturas, quien llama, que es una IA y que es comercial, desde el principio.
+    assert agente["agent"]["first_message"] == "{{saludo}}"
+    for apertura in (captacion.APERTURA, captacion.APERTURA_RELLAMADA % "Marta"):
+        assert "inteligencia artificial de vantelia" in apertura.lower()
+        assert "es una llamada comercial; si no quieres más, me lo dices" in apertura.lower()
     guion = agente["agent"]["prompt"]["prompt"].lower()
-    # Pablo (24-sep) lo pidio corto y detras del gancho, pero tiene que estar al empezar.
-    assert "es una llamada comercial; si no quieres mas, me lo dices" in guion
     assert "tu nunca haces de clienta" in guion, "en la demo la clienta es el negocio, no Sara"
     # Segunda prueba (24-sep): se le colo el ingles y deletreo el email 25 segundos.
     assert "siempre en español" in guion and "no lo deletrees" in guion
@@ -132,7 +134,7 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
         "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": llamada,
         "canal_envio": "pedir_email", "email_negocio": "",
         # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
-        "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio"}
+        "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA}
 
 
 # --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------
