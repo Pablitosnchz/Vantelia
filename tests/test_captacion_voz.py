@@ -134,7 +134,8 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
         "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": llamada,
         "canal_envio": "pedir_email", "email_negocio": "",
         # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
-        "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA}
+        "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA,
+        "sentido": "saliente"}
 
 
 # --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------

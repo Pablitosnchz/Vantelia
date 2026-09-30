@@ -8916,7 +8916,7 @@ tbody tr:last-child td { border-bottom: none; }
             <td>${esc(fecha(ll.creada))}</td>
             <td><div class="cap-company"><strong>${esc(ll.negocio || "—")}</strong><span>${esc(ll.sector || ll.prospecto || "")}</span></div></td>
             <td>${esc(ll.telefono)}</td>
-            <td>${ll.rellamada_de ? `Rellamada a ${esc(ll.responsable_nombre || "quien decide")}` : (ll.origen === "auto" ? "Automática" : "Manual")}</td>
+            <td>${ll.rellamada_de ? `Rellamada a ${esc(ll.responsable_nombre || "quien decide")}` : (ll.origen === "auto" ? "Automática" : ll.origen === "entrante" ? "Nos llamó" : "Manual")}</td>
             <td><span class="ll-result ${clave ? "ll-result--" + esc(clave) : ""}">${esc(texto)}</span></td>
             <td>${esc(DESENLACES[ll.desenlace] || "—")}${ll.segunda_oportunidad ? `<br><small>✉ ${esc(SEGUNDA[ll.segunda_oportunidad] || ll.segunda_oportunidad)}</small>` : ""}</td>
             <td>${ll.interlocutor ? esc(ll.con_quien || "") : "—"}</td>

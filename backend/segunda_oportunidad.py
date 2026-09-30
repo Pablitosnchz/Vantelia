@@ -187,6 +187,9 @@ def elegibles(ahora: datetime, *, contar_horario: bool = True, solo: str = "",
                 continue
             if any(fila["telefono"] in no_llamar for fila in llamadas):
                 continue
+            # Nos llamo el: ya hablo con Sara (o con Pablo). Nada de "os pillamos en mal momento".
+            if any(str(fila["origen"] or "") == "entrante" for fila in llamadas):
+                continue
             decisiva = next(((fila, d) for fila, d in desenlaces if d), None)  # la mas reciente
             if decisiva is None or decisiva[1] not in DESENLACES_CON_CORREO or decisiva[0]["creada"] < desde:
                 continue

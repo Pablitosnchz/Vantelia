@@ -116,6 +116,29 @@ def _turnos(transcript: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return turnos
 
 
+def _entrante_de_sara(conversacion: Dict[str, Any]):
+    """Una llamada que ENTRO al 91 y en la que Sara no uso ninguna herramienta no tiene ficha:
+    se crea aqui para que su transcripcion llegue al panel (30-sep-2026). Solo si la
+    conversacion es de Sara y entrante; cualquier otra se ignora como siempre."""
+    from backend import clients
+
+    try:
+        voz = clients._get_client_config(captacion_voz.TENANT).get("voice") or {}
+    except Exception:  # noqa: BLE001 - sin el tenant de Sara no hay entrantes suyas
+        return None
+    agente = str(voz.get(captacion_voz.CLAVE_AGENTE) or "")
+    if not agente or str(conversacion.get("agent_id") or "") != agente:
+        return None
+    telefonica = (conversacion.get("metadata") or {}).get("phone_call") or {}
+    variables = ((conversacion.get("conversation_initiation_client_data") or {}).get("dynamic_variables") or {})
+    entra = (str(telefonica.get("direction") or "").lower() == "inbound"
+             or str(variables.get("sentido") or "") == "entrante")
+    if not entra:
+        return None
+    quien = str(telefonica.get("external_number") or variables.get("system__caller_id") or "")
+    return captacion_voz._fila_entrante(quien, str(conversacion.get("conversation_id") or ""))
+
+
 def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
     """Guarda la conversacion de ElevenLabs en su llamada. Devuelve el id de la llamada, o
     None si no es de ninguna llamada nuestra. Idempotente: la segunda vez la reemplaza."""
@@ -130,7 +153,10 @@ def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
         fila = conn.execute("SELECT id, interlocutor, responsable_nombre FROM llamadas_voz WHERE conversation_id=?",
                             (conversation_id,)).fetchone()
     if fila is None:
-        return None
+        entrante = _entrante_de_sara(conversacion)
+        if entrante is None:
+            return None
+        fila = (entrante["id"], entrante["interlocutor"], entrante["responsable_nombre"])
     analisis = conversacion.get("analysis") or {}
     metadatos = conversacion.get("metadata") or {}
     datos = analisis.get("data_collection_results") or {}

@@ -71,6 +71,14 @@ APERTURA = ("Hola, soy Sara, una inteligencia artificial de Vantelia. Es una lla
 APERTURA_RELLAMADA = ("Hola, soy Sara, una inteligencia artificial de Vantelia. Es una llamada comercial; "
                       "si no quieres más, me lo dices. ¿Está %s?")
 PRIMER_MENSAJE = "{{saludo}}"
+# Cuando nos llaman ELLOS al 91 (Pablo, 30-sep-2026: "si llaman de vuelta, que atienda Sara").
+# Las salientes siempre mandan su {{saludo}} y {{sentido}}; los valores por defecto del agente
+# son los de una llamada que entra, que no manda nada (el puente solo pasa quien llama).
+SALUDO_ENTRANTE = "Hola, soy Sara, la asistente con inteligencia artificial de Vantelia. ¿En qué te puedo ayudar?"
+# En una entrante las tools no llevan el id de la llamada (no lo hay aun): llevan quien llama y
+# la conversacion, y el servidor encuentra o crea su ficha (`_fila_entrante`).
+CAMPO_QUIEN = "_quien"
+CAMPO_CONVERSACION = "_conversacion"
 
 GUION = """Eres Sara, una asistente virtual de Vantelia: una inteligencia artificial, y lo dices. Llamas por telefono a {{negocio}} ({{sector}}).
 
@@ -90,6 +98,12 @@ GRABACIONES, CENTRALITAS Y ESPERAS
 - Un buzon de voz ("deje su mensaje despues de la señal") si es para colgar: usa `voicemail_detection`.
 - Si el menu exige pulsar una tecla para seguir y no dice que te pasara con alguien, no puedes navegarlo: no digas que has pulsado nada y cuelga con `end_call`. Si anuncia espera o que te pasa con alguien, espera con `skip_turn`.
 - Cuando por fin hable una persona despues de una grabacion o una espera, no ha oido nada de lo anterior: presentate entera con la misma apertura del principio ("{{saludo}}") y espera a que conteste antes de seguir.
+
+SI TE LLAMAN ELLOS
+Esta llamada es {{sentido}}. Si es "entrante", te han llamado ELLOS al numero de Vantelia (casi siempre para devolver una llamada nuestra) y ya les has saludado. Escucha que quieren:
+- Si es por nuestra llamada: dilo en una frase ("Te llame yo: atendemos las llamadas de negocios como el vuestro cuando estais ocupados. Es comercial; si no te interesa, me lo dices") y sigue con LA PREGUNTA (paso 2) sin volver a pedir permiso.
+- Si es otra cosa: ayudale en lo que puedas con lo que sabes de Vantelia; si quiere hablar con una persona, `pasar_a_pablo`.
+- El paso 1 es solo para cuando llamas tu. El resto (pregunta, demostracion, quien decide, cierre y salidas) es igual.
 
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN (las SALIDAS de abajo mandan sobre estos pasos)
 1. Ya te has presentado con la apertura ("{{saludo}}"): ya has dicho que eres una IA y que es comercial. Solo si te dicen claramente que te has equivocado de numero o que no es {{negocio}}, discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales corto y vuelve a pedir permiso con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 ("Si no esta"): pregunta cuando suele estar y despidete, sin preguntas ni demostracion a quien te ha cogido. Si es ella o se pone: pidele permiso para una pregunta breve y sigue en el paso 2.
@@ -331,7 +345,9 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
     base = base_url.rstrip("/")
     herramientas = [
         voz_elevenlabs.herramienta_webhook(nombre, descripcion, "%s%s/tool/%s" % (base, RUTA, nombre),
-                                           esquema, {CAMPO_LLAMADA: VARIABLE_LLAMADA})
+                                           esquema, {CAMPO_LLAMADA: VARIABLE_LLAMADA,
+                                                     CAMPO_QUIEN: "system__caller_id",
+                                                     CAMPO_CONVERSACION: "system__conversation_id"})
         for nombre, (descripcion, esquema) in _HERRAMIENTAS.items()
     ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte. Nunca durante un traspaso anunciado ni mientras "
                               "esperas a que hable alguien."), BUZON_SIN_MENSAJE, ESPERAR_CALLADA]
@@ -346,8 +362,10 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
                 "language": "es",
                 "dynamic_variables": {"dynamic_variable_placeholders": {
                     "negocio": "tu negocio", "sector": "un negocio con citas", VARIABLE_LLAMADA: "",
-                    "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio", "saludo": APERTURA,
-                    "responsable": "quien lleva el negocio"}},
+                    "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio",
+                    "responsable": "quien lleva el negocio",
+                    # Lo que vale si no lo manda nadie: solo pasa en una llamada que ENTRA.
+                    "saludo": SALUDO_ENTRANTE, "sentido": "entrante"}},
                 "prompt": {"prompt": GUION, "llm": voz_elevenlabs.LLM_POR_DEFECTO, "temperature": 0.4,
                            "tools": herramientas},
             },
@@ -600,7 +618,8 @@ def _variables(fila) -> Dict[str, str]:
             "email_negocio": email_hablado(email_negocio),
             "a_quien": responsable or (negocio_hablado(negocio, fila["sector"]) if fila["negocio"] else negocio),
             "responsable": responsable or "quien lleva el negocio",
-            "saludo": (APERTURA_RELLAMADA % responsable) if responsable else APERTURA}
+            "saludo": (APERTURA_RELLAMADA % responsable) if responsable else APERTURA,
+            "sentido": "saliente"}
 
 
 # --- Marcar por SIP (proveedor espanol -> ElevenLabs) -----------------------------------
@@ -1066,10 +1085,52 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "mensaje": "Enviado %s. Diselo en una frase y despidete." % por_donde}
 
 
+MINUTOS_MISMA_ENTRANTE = 30
+
+
+def _fila_entrante(quien: str, conversation_id: str = ""):
+    """La ficha de una llamada que nos hacen al 91. La primera vez se crea, con el negocio,
+    sector y email de nuestra ultima llamada a ese numero si la hubo; despues se reutiliza (por
+    la conversacion, o la del mismo numero de los ultimos minutos). None si no hay por donde."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,80}", conversation_id or ""):
+        conversation_id = ""
+    telefono = telefono_e164(quien) if quien else ""
+    if not (telefono or conversation_id):
+        return None
+    hace = (timeutils._utc_now() - timedelta(minutes=MINUTOS_MISMA_ENTRANTE)).isoformat(timespec="seconds")
+    with _db() as conn:
+        conn.row_factory = sqlite3.Row
+        if conversation_id:
+            fila = conn.execute("SELECT * FROM llamadas_voz WHERE conversation_id=?", (conversation_id,)).fetchone()
+            if fila is not None:
+                return fila
+        if telefono:
+            fila = conn.execute("SELECT * FROM llamadas_voz WHERE telefono=? AND origen='entrante' AND creada >= ? "
+                                "ORDER BY creada DESC LIMIT 1", (telefono, hace)).fetchone()
+            if fila is not None:
+                if conversation_id and not fila["conversation_id"]:
+                    conn.execute("UPDATE llamadas_voz SET conversation_id=? WHERE id=?", (conversation_id, fila["id"]))
+                    conn.commit()
+                return _fila(fila["id"])
+        previa = conn.execute("SELECT negocio, sector, prospecto FROM llamadas_voz WHERE telefono=? AND "
+                              "origen<>'entrante' ORDER BY creada DESC LIMIT 1", (telefono,)).fetchone() if telefono else None
+        llamada_id, ahora = "ll_" + secrets.token_urlsafe(9), _ahora()
+        conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, "
+                     "conversation_id, creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                     (llamada_id, telefono, previa["negocio"] if previa else "", previa["sector"] if previa else "",
+                      previa["prospecto"] if previa else "", "en_curso", "entrante", conversation_id, ahora, ahora))
+        conn.commit()
+    return _fila(llamada_id)
+
+
 def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     """Lo que hace cada tool de la agente de captacion."""
     llamada_id = str(cuerpo.get(CAMPO_LLAMADA) or "")
     fila = _fila(llamada_id) if llamada_id else None
+    if fila is None and not llamada_id:
+        # Una llamada que ENTRA no tiene id (Astra, 30-sep: sin esto, "No encuentro esta llamada").
+        fila = _fila_entrante(str(cuerpo.get(CAMPO_QUIEN) or ""), str(cuerpo.get(CAMPO_CONVERSACION) or ""))
+        llamada_id = fila["id"] if fila is not None else ""
     if fila is None:
         return {"ok": False, "error": "No encuentro esta llamada. Despidete con amabilidad."}
     if nombre == "enviar_informacion":

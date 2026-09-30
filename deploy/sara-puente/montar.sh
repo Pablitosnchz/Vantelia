@@ -30,6 +30,12 @@ if [ -z "$ZU" ] || [ -z "$ZP" ]; then
   echo "Faltan ZADARMA_EXTENSION_USUARIO / ZADARMA_EXTENSION_CLAVE en $ENV_APP" >&2
   exit 1
 fi
+# El 91 de Sara: las llamadas que entran se pasan a ElevenLabs con el en la Request-URI.
+NS=$(val CAPTACION_SIP_NUMERO)
+if ! [[ "$NS" =~ ^\+34[0-9]{9}$ ]]; then
+  echo "CAPTACION_SIP_NUMERO no es un numero espanol (+34 y 9 cifras) en $ENV_APP" >&2
+  exit 1
+fi
 
 mkdir -p "$DESTINO/anterior" "$DESTINO/sonidos"
 chmod 700 "$DESTINO"
@@ -73,6 +79,7 @@ GID_A=$(docker run --rm --entrypoint id "$IMAGEN" -g asterisk)
 
 # Las claves son alfanumericas (Zadarma) y hex (la nuestra): sed con '|' no las rompe.
 sed -e "s|__ZADARMA_USUARIO__|$ZU|g" -e "s|__ZADARMA_CLAVE__|$ZP|g" -e "s|__CLAVE_ELEVENLABS__|$CL|g" \
+  -e "s|__NUMERO_SARA__|$NS|g" \
   "$ORIGEN/pjsip.conf.plantilla" > "$DESTINO/pjsip.conf"
 cp "$ORIGEN/extensions.conf" "$ORIGEN/modules.conf" "$ORIGEN/rtp.conf" "$DESTINO/"
 chown "$UID_A:$GID_A" "$DESTINO/pjsip.conf"

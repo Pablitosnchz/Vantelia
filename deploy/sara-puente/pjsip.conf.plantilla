@@ -41,6 +41,26 @@ force_rport=yes
 rewrite_contact=yes
 dtmf_mode=rfc4733
 
+; --- Llamadas que entran al 91 -> Sara en ElevenLabs. El numero va en la Request-URI (lo
+; exige ElevenLabs para saber que agente coge); sin credenciales: el numero importado admite
+; cualquier origen para las entrantes.
+[elevenlabs_entrada]
+type=aor
+contact=sip:__NUMERO_SARA__@sip.rtc.elevenlabs.io:5060;transport=tcp
+
+[elevenlabs_entrada]
+type=endpoint
+transport=t-tcp
+context=sin-entrada
+disallow=all
+allow=alaw,ulaw
+aors=elevenlabs_entrada
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+dtmf_mode=rfc4733
+
 ; --- Salida por la centralita de Zadarma, registrado como un telefono mas (la extension).
 [zadarma]
 type=auth

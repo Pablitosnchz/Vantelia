@@ -64,7 +64,8 @@ def _montar(tmp_path, nueva_falla=False, nueva_registra=True):
     for fichero in ("pjsip.conf", "extensions.conf", "modules.conf", "rtp.conf"):
         _escribir(os.path.join(destino, fichero), "%s ANTERIOR\n" % fichero)
     env_app = os.path.join(base, ".env")
-    _escribir(env_app, "OTRA=1\nZADARMA_EXTENSION_USUARIO=594819-999\nZADARMA_EXTENSION_CLAVE=claveZadarma\n")
+    _escribir(env_app, "OTRA=1\nZADARMA_EXTENSION_USUARIO=594819-999\nZADARMA_EXTENSION_CLAVE=claveZadarma\n"
+                       "CAPTACION_SIP_NUMERO=+34910000001\n")
     resultado = ejecutar([ruta_posix(MONTAR)], stubs,
                          SARA_PUENTE_DESTINO=ruta_posix(destino), SARA_PUENTE_ENV=ruta_posix(env_app),
                          SARA_PUENTE_ESPERA="0", SARA_PUENTE_IMAGEN="imagen-nueva")
@@ -84,7 +85,9 @@ def test_si_todo_va_bien_se_queda_el_nuevo_con_sus_credenciales(tmp_path):
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     assert _arranques(ordenes) == ["imagen-nueva"]
     assert "594819-999" in pjsip and "claveZadarma" in pjsip and "00112233445566778899aabbccddeeff" in pjsip
-    for marcador in ("__ZADARMA_USUARIO__", "__ZADARMA_CLAVE__", "__CLAVE_ELEVENLABS__"):
+    # Las entrantes al 91 van a Sara en ElevenLabs con el numero en la Request-URI (30-sep).
+    assert "sip:+34910000001@sip.rtc.elevenlabs.io:5060;transport=tcp" in pjsip
+    for marcador in ("__ZADARMA_USUARIO__", "__ZADARMA_CLAVE__", "__CLAVE_ELEVENLABS__", "__NUMERO_SARA__"):
         assert marcador not in pjsip, "no queda ningun marcador sin sustituir"
     with open(os.path.join(str(tmp_path), "sara-puente", "anterior", "pjsip.conf"), encoding="utf-8") as f:
         assert f.read() == "pjsip.conf ANTERIOR\n", "la configuracion de antes queda guardada"
