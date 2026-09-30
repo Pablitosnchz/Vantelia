@@ -179,7 +179,8 @@ def test_a_un_movil_se_le_manda_un_sms_sin_pedir_nada(captacion, envios):
     assert len(envios["sms"]) == 1 and envios["sms"][0][0] == "+34675802001"
     sms = envios["sms"][0][1]
     assert "Peluqueria Movil" in sms and "vantelia.es" in sms
-    assert "675 802 001" in sms and "info@vantelia.es" in sms, "cualquier duda: Pablo o info@ (Pablo, 24-sep)"
+    assert "info@vantelia.es" in sms and "802 001" not in sms, (
+        "cualquier duda: el 91 que atiende Sara o info@; nunca el movil de Pablo (Pablo, 30-sep)")
     assert sms.isascii(), "una tilde cambia la codificacion y el SMS cuesta mas del doble"
     enlace_largo = "https://app.vantelia.es/demo/go/" + "x" * 60
     assert len(captacion.texto_sms("Peluqueria Con Nombre Largo", enlace_largo)) <= 306, "mas de 2 SMS"

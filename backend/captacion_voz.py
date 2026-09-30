@@ -55,7 +55,6 @@ RUTA = "/voice/el-captacion"
 VARIABLE_LLAMADA = "llamada"
 CAMPO_LLAMADA = "_llamada"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
-TELEFONO_PABLO = "675 802 001"
 EMAIL_VANTELIA = "info@vantelia.es"
 WEB = "https://www.vantelia.es"
 
@@ -77,6 +76,8 @@ COMO HABLAS
 
 GRABACIONES, CENTRALITAS Y ESPERAS
 - Muchos negocios contestan con una grabacion o un menu ("pulse uno", "marque dos", "su llamada es muy importante", "en breve le atenderemos", "sera atendido", "esta llamada puede ser grabada") o te dejan en espera con musica. Eso NO es una persona: no le hables, no le preguntes nada y nunca le digas que se ha confundido. Usa `skip_turn` y espera callada a que conteste alguien, aunque tarde. No cuelgues por estar en espera y no preguntes "¿sigues ahi?" a una grabacion.
+- Si la grabacion dice que te pasan con alguien ("le pasamos con una recepcionista", "se transfiere su llamada"), eso tambien es esperar: `skip_turn`. Nunca te despidas ni cuelgues por eso.
+- Si la misma grabacion de espera se ha repetido cinco veces y no coge nadie, cuelga con `end_call` sin decir nada: se le volvera a llamar otro dia.
 - Un buzon de voz ("deje su mensaje despues de la señal") si es para colgar: usa `voicemail_detection`.
 - Si el menu exige pulsar una tecla para seguir y no dice que te pasara con alguien, no puedes navegarlo: no digas que has pulsado nada y cuelga con `end_call`. Si anuncia espera o que te pasa con alguien, espera con `skip_turn`.
 - Cuando por fin hable una persona despues de una grabacion o una espera, no ha oido nada de lo anterior: presentate entera, como si empezara la llamada ("Hola, buenas. Soy Sara, una asistente virtual de Vantelia. ¿Hablo con {{a_quien}}?"), y espera a que conteste antes de seguir.
@@ -104,7 +105,7 @@ SALIDAS
 - "No me interesa": agradece, despidete y usa `end_call`. No preguntes por quien decide ni ofrezcas la demostracion ni la informacion.
 - Si pide que le mandes informacion: ve directa al paso 6, sin demostracion ni preguntar por quien decide.
 - Si pregunta quien eres o si eres un robot: contesta corto ("Soy Sara, una inteligencia artificial de Vantelia; ayudamos a los negocios a coger las llamadas") y sigue donde estabas, sin repetir el gancho entero.
-- Si quiere hablar con una persona: dile que puede llamar o escribir a Pablo, el fundador, al seis siete cinco, ochocientos dos, cero cero uno, u ofrecele mandarselo por escrito (paso 6). Nunca finjas que le pasas la llamada.
+- Si quiere hablar con una persona: dile que Pablo, el fundador, le llama; pregunta cuando le viene bien y usa `volver_a_llamar` (con_quien: "Pablo"). Nunca des otro telefono ni finjas que le pasas la llamada.
 - "No me llameis mas" o enfado: pide disculpas, usa `no_volver_a_llamar` y despidete.
 - Maximo cuatro minutos: si se alarga, ofrece mandar la informacion (paso 6).
 
@@ -521,6 +522,32 @@ _LO_QUE_ES = (
 )
 
 
+# El nombre de la captacion viene del buscador con relleno: "Blow Dry Bar - Daniele Sigigliano -
+# Peluqueria en los Jeronimos Madrid". Dicho entero sonaba a robot desde la primera frase
+# (30-sep-2026). Se queda el primer trozo que no sea solo tipo de negocio o ciudad.
+_SEPARADORES_DE_NOMBRE = re.compile(r"\s+[-–—|·]\s+|,\s+")
+_PALABRAS_DE_RELLENO = frozenset("""
+peluqueria peluquerias peluqueros estetica esteticas centro centros clinica clinicas medicina medica medico
+belleza salon spa masajes masaje fisioterapia fisio osteopatia depilacion laser barberia dental dentista
+podologia beauty hair estudio y de del la las los el en madrid barcelona valencia sevilla malaga bilbao
+zaragoza torrejon alcala henares getafe mostoles leganes alcorcon fuenlabrada
+""".split())
+
+
+def nombre_corto(negocio: str) -> str:
+    """"Blow Dry Bar - Daniele Sigigliano - Peluquería en ..." -> "Blow Dry Bar";
+    "Peluqueria Madrid - Ananda Ferdi" -> "Ananda Ferdi". Sin separadores, tal cual."""
+    negocio = str(negocio or "").strip()
+    partes = [p.strip() for p in _SEPARADORES_DE_NOMBRE.split(negocio) if p.strip()]
+    if len(partes) <= 1:
+        return negocio
+    for parte in partes:
+        palabras = re.findall(r"[a-z0-9]+", textnorm._strip_accents(parte).lower())
+        if any(p not in _PALABRAS_DE_RELLENO for p in palabras):
+            return parte
+    return partes[0]
+
+
 def negocio_hablado(negocio: str, sector: str) -> str:
     """Como lo nombra Sara: "la peluquería Miguel Guerrero", "Clínica Montecarmelo"."""
     negocio = str(negocio or "").strip()
@@ -541,7 +568,7 @@ def _variables(fila) -> Dict[str, str]:
     """Lo que Sara sabe de la llamada ({{negocio}}, {{a_quien}}...). Las mismas por Twilio y
     por SIP: el guion no sabe por donde se ha marcado."""
     email_negocio = str(fila["prospecto"] or "")
-    negocio = fila["negocio"] or "tu negocio"
+    negocio = nombre_corto(fila["negocio"]) or "tu negocio"
     # En una rellamada dirigida se pregunta por quien decide; si no, por el negocio.
     responsable = str(fila["responsable_nombre"] or "") if fila["rellamada_de"] else ""
     return {"negocio": negocio, "sector": fila["sector"] or "un negocio con citas",
@@ -869,11 +896,30 @@ def enlace_de_demo(email_negocio: str) -> str:
     return "%s/demo/go/%s" % (base, outreach_templates.make_tracking_token(email_negocio, "llamada", secreto))
 
 
+def telefono_de_vantelia() -> str:
+    """El 91 desde el que llama Sara, escrito para una persona ("919 93 43 21"). Es el que se
+    da para devolver la llamada; nunca el movil de Pablo (Pablo, 30-sep-2026)."""
+    cifras = re.sub(r"\D", "", settings.CAPTACION_SIP_NUMERO or "")
+    cifras = cifras[2:] if cifras.startswith("34") and len(cifras) == 11 else cifras
+    if len(cifras) != 9:
+        return ""
+    return "%s %s %s %s" % (cifras[:3], cifras[3:5], cifras[5:7], cifras[7:])
+
+
+def _contacto(con_tildes: bool = True) -> str:
+    """"llamanos al 919 93 43 21 o escribe a info@vantelia.es" (sin numero, solo el correo)."""
+    telefono = telefono_de_vantelia()
+    if telefono:
+        return ("llámanos al %s o escribe a %s" if con_tildes else "llamanos al %s o escribe a %s") % (
+            telefono, EMAIL_VANTELIA)
+    return "escribe a %s" % EMAIL_VANTELIA
+
+
 def texto_sms(negocio: str, enlace: str) -> str:
     # Sin tildes a proposito: con una sola, el SMS pasa a otra codificacion y cuesta el doble.
     return ("Hola! Soy Sara, de Vantelia. Asi atenderia el telefono y el WhatsApp de %s: %s "
-            "Pruebalo gratis. Cualquier duda, te llamamos: escribe a Pablo al %s o a %s"
-            % (textnorm._strip_accents(negocio), enlace, TELEFONO_PABLO, EMAIL_VANTELIA))
+            "Pruebalo gratis. Cualquier duda, %s"
+            % (textnorm._strip_accents(negocio), enlace, _contacto(con_tildes=False)))
 
 
 def correo(negocio: str, enlace: str) -> Dict[str, str]:
@@ -883,9 +929,11 @@ def correo(negocio: str, enlace: str) -> Dict[str, str]:
         "atendería el teléfono y el WhatsApp de %s: da citas, las cambia y las cancela mientras "
         "estáis con las manos ocupadas.\n\n"
         "Pruébalo con tu propio negocio: %s\n\n"
-        "¿Alguna duda? Te llamamos cuando te venga bien: escribe a Pablo al %s, a %s o "
-        "responde a este correo.\n\n"
-        "Un saludo,\nSara · Vantelia\n" % (negocio, enlace, TELEFONO_PABLO, EMAIL_VANTELIA))
+        "¿Alguna duda? %s, o responde a este correo.\n\n"
+        "Un saludo,\nSara · Vantelia\n" % (negocio, enlace, _contacto()[:1].upper() + _contacto()[1:]))
+    telefono = telefono_de_vantelia()
+    contacto_html = ("Llámanos al %s o escribe a <a href='mailto:%s'>%s</a>" % (telefono, EMAIL_VANTELIA, EMAIL_VANTELIA)
+                     if telefono else "Escribe a <a href='mailto:%s'>%s</a>" % (EMAIL_VANTELIA, EMAIL_VANTELIA))
     html = (
         "<div style='font-family:sans-serif;max-width:560px;color:#1a1a2e;line-height:1.5'>"
         "<p>Hola,</p><p>Soy Sara, la asistente virtual de Vantelia que os ha llamado hace un "
@@ -893,9 +941,8 @@ def correo(negocio: str, enlace: str) -> Dict[str, str]:
         "cambia y las cancela mientras estáis con las manos ocupadas.</p>"
         "<p><a href='%s' style='display:inline-block;padding:11px 20px;border-radius:999px;"
         "background:#00D1FF;color:#04101C;font-weight:700;text-decoration:none'>Pruébalo con tu "
-        "negocio</a></p><p>¿Alguna duda? Te llamamos cuando te venga bien: escribe a Pablo al %s, "
-        "a <a href='mailto:%s'>%s</a> o responde a este correo.</p><p>Un saludo,<br>Sara · Vantelia</p></div>"
-        % (escape(negocio), escape(enlace, quote=True), TELEFONO_PABLO, EMAIL_VANTELIA, EMAIL_VANTELIA))
+        "negocio</a></p><p>¿Alguna duda? %s, o responde a este correo.</p><p>Un saludo,<br>Sara · Vantelia</p></div>"
+        % (escape(negocio), escape(enlace, quote=True), contacto_html))
     return {"asunto": "Lo que te conté por teléfono", "texto": texto, "html": html}
 
 
@@ -961,7 +1008,7 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         # dice depende de como quedo: solo "ya se le ha mandado" si de verdad salio.
         return {"ok": True, "reclamada": False, "mensaje": _MENSAJE_YA_RECLAMADO.get(
             _estado_del_envio(fila["id"]), _MENSAJE_YA_RECLAMADO["no_enviada"])}
-    negocio = fila["negocio"] or "tu negocio"
+    negocio = nombre_corto(fila["negocio"]) or "tu negocio"
     enlace = enlace_de_demo(email_negocio)
     if email_negocio:
         # Su demo empieza a generarse YA (desde su web, en segundo plano): cuando abra

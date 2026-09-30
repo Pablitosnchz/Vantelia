@@ -80,6 +80,52 @@ def test_el_guion_sabe_de_grabaciones_esperas_y_de_quien_esta_ocupado(captacion)
     assert "hablo_una_persona" in agente["platform_settings"]["data_collection"]
 
 
+# --- Nombre sin relleno de buscador y ningun telefono de Pablo (30-sep) ---------------------
+
+@pytest.mark.parametrize("negocio,corto", [
+    ("Blow Dry Bar - Daniele Sigigliano - Peluquería en los Jerónimos Madrid", "Blow Dry Bar"),
+    ("Allure Nails Madrid - Centro de estética", "Allure Nails Madrid"),
+    ("Maison Eduardo Sánchez, peluquería. Barrio Salamanca", "Maison Eduardo Sánchez"),
+    ("Espacio Isaac Salido - Peluquería & Concept Store", "Espacio Isaac Salido"),
+    ("Peluqueria Madrid - Ananda Ferdi", "Ananda Ferdi"),            # el primer trozo es solo relleno
+    ("Medicina Estética en Madrid - Dr. Rojas", "Dr. Rojas"),
+    ("MARSYA Centro Médico-Estético", "MARSYA Centro Médico-Estético"),  # guion sin espacios: no se corta
+    ("Clinica Montecarmelo", "Clinica Montecarmelo"),
+    ("Peluquería Madrid - Centro de estética", "Peluquería Madrid"),  # todo relleno: el primero
+])
+def test_el_nombre_sin_relleno_de_buscador(captacion, negocio, corto):  # noqa: F811
+    assert captacion.nombre_corto(negocio) == corto
+
+
+def test_sara_dice_el_nombre_corto(captacion):  # noqa: F811
+    hecho = captacion.llamar("911111111", "Medicina Estética en Madrid - Dr. Rojas", "estetica", "", origen="auto",
+                             cliente=_Falso())
+    variables = captacion._variables(captacion._fila(hecho["llamada"]))
+    assert variables["negocio"] == "Dr. Rojas"
+    assert variables["a_quien"] == "el centro de estética Dr. Rojas"
+
+
+def test_ningun_mensaje_de_sara_da_el_movil_de_pablo(captacion, monkeypatch):  # noqa: F811
+    """Pablo, 30-sep: quien devuelve la llamada llama al 91 (lo atendera Sara), no a su movil."""
+    from backend import settings
+
+    monkeypatch.setattr(settings, "CAPTACION_SIP_NUMERO", "+34919934321")
+    guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
+    textos = [guion, captacion.texto_sms("Pelu", "https://x.es/d"), captacion.correo("Pelu", "https://x.es/d")["texto"],
+              captacion.correo("Pelu", "https://x.es/d")["html"]]
+    for texto in textos:
+        assert "675" not in texto and "ochocientos dos" not in texto
+    for texto in textos[1:]:
+        assert "919 93 43 21" in texto and "info@vantelia.es" in texto
+    assert 'usa `volver_a_llamar` (con_quien: "Pablo")' in guion
+
+
+def test_traspasos_y_esperas_eternas(captacion):  # noqa: F811
+    guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
+    assert "Nunca te despidas ni cuelgues por eso" in guion       # Harmonie, 30-sep: "le pasamos con..."
+    assert "se ha repetido cinco veces y no coge nadie" in guion  # Isaac Salido, 30-sep: 300 s en espera
+
+
 # --- Revision de Astra (29-sep): coherencia del guion y tope de duracion --------------------
 
 def test_al_apuntar_a_la_duena_la_herramienta_no_manda_repetir_la_demo(captacion):  # noqa: F811
@@ -96,7 +142,7 @@ def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
     assert "\"No me interesa\": agradece, despidete y usa `end_call`" in guion
     assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
     assert "sin repetir el gancho entero" in guion
-    assert "Nunca finjas que le pasas la llamada" in guion
+    assert "ni finjas que le pasas la llamada" in guion
     # Rellamada a quien decide que no esta: sin demo a quien coge.
     assert "sin gancho ni demostracion a quien te ha cogido" in guion
     # Menu que exige pulsar una tecla: no se puede navegar.
