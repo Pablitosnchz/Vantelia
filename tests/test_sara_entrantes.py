@@ -61,6 +61,18 @@ def test_una_entrante_es_una_sola_ficha(captacion, envios):  # noqa: F811
         assert conn.execute("SELECT COUNT(*) FROM llamadas_voz WHERE origen='entrante'").fetchone()[0] == 1
 
 
+def test_dos_llamadas_del_mismo_numero_son_dos_fichas(captacion, envios):  # noqa: F811
+    """Astra, 30-sep: llamaba dos veces en media hora y la segunda reutilizaba la primera ficha
+    (pisaba su transcripcion y su sello de envio: no le llegaba lo que pidio)."""
+    captacion.herramienta("enviar_informacion", _entrante(_conversacion="conv_primera"))
+    r = captacion.herramienta("enviar_informacion", _entrante(_conversacion="conv_segunda"))
+    assert r["ok"] is True and "Ya se le ha mandado" not in r["mensaje"]
+    with captacion._db() as conn:
+        conversaciones = sorted(f[0] for f in conn.execute(
+            "SELECT conversation_id FROM llamadas_voz WHERE origen='entrante'"))
+    assert conversaciones == ["conv_primera", "conv_segunda"]
+
+
 def test_sin_numero_ni_conversacion_no_se_inventa_nada(captacion):  # noqa: F811
     r = captacion.herramienta("pasar_a_pablo", _entrante(_quien="", _conversacion=""))
     assert r["ok"] is False and "No encuentro esta llamada" in r["error"]

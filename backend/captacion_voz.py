@@ -1105,8 +1105,12 @@ def _fila_entrante(quien: str, conversation_id: str = ""):
             if fila is not None:
                 return fila
         if telefono:
+            # Solo la de la MISMA conversacion (o una aun sin ella): dos llamadas del mismo numero
+            # en media hora son dos fichas, o la segunda pisaba la transcripcion y el sello de
+            # envio de la primera (revision de Astra, 30-sep-2026).
             fila = conn.execute("SELECT * FROM llamadas_voz WHERE telefono=? AND origen='entrante' AND creada >= ? "
-                                "ORDER BY creada DESC LIMIT 1", (telefono, hace)).fetchone()
+                                "AND (? = '' OR conversation_id = '') ORDER BY creada DESC LIMIT 1",
+                                (telefono, hace, conversation_id)).fetchone()
             if fila is not None:
                 if conversation_id and not fila["conversation_id"]:
                     conn.execute("UPDATE llamadas_voz SET conversation_id=? WHERE id=?", (conversation_id, fila["id"]))
