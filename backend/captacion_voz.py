@@ -221,7 +221,12 @@ def _db():
                           # Lo reclaman la herramienta y el respaldo ANTES de mandar.
                           ("informacion", "TEXT NOT NULL DEFAULT ''")):
         if columna not in columnas:
-            conn.execute("ALTER TABLE llamadas_voz ADD COLUMN %s %s" % (columna, tipo))
+            try:
+                conn.execute("ALTER TABLE llamadas_voz ADD COLUMN %s %s" % (columna, tipo))
+            except sqlite3.OperationalError as exc:
+                # Dos conexiones a la vez sobre una base nueva: la otra la anadio entremedias.
+                if "duplicate column" not in str(exc).lower():
+                    raise
     return conn
 
 
