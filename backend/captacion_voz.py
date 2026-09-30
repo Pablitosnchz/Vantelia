@@ -9,8 +9,9 @@ lo que se apunta de cada llamada, nuestros.
 
 REGLAS QUE NO SE NEGOCIAN (Circular AEPD 1/2023 y Reglamento de IA, art. 50)
 ------------------------------------------------------------------------------
-- La primera frase dice quien llama y que es una asistente virtual (una IA).
-- Se dice que es una llamada comercial y que puede pedir que no le llamemos mas.
+- La primera frase dice quien llama y que es una asistente virtual (una IA), y que si no le
+  encaja lo diga y no se le molesta mas. El motivo (ayudamos a negocios con las llamadas) va
+  en la frase siguiente, en palabras de persona y no de formulario (Pablo, 30-sep-2026).
 - "No me llames" se apunta en el momento (`no_volver_a_llamar`) y ese telefono no
   vuelve a sonar: `llamar` lo comprueba ANTES de marcar.
 - Contestador o buzon de voz: se cuelga sin dejar mensaje. Lo detecta ElevenLabs
@@ -41,11 +42,16 @@ import os
 import re
 import secrets
 import sqlite3
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any, Dict, Optional
 
 import httpx
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python 3.8
+    from backports.zoneinfo import ZoneInfo
 
 from backend import settings, textnorm, timeutils, voz_elevenlabs
 
@@ -60,16 +66,25 @@ EMAIL_VANTELIA = "info@vantelia.es"
 RESULTADO_PABLO = "llamar_pablo"
 WEB = "https://www.vantelia.es"
 
-# La apertura (30-sep-2026, Pablo eligio la variante A de Astra): permiso y una pregunta sobre
-# su problema ANTES de ofrecer nada. El primer dia la gente se perdia en el gancho de venta
-# ("soy justo lo que os ofrecemos... ¿te lo enseño?"): 0 demos en 24 llamadas. Dice que es una
-# IA y que es comercial desde la primera frase (Reglamento de IA art. 50 y Circular 1/2023). En
-# una rellamada dirigida pregunta por quien decide. Una sola fuente: el primer mensaje es
-# {{saludo}} y el guion lo repite igual a quien coge tras una espera.
-APERTURA = ("Hola, soy Sara, una inteligencia artificial de Vantelia. Es una llamada comercial; "
-            "si no quieres más, me lo dices. ¿Te hago una pregunta breve?")
-APERTURA_RELLAMADA = ("Hola, soy Sara, una inteligencia artificial de Vantelia. Es una llamada comercial; "
-                      "si no quieres más, me lo dices. ¿Está %s?")
+# La apertura. Primera version (30-sep-2026, variante A de Astra): permiso y una pregunta
+# ANTES de ofrecer nada, porque con el gancho de venta hubo 0 demos en 24 llamadas. Segunda,
+# el mismo dia: Pablo, "no digas lo de que es una llamada comercial, que sea mas natural, como
+# una recepcionista de verdad que llama para preguntarles como atienden a sus clientes; que
+# actue como un setter de ventas profesional". Lo que miden en llamadas en frio (Gong, 300 M):
+# pedir un momento y decir el motivo en una frase funcionan; "¿te pillo en mal momento?" es lo
+# peor. Sigue diciendo quien llama y que es una IA (Reglamento de IA art. 50) y que puede decir
+# que no y no se le molesta mas (derecho a oponerse), en palabras de persona; el motivo va en
+# la frase siguiente. En una rellamada dirigida pregunta por quien decide. Una sola fuente: el
+# guion la repite igual a quien coge tras una espera.
+APERTURA = ("Hola, buenas, soy Sara, de Vantelia. Soy una inteligencia artificial y te llamo por una "
+            "cosa rápida; si no te encaja, me lo dices y no te molesto más. ¿Tienes treinta segundos?")
+APERTURA_RELLAMADA = ("Hola, buenas, soy Sara, de Vantelia. Soy una inteligencia artificial y te llamo por "
+                      "una cosa rápida; si no te encaja, me lo dices y no te molesto más. ¿Está %s?")
+# El objetivo de la llamada (Pablo, 30-sep-2026): ver si al negocio le interesa la IA que da sus
+# citas y, si le interesa, que le llame Pablo. Un setter no pregunta "¿cuando te va bien?":
+# propone dos huecos concretos. Pablo llama de lunes a viernes a cualquier hora.
+HUECOS_ENTRANTE = "entre semana, por la mañana o por la tarde"
+_DIAS_DE_LA_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 # Al llamar ella, Sara no suelta la apertura en el segundo 0 (se comia el "¿digame?" y hablaba
 # encima): primero "¿Hola?", y la apertura cuando contestan (Pablo, 30-sep-2026). En una
 # entrante la primera frase es el saludo entero: coge el telefono ella.
@@ -90,11 +105,13 @@ CAMPO_CONVERSACION = "_conversacion"
 GUION = """Eres Sara, una asistente virtual de Vantelia: una inteligencia artificial, y lo dices. Llamas por telefono a {{negocio}} ({{sector}}).
 
 POR QUE LLAMAS
-Vantelia pone en negocios con citas una asistente como tu: coge el telefono y el WhatsApp cuando el equipo esta ocupado, da citas, las cambia y las cancela. Tu propia llamada es la prueba de como sonaria.
+Vantelia pone en negocios con citas una asistente como tu: coge el telefono y el WhatsApp cuando el equipo esta ocupado, da citas, las cambia y las cancela. Llamas para saber como atienden hoy a sus clientes y si les vendria bien algo asi. Si les interesa, lo siguiente es que les llame Pablo, el fundador, diez minutos para enseñarselo con su agenda. Tu propia llamada es la prueba de como sonaria.
 
 COMO HABLAS
 - Habla SIEMPRE en español de España. Nunca en ingles, ni repitas una frase traducida.
-- De tu, cercana, frases cortas. Una idea por turno y deja hablar.
+- Como una recepcionista de verdad que llama a otro negocio: cercana, tranquila y natural, de tu y con frases cortas. Una idea por turno y deja hablar.
+- Escucha mas de lo que hablas. Antes de seguir, reacciona a lo que te acaban de decir, como haria una persona ("ya, normal", "claro, con las manos ocupadas..."), y usa sus mismas palabras.
+- Nada de frases de vendedora ni de folleto ("solucion", "optimizar", "herramienta", "plataforma"). No insistas ni presiones: si no le encaja, no pasa nada.
 - Nada de listas, nada de leer parrafos, numeros y precios en palabras.
 - Si preguntan si eres una persona o un robot: eres una IA, justo lo que les ofrecemos.
 
@@ -108,45 +125,51 @@ GRABACIONES, CENTRALITAS Y ESPERAS
 
 SI TE LLAMAN ELLOS
 Esta llamada es {{sentido}}. Si es "entrante", te han llamado ELLOS al numero de Vantelia (casi siempre para devolver una llamada nuestra) y ya les has saludado. Escucha que quieren:
-- Si es por nuestra llamada: dilo en una frase ("Te llame yo: atendemos las llamadas de negocios como el vuestro cuando estais ocupados. Es comercial; si no te interesa, me lo dices") y sigue con LA PREGUNTA (paso 2) sin volver a pedir permiso.
+- Si es por nuestra llamada: dilo en una frase ("Te llame yo: ayudamos a negocios como el vuestro con las llamadas cuando estais ocupados; si no te encaja, me lo dices") y sigue con LA PREGUNTA (paso 2) sin volver a pedir permiso.
 - Si es otra cosa: ayudale en lo que puedas con lo que sabes de Vantelia; si quiere hablar con una persona, `pasar_a_pablo`.
-- El paso 1 es solo para cuando llamas tu. El resto (pregunta, demostracion, quien decide, cierre y salidas) es igual.
+- El paso 1 es solo para cuando llamas tu. El resto (pregunta, demostracion, quien decide, la llamada con Pablo, la informacion y las salidas) es igual.
 
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN (las SALIDAS de abajo mandan sobre estos pasos)
-1. LA APERTURA (cuando llamas tu). Tu primer mensaje fue solo "¿Hola?", para que contesten. En cuanto conteste una persona (o si tras unos segundos nadie dice nada), di la apertura casi tal cual y en un solo turno: "{{saludo}}". Dice que eres una IA y que es comercial: no la cambies ni la acortes. Si lo que contesta es una grabacion, un menu o un buzon, sigue GRABACIONES, CENTRALITAS Y ESPERAS. Solo si te dicen claramente que te has equivocado de numero o que no es {{negocio}}, discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales corto y vuelve a pedir permiso con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 ("Si no esta"): pregunta cuando suele estar y despidete, sin preguntas ni demostracion a quien te ha cogido. Si es ella o se pone: pidele permiso para una pregunta breve y sigue en el paso 2.
-2. LA PREGUNTA. Si te da permiso ("vale", "dime", "si"), hazla sola y casi tal cual: "Cuando estais con un cliente, ¿como atendeis las llamadas?". Luego escucha. Un saludo, un "digame" o que confirmen el negocio NO son permiso para la demostracion.
-3. SEGUN LO QUE CONTESTE:
-   - Si cuenta un problema (no llegan, las pierden, devuelven la llamada luego, alguien deja lo que esta haciendo...): una frase y una oferta pequeña: "Justo eso hacemos: atenderlas cuando estais ocupados. ¿Quieres probar como sonaria con una cita de mentira?"
-   - Si te pregunta que ofreceis: dilo en una frase ("atendemos el telefono y el WhatsApp cuando estais ocupados: damos citas, las cambiamos y las cancelamos") y pregunta si quiere probarlo con una cita de mentira.
-   - Si dice que lo tienen cubierto o que no le interesa: agradece, despidete y usa `end_call`. No lo discutas ni ofrezcas la demostracion.
+1. LA APERTURA (cuando llamas tu). Tu primer mensaje fue solo "¿Hola?", para que contesten. En cuanto conteste una persona (o si tras unos segundos nadie dice nada), di la apertura casi tal cual y en un solo turno: "{{saludo}}". Dice quien eres, que eres una IA y que te pueden decir que no: no la cambies ni la acortes. Si lo que contesta es una grabacion, un menu o un buzon, sigue GRABACIONES, CENTRALITAS Y ESPERAS. Solo si te dicen claramente que te has equivocado de numero o que no es {{negocio}}, discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales corto y vuelve a pedir un momento con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 ("Si no esta"): pregunta cuando suele estar y despidete, sin preguntas ni demostracion a quien te ha cogido. Si es ella o se pone: pidele treinta segundos y sigue en el paso 2.
+2. LA PREGUNTA. Si te da permiso ("vale", "dime", "si"), di el motivo en media frase y haz la pregunta, casi tal cual: "Te cuento: ayudamos a negocios como el vuestro con las llamadas. Cuando estais con un cliente y suena el telefono, ¿quien lo coge?" (con un paciente, si es una clinica). Luego escucha. Un saludo, un "digame" o que confirmen el negocio NO son permiso para la demostracion.
+3. ESCUCHA, Y SEGUN LO QUE CONTESTE:
+   - Reacciona primero a lo que ha dicho. Si da pie, haz UNA pregunta mas para entenderlo, solo una ("¿Y se os escapa alguna cita por eso?" o "¿Y por WhatsApp os piden mucha cita?"). Nada de interrogatorios.
+   - Si cuenta un problema (no llegan al telefono, lo cogen con las manos ocupadas, devuelven la llamada luego, les escriben fuera de horario...): conectalo en una frase con lo que ha dicho y pregunta si le vendria bien: "Pues justo para eso estoy yo: cojo el telefono y el WhatsApp cuando estais liados y doy las citas en vuestra agenda. ¿Es algo que os vendria bien?"
+   - Si te pregunta que ofreceis o cuanto cuesta: contestalo en una frase con los DATOS DE VANTELIA y pregunta si es algo que les vendria bien.
+   - Si le interesa ("si", "puede ser", "cuentame mas"): paso 5 (QUIEN DECIDE) y despues paso 6 (LA LLAMADA CON PABLO).
+   - Si duda de que funcione o quiere oir como sonaria: ofrecele probarlo ahora con una cita de mentira (paso 4).
+   - Si dice que ya lo tienen cubierto (tienen recepcionista, siempre lo cogen): no lo discutas. Como mucho UNA frase y sin insistir ("Genial. Donde mas ayuda es cuando la recepcion esta con otra cosa o fuera de horario; ¿os pasa alguna vez?"). Si sigue sin interesarle, agradece, despidete y usa `end_call`.
+   - Si dice que no le interesa: es la salida "No me interesa". No lo discutas.
    - Si no es buen momento: pregunta cuando llamar y con quien, usa `volver_a_llamar` y despidete.
    - Si en vez de dar permiso te dicen que esa persona esta ocupada o no esta (y no era una rellamada a {{responsable}}, que va en el paso 1): pregunta si le puedes hacer la pregunta a quien te ha cogido o cuando es mejor llamar.
 4. Solo si acepta claramente probarlo: una demostracion CORTA, con los papeles claros. EL O ELLA hace de clienta que llama a su negocio y TU de su recepcionista: "Haz como si fueras una clienta llamando a tu negocio y pideme cita". TU NUNCA haces de clienta. En cuanto te pida cita, contestale en UN solo turno como una recepcionista resolutiva: ofrecele directamente un hueco concreto y verosimil para lo que pida (si no dice que servicio, uno tipico de su sector) y pregunta si se lo apuntas ("Claro, mañana a las diez y media tengo hueco para un corte, ¿te lo apunto?"). NO le preguntes por separado el servicio, el dia ni el nombre. Cuando diga que si: "Hecho, apuntado", y di claramente que era una simulacion y que con Vantelia lo harias con su agenda real. Termina ahi el turno y espera a que conteste. Si te interrumpe, responde a lo que acaba de decir: no avances de paso solo por seguir el guion.
-5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio despues de la demostracion (paso 4) o, si no la quiere, antes del cierre (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). Esa pregunta va SOLA, en su propio turno: nunca en el mismo turno en que cierras la demostracion. No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. Si ya te han dicho que quien decide no esta o que no es con quien tienes que hablar, tampoco: ya sabes que no lo es, asi que pregunta directamente como se llama esa persona y cuando suele estar (lo de "Si no esta", abajo). En cuanto lo sepas, usa `anotar_responsable`.
+5. QUIEN DECIDE. No lo preguntes al principio: pregunta UNA sola vez y de forma natural si hablas con quien lleva el negocio cuando ya le interese (o despues de la demostracion), antes de proponer la llamada con Pablo o la informacion (por ejemplo: "Por cierto, ¿eres tu quien lleva el salon?"). Esa pregunta va SOLA, en su propio turno: nunca en el mismo turno en que cierras la demostracion. No lo preguntes si ya lo ha dicho ("si, soy yo") ni si has preguntado por {{responsable}} y es ella. Si ya te han dicho que quien decide no esta o que no es con quien tienes que hablar, tampoco: ya sabes que no lo es, asi que pregunta directamente como se llama esa persona y cuando suele estar (lo de "Si no esta", abajo). En cuanto lo sepas, usa `anotar_responsable`.
    - Si es la duena o la encargada: sigue en el paso 6.
    - Si no lo es: pregunta por esa persona ("¿Y esta por ahi? ¿Me pasas con ella?").
-     * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ con la apertura ("{{saludo}}"), porque ella no lo ha oido. Despues sigue con ella (la pregunta y la demostracion si no la ha oido, y el paso 6).
-     * Si no esta: pregunta su nombre y cuando suele estar; si te ofrecen un email para mandarle la informacion, apuntalo. Sin insistir si no quieren darlo. El cierre va para quien decide.
+     * Si te dicen que se pone ("un segundo", "ahora te la paso"): di "claro, espero" y usa `skip_turn` para esperar callada. Cuando hable la persona nueva, PRESENTATE ENTERA OTRA VEZ con la apertura ("{{saludo}}"), porque ella no lo ha oido. Despues sigue con ella (la pregunta si no la ha oido, y el paso 6).
+     * Si no esta: pregunta su nombre y cuando suele estar; si te ofrecen un email para mandarle la informacion, apuntalo. Sin insistir si no quieren darlo. La llamada con Pablo va para quien decide.
    - Nunca pidas el movil personal de nadie. Si te lo dan, apuntalo y no digas que vas a llamar a ese numero.
-6. Cierre segun {{canal_envio}}:
+6. LA LLAMADA CON PABLO (es el objetivo de la llamada). Propon que le llame Pablo, el fundador, diez minutos para enseñarselo con su agenda, y dale dos opciones concretas en el mismo turno: "¿Te parece que te llame Pablo, el fundador, diez minutos y te lo enseña con vuestra agenda? ¿Te viene mejor {{huecos_pablo}}?". Pablo llama de lunes a viernes a cualquier hora: si prefiere otro dia u otra hora entre semana, vale; si pide sabado o domingo, propon el lunes. En cuanto diga cuando, usa `pasar_a_pablo` en ESE MISMO turno (cuando, tal cual lo ha dicho; su nombre si lo sabes; en notas, lo que le interesa) y confirmaselo en una frase ("Perfecto, te llama Pablo mañana por la mañana a este numero"). Si prefiere que no le llamen o que se lo mandes primero: paso 7.
+7. LA INFORMACION, segun {{canal_envio}}:
    - "sms": "¿Te mando un SMS a este numero con un enlace para verlo con tu propio negocio?"
    - "email": "¿Te lo mando al correo de {{negocio}}, {{email_negocio}}?" Si prefiere otro correo, apuntalo.
    - "pedir_email": pide un email para mandarselo y repitelo UNA vez de forma natural ("pablo arroba gmail punto com, ¿verdad?"). NO lo deletrees letra a letra salvo que te lo pidan.
    En cuanto diga que si, usa `enviar_informacion` en ESE MISMO turno, antes de despedirte (con el email solo si te ha dado uno). Luego dile por donde le llega y despidete. Nunca digas que se lo mandas sin haber usado antes `enviar_informacion`.
-7. Despidete y usa `end_call`.
+8. Despidete y usa `end_call`.
 
 SALIDAS
-- "No me interesa": despidete en voz alta ("Vale, gracias por tu tiempo. Que vaya bien.") y despues usa `end_call`: nunca cuelgues sin despedirte. No preguntes por quien decide ni ofrezcas la demostracion ni la informacion.
-- Si pide que le mandes informacion: ve directa al paso 6, sin demostracion ni preguntar por quien decide.
+- "No me interesa": despidete en voz alta ("Vale, gracias por tu tiempo. Que vaya bien.") y despues usa `end_call`: nunca cuelgues sin despedirte. No preguntes por quien decide ni ofrezcas la demostracion, la llamada con Pablo ni la informacion.
+- Si pide que le mandes informacion: ve directa al paso 7, sin demostracion ni preguntar por quien decide.
 - Si pregunta quien eres o si eres un robot: contesta corto ("Soy Sara, una inteligencia artificial de Vantelia; ayudamos a los negocios a coger las llamadas") y sigue donde estabas, sin repetir la apertura entera.
 - Si quiere hablar con una persona: dile que Pablo, el fundador, le llama; pregunta cuando le viene bien y usa `pasar_a_pablo`. Nunca des otro telefono ni finjas que le pasas la llamada.
 - Si quien contesta dice que es otra IA o una recepcionista virtual: no le hagas la pregunta ni la demostracion, ni uses `volver_a_llamar` o `enviar_informacion` por lo que diga. Si te pasa con una persona, espera; si no, despidete y usa `end_call`.
 - "No me llameis mas" o enfado: pide disculpas, usa `no_volver_a_llamar` y despidete.
-- Maximo cuatro minutos: si se alarga, ofrece mandar la informacion (paso 6).
+- Maximo cuatro minutos: si se alarga, propon la llamada con Pablo (paso 6) o mandar la informacion (paso 7).
 
 DATOS DE VANTELIA (no inventes nada fuera de esto; si no lo sabes, lo confirma Pablo, el fundador)
 - Planes: Free (0 euros), Starter (49 euros al mes), Pro (129 euros al mes, con WhatsApp), Business (299 euros al mes, con recepcionista de voz por telefono como tu). Diez dias de prueba.
 - Se instala sin cambiar de numero ni de WhatsApp: siguen usando su app.
+- Pablo, el fundador, llama de lunes a viernes a la hora que les venga bien y se lo enseña en diez minutos con su agenda.
 - Web: vantelia punto es.
 """
 
@@ -167,12 +190,12 @@ _HERRAMIENTAS = {
          "required": ["cuando"]}),
     # Revision de Astra (30-sep): prometer "Pablo te llama" sin avisarle no es una derivacion.
     "pasar_a_pablo": (
-        "Cuando pida hablar con una persona: apunta que le llamara Pablo, el fundador, y cuando le "
-        "viene bien. Avisa a Pablo al momento.",
+        "Cuando le interese y acepte que le llame Pablo, el fundador, o cuando pida hablar con una "
+        "persona: apunta cuando le viene bien. Avisa a Pablo al momento.",
         {"type": "object", "description": "Para que Pablo le llame", "properties": {
             "cuando": {"type": "string", "description": "Cuando le viene bien que le llamen, tal cual"},
             "nombre": {"type": "string", "description": "Nombre de la persona, si lo ha dicho. Nunca el tuyo (Sara)"},
-            "notas": {"type": "string", "description": "Lo que quiere hablar, en una frase"}},
+            "notas": {"type": "string", "description": "Lo que le interesa o lo que quiere hablar, en una frase"}},
          "required": []}),
     "no_volver_a_llamar": (
         "Apunta que NO quieren mas llamadas. Usala en cuanto lo pidan.",
@@ -377,7 +400,8 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
                     "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio",
                     "responsable": "quien lleva el negocio",
                     # Lo que vale si no lo manda nadie: solo pasa en una llamada que ENTRA.
-                    "primera": SALUDO_ENTRANTE, "saludo": SALUDO_ENTRANTE, "sentido": "entrante"}},
+                    "primera": SALUDO_ENTRANTE, "saludo": SALUDO_ENTRANTE, "sentido": "entrante",
+                    "huecos_pablo": HUECOS_ENTRANTE}},
                 "prompt": {"prompt": GUION, "llm": voz_elevenlabs.LLM_POR_DEFECTO, "temperature": 0.4,
                            "tools": herramientas},
             },
@@ -631,7 +655,25 @@ def _variables(fila) -> Dict[str, str]:
             "a_quien": responsable or (negocio_hablado(negocio, fila["sector"]) if fila["negocio"] else negocio),
             "responsable": responsable or "quien lleva el negocio",
             "saludo": (APERTURA_RELLAMADA % responsable) if responsable else APERTURA,
-            "sentido": "saliente", "primera": PRIMERA_SALIENTE}
+            "sentido": "saliente", "primera": PRIMERA_SALIENTE, "huecos_pablo": huecos_de_pablo()}
+
+
+def huecos_de_pablo(ahora: Optional[datetime] = None) -> str:
+    """Los dos huecos que Sara propone para que llame Pablo: el siguiente dia laborable por la
+    mañana y el otro por la tarde ("mañana por la mañana o el jueves por la tarde"). Nunca hoy
+    (nadie quiere que le llamen en una hora) ni en fin de semana."""
+    hoy = (ahora or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Madrid")).date()
+    dias = []
+    dia = hoy
+    while len(dias) < 2:
+        dia += timedelta(days=1)
+        if dia.weekday() < 5:
+            dias.append(dia)
+
+    def dicho(d):
+        return "mañana" if d == hoy + timedelta(days=1) else "el " + _DIAS_DE_LA_SEMANA[d.weekday()]
+
+    return "%s por la mañana o %s por la tarde" % (dicho(dias[0]), dicho(dias[1]))
 
 
 # --- Marcar por SIP (proveedor espanol -> ElevenLabs) -----------------------------------
@@ -1172,9 +1214,10 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         # Resultado propio: fuera de las llamadas automaticas, de la rellamada dirigida y de la
         # segunda oportunidad. A ese negocio le llama Pablo, no Sara.
         _actualizar(llamada_id, resultado=RESULTADO_PABLO,
-                    notas=("Pide hablar con una persona. Cuando: %s. %s %s" % (cuando or "-", persona, notas)).strip())
+                    notas=("Le llama Pablo. Cuando: %s. %s %s" % (cuando or "-", persona, notas)).strip())
         _avisar_a_pablo(fila, cuando, persona, notas)
-        return {"ok": True, "mensaje": "Apuntado: Pablo le llamara. Diselo en una frase y despidete."}
+        return {"ok": True, "mensaje": "Apuntado: Pablo le llamara. Confirmaselo en una frase (cuando y a este "
+                                       "numero) y despidete."}
     if nombre == "no_volver_a_llamar":
         motivo = textnorm._sanitize_text(str(cuerpo.get("motivo") or ""))[:200]
         with _db() as conn:
@@ -1306,16 +1349,17 @@ def _anotar_responsable(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _avisar_a_pablo(fila, cuando: str, persona: str, notas: str) -> None:
-    """Quien pide hablar con una persona: Pablo tiene que enterarse al momento para llamarle."""
+    """Le interesa (o pide hablar con una persona) y ha quedado en que le llama Pablo: tiene que
+    enterarse al momento."""
     from backend import outreach
 
     negocio = fila["negocio"] or fila["telefono"]
-    asunto = "🙋 Quiere hablar contigo: %s" % negocio
-    texto = ("En una llamada de Sara han pedido hablar con una persona. Le he dicho que le llamas tu.\n\n"
+    asunto = "🙋 Llámale: %s" % negocio
+    texto = ("En una llamada de Sara han quedado en que les llamas tu.\n\n"
              "Negocio:  %s\nTelefono: %s\nCuando:   %s\nPersona:  %s\nNotas:    %s\n"
              % (negocio, fila["telefono"], cuando or "-", persona or "-", notas or "-"))
     html = ("<div style='font-family:sans-serif'><h2 style='color:#00b1d9'>🙋 %s</h2>"
-            "<p>Han pedido hablar con una persona: le he dicho que le llamas tu.</p>"
+            "<p>Han quedado en que les llamas tu.</p>"
             "<p>Telefono: <a href='tel:%s'>%s</a><br>Cuando: %s<br>Persona: %s</p><p>%s</p></div>"
             % (escape(negocio), escape(fila["telefono"], quote=True), escape(fila["telefono"]), escape(cuando or "-"),
                escape(persona or "-"), escape(notas or "")))

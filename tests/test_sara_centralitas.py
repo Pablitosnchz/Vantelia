@@ -156,19 +156,74 @@ def test_traspasos_y_esperas_eternas(captacion):  # noqa: F811
 
 def test_apertura_permiso_y_pregunta_antes_de_ofrecer_nada(captacion):  # noqa: F811
     """Pablo, 30-sep: "la llamada se ve demasiado comercial". 24 llamadas, 0 demos: se perdian
-    en el gancho de venta. Eligio la apertura A de Astra."""
+    en el gancho de venta. Primero la apertura A de Astra; luego, el mismo dia, sin la frase
+    "es una llamada comercial" y con la pregunta de como atienden a sus clientes."""
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
     guion = agente["agent"]["prompt"]["prompt"]
-    assert captacion.APERTURA.endswith("¿Te hago una pregunta breve?")
+    assert captacion.APERTURA.endswith("¿Tienes treinta segundos?")
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
-    assert "¿como atendeis las llamadas?" in paso_2
+    assert "Cuando estais con un cliente y suena el telefono, ¿quien lo coge?" in paso_2
     assert "4. Solo si acepta claramente probarlo" in guion
     assert "soy justo lo que os ofrecemos" not in guion, "el gancho de venta, fuera"
     assert "Si quien contesta dice que es otra IA" in guion  # MARSYA, 29-sep
     assert "no avances de paso solo por seguir el guion" in guion  # Div@, 29-sep
-    assert "Si es ella o se pone: pidele permiso para una pregunta breve" in guion  # rellamada: "¿Esta Marta?"
+    assert "Si es ella o se pone: pidele treinta segundos" in guion  # rellamada: "¿Esta Marta?"
     colgar = [t for t in agente["agent"]["prompt"]["tools"] if t["name"] == "end_call"][0]
     assert "traspaso" in colgar["description"]  # Harmonie, 30-sep
+
+
+# --- Como un setter (Pablo, 30-sep): ver si le interesa y, si si, que le llame Pablo -------
+
+def test_si_le_interesa_sara_propone_que_le_llame_pablo_con_dos_huecos(captacion):  # noqa: F811
+    """Pablo: "que actue como un setter de ventas profesional"; el objetivo es ver si le
+    interesa la IA que da sus citas, y el siguiente paso es que le llame el (L-V, a cualquier
+    hora). Un setter no pregunta "¿cuando te va bien?": propone dos huecos."""
+    agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
+    guion = agente["prompt"]["prompt"]
+    paso_3 = guion.split("\n3. ", 1)[1].split("\n4. ", 1)[0]
+    assert "¿Es algo que os vendria bien?" in paso_3, "pregunta por el interes, no por la demo"
+    assert "paso 6 (LA LLAMADA CON PABLO)" in paso_3
+    assert "UNA pregunta mas para entenderlo, solo una" in paso_3
+    paso_6 = guion.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
+    assert "LA LLAMADA CON PABLO" in paso_6 and "{{huecos_pablo}}" in paso_6
+    assert "usa `pasar_a_pablo` en ESE MISMO turno" in paso_6
+    assert "si pide sabado o domingo, propon el lunes" in paso_6
+    assert "Si pide que le mandes informacion: ve directa al paso 7" in guion
+    assert "propon la llamada con Pablo (paso 6)" in guion  # si se alarga
+    # Nada de frases de folleto.
+    assert "Nada de frases de vendedora ni de folleto" in guion
+    herramienta = [t for t in agente["prompt"]["tools"] if t["name"] == "pasar_a_pablo"][0]
+    assert "Cuando le interese" in herramienta["description"]
+    # Las entrantes no traen huecos calculados: el valor por defecto sirve igual en la frase.
+    assert agente["dynamic_variables"]["dynamic_variable_placeholders"]["huecos_pablo"] == (
+        "entre semana, por la mañana o por la tarde")
+
+
+@pytest.mark.parametrize("hora_utc,huecos", [
+    ("2026-09-29T08:30:00+00:00", "mañana por la mañana o el jueves por la tarde"),  # martes
+    ("2026-10-01T08:30:00+00:00", "mañana por la mañana o el lunes por la tarde"),  # jueves
+    ("2026-10-02T08:30:00+00:00", "el lunes por la mañana o el martes por la tarde"),  # viernes
+    ("2026-10-03T08:30:00+00:00", "el lunes por la mañana o el martes por la tarde"),  # sabado
+    ("2026-10-04T08:30:00+00:00", "mañana por la mañana o el martes por la tarde"),  # domingo
+    # 23:30 UTC del lunes ya es martes en Madrid: cuenta el dia de Madrid.
+    ("2026-09-28T23:30:00+00:00", "mañana por la mañana o el jueves por la tarde"),
+])
+def test_los_huecos_de_pablo_son_de_lunes_a_viernes_y_nunca_hoy(captacion, hora_utc, huecos):  # noqa: F811
+    from datetime import datetime
+
+    assert captacion.huecos_de_pablo(datetime.fromisoformat(hora_utc)) == huecos
+
+
+def test_a_quien_le_interesa_le_llama_pablo_y_el_aviso_lo_dice(captacion, envios):  # noqa: F811
+    hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "", origen="auto", cliente=_Falso())
+    r = captacion.herramienta("pasar_a_pablo", {"_llamada": hecho["llamada"], "cuando": "el jueves por la tarde",
+                                               "notas": "pierden llamadas cuando estan con clientas"})
+    assert r["ok"] is True and "Confirmaselo" in r["mensaje"]
+    fila = captacion._fila(hecho["llamada"])
+    assert fila["resultado"] == "llamar_pablo" and "Le llama Pablo" in fila["notas"]
+    asunto, texto = envios["avisos"][0][0], envios["avisos"][0][1]
+    assert asunto.startswith("🙋 Llámale") and "han quedado en que les llamas tu" in texto
+    assert "el jueves por la tarde" in texto and "pierden llamadas" in texto
 
 
 def test_al_llamar_primero_hola_y_la_apertura_cuando_contestan(captacion):  # noqa: F811
@@ -198,7 +253,7 @@ def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
     guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
     assert "las SALIDAS de abajo mandan sobre estos pasos" in guion
     assert "nunca cuelgues sin despedirte" in guion  # 30-sep: colgo tras "no, gracias" sin decir nada
-    assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
+    assert "Si pide que le mandes informacion: ve directa al paso 7" in guion
     assert "sin repetir la apertura entera" in guion
     assert "ni finjas que le pasas la llamada" in guion
     # Rellamada a quien decide que no esta: sin demo a quien coge.

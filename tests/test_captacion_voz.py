@@ -5,8 +5,9 @@ POR QUE EXISTE
 --------------
 Parte C del plan de voz (docs/PLAN_VOZ_HUMANA_Y_AUTOCAPTACION.md, 23-sep-2026). Una
 llamada comercial en frio tiene reglas (Circular AEPD 1/2023 y Reglamento de IA,
-art. 50): decir quien llama y que es una IA, que es comercial, y que puede pedir que
-no le llamemos mas. Y "no me llameis" tiene que cumplirse de verdad: ese telefono no
+art. 50): decir quien llama y que es una IA, el motivo, y que puede decir que no y no
+se le molesta mas. Desde el 30-sep-2026 sin la frase de formulario "es una llamada
+comercial" (Pablo: "que sea mas natural"). Y "no me llameis" tiene que cumplirse de verdad: ese telefono no
 vuelve a sonar. Estos tests vigilan eso y que un contestador no reciba un mensaje.
 """
 from __future__ import annotations
@@ -63,13 +64,17 @@ def test_telefonos_en_formato_internacional(captacion, dado, esperado):
 
 def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
-    # La primera frase la calcula el servidor por llamada ({{saludo}}, apertura A del 30-sep): en
-    # las dos aperturas, quien llama, que es una IA y que es comercial, desde el principio.
+    # La primera frase la calcula el servidor por llamada ({{saludo}}): en las dos aperturas,
+    # quien llama, que es una IA y que puede decir que no, desde el principio.
     assert agente["agent"]["first_message"] == "{{primera}}"  # "¿Hola?" y luego la apertura (30-sep)
     for apertura in (captacion.APERTURA, captacion.APERTURA_RELLAMADA % "Marta"):
-        assert "inteligencia artificial de vantelia" in apertura.lower()
-        assert "es una llamada comercial; si no quieres más, me lo dices" in apertura.lower()
+        assert "soy sara, de vantelia. soy una inteligencia artificial" in apertura.lower()
+        assert "si no te encaja, me lo dices y no te molesto más" in apertura.lower()
+        assert "comercial" not in apertura.lower(), "Pablo, 30-sep: sin la frase de formulario"
     guion = agente["agent"]["prompt"]["prompt"].lower()
+    # El motivo de la llamada, en cuanto da permiso.
+    paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
+    assert "ayudamos a negocios como el vuestro con las llamadas" in paso_2
     assert "tu nunca haces de clienta" in guion, "en la demo la clienta es el negocio, no Sara"
     # Segunda prueba (24-sep): se le colo el ingles y deletreo el email 25 segundos.
     assert "siempre en español" in guion and "no lo deletrees" in guion
@@ -90,7 +95,7 @@ def test_tras_el_si_una_sola_pregunta_y_quien_decide_despues(captacion):
     guion = agente["agent"]["prompt"]["prompt"]
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
     assert paso_2.count("?") == 1 and "quien lleva" not in paso_2
-    assert guion.index("con los papeles claros") < guion.index("QUIEN DECIDE")
+    assert guion.index("con los papeles claros") < guion.index("\n5. QUIEN DECIDE")
     assert "nunca des por hecho que te has equivocado de numero" in guion
     assert agente["tts"]["stability"] >= 0.9, "sin trozos con otra voz"
 
@@ -135,7 +140,7 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
         "canal_envio": "pedir_email", "email_negocio": "",
         # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
         "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA,
-        "sentido": "saliente", "primera": "¿Hola?"}
+        "sentido": "saliente", "primera": "¿Hola?", "huecos_pablo": captacion.huecos_de_pablo()}
 
 
 # --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------
