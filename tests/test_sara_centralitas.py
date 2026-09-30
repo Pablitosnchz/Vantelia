@@ -171,6 +171,19 @@ def test_apertura_permiso_y_pregunta_antes_de_ofrecer_nada(captacion):  # noqa: 
     assert "traspaso" in colgar["description"]  # Harmonie, 30-sep
 
 
+def test_al_llamar_primero_hola_y_la_apertura_cuando_contestan(captacion):  # noqa: F811
+    """Pablo, 30-sep: soltaba la apertura en el segundo 0, encima del "¿digame?". Primero
+    "¿Hola?"; la apertura, cuando contestan. En una entrante coge ella: saludo entero."""
+    agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
+    assert agente["first_message"] == "{{primera}}"
+    assert agente["dynamic_variables"]["dynamic_variable_placeholders"]["primera"] == captacion.SALUDO_ENTRANTE
+    hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "", origen="auto", cliente=_Falso())
+    variables = captacion._variables(captacion._fila(hecho["llamada"]))
+    assert (variables["primera"], variables["saludo"]) == ("¿Hola?", captacion.APERTURA)
+    paso_1 = agente["prompt"]["prompt"].split("\n1. ", 1)[1].split("\n2. ", 1)[0]
+    assert 'Tu primer mensaje fue solo "¿Hola?"' in paso_1 and '"{{saludo}}"' in paso_1
+
+
 # --- Revision de Astra (29-sep): coherencia del guion y tope de duracion --------------------
 
 def test_al_apuntar_a_la_duena_la_herramienta_no_manda_repetir_la_demo(captacion):  # noqa: F811
@@ -184,7 +197,7 @@ def test_al_apuntar_a_la_duena_la_herramienta_no_manda_repetir_la_demo(captacion
 def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
     guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
     assert "las SALIDAS de abajo mandan sobre estos pasos" in guion
-    assert "\"No me interesa\": agradece, despidete y usa `end_call`" in guion
+    assert "nunca cuelgues sin despedirte" in guion  # 30-sep: colgo tras "no, gracias" sin decir nada
     assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
     assert "sin repetir la apertura entera" in guion
     assert "ni finjas que le pasas la llamada" in guion

@@ -70,7 +70,11 @@ APERTURA = ("Hola, soy Sara, una inteligencia artificial de Vantelia. Es una lla
             "si no quieres más, me lo dices. ¿Te hago una pregunta breve?")
 APERTURA_RELLAMADA = ("Hola, soy Sara, una inteligencia artificial de Vantelia. Es una llamada comercial; "
                       "si no quieres más, me lo dices. ¿Está %s?")
-PRIMER_MENSAJE = "{{saludo}}"
+# Al llamar ella, Sara no suelta la apertura en el segundo 0 (se comia el "¿digame?" y hablaba
+# encima): primero "¿Hola?", y la apertura cuando contestan (Pablo, 30-sep-2026). En una
+# entrante la primera frase es el saludo entero: coge el telefono ella.
+PRIMERA_SALIENTE = "¿Hola?"
+PRIMER_MENSAJE = "{{primera}}"
 # Cuando nos llaman ELLOS al 91 (Pablo, 30-sep-2026: "si llaman de vuelta, que atienda Sara").
 # Las salientes siempre mandan su {{saludo}} y {{sentido}}; los valores por defecto del agente
 # son los de una llamada que entra, que no manda nada (el puente solo pasa quien llama).
@@ -109,7 +113,7 @@ Esta llamada es {{sentido}}. Si es "entrante", te han llamado ELLOS al numero de
 - El paso 1 es solo para cuando llamas tu. El resto (pregunta, demostracion, quien decide, cierre y salidas) es igual.
 
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN (las SALIDAS de abajo mandan sobre estos pasos)
-1. Ya te has presentado con la apertura ("{{saludo}}"): ya has dicho que eres una IA y que es comercial. Solo si te dicen claramente que te has equivocado de numero o que no es {{negocio}}, discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales corto y vuelve a pedir permiso con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 ("Si no esta"): pregunta cuando suele estar y despidete, sin preguntas ni demostracion a quien te ha cogido. Si es ella o se pone: pidele permiso para una pregunta breve y sigue en el paso 2.
+1. LA APERTURA (cuando llamas tu). Tu primer mensaje fue solo "¿Hola?", para que contesten. En cuanto conteste una persona (o si tras unos segundos nadie dice nada), di la apertura casi tal cual y en un solo turno: "{{saludo}}". Dice que eres una IA y que es comercial: no la cambies ni la acortes. Si lo que contesta es una grabacion, un menu o un buzon, sigue GRABACIONES, CENTRALITAS Y ESPERAS. Solo si te dicen claramente que te has equivocado de numero o que no es {{negocio}}, discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales corto y vuelve a pedir permiso con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 ("Si no esta"): pregunta cuando suele estar y despidete, sin preguntas ni demostracion a quien te ha cogido. Si es ella o se pone: pidele permiso para una pregunta breve y sigue en el paso 2.
 2. LA PREGUNTA. Si te da permiso ("vale", "dime", "si"), hazla sola y casi tal cual: "Cuando estais con un cliente, ¿como atendeis las llamadas?". Luego escucha. Un saludo, un "digame" o que confirmen el negocio NO son permiso para la demostracion.
 3. SEGUN LO QUE CONTESTE:
    - Si cuenta un problema (no llegan, las pierden, devuelven la llamada luego, alguien deja lo que esta haciendo...): una frase y una oferta pequeña: "Justo eso hacemos: atenderlas cuando estais ocupados. ¿Quieres probar como sonaria con una cita de mentira?"
@@ -132,7 +136,7 @@ LO QUE TIENES QUE CONSEGUIR, EN ORDEN (las SALIDAS de abajo mandan sobre estos p
 7. Despidete y usa `end_call`.
 
 SALIDAS
-- "No me interesa": agradece, despidete y usa `end_call`. No preguntes por quien decide ni ofrezcas la demostracion ni la informacion.
+- "No me interesa": despidete en voz alta ("Vale, gracias por tu tiempo. Que vaya bien.") y despues usa `end_call`: nunca cuelgues sin despedirte. No preguntes por quien decide ni ofrezcas la demostracion ni la informacion.
 - Si pide que le mandes informacion: ve directa al paso 6, sin demostracion ni preguntar por quien decide.
 - Si pregunta quien eres o si eres un robot: contesta corto ("Soy Sara, una inteligencia artificial de Vantelia; ayudamos a los negocios a coger las llamadas") y sigue donde estabas, sin repetir la apertura entera.
 - Si quiere hablar con una persona: dile que Pablo, el fundador, le llama; pregunta cuando le viene bien y usa `pasar_a_pablo`. Nunca des otro telefono ni finjas que le pasas la llamada.
@@ -373,7 +377,7 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
                     "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio",
                     "responsable": "quien lleva el negocio",
                     # Lo que vale si no lo manda nadie: solo pasa en una llamada que ENTRA.
-                    "saludo": SALUDO_ENTRANTE, "sentido": "entrante"}},
+                    "primera": SALUDO_ENTRANTE, "saludo": SALUDO_ENTRANTE, "sentido": "entrante"}},
                 "prompt": {"prompt": GUION, "llm": voz_elevenlabs.LLM_POR_DEFECTO, "temperature": 0.4,
                            "tools": herramientas},
             },
@@ -627,7 +631,7 @@ def _variables(fila) -> Dict[str, str]:
             "a_quien": responsable or (negocio_hablado(negocio, fila["sector"]) if fila["negocio"] else negocio),
             "responsable": responsable or "quien lleva el negocio",
             "saludo": (APERTURA_RELLAMADA % responsable) if responsable else APERTURA,
-            "sentido": "saliente"}
+            "sentido": "saliente", "primera": PRIMERA_SALIENTE}
 
 
 # --- Marcar por SIP (proveedor espanol -> ElevenLabs) -----------------------------------

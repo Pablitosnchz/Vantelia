@@ -41,9 +41,9 @@ def test_el_guion_pregunta_por_quien_decide_despues_del_gancho(captacion):  # no
 
 def test_el_saludo_pregunta_por_el_negocio_o_por_quien_decide(captacion):  # noqa: F811
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
-    assert agente["first_message"] == "{{saludo}}"
+    assert agente["first_message"] == "{{primera}}"
     variables = agente["dynamic_variables"]["dynamic_variable_placeholders"]
-    assert {"a_quien", "responsable", "saludo"} <= set(variables)
+    assert {"a_quien", "responsable", "saludo", "primera"} <= set(variables)
     fila = {"id": "ll_1", "telefono": "+34911111111", "prospecto": "", "negocio": "Pelu Marta", "sector": "peluqueria",
             "responsable_nombre": "Marta", "rellamada_de": "ll_antes"}
     assert captacion._variables(fila)["saludo"].endswith("¿Está Marta?"), "en la rellamada, por quien decide"

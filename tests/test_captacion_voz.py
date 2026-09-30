@@ -65,7 +65,7 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
     # La primera frase la calcula el servidor por llamada ({{saludo}}, apertura A del 30-sep): en
     # las dos aperturas, quien llama, que es una IA y que es comercial, desde el principio.
-    assert agente["agent"]["first_message"] == "{{saludo}}"
+    assert agente["agent"]["first_message"] == "{{primera}}"  # "¿Hola?" y luego la apertura (30-sep)
     for apertura in (captacion.APERTURA, captacion.APERTURA_RELLAMADA % "Marta"):
         assert "inteligencia artificial de vantelia" in apertura.lower()
         assert "es una llamada comercial; si no quieres más, me lo dices" in apertura.lower()
@@ -135,7 +135,7 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
         "canal_envio": "pedir_email", "email_negocio": "",
         # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
         "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA,
-        "sentido": "saliente"}
+        "sentido": "saliente", "primera": "¿Hola?"}
 
 
 # --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------
