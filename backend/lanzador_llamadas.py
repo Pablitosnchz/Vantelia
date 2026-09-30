@@ -373,7 +373,8 @@ def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
         filas = conn.execute(
             "SELECT l.* FROM llamadas_voz l "
             "WHERE l.origen = 'auto' AND l.interlocutor = 'empleado' AND l.responsable_nombre <> '' "
-            "AND l.rellamada_de = '' AND l.resultado NOT IN ('no_llamar', 'interesado') AND l.creada <= ? "
+            "AND l.rellamada_de = '' AND l.resultado NOT IN ('no_llamar', 'interesado', 'llamar_pablo') "
+            "AND l.creada <= ? "
             "AND NOT EXISTS (SELECT 1 FROM llamadas_voz r WHERE r.rellamada_de = l.id) "
             "AND NOT EXISTS (SELECT 1 FROM no_llamar n WHERE n.telefono = l.telefono) "
             "AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = l.prospecto) "

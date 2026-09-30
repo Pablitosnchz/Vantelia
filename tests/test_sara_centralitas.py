@@ -117,7 +117,33 @@ def test_ningun_mensaje_de_sara_da_el_movil_de_pablo(captacion, monkeypatch):  #
         assert "675" not in texto and "ochocientos dos" not in texto
     for texto in textos[1:]:
         assert "919 93 43 21" in texto and "info@vantelia.es" in texto
-    assert 'usa `volver_a_llamar` (con_quien: "Pablo")' in guion
+    assert "usa `pasar_a_pablo`" in guion
+
+
+def test_quien_pide_una_persona_llega_a_pablo_y_sara_no_vuelve_a_llamarle(captacion, envios, lanzador):  # noqa: F811
+    """Astra, 30-sep: Sara prometia "Pablo te llama" y nada le avisaba; y el lanzador podia
+    volver a llamarle con Sara."""
+    from backend import segunda_oportunidad
+
+    hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "hola@pelu.es", origen="auto", cliente=_Falso())
+    captacion._actualizar(hecho["llamada"], interlocutor="empleado", responsable_nombre="Marta",
+                          responsable_cuando="por las tardes", conversation_id="conv_1")
+    with captacion._db() as conn:  # la llamada fue el dia antes: ya tocaria rellamar
+        conn.execute("UPDATE llamadas_voz SET creada=? WHERE id=?",
+                     (lanzador._iso(MARTES_10_30 - timedelta(days=1)), hecho["llamada"]))
+        conn.commit()
+    tarde = MARTES_10_30 + timedelta(days=1, hours=6)  # 16:30 en Madrid, cuando dijeron que esta
+    assert len(lanzador.rellamadas_dirigidas(tarde)) == 1, "control: sin pasar a Pablo, Sara le rellamaria"
+    r = captacion.herramienta("pasar_a_pablo", {"_llamada": hecho["llamada"], "cuando": "mañana por la tarde",
+                                               "nombre": "Lucia"})
+    assert r["ok"] is True and "Pablo" in r["mensaje"]
+    fila = captacion._fila(hecho["llamada"])
+    assert fila["resultado"] == "llamar_pablo"
+    assert len(envios["avisos"]) == 1 and "+34911111111" in envios["avisos"][0][1], "Pablo se entera, con el telefono"
+    assert "mañana por la tarde" in envios["avisos"][0][1]
+    # Ni rellamada dirigida con Sara ni segunda oportunidad por correo: le llama Pablo.
+    assert lanzador.rellamadas_dirigidas(tarde) == []
+    assert segunda_oportunidad.desenlace_de(fila, "") in segunda_oportunidad.DESENLACES_QUE_CIERRAN
 
 
 def test_traspasos_y_esperas_eternas(captacion):  # noqa: F811

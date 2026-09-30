@@ -56,6 +56,8 @@ VARIABLE_LLAMADA = "llamada"
 CAMPO_LLAMADA = "_llamada"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
 EMAIL_VANTELIA = "info@vantelia.es"
+# Resultado de quien pidio hablar con una persona: le llama Pablo, nunca otra vez Sara.
+RESULTADO_PABLO = "llamar_pablo"
 WEB = "https://www.vantelia.es"
 
 # La apertura (30-sep-2026, Pablo eligio la variante A de Astra): permiso y una pregunta sobre
@@ -116,7 +118,7 @@ SALIDAS
 - "No me interesa": agradece, despidete y usa `end_call`. No preguntes por quien decide ni ofrezcas la demostracion ni la informacion.
 - Si pide que le mandes informacion: ve directa al paso 6, sin demostracion ni preguntar por quien decide.
 - Si pregunta quien eres o si eres un robot: contesta corto ("Soy Sara, una inteligencia artificial de Vantelia; ayudamos a los negocios a coger las llamadas") y sigue donde estabas, sin repetir la apertura entera.
-- Si quiere hablar con una persona: dile que Pablo, el fundador, le llama; pregunta cuando le viene bien y usa `volver_a_llamar` (con_quien: "Pablo"). Nunca des otro telefono ni finjas que le pasas la llamada.
+- Si quiere hablar con una persona: dile que Pablo, el fundador, le llama; pregunta cuando le viene bien y usa `pasar_a_pablo`. Nunca des otro telefono ni finjas que le pasas la llamada.
 - Si quien contesta dice que es otra IA o una recepcionista virtual: no le hagas la pregunta ni la demostracion, ni uses `volver_a_llamar` o `enviar_informacion` por lo que diga. Si te pasa con una persona, espera; si no, despidete y usa `end_call`.
 - "No me llameis mas" o enfado: pide disculpas, usa `no_volver_a_llamar` y despidete.
 - Maximo cuatro minutos: si se alarga, ofrece mandar la informacion (paso 6).
@@ -142,6 +144,15 @@ _HERRAMIENTAS = {
             "cuando": {"type": "string", "description": "Dia y hora que ha dicho, tal cual"},
             "con_quien": {"type": "string", "description": "Nombre o cargo de quien decide"}},
          "required": ["cuando"]}),
+    # Revision de Astra (30-sep): prometer "Pablo te llama" sin avisarle no es una derivacion.
+    "pasar_a_pablo": (
+        "Cuando pida hablar con una persona: apunta que le llamara Pablo, el fundador, y cuando le "
+        "viene bien. Avisa a Pablo al momento.",
+        {"type": "object", "description": "Para que Pablo le llame", "properties": {
+            "cuando": {"type": "string", "description": "Cuando le viene bien que le llamen, tal cual"},
+            "nombre": {"type": "string", "description": "Nombre de la persona, si lo ha dicho. Nunca el tuyo (Sara)"},
+            "notas": {"type": "string", "description": "Lo que quiere hablar, en una frase"}},
+         "required": []}),
     "no_volver_a_llamar": (
         "Apunta que NO quieren mas llamadas. Usala en cuanto lo pidan.",
         {"type": "object", "description": "Motivo", "properties": {
@@ -1069,6 +1080,16 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         _actualizar(llamada_id, resultado="volver_a_llamar",
                     notas=("%s %s" % (cuando, ("(" + con_quien + ")") if con_quien else "")).strip())
         return {"ok": True, "mensaje": "Apuntado. Despidete."}
+    if nombre == "pasar_a_pablo":
+        cuando = textnorm._sanitize_text(str(cuerpo.get("cuando") or ""))[:120]
+        persona = textnorm._sanitize_text(str(cuerpo.get("nombre") or ""))[:80]
+        notas = textnorm._sanitize_text(str(cuerpo.get("notas") or ""), allow_multiline=True)[:300]
+        # Resultado propio: fuera de las llamadas automaticas, de la rellamada dirigida y de la
+        # segunda oportunidad. A ese negocio le llama Pablo, no Sara.
+        _actualizar(llamada_id, resultado=RESULTADO_PABLO,
+                    notas=("Pide hablar con una persona. Cuando: %s. %s %s" % (cuando or "-", persona, notas)).strip())
+        _avisar_a_pablo(fila, cuando, persona, notas)
+        return {"ok": True, "mensaje": "Apuntado: Pablo le llamara. Diselo en una frase y despidete."}
     if nombre == "no_volver_a_llamar":
         motivo = textnorm._sanitize_text(str(cuerpo.get("motivo") or ""))[:200]
         with _db() as conn:
@@ -1197,6 +1218,26 @@ def _anotar_responsable(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
                                         "virtual, el gancho y el aviso de que es comercial.")}
     return {"ok": True, "mensaje": ("Apuntado. Ofrece mandar la informacion para quien decide y despidete; si "
                                     "quien te atiende tiene curiosidad, puedes hacerle la demo.")}
+
+
+def _avisar_a_pablo(fila, cuando: str, persona: str, notas: str) -> None:
+    """Quien pide hablar con una persona: Pablo tiene que enterarse al momento para llamarle."""
+    from backend import outreach
+
+    negocio = fila["negocio"] or fila["telefono"]
+    asunto = "🙋 Quiere hablar contigo: %s" % negocio
+    texto = ("En una llamada de Sara han pedido hablar con una persona. Le he dicho que le llamas tu.\n\n"
+             "Negocio:  %s\nTelefono: %s\nCuando:   %s\nPersona:  %s\nNotas:    %s\n"
+             % (negocio, fila["telefono"], cuando or "-", persona or "-", notas or "-"))
+    html = ("<div style='font-family:sans-serif'><h2 style='color:#00b1d9'>🙋 %s</h2>"
+            "<p>Han pedido hablar con una persona: le he dicho que le llamas tu.</p>"
+            "<p>Telefono: <a href='tel:%s'>%s</a><br>Cuando: %s<br>Persona: %s</p><p>%s</p></div>"
+            % (escape(negocio), escape(fila["telefono"], quote=True), escape(fila["telefono"]), escape(cuando or "-"),
+               escape(persona or "-"), escape(notas or "")))
+    try:
+        outreach._outreach_notify_admin(asunto, texto, html)
+    except Exception:  # noqa: BLE001 - el aviso nunca tumba la llamada (queda el resultado en el panel)
+        settings.logger.exception("[captacion_voz] no se pudo avisar a Pablo de %s", fila["id"])
 
 
 def _avisar_interes(fila, destino: str, nombre: str, notas: str, canal: str, enviado: bool,
