@@ -483,6 +483,14 @@ def _trabajador() -> None:
             transcripciones_llamadas.recoger_pendientes()
         except Exception as exc:  # noqa: BLE001
             settings.logger.warning("[cuenta_elevenlabs] recogida de transcripciones: %s", censurar(exc))
+        try:
+            # Las entrantes al 91 sin herramientas cuyo aviso no llego: sin ficha, la recogida
+            # de arriba no las ve.
+            from backend import transcripciones_llamadas
+
+            transcripciones_llamadas.recoger_entrantes()
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("[cuenta_elevenlabs] recogida de entrantes: %s", censurar(exc))
         parar.wait(MINUTOS_ENTRE_REVISIONES * 60)
 
 

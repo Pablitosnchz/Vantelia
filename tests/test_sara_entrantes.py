@@ -154,6 +154,36 @@ def test_la_entrante_sin_herramientas_llega_igual_al_panel(sip):  # noqa: F811
                             (llamada_id,)).fetchone()[0] == 1
 
 
+def test_la_entrante_cuyo_aviso_no_llego_se_recoge(sip, monkeypatch):  # noqa: F811
+    """Astra, 30-sep: sin herramientas y sin aviso de fin, la entrante no tenia ficha y la
+    recogida de respaldo (que solo mira fichas) nunca la veia."""
+    from backend import settings, transcripciones_llamadas
+    from test_captacion_voz import _Respuesta
+
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_activa")
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_activa"])
+    sip._fila_entrante("+34912222222", "conv_conocida")  # esta ya tiene ficha
+    pedidas = []
+
+    class _Api:
+        def get(self, url, headers=None, params=None, **k):
+            if url.endswith("/v1/convai/conversations"):
+                assert params["agent_id"] == "agent_sara"
+                return _Respuesta(200, {"conversations": [{"conversation_id": "conv_perdida"},
+                                                          {"conversation_id": "conv_conocida"}]})
+            pedidas.append(url.rsplit("/", 1)[-1])
+            return _Respuesta(200, _conversacion_entrante(conversation_id="conv_perdida"))
+
+        def close(self):
+            pass
+
+    assert transcripciones_llamadas.recoger_entrantes(cliente=_Api()) == 1
+    assert pedidas == ["conv_perdida"], "solo se pide la que falta"
+    with sip._db() as conn:
+        assert conn.execute("SELECT origen FROM llamadas_voz WHERE conversation_id='conv_perdida'").fetchone()[0] == "entrante"
+    assert transcripciones_llamadas.recoger_entrantes(cliente=_Api()) == 0, "la segunda vez ya la tiene"
+
+
 def test_la_entrante_cuenta_aunque_se_haya_cambiado_de_cuenta(sip):  # noqa: F811
     """Astra, 30-sep: el aviso llega con el agente de la cuenta vieja; el 91 es el mismo."""
     from backend import transcripciones_llamadas

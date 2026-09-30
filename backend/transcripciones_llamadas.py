@@ -275,6 +275,48 @@ def recoger_pendientes(*, cliente: Optional[httpx.Client] = None, limite: int = 
     return guardadas
 
 
+HORAS_BUSCANDO_ENTRANTES = 24
+
+
+def recoger_entrantes(*, cliente: Optional[httpx.Client] = None, horas: int = HORAS_BUSCANDO_ENTRANTES) -> int:
+    """Entrantes cuyo aviso de fin no llego y en las que Sara no uso herramientas: no tienen
+    ficha, asi que `recoger_pendientes` no las ve (revision de Astra, 30-sep-2026). Se piden a
+    la cuenta activa las conversaciones recientes de Sara y se guardan las que falten;
+    `guardar` solo les crea ficha si son entrantes a su 91. Devuelve cuantas guardo."""
+    from backend import clients
+
+    try:
+        agente = str((clients._get_client_config(captacion_voz.TENANT).get("voice") or {}).get(
+            captacion_voz.CLAVE_AGENTE) or "")
+    except Exception:  # noqa: BLE001 - sin el tenant de Sara no hay nada que buscar
+        return 0
+    if not agente or not settings.ELEVENLABS_API_KEY:
+        return 0
+    desde = int(timeutils._utc_now().timestamp()) - horas * 3600
+    propio = cliente is None
+    cliente = cliente or httpx.Client(timeout=20.0)
+    guardadas = 0
+    try:
+        r = cliente.get("%s/v1/convai/conversations" % API, headers={"xi-api-key": settings.ELEVENLABS_API_KEY},
+                        params={"agent_id": agente, "call_start_after_unix": desde, "page_size": 100})
+        if r.status_code != 200:
+            return 0
+        ids = [str(c.get("conversation_id") or "") for c in (r.json() or {}).get("conversations") or []]
+        with _db() as conn:
+            conocidas = {f[0] for f in conn.execute("SELECT conversation_id FROM llamadas_voz WHERE conversation_id <> ''")}
+        for conversation_id in ids:
+            if conversation_id and conversation_id not in conocidas:
+                conversacion = _pedir(conversation_id, cliente)
+                if conversacion and guardar(conversacion, "recogida"):
+                    guardadas += 1
+    except httpx.HTTPError as exc:
+        settings.logger.warning("[transcripciones] no se pudieron buscar entrantes: %s", cuenta_elevenlabs.censurar(exc))
+    finally:
+        if propio:
+            cliente.close()
+    return guardadas
+
+
 def _reservar_intento(llamada_id: str, ahora: datetime, reintento: str) -> bool:
     """Apunta el intento ANTES de pedir la conversacion, y solo si sigue tocando. Si se
     apuntaba despues, dos recogidas a la vez (el vigilante y una descarga del JSONL)
