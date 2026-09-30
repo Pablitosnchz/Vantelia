@@ -101,6 +101,13 @@ SALUDO_ENTRANTE = "Hola, soy Sara, la asistente con inteligencia artificial de V
 NOMBRE_DEL_AGENTE = "Sara - captacion Vantelia (telefono)"
 CAMPO_QUIEN = "_quien"
 CAMPO_CONVERSACION = "_conversacion"
+# Las entrantes las coge OTRO agente, asignado al 91: ElevenLabs NO usa los valores por
+# defecto de las variables en una llamada SIP que entra (primera prueba, 30-sep-2026: colgaba
+# al segundo con "Missing required dynamic variables in first message: {'saludo'}"). Es la
+# misma Sara, con su guion ya rellenado con lo de una entrante y el saludo fijo. Las salientes
+# siguen usando la Sara de siempre: la llamada dice que agente usar.
+CLAVE_AGENTE_ENTRADA = "elevenlabs_agent_captacion_entrada"
+NOMBRE_DEL_AGENTE_ENTRADA = "Sara - devoluciones Vantelia (telefono)"
 
 GUION = """Eres Sara, una asistente virtual de Vantelia: una inteligencia artificial, y lo dices. Llamas por telefono a {{negocio}} ({{sector}}).
 
@@ -374,37 +381,54 @@ DATOS_AL_TERMINAR = {
 }
 
 
-def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
+# Lo que valen las variables del guion en una llamada que ENTRA (no las manda nadie).
+VARIABLES_DE_ENTRADA = {
+    "negocio": "tu negocio", "sector": "un negocio con citas", VARIABLE_LLAMADA: "",
+    "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio",
+    "responsable": "quien lleva el negocio", "primera": SALUDO_ENTRANTE, "saludo": SALUDO_ENTRANTE,
+    "sentido": "entrante", "huecos_pablo": HUECOS_ENTRANTE,
+}
+
+
+def guion_de_entrada() -> str:
+    """El guion con sus {{variables}} ya puestas para una entrante. Una variable sin valor
+    aqui es un error (KeyError): colgaria la llamada igual que el 30-sep."""
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: VARIABLES_DE_ENTRADA[m.group(1)], GUION)
+
+
+def agente_de_captacion(base_url: str, aviso_id: str = "", *, entrada: bool = False) -> Dict[str, Any]:
     """Sara en ElevenLabs. Con `aviso_id` (via SIP) lleva enganchado el aviso de fin de
-    llamada de su cuenta, con los fallos al marcar: sin el no se sabria si no contestaron."""
+    llamada de su cuenta, con los fallos al marcar: sin el no se sabria si no contestaron.
+    Con `entrada`, la Sara que coge las llamadas al 91: sin ninguna variable nuestra (ni en el
+    saludo, ni en el guion, ni en las tools), solo las del sistema."""
     base = base_url.rstrip("/")
+    variables = {CAMPO_QUIEN: "system__caller_id", CAMPO_CONVERSACION: "system__conversation_id"}
+    if not entrada:
+        variables[CAMPO_LLAMADA] = VARIABLE_LLAMADA
     herramientas = [
         voz_elevenlabs.herramienta_webhook(nombre, descripcion, "%s%s/tool/%s" % (base, RUTA, nombre),
-                                           esquema, {CAMPO_LLAMADA: VARIABLE_LLAMADA,
-                                                     CAMPO_QUIEN: "system__caller_id",
-                                                     CAMPO_CONVERSACION: "system__conversation_id"})
+                                           esquema, variables)
         for nombre, (descripcion, esquema) in _HERRAMIENTAS.items()
     ] + [voz_elevenlabs.colgar("Cuelga despues de despedirte. Nunca durante un traspaso anunciado ni mientras "
                               "esperas a que hable alguien."), BUZON_SIN_MENSAJE, ESPERAR_CALLADA]
     audio = voz_elevenlabs.formato_de_audio(telefono=True)
     voz = dict({"voice_id": settings.ELEVENLABS_VOICE_ID, "model_id": voz_elevenlabs.MODELO_VOZ}, **audio["tts"])
     voz["stability"] = ESTABILIDAD_DE_SARA
+    if entrada:
+        agente = {"first_message": SALUDO_ENTRANTE, "language": "es",
+                  "prompt": {"prompt": guion_de_entrada(), "llm": voz_elevenlabs.LLM_POR_DEFECTO,
+                             "temperature": 0.4, "tools": herramientas}}
+    else:
+        agente = {"first_message": PRIMER_MENSAJE, "language": "es",
+                  # Solo para probarla en el panel de ElevenLabs: en una llamada de verdad las
+                  # manda siempre el servidor (`_variables`).
+                  "dynamic_variables": {"dynamic_variable_placeholders": dict(VARIABLES_DE_ENTRADA)},
+                  "prompt": {"prompt": GUION, "llm": voz_elevenlabs.LLM_POR_DEFECTO, "temperature": 0.4,
+                             "tools": herramientas}}
     return {
-        "name": NOMBRE_DEL_AGENTE,
+        "name": NOMBRE_DEL_AGENTE_ENTRADA if entrada else NOMBRE_DEL_AGENTE,
         "conversation_config": {
-            "agent": {
-                "first_message": PRIMER_MENSAJE,
-                "language": "es",
-                "dynamic_variables": {"dynamic_variable_placeholders": {
-                    "negocio": "tu negocio", "sector": "un negocio con citas", VARIABLE_LLAMADA: "",
-                    "canal_envio": "pedir_email", "email_negocio": "", "a_quien": "tu negocio",
-                    "responsable": "quien lleva el negocio",
-                    # Lo que vale si no lo manda nadie: solo pasa en una llamada que ENTRA.
-                    "primera": SALUDO_ENTRANTE, "saludo": SALUDO_ENTRANTE, "sentido": "entrante",
-                    "huecos_pablo": HUECOS_ENTRANTE}},
-                "prompt": {"prompt": GUION, "llm": voz_elevenlabs.LLM_POR_DEFECTO, "temperature": 0.4,
-                           "tools": herramientas},
-            },
+            "agent": agente,
             "asr": audio["asr"],
             "tts": voz,
             "turn": {"speculative_turn": True, "silence_end_call_timeout": SEGUNDOS_DE_SILENCIO_PARA_COLGAR},
@@ -428,7 +452,9 @@ def sincronizar_agente(*, base_url: str = "", cliente: Optional[httpx.Client] = 
         raise RuntimeError("Falta ELEVENLABS_API_KEY o ELEVENLABS_TOOL_SECRET.")
     if via_sip() and not sip_configurado():
         raise RuntimeError("Faltan los datos del SIP de Sara (CAPTACION_SIP_NUMERO, _USUARIO, _CLAVE y _HOST).")
-    previo = str((clients._get_client_config(TENANT).get("voice") or {}).get(CLAVE_AGENTE) or "")
+    voz = clients._get_client_config(TENANT).get("voice") or {}
+    previo = str(voz.get(CLAVE_AGENTE) or "")
+    previo_entrada = str(voz.get(CLAVE_AGENTE_ENTRADA) or "")
     base = base_url or settings.APP_BASE_URL
     propio = cliente is None
     cliente = cliente or httpx.Client(timeout=60.0)
@@ -437,11 +463,20 @@ def sincronizar_agente(*, base_url: str = "", cliente: Optional[httpx.Client] = 
         agent_id = voz_elevenlabs.publicar_agente(cliente, agente_de_captacion(base, aviso_id), previo)
         if agent_id != previo:
             voz_elevenlabs.guardar_en_voz(TENANT, CLAVE_AGENTE, agent_id)
-        numero_id = asegurar_numero_sip(cliente, agent_id) if via_sip() else ""
+        numero_id = entrada_id = ""
+        if via_sip():
+            # Al 91 se asigna la Sara de ENTRADA (es la que coge cuando llaman); las salientes
+            # dicen en cada llamada que agente usar.
+            entrada_id = voz_elevenlabs.publicar_agente(
+                cliente, agente_de_captacion(base, aviso_id, entrada=True), previo_entrada)
+            if entrada_id != previo_entrada:
+                voz_elevenlabs.guardar_en_voz(TENANT, CLAVE_AGENTE_ENTRADA, entrada_id)
+            numero_id = asegurar_numero_sip(cliente, entrada_id)
     finally:
         if propio:
             cliente.close()
-    return dict({"agent_id": agent_id}, **({"numero_sip": numero_id, "aviso": aviso_id} if via_sip() else {}))
+    return dict({"agent_id": agent_id},
+                **({"agente_entrada": entrada_id, "numero_sip": numero_id, "aviso": aviso_id} if via_sip() else {}))
 
 
 def _numero_de_salida() -> str:
@@ -821,7 +856,8 @@ def _liberar_numero_de_otra_cuenta(cliente: httpx.Client) -> None:
 
 
 def asegurar_numero_sip(cliente: httpx.Client, agent_id: str) -> str:
-    """El 91 del proveedor SIP importado en la cuenta activa y con Sara asignada. Devuelve su id."""
+    """El 91 del proveedor SIP importado en la cuenta activa y con `agent_id` asignado (la Sara
+    de entrada: la que coge cuando llaman). Devuelve su id."""
     from backend import clients
 
     numero_id = str((clients._get_client_config(TENANT).get("voice") or {}).get(CLAVE_NUMERO_SIP) or "")

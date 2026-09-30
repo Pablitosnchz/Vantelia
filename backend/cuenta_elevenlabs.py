@@ -295,7 +295,9 @@ def _devolver_numero_sip(antes: Dict[str, Dict[str, str]], cliente: Optional[htt
     (inofensivo). Nunca lanza: lo que falle queda en el log y en el aviso de rotacion."""
     from backend import captacion_voz
 
-    agente = (antes.get(captacion_voz.TENANT) or {}).get(captacion_voz.CLAVE_AGENTE, "")
+    de_antes = antes.get(captacion_voz.TENANT) or {}
+    # Al 91 va la Sara de entrada; si aun no existia (antes del 30-sep-2026), la de siempre.
+    agente = de_antes.get(captacion_voz.CLAVE_AGENTE_ENTRADA) or de_antes.get(captacion_voz.CLAVE_AGENTE, "")
     if not (captacion_voz.via_sip() and agente):
         return
     propio = cliente is None

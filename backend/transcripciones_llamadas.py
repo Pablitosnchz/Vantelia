@@ -36,7 +36,7 @@ import re
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 import httpx
 
@@ -126,14 +126,14 @@ def _entrante_de_sara(conversacion: Dict[str, Any]):
         voz = clients._get_client_config(captacion_voz.TENANT).get("voice") or {}
     except Exception:  # noqa: BLE001 - sin el tenant de Sara, solo cuenta el numero
         voz = {}
-    agente = str(voz.get(captacion_voz.CLAVE_AGENTE) or "")
+    agentes = {str(voz.get(c) or "") for c in (captacion_voz.CLAVE_AGENTE, captacion_voz.CLAVE_AGENTE_ENTRADA)} - {""}
     telefonica = (conversacion.get("metadata") or {}).get("phone_call") or {}
     # De Sara: su agente actual, o una llamada a SU 91 (tras cambiar de cuenta el aviso llega
     # con el agente viejo; el numero es el mismo en todas; revision de Astra, 30-sep-2026).
     numero_sara = captacion_voz.telefono_e164(settings.CAPTACION_SIP_NUMERO) if settings.CAPTACION_SIP_NUMERO else ""
     llamado = captacion_voz.telefono_e164(str(telefonica.get("agent_number") or "")) if telefonica.get(
         "agent_number") else ""
-    if not ((agente and str(conversacion.get("agent_id") or "") == agente) or (numero_sara and llamado == numero_sara)):
+    if not (str(conversacion.get("agent_id") or "") in agentes or (numero_sara and llamado == numero_sara)):
         return None
     variables = ((conversacion.get("conversation_initiation_client_data") or {}).get("dynamic_variables") or {})
     entra = (str(telefonica.get("direction") or "").lower() == "inbound"
@@ -285,9 +285,13 @@ HORAS_BUSCANDO_ENTRANTES = 24
 MAX_PAGINAS_POR_CUENTA = 10
 
 
-def _conversaciones_de_sara(cliente: httpx.Client, clave: str, agente: str, desde: int) -> List[str]:
+NOMBRES_DE_SARA = (captacion_voz.NOMBRE_DEL_AGENTE, captacion_voz.NOMBRE_DEL_AGENTE_ENTRADA)
+
+
+def _conversaciones_de_sara(cliente: httpx.Client, clave: str, agentes: Set[str], desde: int) -> List[str]:
     """Ids de las conversaciones recientes de Sara en una cuenta, todas las paginas (con tope).
-    Suyas: su agente actual o una con su nombre (tras rotar, en la cuenta vieja el id es otro)."""
+    Suyas: sus agentes actuales (el de llamar y el que coge el 91) o una con su nombre (tras
+    rotar, en la cuenta vieja el id es otro)."""
     ids: List[str] = []
     cursor = ""
     for _ in range(MAX_PAGINAS_POR_CUENTA):
@@ -303,8 +307,7 @@ def _conversaciones_de_sara(cliente: httpx.Client, clave: str, agente: str, desd
             break
         datos = r.json() or {}
         for c in datos.get("conversations") or []:
-            if (agente and str(c.get("agent_id") or "") == agente) or \
-                    str(c.get("agent_name") or "") == captacion_voz.NOMBRE_DEL_AGENTE:
+            if str(c.get("agent_id") or "") in agentes or str(c.get("agent_name") or "") in NOMBRES_DE_SARA:
                 ids.append(str(c.get("conversation_id") or ""))
         cursor = str(datos.get("next_cursor") or "")
         if not datos.get("has_more") or not cursor:
@@ -321,10 +324,10 @@ def recoger_entrantes(*, cliente: Optional[httpx.Client] = None, horas: int = HO
     from backend import clients
 
     try:
-        agente = str((clients._get_client_config(captacion_voz.TENANT).get("voice") or {}).get(
-            captacion_voz.CLAVE_AGENTE) or "")
+        voz = clients._get_client_config(captacion_voz.TENANT).get("voice") or {}
     except Exception:  # noqa: BLE001 - sin el tenant de Sara no hay nada que buscar
         return 0
+    agentes = {str(voz.get(c) or "") for c in (captacion_voz.CLAVE_AGENTE, captacion_voz.CLAVE_AGENTE_ENTRADA)} - {""}
     claves = cuenta_elevenlabs.claves()
     if not claves:
         return 0
@@ -337,7 +340,7 @@ def recoger_entrantes(*, cliente: Optional[httpx.Client] = None, horas: int = HO
             conocidas = {f[0] for f in conn.execute("SELECT conversation_id FROM llamadas_voz WHERE conversation_id <> ''")}
         vistas = set(conocidas)
         for clave in claves:
-            for conversation_id in _conversaciones_de_sara(cliente, clave, agente, desde):
+            for conversation_id in _conversaciones_de_sara(cliente, clave, agentes, desde):
                 if conversation_id in vistas:
                     continue
                 vistas.add(conversation_id)

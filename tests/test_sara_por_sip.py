@@ -354,13 +354,22 @@ def test_sincronizar_por_sip_deja_aviso_agente_y_numero(sip, monkeypatch, api_mo
     from backend import voz_elevenlabs
 
     publicado = []
+    ids = {sip.NOMBRE_DEL_AGENTE: "agent_sara", sip.NOMBRE_DEL_AGENTE_ENTRADA: "agent_entrada"}
     monkeypatch.setattr(voz_elevenlabs, "configurado", lambda: True)
     monkeypatch.setattr(voz_elevenlabs, "publicar_agente",
-                        lambda cliente, cuerpo, previo: publicado.append(cuerpo) or "agent_sara")
+                        lambda cliente, cuerpo, previo: publicado.append(cuerpo) or ids[cuerpo["name"]])
     api_module.CONFIG_CLIENTES["vantelia"]["voice"].pop(sip.CLAVE_NUMERO_SIP)
-    hecho = sip.sincronizar_agente(base_url="https://app.test", cliente=_ElevenLabs())
-    assert hecho == {"agent_id": "agent_sara", "numero_sip": "phnum_nuevo", "aviso": "wh_1"}
-    assert publicado[0]["platform_settings"]["workspace_overrides"]["webhooks"]["post_call_webhook_id"] == "wh_1"
+    el = _ElevenLabs()
+    hecho = sip.sincronizar_agente(base_url="https://app.test", cliente=el)
+    assert hecho == {"agent_id": "agent_sara", "agente_entrada": "agent_entrada", "numero_sip": "phnum_nuevo",
+                     "aviso": "wh_1"}
+    for cuerpo in publicado:  # las dos Saras llevan el aviso de fin de llamada
+        assert cuerpo["platform_settings"]["workspace_overrides"]["webhooks"]["post_call_webhook_id"] == "wh_1"
+    # Al 91 va la Sara de ENTRADA (30-sep: con la de llamar, ElevenLabs colgaba cada entrante).
+    importado = [p for p in el.peticiones if p[0] == "POST" and p[1].endswith("/v1/convai/phone-numbers")][0]
+    assert importado[2]["json"]["agent_id"] == "agent_entrada"
+    voz = api_module.CONFIG_CLIENTES["vantelia"]["voice"]
+    assert (voz[sip.CLAVE_AGENTE], voz[sip.CLAVE_AGENTE_ENTRADA]) == ("agent_sara", "agent_entrada")
 
 
 # --- Lo que el lanzador exige por SIP ----------------------------------------------------

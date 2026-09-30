@@ -43,6 +43,83 @@ def test_las_herramientas_llevan_quien_llama_y_la_entrante_tiene_su_saludo(capta
     assert (variables["sentido"], variables["saludo"]) == ("saliente", captacion.APERTURA)
 
 
+def test_la_sara_que_coge_el_91_no_necesita_ninguna_variable(captacion):  # noqa: F811
+    """Primera prueba de verdad (30-sep, 22:54): ElevenLabs colgo la entrante al segundo con
+    "Missing required dynamic variables in first message: {'saludo'}". Los valores por defecto
+    del agente NO valen en una llamada SIP que entra: la Sara del 91 no puede usar ninguna
+    variable nuestra, ni en el saludo, ni en el guion, ni en las herramientas."""
+    import re
+
+    agente = captacion.agente_de_captacion("https://app.test", entrada=True)
+    assert agente["name"] == captacion.NOMBRE_DEL_AGENTE_ENTRADA != captacion.NOMBRE_DEL_AGENTE
+    config = agente["conversation_config"]["agent"]
+    assert config["first_message"] == captacion.SALUDO_ENTRANTE
+    assert "{{" not in config["first_message"] + config["prompt"]["prompt"]
+    assert "Esta llamada es entrante" in config["prompt"]["prompt"]
+    assert "dynamic_variables" not in config
+    usadas = {campo["dynamic_variable"] for t in config["prompt"]["tools"] if t.get("type") == "webhook"
+              for campo in t["api_schema"]["request_body_schema"]["properties"].values() if "dynamic_variable" in campo}
+    assert usadas == {"system__caller_id", "system__conversation_id"}, "solo las que pone ElevenLabs"
+    # El resto de la Sara de siempre, igual: mismo guion y mismas herramientas.
+    normal = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
+    assert [t["name"] for t in config["prompt"]["tools"]] == [t["name"] for t in normal["prompt"]["tools"]]
+    assert config["prompt"]["prompt"] == captacion.guion_de_entrada()
+    assert re.sub(r"\{\{\w+\}\}", "", normal["prompt"]["prompt"]).count("\n") == config["prompt"]["prompt"].count("\n")
+    assert "LA LLAMADA CON PABLO" in config["prompt"]["prompt"]
+
+
+def test_la_sara_que_llama_recibe_todas_las_variables_que_usa(captacion):  # noqa: F811
+    """La misma trampa en las salientes: una {{variable}} del guion o del primer mensaje que el
+    servidor no mande colgaria TODAS las llamadas al segundo."""
+    import re
+
+    agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
+    usadas = set(re.findall(r"\{\{(\w+)\}\}", agente["first_message"] + agente["prompt"]["prompt"]))
+    for rellamada in (False, True):
+        hecho = captacion.llamar("911111111" if not rellamada else "911111112", "Pelu Marta", "peluqueria", "",
+                                 origen="auto", cliente=_Falso())
+        if rellamada:
+            captacion._actualizar(hecho["llamada"], responsable_nombre="Marta")
+            with captacion._db() as conn:
+                conn.execute("UPDATE llamadas_voz SET rellamada_de='ll_x' WHERE id=?", (hecho["llamada"],))
+                conn.commit()
+        mandadas = captacion._variables(captacion._fila(hecho["llamada"]))
+        assert usadas <= set(mandadas), usadas - set(mandadas)
+        assert all(str(mandadas[v]) for v in usadas if v != "email_negocio"), "ninguna vacia que se note"
+
+
+def test_el_puente_pasa_de_verdad_quien_llama():
+    """En la subrutina de cabeceras CALLERID(num) es el del canal hacia ElevenLabs ("s"): la
+    primera entrante llego con X-Caller-ID: s y sin forma de encontrar su ficha."""
+    from pathlib import Path
+
+    conf = (Path(__file__).resolve().parents[1] / "deploy" / "sara-puente" / "extensions.conf").read_text(
+        encoding="utf-8")
+    entrante = conf.split("[entrante]", 1)[1].split("\n[", 1)[0]
+    cabeceras = conf.split("[cabeceras]", 1)[1].split("\n[", 1)[0]
+    assert entrante.index("Set(__QUIEN=${CALLERID(num)})") < entrante.index("Dial(")
+    assert "X-Caller-ID)=${QUIEN}" in cabeceras and "CALLERID" not in cabeceras
+
+
+def test_la_recogida_reconoce_tambien_a_la_sara_del_91(sip):  # noqa: F811
+    from backend import transcripciones_llamadas
+    from test_captacion_voz import _Respuesta
+
+    conversaciones = [
+        {"conversation_id": "conv_llamar", "agent_id": "agent_sara"},
+        {"conversation_id": "conv_91", "agent_id": "agent_entrada"},
+        {"conversation_id": "conv_91_vieja", "agent_id": "agent_x", "agent_name": sip.NOMBRE_DEL_AGENTE_ENTRADA},
+        {"conversation_id": "conv_ajena", "agent_id": "agent_negocio", "agent_name": "Asistente de un negocio"},
+    ]
+
+    class _Api:
+        def get(self, url, headers=None, params=None, **k):
+            return _Respuesta(200, {"conversations": conversaciones, "has_more": False})
+
+    ids = transcripciones_llamadas._conversaciones_de_sara(_Api(), "k", {"agent_sara", "agent_entrada"}, 0)
+    assert ids == ["conv_llamar", "conv_91", "conv_91_vieja"]
+
+
 def test_quien_devuelve_la_llamada_recibe_la_informacion(captacion, envios):  # noqa: F811
     """Le llamamos, no lo cogio, devuelve la llamada y pide la informacion: le llega el SMS y
     la ficha es la del negocio al que llamamos."""
