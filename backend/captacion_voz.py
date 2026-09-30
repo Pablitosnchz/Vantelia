@@ -1100,29 +1100,33 @@ def _fila_entrante(quien: str, conversation_id: str = ""):
     hace = (timeutils._utc_now() - timedelta(minutes=MINUTOS_MISMA_ENTRANTE)).isoformat(timespec="seconds")
     with _db() as conn:
         conn.row_factory = sqlite3.Row
+        # Buscar y crear en UNA transaccion de escritura: dos herramientas a la vez en la misma
+        # entrante creaban dos fichas, cada una con su sello de envio (revision de Astra, 30-sep).
+        conn.execute("BEGIN IMMEDIATE")
+        llamada_id = ""
         if conversation_id:
-            fila = conn.execute("SELECT * FROM llamadas_voz WHERE conversation_id=?", (conversation_id,)).fetchone()
-            if fila is not None:
-                return fila
-        if telefono:
+            fila = conn.execute("SELECT id FROM llamadas_voz WHERE conversation_id=?", (conversation_id,)).fetchone()
+            llamada_id = fila["id"] if fila is not None else ""
+        if not llamada_id and telefono:
             # Solo la de la MISMA conversacion (o una aun sin ella): dos llamadas del mismo numero
             # en media hora son dos fichas, o la segunda pisaba la transcripcion y el sello de
             # envio de la primera (revision de Astra, 30-sep-2026).
-            fila = conn.execute("SELECT * FROM llamadas_voz WHERE telefono=? AND origen='entrante' AND creada >= ? "
-                                "AND (? = '' OR conversation_id = '') ORDER BY creada DESC LIMIT 1",
+            fila = conn.execute("SELECT id, conversation_id FROM llamadas_voz WHERE telefono=? AND origen='entrante' "
+                                "AND creada >= ? AND (? = '' OR conversation_id = '') ORDER BY creada DESC LIMIT 1",
                                 (telefono, hace, conversation_id)).fetchone()
             if fila is not None:
+                llamada_id = fila["id"]
                 if conversation_id and not fila["conversation_id"]:
-                    conn.execute("UPDATE llamadas_voz SET conversation_id=? WHERE id=?", (conversation_id, fila["id"]))
-                    conn.commit()
-                return _fila(fila["id"])
-        previa = conn.execute("SELECT negocio, sector, prospecto FROM llamadas_voz WHERE telefono=? AND "
-                              "origen<>'entrante' ORDER BY creada DESC LIMIT 1", (telefono,)).fetchone() if telefono else None
-        llamada_id, ahora = "ll_" + secrets.token_urlsafe(9), _ahora()
-        conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, "
-                     "conversation_id, creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                     (llamada_id, telefono, previa["negocio"] if previa else "", previa["sector"] if previa else "",
-                      previa["prospecto"] if previa else "", "en_curso", "entrante", conversation_id, ahora, ahora))
+                    conn.execute("UPDATE llamadas_voz SET conversation_id=? WHERE id=?", (conversation_id, llamada_id))
+        if not llamada_id:
+            previa = conn.execute("SELECT negocio, sector, prospecto FROM llamadas_voz WHERE telefono=? AND "
+                                  "origen<>'entrante' ORDER BY creada DESC LIMIT 1",
+                                  (telefono,)).fetchone() if telefono else None
+            llamada_id, ahora = "ll_" + secrets.token_urlsafe(9), _ahora()
+            conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, "
+                         "conversation_id, creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                         (llamada_id, telefono, previa["negocio"] if previa else "", previa["sector"] if previa else "",
+                          previa["prospecto"] if previa else "", "en_curso", "entrante", conversation_id, ahora, ahora))
         conn.commit()
     return _fila(llamada_id)
 

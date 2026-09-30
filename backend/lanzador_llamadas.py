@@ -376,6 +376,10 @@ def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
             "AND l.rellamada_de = '' AND l.resultado NOT IN ('no_llamar', 'interesado', 'llamar_pablo') "
             "AND l.creada <= ? "
             "AND NOT EXISTS (SELECT 1 FROM llamadas_voz r WHERE r.rellamada_de = l.id) "
+            # Si despues nos llamo el (devolvio la llamada), ya hemos hablado: no se le rellama
+            # aunque la saliente siga pendiente (revision de Astra, 30-sep-2026).
+            "AND NOT EXISTS (SELECT 1 FROM llamadas_voz e WHERE e.telefono = l.telefono "
+            "                AND e.origen = 'entrante' AND e.creada > l.creada) "
             "AND NOT EXISTS (SELECT 1 FROM no_llamar n WHERE n.telefono = l.telefono) "
             "AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = l.prospecto) "
             "AND NOT EXISTS (SELECT 1 FROM prospects p WHERE p.email = l.prospecto "

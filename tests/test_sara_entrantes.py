@@ -11,10 +11,13 @@ Plan y tabla de fallos: docs/PLAN_SARA_ENTRANTES.md.
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from test_booking_exhaustive import api_module  # noqa: F401
 from test_captacion_voz import _Falso, captacion, envios  # noqa: F401
+from test_lanzador_llamadas import MARTES_10_30, lanzador  # noqa: F401
 from test_sara_por_sip import sip  # noqa: F401
 from test_segunda_oportunidad import MARTES_1630, _llamada, _negocio, _ronda, so  # noqa: F401
 
@@ -71,6 +74,50 @@ def test_dos_llamadas_del_mismo_numero_son_dos_fichas(captacion, envios):  # noq
         conversaciones = sorted(f[0] for f in conn.execute(
             "SELECT conversation_id FROM llamadas_voz WHERE origen='entrante'"))
     assert conversaciones == ["conv_primera", "conv_segunda"]
+
+
+def test_dos_herramientas_a_la_vez_una_sola_ficha(captacion, monkeypatch):  # noqa: F811
+    """Astra, 30-sep: dos primeras peticiones a la vez de la misma entrante pasaban las dos la
+    busqueda e insertaban dos fichas (dos sellos de envio: dos SMS)."""
+    import threading
+
+    original = captacion.secrets.token_urlsafe
+    llegadas, las_dos = [], threading.Event()
+
+    def id_lento(n):
+        llegadas.append(1)
+        if len(llegadas) >= 2:
+            las_dos.set()
+        las_dos.wait(1.5)  # sin cerrojo, las dos llegan aqui a la vez y cada una crea la suya
+        return original(n)
+
+    monkeypatch.setattr(captacion.secrets, "token_urlsafe", id_lento)
+    ids = []
+    hilos = [threading.Thread(target=lambda: ids.append(captacion._fila_entrante("+34675802001", "conv_x")["id"]))
+             for _ in range(2)]
+    for hilo in hilos:
+        hilo.start()
+    for hilo in hilos:
+        hilo.join(15)
+    assert len(ids) == 2 and len(set(ids)) == 1
+    with captacion._db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM llamadas_voz WHERE origen='entrante'").fetchone()[0] == 1
+
+
+def test_si_nos_devolvio_la_llamada_no_se_le_rellama(captacion, lanzador):  # noqa: F811
+    """Astra, 30-sep: el empleado dejo el nombre y la hora de la duena, ella nos llamo y pidio
+    hablar con Pablo... y la rellamada de Sara seguia pendiente."""
+    hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "hola@pelu.es", origen="auto", cliente=_Falso())
+    captacion._actualizar(hecho["llamada"], estado="terminada", interlocutor="empleado", responsable_nombre="Marta",
+                          responsable_cuando="por las tardes", conversation_id="conv_1")
+    with captacion._db() as conn:
+        conn.execute("UPDATE llamadas_voz SET creada=? WHERE id=?",
+                     (lanzador._iso(MARTES_10_30 - timedelta(days=1)), hecho["llamada"]))
+        conn.commit()
+    tarde = MARTES_10_30 + timedelta(days=1, hours=6)
+    assert len(lanzador.rellamadas_dirigidas(tarde)) == 1, "control: sin la devolucion, se rellamaria"
+    captacion.herramienta("pasar_a_pablo", _entrante(_quien="+34911111111", _conversacion="conv_devuelta"))
+    assert lanzador.rellamadas_dirigidas(tarde) == []
 
 
 def test_sin_numero_ni_conversacion_no_se_inventa_nada(captacion):  # noqa: F811
