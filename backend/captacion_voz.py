@@ -77,6 +77,9 @@ PRIMER_MENSAJE = "{{saludo}}"
 SALUDO_ENTRANTE = "Hola, soy Sara, la asistente con inteligencia artificial de Vantelia. ¿En qué te puedo ayudar?"
 # En una entrante las tools no llevan el id de la llamada (no lo hay aun): llevan quien llama y
 # la conversacion, y el servidor encuentra o crea su ficha (`_fila_entrante`).
+# El nombre es el mismo en todas las cuentas (el id no): con el se reconocen sus conversaciones
+# en una cuenta de la que ya se roto (transcripciones_llamadas.recoger_entrantes).
+NOMBRE_DEL_AGENTE = "Sara - captacion Vantelia (telefono)"
 CAMPO_QUIEN = "_quien"
 CAMPO_CONVERSACION = "_conversacion"
 
@@ -360,7 +363,7 @@ def agente_de_captacion(base_url: str, aviso_id: str = "") -> Dict[str, Any]:
     voz = dict({"voice_id": settings.ELEVENLABS_VOICE_ID, "model_id": voz_elevenlabs.MODELO_VOZ}, **audio["tts"])
     voz["stability"] = ESTABILIDAD_DE_SARA
     return {
-        "name": "Sara - captacion Vantelia (telefono)",
+        "name": NOMBRE_DEL_AGENTE,
         "conversation_config": {
             "agent": {
                 "first_message": PRIMER_MENSAJE,

@@ -161,24 +161,34 @@ def test_la_entrante_cuyo_aviso_no_llego_se_recoge(sip, monkeypatch):  # noqa: F
     from test_captacion_voz import _Respuesta
 
     monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "k_activa")
-    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_activa"])
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEYS", ["k_activa", "k_vieja"])
     sip._fila_entrante("+34912222222", "conv_conocida")  # esta ya tiene ficha
     pedidas = []
+    # Astra (d7146ce): la perdida puede estar en la SEGUNDA pagina y en la cuenta VIEJA (tras
+    # rotar), con otro id de agente pero el mismo nombre. La de otro agente no se toca.
+    paginas = {
+        ("k_activa", ""): {"conversations": [{"conversation_id": "conv_conocida", "agent_id": "agent_sara"}],
+                           "has_more": False},
+        ("k_vieja", ""): {"conversations": [{"conversation_id": "conv_de_un_negocio", "agent_id": "agent_negocio",
+                                             "agent_name": "Asistente de un negocio"}],
+                          "has_more": True, "next_cursor": "pag2"},
+        ("k_vieja", "pag2"): {"conversations": [{"conversation_id": "conv_perdida", "agent_id": "agent_viejo",
+                                                 "agent_name": sip.NOMBRE_DEL_AGENTE}], "has_more": False},
+    }
 
     class _Api:
         def get(self, url, headers=None, params=None, **k):
             if url.endswith("/v1/convai/conversations"):
-                assert params["agent_id"] == "agent_sara"
-                return _Respuesta(200, {"conversations": [{"conversation_id": "conv_perdida"},
-                                                          {"conversation_id": "conv_conocida"}]})
+                return _Respuesta(200, paginas[(headers["xi-api-key"], (params or {}).get("cursor", ""))])
             pedidas.append(url.rsplit("/", 1)[-1])
-            return _Respuesta(200, _conversacion_entrante(conversation_id="conv_perdida"))
+            return _Respuesta(200, _conversacion_entrante(conversation_id="conv_perdida", agente="agent_viejo",
+                                                          numero="+34910000001"))
 
         def close(self):
             pass
 
     assert transcripciones_llamadas.recoger_entrantes(cliente=_Api()) == 1
-    assert pedidas == ["conv_perdida"], "solo se pide la que falta"
+    assert pedidas == ["conv_perdida"], "solo se pide la que falta, y nunca la de otro agente"
     with sip._db() as conn:
         assert conn.execute("SELECT origen FROM llamadas_voz WHERE conversation_id='conv_perdida'").fetchone()[0] == "entrante"
     assert transcripciones_llamadas.recoger_entrantes(cliente=_Api()) == 0, "la segunda vez ya la tiene"

@@ -276,13 +276,42 @@ def recoger_pendientes(*, cliente: Optional[httpx.Client] = None, limite: int = 
 
 
 HORAS_BUSCANDO_ENTRANTES = 24
+MAX_PAGINAS_POR_CUENTA = 10
+
+
+def _conversaciones_de_sara(cliente: httpx.Client, clave: str, agente: str, desde: int) -> List[str]:
+    """Ids de las conversaciones recientes de Sara en una cuenta, todas las paginas (con tope).
+    Suyas: su agente actual o una con su nombre (tras rotar, en la cuenta vieja el id es otro)."""
+    ids: List[str] = []
+    cursor = ""
+    for _ in range(MAX_PAGINAS_POR_CUENTA):
+        params: Dict[str, Any] = {"call_start_after_unix": desde, "page_size": 100}
+        if cursor:
+            params["cursor"] = cursor
+        try:
+            r = cliente.get("%s/v1/convai/conversations" % API, headers={"xi-api-key": clave}, params=params)
+        except httpx.HTTPError as exc:
+            settings.logger.warning("[transcripciones] no se pudieron buscar entrantes: %s", cuenta_elevenlabs.censurar(exc))
+            break
+        if r.status_code != 200:
+            break
+        datos = r.json() or {}
+        for c in datos.get("conversations") or []:
+            if (agente and str(c.get("agent_id") or "") == agente) or \
+                    str(c.get("agent_name") or "") == captacion_voz.NOMBRE_DEL_AGENTE:
+                ids.append(str(c.get("conversation_id") or ""))
+        cursor = str(datos.get("next_cursor") or "")
+        if not datos.get("has_more") or not cursor:
+            break
+    return [i for i in ids if i]
 
 
 def recoger_entrantes(*, cliente: Optional[httpx.Client] = None, horas: int = HORAS_BUSCANDO_ENTRANTES) -> int:
     """Entrantes cuyo aviso de fin no llego y en las que Sara no uso herramientas: no tienen
-    ficha, asi que `recoger_pendientes` no las ve (revision de Astra, 30-sep-2026). Se piden a
-    la cuenta activa las conversaciones recientes de Sara y se guardan las que falten;
-    `guardar` solo les crea ficha si son entrantes a su 91. Devuelve cuantas guardo."""
+    ficha, asi que `recoger_pendientes` no las ve (revision de Astra, 30-sep-2026). Se recorren
+    las conversaciones recientes de Sara en TODAS las cuentas de la reserva (tras rotar, la
+    entrante vive en la vieja) y se guardan las que falten; `guardar` solo les crea ficha si
+    son entrantes a su 91. Devuelve cuantas guardo."""
     from backend import clients
 
     try:
@@ -290,27 +319,25 @@ def recoger_entrantes(*, cliente: Optional[httpx.Client] = None, horas: int = HO
             captacion_voz.CLAVE_AGENTE) or "")
     except Exception:  # noqa: BLE001 - sin el tenant de Sara no hay nada que buscar
         return 0
-    if not agente or not settings.ELEVENLABS_API_KEY:
+    claves = cuenta_elevenlabs.claves()
+    if not claves:
         return 0
     desde = int(timeutils._utc_now().timestamp()) - horas * 3600
     propio = cliente is None
     cliente = cliente or httpx.Client(timeout=20.0)
     guardadas = 0
     try:
-        r = cliente.get("%s/v1/convai/conversations" % API, headers={"xi-api-key": settings.ELEVENLABS_API_KEY},
-                        params={"agent_id": agente, "call_start_after_unix": desde, "page_size": 100})
-        if r.status_code != 200:
-            return 0
-        ids = [str(c.get("conversation_id") or "") for c in (r.json() or {}).get("conversations") or []]
         with _db() as conn:
             conocidas = {f[0] for f in conn.execute("SELECT conversation_id FROM llamadas_voz WHERE conversation_id <> ''")}
-        for conversation_id in ids:
-            if conversation_id and conversation_id not in conocidas:
+        vistas = set(conocidas)
+        for clave in claves:
+            for conversation_id in _conversaciones_de_sara(cliente, clave, agente, desde):
+                if conversation_id in vistas:
+                    continue
+                vistas.add(conversation_id)
                 conversacion = _pedir(conversation_id, cliente)
                 if conversacion and guardar(conversacion, "recogida"):
                     guardadas += 1
-    except httpx.HTTPError as exc:
-        settings.logger.warning("[transcripciones] no se pudieron buscar entrantes: %s", cuenta_elevenlabs.censurar(exc))
     finally:
         if propio:
             cliente.close()
