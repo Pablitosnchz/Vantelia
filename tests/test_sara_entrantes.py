@@ -17,7 +17,7 @@ import pytest
 
 from test_booking_exhaustive import api_module  # noqa: F401
 from test_captacion_voz import _Falso, captacion, envios  # noqa: F401
-from test_lanzador_llamadas import MARTES_10_30, lanzador  # noqa: F401
+from test_lanzador_llamadas import MARTES_10_30, _llamada_previa, lanzador  # noqa: F401
 from test_sara_por_sip import sip  # noqa: F401
 from test_segunda_oportunidad import MARTES_1630, _llamada, _negocio, _ronda, so  # noqa: F401
 
@@ -192,6 +192,27 @@ def test_la_entrante_cuyo_aviso_no_llego_se_recoge(sip, monkeypatch):  # noqa: F
     with sip._db() as conn:
         assert conn.execute("SELECT origen FROM llamadas_voz WHERE conversation_id='conv_perdida'").fetchone()[0] == "entrante"
     assert transcripciones_llamadas.recoger_entrantes(cliente=_Api()) == 0, "la segunda vez ya la tiene"
+
+
+def test_una_entrante_recogida_tarde_conserva_su_hora(sip, lanzador):  # noqa: F811
+    """Astra, 30-sep: entrante a las 10, saliente a las 11 en la que un empleado deja a quien
+    decide, y la entrante se recoge a las 12. Con la hora de la recogida parecia posterior a la
+    saliente y cancelaba su rellamada."""
+    from backend import transcripciones_llamadas
+
+    saliente = MARTES_10_30 - timedelta(days=1)
+    _llamada_previa(lanzador, "+34911234567", saliente, estado="terminada")
+    with sip._db() as conn:
+        conn.execute("UPDATE llamadas_voz SET interlocutor='empleado', responsable_nombre='Marta', "
+                     "responsable_cuando='por las tardes', sector='peluqueria', conversation_id='conv_saliente' "
+                     "WHERE telefono='+34911234567'")
+        conn.commit()
+    tarde = MARTES_10_30 + timedelta(days=1, hours=6)
+    assert len(lanzador.rellamadas_dirigidas(tarde)) == 1
+    conversacion = _conversacion_entrante()  # la entrante fue una hora ANTES de la saliente
+    conversacion["metadata"]["start_time_unix_secs"] = int((saliente - timedelta(hours=1)).timestamp())
+    assert transcripciones_llamadas.guardar(conversacion, "recogida")
+    assert len(lanzador.rellamadas_dirigidas(tarde)) == 1, "la rellamada sigue pendiente"
 
 
 def test_la_entrante_cuenta_aunque_se_haya_cambiado_de_cuenta(sip):  # noqa: F811

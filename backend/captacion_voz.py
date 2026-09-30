@@ -1096,10 +1096,13 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
 MINUTOS_MISMA_ENTRANTE = 30
 
 
-def _fila_entrante(quien: str, conversation_id: str = ""):
+def _fila_entrante(quien: str, conversation_id: str = "", cuando: str = ""):
     """La ficha de una llamada que nos hacen al 91. La primera vez se crea, con el negocio,
     sector y email de nuestra ultima llamada a ese numero si la hubo; despues se reutiliza (por
-    la conversacion, o la del mismo numero de los ultimos minutos). None si no hay por donde."""
+    la conversacion, o la del mismo numero de los ultimos minutos). None si no hay por donde.
+
+    `cuando` = hora real de la llamada si se crea tarde (al recogerla): con la de la recogida,
+    parecia posterior a una saliente y cancelaba su rellamada (revision de Astra, 30-sep)."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{4,80}", conversation_id or ""):
         conversation_id = ""
     telefono = telefono_e164(quien) if quien else ""
@@ -1131,10 +1134,11 @@ def _fila_entrante(quien: str, conversation_id: str = ""):
                                   "origen<>'entrante' ORDER BY creada DESC LIMIT 1",
                                   (telefono,)).fetchone() if telefono else None
             llamada_id, ahora = "ll_" + secrets.token_urlsafe(9), _ahora()
+            creada = cuando or ahora
             conn.execute("INSERT INTO llamadas_voz (id, telefono, negocio, sector, prospecto, estado, origen, "
                          "conversation_id, creada, actualizada) VALUES (?,?,?,?,?,?,?,?,?,?)",
                          (llamada_id, telefono, previa["negocio"] if previa else "", previa["sector"] if previa else "",
-                          previa["prospecto"] if previa else "", "en_curso", "entrante", conversation_id, ahora, ahora))
+                          previa["prospecto"] if previa else "", "en_curso", "entrante", conversation_id, creada, ahora))
         conn.commit()
     return _fila(llamada_id)
 

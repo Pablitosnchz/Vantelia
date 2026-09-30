@@ -35,7 +35,7 @@ import json
 import re
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
@@ -141,7 +141,13 @@ def _entrante_de_sara(conversacion: Dict[str, Any]):
     if not entra:
         return None
     quien = str(telefonica.get("external_number") or variables.get("system__caller_id") or "")
-    return captacion_voz._fila_entrante(quien, str(conversacion.get("conversation_id") or ""))
+    # La hora real de la llamada, no la de ahora (la recogida puede llegar horas despues).
+    inicio = (conversacion.get("metadata") or {}).get("start_time_unix_secs")
+    try:
+        cuando = datetime.fromtimestamp(int(inicio), tz=timezone.utc).isoformat(timespec="seconds") if inicio else ""
+    except (TypeError, ValueError, OverflowError, OSError):
+        cuando = ""
+    return captacion_voz._fila_entrante(quien, str(conversacion.get("conversation_id") or ""), cuando)
 
 
 def guardar(conversacion: Dict[str, Any], origen: str) -> Optional[str]:
