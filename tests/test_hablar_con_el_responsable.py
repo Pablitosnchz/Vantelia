@@ -91,6 +91,11 @@ def test_si_se_pone_al_telefono_la_herramienta_le_recuerda_presentarse(captacion
     r = captacion.herramienta("anotar_responsable", {
         captacion.CAMPO_LLAMADA: llamada, "interlocutor": "empleado", "se_pone_ahora": True})
     assert "espera" in r["mensaje"] and "presentate entera" in r["mensaje"]
+    # Astra, 30-sep: la herramienta seguia mandando "el gancho y el aviso de que es comercial"
+    # cuando el guion ya no lo dice. Misma apertura que al principio, sin ordenes que choquen.
+    assert "misma apertura del principio" in r["mensaje"]
+    for dicho in (r["mensaje"].lower(), captacion.GUION.lower()):
+        assert "comercial" not in dicho and "gancho" not in dicho
     assert captacion._fila(llamada)["se_pone_ahora"] == 1
 
 

@@ -1342,8 +1342,9 @@ def _anotar_responsable(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True, "mensaje": "Apuntado: hablas con quien decide en el negocio."}
     if se_pone:
         return {"ok": True, "mensaje": ("Apuntado. Di 'claro, espero' y espera callada. Cuando hable la persona "
-                                        "nueva, presentate entera otra vez: quien eres, que eres una asistente "
-                                        "virtual, el gancho y el aviso de que es comercial.")}
+                                        "nueva, presentate entera otra vez con la misma apertura del principio "
+                                        "(quien eres, que eres una inteligencia artificial y que si no le encaja "
+                                        "no la molestas mas) y espera a que conteste.")}
     return {"ok": True, "mensaje": ("Apuntado. Ofrece mandar la informacion para quien decide y despidete; si "
                                     "quien te atiende tiene curiosidad, puedes hacerle la demo.")}
 
