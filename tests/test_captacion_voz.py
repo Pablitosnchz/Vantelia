@@ -67,14 +67,22 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     # La primera frase la calcula el servidor por llamada ({{saludo}}): en las dos aperturas,
     # quien llama, que es una IA y que puede decir que no, desde el principio.
     assert agente["agent"]["first_message"] == "{{primera}}"  # "¿Hola?" y luego la apertura (30-sep)
-    for apertura in (captacion.APERTURA, captacion.APERTURA_RELLAMADA % "Marta"):
-        assert "soy sara, de vantelia. soy una inteligencia artificial" in apertura.lower()
-        assert "si no te encaja, me lo dices y no te molesto más" in apertura.lower()
+    # Desde el 1-oct-2026 (Pablo: "demasiado largo, la gente corta") solo quien y que es una IA:
+    # sin Vantelia ni "si no te encaja". La IA, en la PRIMERA frase (Reglamento de IA, art. 50:
+    # como tarde en la primera interaccion), tambien al coger el 91.
+    for apertura in (captacion.APERTURA, captacion.APERTURA_RELLAMADA % "Marta", captacion.SALUDO_ENTRANTE):
+        primera_frase = apertura.split(".")[0].lower()
+        assert "soy sara, una ia" in primera_frase
         assert "comercial" not in apertura.lower(), "Pablo, 30-sep: sin la frase de formulario"
+    assert captacion.APERTURA == "Hola, soy Sara, una IA. ¿Tienes treinta segundos?"
     guion = agente["agent"]["prompt"]["prompt"].lower()
-    # El motivo de la llamada, en cuanto da permiso.
+    # El motivo de la llamada, en cuanto da permiso; y la IA otra vez en el gancho.
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
     assert "ayudamos a negocios como el vuestro con las llamadas" in paso_2
+    paso_3 = guion.split("\n3. ", 1)[1].split("\n4. ", 1)[0]
+    assert "justo para eso estoy yo: soy una inteligencia artificial que" in paso_3
+    # Nunca negar que es una IA, la pregunten cuando la pregunten.
+    assert "si preguntan si eres una persona o un robot: eres una ia" in guion
     assert "tu nunca haces de clienta" in guion, "en la demo la clienta es el negocio, no Sara"
     # Segunda prueba (24-sep): se le colo el ingles y deletreo el email 25 segundos.
     assert "siempre en español" in guion and "no lo deletrees" in guion

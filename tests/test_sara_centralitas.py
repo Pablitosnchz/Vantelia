@@ -182,18 +182,23 @@ def test_si_le_interesa_sara_propone_que_le_llame_pablo_con_dos_huecos(captacion
     guion = agente["prompt"]["prompt"]
     paso_3 = guion.split("\n3. ", 1)[1].split("\n4. ", 1)[0]
     assert "¿Es algo que os vendria bien?" in paso_3, "pregunta por el interes, no por la demo"
-    assert "paso 6 (LA LLAMADA CON PABLO)" in paso_3
+    assert "paso 6 (LA DEMO GRATUITA)" in paso_3
     assert "UNA pregunta mas para entenderlo, solo una" in paso_3
+    # 1-oct (Pablo): el cierre es la demo gratuita por SMS o email, no "¿te llamo Pablo?". Si
+    # prefiere que le llamen, entonces si los dos huecos concretos.
     paso_6 = guion.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
-    assert "LA LLAMADA CON PABLO" in paso_6 and "{{huecos_pablo}}" in paso_6
+    assert "LA DEMO GRATUITA" in paso_6 and "una pequeña demo gratuita para que pruebes como quedaria" in paso_6
+    assert "usa `enviar_informacion` en ESE MISMO turno" in paso_6
+    assert "Si prefiere que le llamemos" in paso_6 and "{{huecos_pablo}}" in paso_6
     assert "usa `pasar_a_pablo` en ESE MISMO turno" in paso_6
     assert "si pide sabado o domingo, propon el lunes" in paso_6
-    assert "Si pide que le mandes informacion: ve directa al paso 7" in guion
-    assert "propon la llamada con Pablo (paso 6)" in guion  # si se alarga
+    assert "¿Te parece que te llame Pablo" not in guion
+    assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
+    assert "ofrece la demo gratuita (paso 6)" in guion  # si se alarga
     # Nada de frases de folleto.
     assert "Nada de frases de vendedora ni de folleto" in guion
     herramienta = [t for t in agente["prompt"]["tools"] if t["name"] == "pasar_a_pablo"][0]
-    assert "Cuando le interese" in herramienta["description"]
+    assert "Cuando prefiera que le llame Pablo" in herramienta["description"]
     # Las entrantes no traen huecos calculados: el valor por defecto sirve igual en la frase.
     assert agente["dynamic_variables"]["dynamic_variable_placeholders"]["huecos_pablo"] == (
         "entre semana, por la mañana o por la tarde")
@@ -253,7 +258,7 @@ def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
     guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
     assert "las SALIDAS de abajo mandan sobre estos pasos" in guion
     assert "nunca cuelgues sin despedirte" in guion  # 30-sep: colgo tras "no, gracias" sin decir nada
-    assert "Si pide que le mandes informacion: ve directa al paso 7" in guion
+    assert "Si pide que le mandes informacion: ve directa al paso 6" in guion
     assert "sin repetir la apertura entera" in guion
     assert "ni finjas que le pasas la llamada" in guion
     # Rellamada a quien decide que no esta: sin demo a quien coge.

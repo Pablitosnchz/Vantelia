@@ -35,7 +35,7 @@ def test_las_herramientas_llevan_quien_llama_y_la_entrante_tiene_su_saludo(capta
     # Si nadie manda variables (solo pasa en una entrante), saluda como quien coge el telefono.
     por_defecto = agente["dynamic_variables"]["dynamic_variable_placeholders"]
     assert (por_defecto["saludo"], por_defecto["sentido"]) == (captacion.SALUDO_ENTRANTE, "entrante")
-    assert "inteligencia artificial" in captacion.SALUDO_ENTRANTE, "tambien al coger: que es una IA"
+    assert "una IA" in captacion.SALUDO_ENTRANTE.split(".")[0], "tambien al coger: que es una IA, en la primera frase"
     assert "SI TE LLAMAN ELLOS" in agente["prompt"]["prompt"] and "{{sentido}}" in agente["prompt"]["prompt"]
     # Las salientes mandan siempre lo suyo.
     hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "", origen="auto", cliente=_Falso())
@@ -65,7 +65,7 @@ def test_la_sara_que_coge_el_91_no_necesita_ninguna_variable(captacion):  # noqa
     assert [t["name"] for t in config["prompt"]["tools"]] == [t["name"] for t in normal["prompt"]["tools"]]
     assert config["prompt"]["prompt"] == captacion.guion_de_entrada()
     assert re.sub(r"\{\{\w+\}\}", "", normal["prompt"]["prompt"]).count("\n") == config["prompt"]["prompt"].count("\n")
-    assert "LA LLAMADA CON PABLO" in config["prompt"]["prompt"]
+    assert "LA DEMO GRATUITA" in config["prompt"]["prompt"]
 
 
 def test_la_sara_que_llama_recibe_todas_las_variables_que_usa(captacion):  # noqa: F811
