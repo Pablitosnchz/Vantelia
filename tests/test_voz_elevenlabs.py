@@ -370,12 +370,15 @@ def test_por_telefono_no_pide_el_numero_desde_el_que_llaman(api_module, configur
 
 
 def test_la_voz_va_estable_en_sara_y_en_los_negocios(api_module, configurado):  # noqa: F811
-    """Pablo: "a veces le cambiaba la voz". De serie ElevenLabs pone estabilidad 0,5."""
+    """Pablo: "a veces le cambiaba la voz". De serie ElevenLabs pone estabilidad 0,5. Sara,
+    desde el 1-oct-2026, con los ajustes de serie de su voz (Pablo: "tal cual de ElevenLabs")."""
     from backend import captacion_voz, voz_elevenlabs
 
     negocio = voz_elevenlabs.agente_para("demo", api_module.CONFIG_CLIENTES["demo"], "https://app.test",
                                          telefono=True)["conversation_config"]["tts"]
-    sara = captacion_voz.agente_de_captacion("https://app.test")["conversation_config"]["tts"]
+    assert negocio["stability"] >= 0.7 and negocio["similarity_boost"] >= 0.9
+    for entrada in (False, True):
+        sara = captacion_voz.agente_de_captacion("https://app.test", entrada=entrada)["conversation_config"]["tts"]
+        assert (sara["stability"], sara["similarity_boost"]) == (0.65, 0.76)
     for tts in (negocio, sara):
-        assert tts["stability"] >= 0.7 and tts["similarity_boost"] >= 0.9
         assert tts["agent_output_audio_format"] == "ulaw_8000"

@@ -105,7 +105,11 @@ def test_tras_el_si_una_sola_pregunta_y_quien_decide_despues(captacion):
     assert paso_2.count("?") == 1 and "quien lleva" not in paso_2
     assert guion.index("con los papeles claros") < guion.index("\n5. QUIEN DECIDE")
     assert "nunca des por hecho que te has equivocado de numero" in guion
-    assert agente["tts"]["stability"] >= 0.9, "sin trozos con otra voz"
+    # 1-oct-2026 (Pablo): la voz tal cual viene de ElevenLabs, sin los 0,9 / 0,9 de antes, y con
+    # Flash: v3 Conversational y v4 Turbo se probaron en llamadas y sonaban "mas robot".
+    assert {k: agente["tts"][k] for k in ("stability", "similarity_boost", "speed", "expressive_mode")} == {
+        "stability": 0.65, "similarity_boost": 0.76, "speed": 1.0, "expressive_mode": False}
+    assert agente["tts"]["model_id"] == "eleven_flash_v2_5"
 
 
 def test_no_llamar_mas_se_cumple_de_verdad(captacion):

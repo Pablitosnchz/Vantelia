@@ -352,10 +352,17 @@ SEGUNDOS_DE_SILENCIO_PARA_COLGAR = 75
 # La llamada entera: el guion pide cuatro minutos; cinco dejan sitio a una espera en centralita.
 SEGUNDOS_MAXIMOS_DE_LLAMADA = 300
 
-# Con la estabilidad comun (0,7) Pablo seguia oyendo "como dos voces" dentro de un mismo
-# turno (28-sep-2026): el modelo rapido genera la voz frase a frase y cada trozo salia con otro
-# tono. Solo Sara: los agentes de los negocios siguen con el ajuste comun.
-ESTABILIDAD_DE_SARA = 0.9
+# La voz de Sara, TAL CUAL viene de ElevenLabs: los ajustes de serie de "Laura - Customer
+# service" (GET /v1/voices/{id}/settings). Pablo, 1-oct-2026: "dice 'hola, soy Sara, una IA' en
+# un tono y luego '¿tienes treinta segundos?' como con otra voz; pon la voz estandar sin filtros".
+# Historia: con la comun (0,7) se oian "dos voces" en un turno (28-sep) y se subio a 0,9 / 0,9,
+# sin que se fuera: el modelo rapido genera la voz frase a frase y cada trozo puede salir con
+# otro tono. Solo Sara: los agentes de los negocios siguen con el ajuste comun.
+# Probado en llamadas con Pablo el mismo dia y descartado: eleven_v3_conversational y
+# eleven_v4_turbo (este tambien con estabilidad 0,5 y modo expresivo) mantienen el tono entre
+# turnos pero suenan "mas robot, le falta la emocion de la flash". Se queda Flash (MODELO_VOZ)
+# con estos ajustes: "cambia un poco el tono pero esta bien". Modo expresivo apagado a proposito.
+AJUSTES_DE_VOZ_DE_SARA = {"stability": 0.65, "similarity_boost": 0.76, "speed": 1.0, "expressive_mode": False}
 
 # Lo que ElevenLabs saca de cada conversacion al terminar (lo guarda el aviso de fin de
 # llamada con la transcripcion). Los nombres los comparten los dos planes: el de hablar
@@ -420,7 +427,7 @@ def agente_de_captacion(base_url: str, aviso_id: str = "", *, entrada: bool = Fa
                               "esperas a que hable alguien."), BUZON_SIN_MENSAJE, ESPERAR_CALLADA]
     audio = voz_elevenlabs.formato_de_audio(telefono=True)
     voz = dict({"voice_id": settings.ELEVENLABS_VOICE_ID, "model_id": voz_elevenlabs.MODELO_VOZ}, **audio["tts"])
-    voz["stability"] = ESTABILIDAD_DE_SARA
+    voz.update(AJUSTES_DE_VOZ_DE_SARA)
     if entrada:
         agente = {"first_message": SALUDO_ENTRANTE, "language": "es",
                   "prompt": {"prompt": guion_de_entrada(), "llm": voz_elevenlabs.LLM_POR_DEFECTO,
