@@ -35,7 +35,7 @@ Ejemplo:
 Script recomendado para actualizar casi todo el proyecto:
 
 ```powershell
-cd E:\Vantelia
+cd D:\Vantelia
 powershell -ExecutionPolicy Bypass -File .\deploy\deploy.ps1
 ```
 
@@ -109,31 +109,31 @@ ssh root@72.62.188.104
 Subir `api.py`:
 
 ```powershell
-scp "E:\Vantelia\api.py" root@72.62.188.104:/srv/vantelia/
+scp "D:\Vantelia\api.py" root@72.62.188.104:/srv/vantelia/
 ```
 
 Subir panel admin:
 
 ```powershell
-scp -r "E:\Vantelia\admin_ui" root@72.62.188.104:/srv/vantelia/
+scp -r "D:\Vantelia\admin_ui" root@72.62.188.104:/srv/vantelia/
 ```
 
 Subir widget:
 
 ```powershell
-scp -r "E:\Vantelia\widget" root@72.62.188.104:/srv/vantelia/
+scp -r "D:\Vantelia\widget" root@72.62.188.104:/srv/vantelia/
 ```
 
 Subir manual:
 
 ```powershell
-scp "E:\Vantelia\docs\MANUAL_ADMIN.md" root@72.62.188.104:/srv/vantelia/docs/
+scp "D:\Vantelia\docs\MANUAL_ADMIN.md" root@72.62.188.104:/srv/vantelia/docs/
 ```
 
 Subir una version completa del proyecto:
 
 ```powershell
-cd E:\
+cd D:\
 tar --exclude="Vantelia/.git" `
     --exclude="Vantelia/.venv" `
     --exclude="Vantelia/node_modules" `
@@ -752,10 +752,10 @@ Es la forma mas rapida cuando has tocado pocos archivos.
 Ejemplo desde tu ordenador Windows:
 
 ```powershell
-scp "E:\Vantelia\api.py" root@TU_IP_DEL_VPS:/srv/vantelia/
-scp "E:\Vantelia\requirements.txt" root@TU_IP_DEL_VPS:/srv/vantelia/
-scp -r "E:\Vantelia\admin_ui" root@TU_IP_DEL_VPS:/srv/vantelia/
-scp -r "E:\Vantelia\widget" root@TU_IP_DEL_VPS:/srv/vantelia/
+scp "D:\Vantelia\api.py" root@TU_IP_DEL_VPS:/srv/vantelia/
+scp "D:\Vantelia\requirements.txt" root@TU_IP_DEL_VPS:/srv/vantelia/
+scp -r "D:\Vantelia\admin_ui" root@TU_IP_DEL_VPS:/srv/vantelia/
+scp -r "D:\Vantelia\widget" root@TU_IP_DEL_VPS:/srv/vantelia/
 ```
 
 Despues, dentro del VPS:
@@ -781,7 +781,7 @@ Es mas ordenada cuando has cambiado bastantes cosas.
 Desde tu ordenador Windows:
 
 ```powershell
-cd E:\
+cd D:\
 tar --exclude="Vantelia/.git" `
     --exclude="Vantelia/.venv" `
     --exclude="Vantelia/node_modules" `

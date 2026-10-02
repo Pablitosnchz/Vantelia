@@ -451,7 +451,7 @@ temporal (`qa_voice_calls`) y tools reales sobre una base aislada en `temp`; no 
 ### 8.1 Prerrequisitos
 
 - `OPENAI_API_KEY` configurada y red disponible.
-- Ejecutar desde la raíz del repo (`E:\Vantelia` en Windows).
+- Ejecutar desde la raíz del repo (`D:\Vantelia` en Windows).
 - No lanzar estas pruebas en paralelo entre sí: cada script crea su propio entorno temporal, pero
   Realtime tiene variabilidad y es más fácil diagnosticar de uno en uno.
 

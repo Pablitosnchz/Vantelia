@@ -138,9 +138,9 @@ El alta express usa la `OPENAI_API_KEY` configurada en el backend para generar e
 
 Manual recomendado para operacion diaria:
 
-- [Resumen de Funcionalidades](/e:/Vantelia/docs/Funcionalidades.md:1)
-- [Manual de Administracion](/e:/Vantelia/docs/MANUAL_ADMIN.md:1)
-- [Operacion minima antes de vender agresivamente](/e:/Vantelia/docs/OPERACION_PRODUCCION.md:1)
+- [Resumen de Funcionalidades](docs/Funcionalidades.md)
+- [Manual de Administracion](docs/MANUAL_ADMIN.md)
+- [Operacion minima antes de vender agresivamente](docs/OPERACION_PRODUCCION.md)
 
 Comprobaciones minimas antes de desplegar:
 
@@ -192,4 +192,4 @@ La ruta recomendada para este stack es:
 
 Hostinger indica que Python necesita acceso root y que en hosting Web y Cloud la alternativa es un VPS, asi que para este proyecto lo apropiado es Hostinger VPS.
 
-He dejado una guia lista en [deploy/hostinger/DEPLOY.md](/e:/Vantelia/deploy/hostinger/DEPLOY.md:1) y un compose en [deploy/hostinger/docker-compose.yml](/e:/Vantelia/deploy/hostinger/docker-compose.yml:1).
+He dejado una guia lista en [deploy/hostinger/DEPLOY.md](deploy/hostinger/DEPLOY.md) y un compose en [deploy/hostinger/docker-compose.yml](deploy/hostinger/docker-compose.yml).

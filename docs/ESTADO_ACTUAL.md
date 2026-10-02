@@ -19,7 +19,7 @@
 - **Cap Rocat:** tono usted y sin emojis en su config de produccion (decision de Pablo); "pasar a una persona" en usted y en ingles a quien escribe en ingles (`0154453`). La pausa de temporada ya existe en su panel; la cuota nov-mar se pausa a mano en Stripe.
 - **Web:** el widget de vantelia.es pedia un tenant que no existia (404). Creado `vantelia` (Sara, alta express desde la web) y la web apunta a el (`63443a1`, subido por FTP).
 - **Captacion por email:** la ronda marcaba como vistos negocios cuya web no llego a abrir (`3f6d27f`).
-- **Carpetas:** TODAS las copias de trabajo viven ahora en `E:\Vantelia-copias\` (`claude\` y `astra\`; lista de lo movido en `astra\MOVIDAS_24sep.txt`). Nuevas copias, siempre ahi.
+- **Carpetas (actualizado 2-oct-2026, PC nuevo):** el repo esta en `D:\Vantelia` y las copias de trabajo nuevas van en `D:\Vantelia-copias\` (`claude\` y `astra\`). Las del PC anterior (`E:\Vantelia-copias\`, lista en `astra\MOVIDAS_24sep.txt`) no estan en este equipo: sus ramas siguen en el repo, pero lo que quedara sin commit solo esta en aquel disco. `git worktree list` las marca "prunable"; no podarlas sin preguntar a Pablo.
 
 ## En curso anterior — 2026-09-21 Europe/Madrid
 

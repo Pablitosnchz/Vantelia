@@ -7,7 +7,7 @@ mide cumplimiento.
 """
 import asyncio, datetime, os, re, sys, unicodedata
 
-RAIZ = r"e:\Vantelia"; sys.path.insert(0, RAIZ); os.chdir(RAIZ)
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, RAIZ); os.chdir(RAIZ)
 DEST = sys.argv[1]; os.environ["DB_PATH"] = DEST
 from evals import arnes
 arnes.preparar_copia(sys.argv[2], DEST)
