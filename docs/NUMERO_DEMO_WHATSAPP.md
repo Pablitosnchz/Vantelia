@@ -10,6 +10,24 @@ suplantación de cuentas, inservible en un primer contacto comercial.
 
 ---
 
+## Estado actual (3-oct-2026)
+
+- **Número público de demo: +34 919 93 43 21** (Zadarma, el mismo 91 desde el que llama
+  Sara; registrar el número en WhatsApp no afecta a las llamadas). `phone_number_id`
+  `1404363529416888`, nombre "Vantelia", Cloud API `CONNECTED`. Está en la misma WABA que
+  el +1 (el token de sistema no la lista: el id del número sale en WhatsApp Manager).
+  El PIN de dos pasos está en el `.env` local (`WHATSAPP_DEMO_34_PIN`).
+- El **+1 803 884 9920** (`1224366604083765`) sigue en el hub para que funcionen los
+  enlaces antiguos: `WHATSAPP_DEMO_PHONE_NUMBER_ID=1224366604083765,1404363529416888` y
+  `WHATSAPP_DEMO_PUBLIC_NUMBER=+34919934321` en el `.env` del VPS (copia previa
+  `/srv/vantelia-backups/env-pre-demo34-20261003`).
+- **Trampa de la verificación:** Meta verifica un fijo con una llamada que dicta el
+  código, y las entrantes del 91 las coge Sara. No hace falta desviar: el código queda
+  en la transcripción de la conversación del agente «Sara - devoluciones Vantelia
+  (telefono)» en ElevenLabs (cuenta activa del VPS). Así se sacó el 3-oct.
+
+---
+
 ## Estado verificado de la cuenta Meta (14-ago-2026)
 
 | Activo | Estado |
