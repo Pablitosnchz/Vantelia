@@ -39,10 +39,32 @@ from api_models import AppKnowledgeItem, AppQAItem, ChatMessagePublic, ChatSessi
 import onboarding_utils
 from backend import agenda, appstate, booking, clients, commerce, db, settings, textnorm, timeutils
 
+# Ventana de contexto de los modelos que la version fijada de llama-index-llms-openai
+# (0.1.31) no conoce. Sin registrarlos, `OpenAI(model=...)` revienta al primer uso con
+# "Unknown model": paso con `gpt-4.1-mini` (CHAT_MODEL desde el 25-sep-2026), y el RAG
+# dejo de contestar lo que no casaba con una regla (Cap Rocat, 3-oct-2026).
+_CONTEXTO_DE_MODELOS_NUEVOS = {"gpt-4.1": 1047576, "gpt-5": 400000}
+_CONTEXTO_POR_DEFECTO = 128000
+
+
+def _registrar_modelo_en_llama_index(modelo: str) -> None:
+    """Da a conocer a llama-index un modelo de chat que su lista interna no trae."""
+    from llama_index.llms.openai import utils as openai_utils
+
+    if not modelo or modelo in openai_utils.ALL_AVAILABLE_MODELS:
+        return
+    contexto = next((v for prefijo, v in _CONTEXTO_DE_MODELOS_NUEVOS.items() if modelo.startswith(prefijo)),
+                    _CONTEXTO_POR_DEFECTO)
+    openai_utils.ALL_AVAILABLE_MODELS[modelo] = contexto
+    # Sin esto lo trataria como modelo de "completions" y llamaria al endpoint equivocado.
+    openai_utils.CHAT_MODELS[modelo] = contexto
+
+
 def _setup_llama_index() -> None:
     if not settings.OPENAI_API_KEY:
         return
 
+    _registrar_modelo_en_llama_index(settings.DEFAULT_CHAT_MODEL)
     Settings.llm = OpenAI(model=settings.DEFAULT_CHAT_MODEL, temperature=0.1)
     Settings.embed_model = OpenAIEmbedding(model=settings.DEFAULT_EMBEDDING_MODEL)
 

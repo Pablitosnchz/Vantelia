@@ -1,6 +1,7 @@
 """El destino del banco nunca puede borrar su origen antes de copiar SQLite."""
 import os
 import pathlib
+from contextlib import closing
 import sqlite3
 import sys
 
@@ -10,7 +11,9 @@ from scripts import evaluar_asistente as banco
 
 
 def _sqlite_sintetica(path):
-    with sqlite3.connect(str(path)) as conexion:
+    # `with sqlite3.connect()` confirma pero NO cierra: en Windows el fichero seguia abierto
+    # y renombrarlo daba WinError 32 (PC nuevo, 3-oct-2026).
+    with closing(sqlite3.connect(str(path))) as conexion, conexion:
         conexion.execute("CREATE TABLE prueba (dato TEXT)")
         conexion.execute("INSERT INTO prueba VALUES ('conservar')")
     return path.read_bytes()
