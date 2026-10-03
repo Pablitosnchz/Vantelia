@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -117,7 +118,10 @@ def test_una_conversacion_sin_herramienta_no_se_reintenta(lanzador):  # noqa: F8
     with lanzador._db() as conn:
         conn.execute("UPDATE llamadas_voz SET conversation_id='conv_real'")
         conn.commit()
-    llamada = lanzador._db().execute("SELECT id FROM llamadas_voz").fetchone()[0]
+    # Cerrada antes de seguir: una conexion suelta dejaba la base bloqueada y estado_final
+    # fallaba con "database is locked" segun cuando pasara el recolector (3-oct-2026).
+    with closing(lanzador._db()) as conn:
+        llamada = conn.execute("SELECT id FROM llamadas_voz").fetchone()[0]
     captacion_voz.estado_final(llamada, "completed")
     assert lanzador.candidatos(MARTES_10_30) == []
 
