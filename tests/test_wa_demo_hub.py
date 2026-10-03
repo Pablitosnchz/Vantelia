@@ -152,6 +152,72 @@ def test_sin_numero_configurado_no_hay_enlace_ni_hub(api_module, monkeypatch):
     assert wa_demo.is_hub("cualquier-cosa") is False
 
 
+# --- Coexistence en el numero de demo: el eco de la app del movil -----------
+#
+# El 3-oct-2026 el numero de demo (+34) paso a Coexistence: Pablo contesta desde
+# su movil. El eco no puede salir del numero (no es de ningun negocio): sale de la
+# demo a la que esta atado el telefono del prospecto.
+
+
+def _filas(session_id):
+    from backend import db
+
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT role, content FROM chat_messages WHERE session_id = ?", (session_id,)
+        ).fetchall()
+
+
+def test_eco_en_el_numero_de_demo_calla_al_asistente_de_esa_demo(api_module, monkeypatch):
+    from backend import inbox, settings, wa_demo, whatsapp
+
+    monkeypatch.setattr(settings, "WHATSAPP_DEMO_PHONE_NUMBER_ID", "hub-1", raising=False)
+    code = wa_demo.create_code("demo", label="Hotel de prueba")["code"]
+    assert wa_demo.resolve_incoming("hub-1", "34600111333", f"DEMO {code}")["cliente_id"] == "demo"
+    session_id = whatsapp._whatsapp_session_id("demo", "34600111333")
+
+    whatsapp._handle_whatsapp_echoes(
+        "hub-1", [{"to": "34600111333", "type": "text", "text": {"body": "Te llamo en cinco minutos."}}],
+    )
+
+    assert inbox.bot_is_muted(session_id) is True
+    assert any(f["role"] == "assistant" and "cinco minutos" in f["content"] for f in _filas(session_id))
+
+
+def test_eco_en_el_numero_de_demo_a_quien_no_tiene_demo_se_ignora(api_module, monkeypatch):
+    """Pablo escribe desde su movil a alguien que nunca mando un codigo: no hay
+    asistente que callar, y no debe romper el webhook ni inventarse un negocio."""
+    from backend import settings, whatsapp
+
+    monkeypatch.setattr(settings, "WHATSAPP_DEMO_PHONE_NUMBER_ID", "hub-1", raising=False)
+    whatsapp._handle_whatsapp_echoes(
+        "hub-1", [{"to": "34600222444", "type": "text", "text": {"body": "hola"}}],
+    )
+    assert _filas(whatsapp._whatsapp_session_id("demo", "34600222444")) == []
+
+
+def test_eco_en_el_numero_de_demo_manda_la_demo_aunque_el_numero_tenga_negocio(api_module, monkeypatch):
+    """El alta de Coexistence guarda el numero en la cuenta de algun negocio. Aun
+    asi, en el numero de demo manda la demo del prospecto, no ese negocio."""
+    from backend import inbox, settings, wa_demo, wa_onboarding, whatsapp
+
+    monkeypatch.setattr(settings, "WHATSAPP_DEMO_PHONE_NUMBER_ID", "hub-1", raising=False)
+    wa_onboarding.save_account(
+        "Vantelia", waba_id="W", phone_number_id="hub-1", token="t",
+        mode=wa_onboarding.MODE_COEXISTENCE,
+    )
+    code = wa_demo.create_code("demo")["code"]
+    wa_demo.resolve_incoming("hub-1", "34600555666", f"DEMO {code}")
+
+    whatsapp._handle_whatsapp_echoes(
+        "hub-1", [{"to": "34600555666", "type": "text", "text": {"body": "Ya lo miro yo."}}],
+    )
+
+    assert inbox.bot_is_muted(whatsapp._whatsapp_session_id("demo", "34600555666")) is True
+    assert _filas(whatsapp._whatsapp_session_id("Vantelia", "34600555666")) == []
+    wa_onboarding.disconnect("Vantelia")
+
+
 # --- API admin --------------------------------------------------------------
 
 

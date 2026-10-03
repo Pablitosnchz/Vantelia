@@ -4884,16 +4884,29 @@ def _handle_whatsapp_echoes(
     Dos efectos: quedan en el historial del panel (para que el resto del equipo
     vea la conversacion completa) y ponen el chat en manos humanas, de forma que
     el asistente deja de responder ahi sin que nadie tenga que pulsar nada.
+
+    En el numero de demo compartido el negocio no sale del numero: cada
+    conversacion es del asistente al que la ato el codigo DEMO de quien escribe.
+    Sin esto, a quien Pablo contestaba desde su movil el asistente le seguia
+    hablando por encima (3-oct-2026, al pasar el 91 a Coexistence).
     """
-    try:
-        cliente_id = _resolve_whatsapp_client_id(phone_number_id, forced_cliente_id)
-    except Exception as exc:  # noqa: BLE001 - un eco no resoluble no debe romper el webhook
-        settings.logger.warning("Eco de WhatsApp sin cliente (%s): %s", phone_number_id, exc)
-        return
+    demo_hub = wa_demo.is_hub(phone_number_id) and not forced_cliente_id
+    cliente_id = ""
+    if not demo_hub:
+        try:
+            cliente_id = _resolve_whatsapp_client_id(phone_number_id, forced_cliente_id)
+        except Exception as exc:  # noqa: BLE001 - un eco no resoluble no debe romper el webhook
+            settings.logger.warning("Eco de WhatsApp sin cliente (%s): %s", phone_number_id, exc)
+            return
     for echo in echoes:
         to_number = str(echo.get("to") or "").strip()
         if not to_number:
             continue
+        if demo_hub:
+            cliente_id = wa_demo.route_for_phone(to_number)
+            if not cliente_id:
+                # Nadie ato ese telefono a una demo: no hay conversacion que callar.
+                continue
         texto = ""
         if str(echo.get("type") or "") == "text":
             texto = str((echo.get("text") or {}).get("body") or "").strip()
