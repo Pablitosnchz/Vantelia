@@ -81,6 +81,22 @@ def test_menu_flag_survives_config_reload(api_module, client, portal_cookies):
         _set_menu(client, portal_cookies, True)
 
 
+def test_sin_menu_la_ia_no_ofrece_volver_al_menu(api_module, client, portal_cookies):
+    """Cap Rocat, 3-oct-2026: con el menu apagado, el modelo cerraba sus respuestas con
+    "Escriba menú para volver al menú principal" porque el guion se lo pedia a todos."""
+    from backend import clients, rag
+
+    try:
+        _set_menu(client, portal_cookies, False)
+        sin_menu = rag._build_system_prompt("demo", clients._get_client_config("demo"))
+        assert "volver al menu principal" not in sin_menu
+        assert "no tiene menu de opciones" in sin_menu
+    finally:
+        _set_menu(client, portal_cookies, True)
+    con_menu = rag._build_system_prompt("demo", clients._get_client_config("demo"))
+    assert "volver al menu principal" in con_menu
+
+
 def test_whatsapp_menu_sender_sends_plain_text_when_disabled(api_module, client, portal_cookies):
     """El corte esta en `_wa_send_main_menu`, que es por donde pasan TODOS los
     puntos que abren el menu en WhatsApp."""

@@ -234,6 +234,28 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     else:
         starter_block = ""
 
+    # Solo se habla del menu a quien lo tiene. Con el menu apagado (Cap Rocat) el modelo
+    # seguia cerrando con "Escriba menú para volver al menú principal" (3-oct-2026).
+    from backend import chat  # tardio: chat importa rag
+
+    if chat._menu_enabled(cliente_id):
+        bloque_menu = (
+            "EXPERIENCIA TIPO MENU INTERACTIVO\n"
+            "24. El sistema gestiona el saludo inicial y el menu principal automaticamente. Cuando el "
+            "mensaje del usuario incluya un bloque \"FLUJO_DE_MENU_ACTIVO (<opcion>)\" sigue al pie de "
+            "la letra esa instruccion.\n"
+            "25. Tras cualquier respuesta de un flujo de menu, ofrece volver al menu principal con una "
+            "frase corta tipo \"Escribe **menú** para volver al menú principal.\".\n"
+            "26. Si la consulta del usuario es ambigua o termina un flujo, ofrece tambien volver al menu "
+            "principal."
+        )
+    else:
+        bloque_menu = (
+            "SIN MENU DE OPCIONES\n"
+            "24. Este negocio no tiene menu de opciones: responde directamente a lo que preguntan. "
+            "Nunca digas que escriban \"menu\" ni ofrezcas volver a ningun menu principal."
+        )
+
     contact_lines: List[str] = []
     if contacto.get("telefono"):
         contact_lines.append(f"- Teléfono: {contacto['telefono']}")
@@ -416,10 +438,7 @@ REGLAS DE SEGURIDAD Y MEMORIA
 REGLAS DE FALLBACK
 23. Si tras consultar tu base documental sigues sin tener el dato y el bloque de contexto del sistema tampoco lo cubre, responde literalmente: "No tengo ese dato publicado todavia, pero puedo derivarte al equipo humano para que te lo confirme." y, si hay contacto, ofrece telefono o email.
 
-EXPERIENCIA TIPO MENU INTERACTIVO
-24. El sistema gestiona el saludo inicial y el menu principal automaticamente. Cuando el mensaje del usuario incluya un bloque "FLUJO_DE_MENU_ACTIVO (<opcion>)" sigue al pie de la letra esa instruccion.
-25. Tras cualquier respuesta de un flujo de menu, ofrece volver al menu principal con una frase corta tipo "Escribe **menú** para volver al menú principal.".
-26. Si la consulta del usuario es ambigua o termina un flujo, ofrece tambien volver al menu principal.
+{bloque_menu}
 27. Usa emojis con moderacion (📅 cita, 💬 dudas, 🛍️ productos, ⭐ recomendacion, ⚖️ comparar, 💶 precio). Maximo 1-2 por respuesta.
 28. Mensajes cortos y claros, formato conversacional, listas con "· **Titulo:** ..." cuando enumeres opciones o pasos.
 {"29. En el flujo 'agendar' cita por chat (sin formulario): pregunta UNA cosa por mensaje en orden fecha → hora → nombre. Tras tener los tres, confirma resumen y añade " + settings.BOOKING_SENTINEL + "." if booking_enabled else "29. IMPORTANTE: la reserva online esta DESACTIVADA. Si el usuario menciona citas, reservas o agendar, NO preguntes por fecha ni hora ni nombre, NO inicies ningun flujo de agenda. Responde unicamente que la reserva online no esta disponible y proporciona los datos de contacto del bloque 'Datos de contacto verificados'."}
