@@ -10,7 +10,23 @@ suplantación de cuentas, inservible en un primer contacto comercial.
 
 ---
 
-## Estado actual (3-oct-2026)
+## Estado actual (3-oct-2026, tarde)
+
+- **El número público de demo vuelve a ser el +1 803 884 9920** mientras el 91 pasa a
+  Coexistence. El 91 se desconectó de la API, se borró de WhatsApp Manager y se registró en la
+  app de WhatsApp Business del móvil de Pablo. El alta de Coexistence falló con
+  `#2388002` ("error al verificar los requisitos del número"): **Meta exige que el número
+  lleve al menos 7 días activo en la app** (mejor con conversaciones reales). Hay que
+  reintentarlo a partir del 10-oct con el enlace de
+  `GET /admin/clientes/vantelia/whatsapp-signup-link`, portfolio **Clara IA** («Vantelia»
+  sale gris porque es la dueña de la app). Después: meter el `phone_number_id` nuevo en
+  `WHATSAPP_DEMO_PHONE_NUMBER_ID`, volver a poner `WHATSAPP_DEMO_PUBLIC_NUMBER=+34919934321`
+  y comprobar que el token global puede enviar por la WABA de Clara IA.
+- **El código de verificación de la app** se sacó con Sara: la llamada de WhatsApp pide
+  "pulsa N" antes de dictarlo. Se le dio temporalmente la herramienta
+  `play_keypad_touch_tone` y se restauró justo después.
+
+### Primera alta del 91 en la API (3-oct-2026, mañana, ya deshecha)
 
 - **Número público de demo: +34 919 93 43 21** (Zadarma, el mismo 91 desde el que llama
   Sara; registrar el número en WhatsApp no afecta a las llamadas). `phone_number_id`
