@@ -60,7 +60,9 @@ CLAVE_AGENTE = "elevenlabs_agent_captacion"
 RUTA = "/voice/el-captacion"
 VARIABLE_LLAMADA = "llamada"
 CAMPO_LLAMADA = "_llamada"
-_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
+# Solo ASCII: "recep-recepción@dentalnavarro.com" (Dental Navarro, 2-oct-2026) pasaba la regla
+# anterior, el servidor de correo lo rechazaba y el interesado se quedaba sin la demo.
+_EMAIL = re.compile(r"^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$", re.IGNORECASE)
 EMAIL_VANTELIA = "info@vantelia.es"
 # Resultado de quien pidio hablar con una persona: le llama Pablo, nunca otra vez Sara.
 RESULTADO_PABLO = "llamar_pablo"
@@ -1144,9 +1146,13 @@ _MENSAJE_YA_RECLAMADO = {
 
 def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     dado = str(cuerpo.get("email") or "").strip().lower().replace(" ", "")
+    email_negocio = str(fila["prospecto"] or "").strip().lower()
     if dado and not _EMAIL.match(dado):
-        return {"ok": False, "error": "Ese email no parece completo. Pideselo otra vez."}
-    email_negocio = str(fila["prospecto"] or "")
+        if not email_negocio:
+            return {"ok": False, "error": "Ese email no parece completo. Pideselo otra vez."}
+        # Mal dictado, pero el negocio ya tiene su correo en captacion: mejor ahi que perderlo
+        # (Dental Navarro, 2-oct-2026: estaba gonzalo@ y no le llego nada).
+        dado = ""
     destino_email = dado or ("" if es_movil(fila["telefono"]) else email_negocio)
     if not destino_email and not es_movil(fila["telefono"]):
         return {"ok": False, "error": "No tengo a donde mandarlo: pidele un email."}
@@ -1176,6 +1182,13 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001 - no poder mandarlo no puede perder al interesado
         settings.logger.exception("[captacion_voz] no se pudo mandar la informacion de %s", fila["id"])
         canal, enviado = ("email" if destino_email else "sms"), False
+        if destino_email and email_negocio and email_negocio != destino_email and _EMAIL.match(email_negocio):
+            # El dictado lo rechazo el servidor: segundo intento al correo del negocio.
+            try:
+                enviado = _mandar_correo(email_negocio, correo(negocio, enlace))
+                destino_email = email_negocio
+            except Exception:  # noqa: BLE001
+                settings.logger.exception("[captacion_voz] tampoco al correo del negocio de %s", fila["id"])
     notas = textnorm._sanitize_text(str(cuerpo.get("notas") or ""), allow_multiline=True)[:500]
     nombre_contacto = textnorm._sanitize_text(str(cuerpo.get("nombre") or ""))[:80]
     _actualizar(fila["id"], informacion="enviada" if enviado else "no_enviada",

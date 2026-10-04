@@ -231,6 +231,43 @@ def test_a_un_fijo_sin_email_se_le_pide_y_uno_mal_dictado_no_vale(captacion, env
     assert r["ok"] is True and envios["email"][0]["To"] == "pepe@correo.es"
 
 
+def test_un_email_dictado_con_tildes_no_se_da_por_bueno(captacion, envios):
+    """Dental Navarro, 2-oct-2026: "recep-recepción@dentalnavarro.com" pasaba la regla, el
+    servidor de correo lo rechazaba y no salia nada. Sin correo del negocio, se pide otra vez."""
+    llamada = captacion.llamar("911234574", "Clinica Sin Email", cliente=_Falso())["llamada"]
+    r = captacion.herramienta("enviar_informacion",
+                              {"_llamada": llamada, "email": "recep-recepción@dentalnavarro.com"})
+    assert r["ok"] is False and envios["email"] == []
+
+
+def test_mal_dictado_pero_conocido_va_al_correo_del_negocio(captacion, envios):
+    _con_negocio_en_captacion("gonzalo@clinicafija.es", "91 123 45 75")
+    llamada = captacion.llamar("911234575", "Clinica Fija", cliente=_Falso())["llamada"]
+    r = captacion.herramienta("enviar_informacion",
+                              {"_llamada": llamada, "email": "recep-recepción@clinicafija.com"})
+    assert r["ok"] is True and "gonzalo" in r["mensaje"]
+    assert [m["To"] for m in envios["email"]] == ["gonzalo@clinicafija.es"]
+    assert captacion._fila(llamada)["informacion"] == "enviada"
+
+
+def test_si_el_dictado_rebota_se_reintenta_al_correo_del_negocio(captacion, envios, monkeypatch):
+    from backend import outreach
+
+    def enviar(msg):
+        if msg["To"] == "recepcion@otrodominio.es":
+            raise RuntimeError("550 buzon inexistente")
+        envios["email"].append(msg)
+
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", enviar)
+    _con_negocio_en_captacion("info@clinicados.es", "91 123 45 76")
+    llamada = captacion.llamar("911234576", "Clinica Dos", cliente=_Falso())["llamada"]
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada, "email": "recepcion@otrodominio.es"})
+    assert r["ok"] is True and [m["To"] for m in envios["email"]] == ["info@clinicados.es"]
+    fila = captacion._fila(llamada)
+    assert fila["informacion"] == "enviada" and fila["email"] == "info@clinicados.es"
+    assert "info@clinicados.es" in envios["avisos"][0][1], "Pablo ve a donde salio de verdad"
+
+
 def test_si_no_se_puede_mandar_el_interesado_no_se_pierde(captacion, envios, monkeypatch):
     from backend import messaging
 
