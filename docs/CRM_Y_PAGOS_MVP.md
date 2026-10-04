@@ -231,3 +231,24 @@ Pasos manuales de produccion:
 3. Mantener estable y protegida `OAUTH_TOKEN_ENCRYPTION_KEY`.
 4. Registrar los Sender ID españoles con Twilio antes de marcarlos como `active`.
 5. Para números dedicados, provisionar una subcuenta Twilio por negocio y guardar sus credenciales cifradas.
+
+## 6. Cuota anual domiciliada de NUESTROS clientes (oct 2026)
+
+Lo que Vantelia cobra a un negocio que paga al año (Cap Rocat): Stripe Billing con
+adeudo SEPA, sin código en el backend. Todo pasa por `scripts/cuota_anual_stripe.py`:
+`alta-cliente`, `enlace` (página de Stripe en la que el negocio domicilia; no cobra y
+caduca a las 24 h), `suscribir --primer-cobro AAAA-MM-DD` (el día que acaba su prueba) y
+`estado`. Coste: 0,7 % de Billing + 0,35 € por adeudo (≈ 9,40 € al año por 1.290 €).
+
+- **Nunca `cliente_id` ni `client_reference_id`** en la metadata: el webhook
+  (`routers/billing_web.py`) los usa para cambiar el plan del tenant. El enlace con el
+  tenant va en `metadata.vantelia_tenant`, que el webhook no lee, y por eso estos cobros
+  no tocan la configuración del negocio.
+- El precio anual (`STRIPE_PRICE_PRO_ANNUAL`) lleva el IVA incluido. La suscripción lleva
+  el tipo «IVA 21 %» incluido (`metadata.marca=vantelia_iva_21_incluido`) y el NIF del
+  emisor para que la factura lo desglose. Los datos fiscales del emisor van en el pie de
+  la factura del cliente, porque la cuenta de Stripe no tiene dirección pública.
+- Si en la hoja de pedido el negocio eligió transferencia, la domiciliación necesita su
+  aceptación: cambia la forma de pago.
+- Desde el 01/07/2027 (VeriFactu para autónomos) las facturas de Stripe tendrán que pasar
+  por un sistema que lo cumpla.
