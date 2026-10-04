@@ -270,6 +270,27 @@ def test_si_el_dictado_rebota_se_reintenta_al_correo_del_negocio(captacion, envi
     assert "info@clinicados.es" in envios["avisos"][0][1], "Pablo ve a donde salio de verdad"
 
 
+def test_si_el_segundo_intento_queda_en_duda_la_ficha_dice_a_donde_salio(captacion, envios, monkeypatch):
+    """Revision de Astra a 499299a: rechazado el dictado, el envio al negocio se corta tras
+    aceptarse. Ficha y aviso tienen que nombrar el correo del negocio, no el rechazado."""
+    import smtplib
+
+    from backend import outreach
+
+    def enviar(msg):
+        if msg["To"] == "recepcion@otrodominio.es":
+            raise smtplib.SMTPRecipientsRefused({msg["To"]: (550, b"buzon inexistente")})
+        raise smtplib.SMTPServerDisconnected("se cerro la conexion tras aceptar el mensaje")
+
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", enviar)
+    _con_negocio_en_captacion("info@clinicacuatro.es", "91 123 45 78")
+    llamada = captacion.llamar("911234578", "Clinica Cuatro", cliente=_Falso())["llamada"]
+    captacion.herramienta("enviar_informacion", {"_llamada": llamada, "email": "recepcion@otrodominio.es"})
+    fila = captacion._fila(llamada)
+    assert fila["email"] == "info@clinicacuatro.es" and fila["informacion"] == "no_enviada"
+    assert "info@clinicacuatro.es" in envios["avisos"][0][1]
+
+
 def test_si_la_entrega_es_dudosa_no_se_manda_un_segundo_correo(captacion, envios, monkeypatch):
     """Revision de Astra a 52bd382: el SMTP acepta el mensaje y se corta al cerrar. Pudo salir:
     un segundo correo al negocio seria un duplicado. Se queda como no confirmado y avisa a Pablo."""

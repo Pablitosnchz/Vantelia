@@ -1188,9 +1188,11 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         # correo (revision de Astra a 52bd382, 4-oct-2026; NORMAS_AGENTE_IA).
         if (isinstance(exc, smtplib.SMTPRecipientsRefused) and destino_email and email_negocio
                 and email_negocio != destino_email and _EMAIL.match(email_negocio)):
+            # El destino se apunta ANTES: si este segundo envio queda en duda, la ficha y el aviso
+            # tienen que decir a donde pudo salir, no el correo que ya sabemos rechazado (Astra).
+            destino_email = email_negocio
             try:
                 enviado = _mandar_correo(email_negocio, correo(negocio, enlace))
-                destino_email = email_negocio
             except Exception:  # noqa: BLE001
                 settings.logger.exception("[captacion_voz] tampoco al correo del negocio de %s", fila["id"])
     notas = textnorm._sanitize_text(str(cuerpo.get("notas") or ""), allow_multiline=True)[:500]
