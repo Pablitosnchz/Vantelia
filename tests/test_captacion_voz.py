@@ -251,11 +251,13 @@ def test_mal_dictado_pero_conocido_va_al_correo_del_negocio(captacion, envios):
 
 
 def test_si_el_dictado_rebota_se_reintenta_al_correo_del_negocio(captacion, envios, monkeypatch):
+    import smtplib
+
     from backend import outreach
 
     def enviar(msg):
         if msg["To"] == "recepcion@otrodominio.es":
-            raise RuntimeError("550 buzon inexistente")
+            raise smtplib.SMTPRecipientsRefused({msg["To"]: (550, b"buzon inexistente")})
         envios["email"].append(msg)
 
     monkeypatch.setattr(outreach, "_outreach_send_email_object", enviar)
@@ -266,6 +268,28 @@ def test_si_el_dictado_rebota_se_reintenta_al_correo_del_negocio(captacion, envi
     fila = captacion._fila(llamada)
     assert fila["informacion"] == "enviada" and fila["email"] == "info@clinicados.es"
     assert "info@clinicados.es" in envios["avisos"][0][1], "Pablo ve a donde salio de verdad"
+
+
+def test_si_la_entrega_es_dudosa_no_se_manda_un_segundo_correo(captacion, envios, monkeypatch):
+    """Revision de Astra a 52bd382: el SMTP acepta el mensaje y se corta al cerrar. Pudo salir:
+    un segundo correo al negocio seria un duplicado. Se queda como no confirmado y avisa a Pablo."""
+    import smtplib
+
+    from backend import outreach
+
+    intentos = []
+
+    def enviar(msg):
+        intentos.append(msg["To"])
+        raise smtplib.SMTPServerDisconnected("se cerro la conexion tras aceptar el mensaje")
+
+    monkeypatch.setattr(outreach, "_outreach_send_email_object", enviar)
+    _con_negocio_en_captacion("info@clinicatres.es", "91 123 45 77")
+    llamada = captacion.llamar("911234577", "Clinica Tres", cliente=_Falso())["llamada"]
+    r = captacion.herramienta("enviar_informacion", {"_llamada": llamada, "email": "recepcion@otrodominio.es"})
+    assert r["ok"] is True and intentos == ["recepcion@otrodominio.es"], "un solo intento"
+    fila = captacion._fila(llamada)
+    assert fila["email"] == "recepcion@otrodominio.es" and fila["informacion"] == "no_enviada"
 
 
 def test_si_no_se_puede_mandar_el_interesado_no_se_pierde(captacion, envios, monkeypatch):

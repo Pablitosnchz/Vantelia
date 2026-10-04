@@ -41,6 +41,7 @@ import asyncio
 import os
 import re
 import secrets
+import smtplib
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from html import escape
@@ -1179,11 +1180,14 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
             canal, enviado = "email", _mandar_correo(destino_email, correo(negocio, enlace))
         else:
             canal, enviado = "sms", _mandar_sms(fila["telefono"], texto_sms(negocio, enlace))
-    except Exception:  # noqa: BLE001 - no poder mandarlo no puede perder al interesado
+    except Exception as exc:  # noqa: BLE001 - no poder mandarlo no puede perder al interesado
         settings.logger.exception("[captacion_voz] no se pudo mandar la informacion de %s", fila["id"])
         canal, enviado = ("email" if destino_email else "sms"), False
-        if destino_email and email_negocio and email_negocio != destino_email and _EMAIL.match(email_negocio):
-            # El dictado lo rechazo el servidor: segundo intento al correo del negocio.
+        # Segundo intento SOLO si consta que el primero no salio: el servidor rechazo al
+        # destinatario. Un corte tras aceptar el mensaje no es eso, y reintentar duplicaria el
+        # correo (revision de Astra a 52bd382, 4-oct-2026; NORMAS_AGENTE_IA).
+        if (isinstance(exc, smtplib.SMTPRecipientsRefused) and destino_email and email_negocio
+                and email_negocio != destino_email and _EMAIL.match(email_negocio)):
             try:
                 enviado = _mandar_correo(email_negocio, correo(negocio, enlace))
                 destino_email = email_negocio
