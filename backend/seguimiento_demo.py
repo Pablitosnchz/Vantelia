@@ -78,7 +78,7 @@ MOTIVO_BAJA = "no_le_interesa_la_demo"  # la baja que pone el "ahora no" (y quit
 
 ORIGENES = ("llamada", "web", "correo", "demo")
 ORIGEN_TEXTO = {"llamada": "Sara le mandó la demo en una llamada", "web": "generó su demo en la web",
-                "correo": "usó la demo de un correo frío", "demo": "pulsó «Me interesa» en su demo"}
+                "correo": "usó la demo de un correo frío", "demo": "desde su demo"}
 _PESO_ORIGEN = {"correo": 1, "demo": 2, "web": 3, "llamada": 3}
 ESTADOS = ("activo", "cualificado", "descartado", "respondio", "parado", "terminado", "caducado")
 # Estados del prospecto en los que no se le escribe ni se le inscribe.
@@ -1321,6 +1321,14 @@ def _dia_bonito(momento: Optional[datetime]) -> str:
     return "%s %d a las %s" % (_DIAS_SEMANA[local.weekday()], local.day, local.strftime("%H:%M"))
 
 
+def _origen_texto(fila) -> str:
+    """De donde viene, para la ficha. Desde su demo: con el correo en el que le llego, si lo hubo."""
+    texto = ORIGEN_TEXTO.get(fila["origen"], fila["origen"])
+    if fila["origen"] in ("demo", "correo") and fila["asunto_hilo"]:
+        texto += " (le llegó en el correo «%s»)" % fila["asunto_hilo"]
+    return texto
+
+
 def _enlace_directo(demo_id: str) -> str:
     if not demo_id:
         return ""
@@ -1375,8 +1383,11 @@ def ficha(seg_id: str) -> Dict[str, Any]:
         sobre_la_demo = "En su demo preguntó: «%s». Empieza por ahí." % uso["preguntas"][0]
     elif la_probo(uso):
         sobre_la_demo = "Probó la demo: pregúntale qué le pareció y qué echó en falta."
+    elif uso.get("clics"):
+        sobre_la_demo = ("Abrió la demo pero no consta que le escribiera: enséñasela en directo, con su web y sus "
+                         "servicios.")
     else:
-        sobre_la_demo = "No consta que probara la demo: enséñasela en directo, con su web y sus servicios."
+        sobre_la_demo = "No consta que abriera la demo: enséñasela en directo, con su web y sus servicios."
     ideas = ["Pregúntale cuántas llamadas y mensajes se les escapan cuando están %s." % frases["atendiendo"],
              sobre_la_demo,
              "Cierra con dejarlo funcionando con %s, montado por ti y sin cambiar de número." % OFERTA_PRUEBA]
@@ -1388,7 +1399,7 @@ def ficha(seg_id: str) -> Dict[str, Any]:
     plan += "."
     return {
         "id": seg_id, "negocio": negocio, "sector": fila["sector"] or prospecto.get("niche") or "",
-        "origen": fila["origen"], "origen_texto": ORIGEN_TEXTO.get(fila["origen"], fila["origen"]),
+        "origen": fila["origen"], "origen_texto": _origen_texto(fila),
         "estado": fila["estado"], "cualificado_en": fila["cualificado_en"], "cualificado_por": por,
         "por_texto": por_texto, "detalle": fila["motivo"] or "",
         "contacto": {"nombre": nombre, "telefono": telefono, "email": email,
