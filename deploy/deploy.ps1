@@ -223,7 +223,10 @@ if ($MostrarEntorno) {
     exit 0
 }
 $scpArgsBase = @()
-$sshArgsBase = @()
+# Keepalive: el humo tarda minutos sin escribir nada por la conexion (su salida se recoge al
+# final) y un router la cortaba por inactiva ("client_loop: send disconnect: Connection reset",
+# 5-oct-2026): el despliegue lo tomaba por un humo roto y volvia atras sin motivo.
+$sshArgsBase = @("-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=10")
 if ($SshKeyPath) {
     $resolvedKeyPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SshKeyPath)
     if (-not (Test-Path -LiteralPath $resolvedKeyPath)) {
