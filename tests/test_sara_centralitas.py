@@ -162,7 +162,11 @@ def test_apertura_permiso_y_pregunta_antes_de_ofrecer_nada(captacion):  # noqa: 
     guion = agente["agent"]["prompt"]["prompt"]
     assert captacion.APERTURA.endswith("¿Tienes treinta segundos?")
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
-    assert "Cuando estais con un cliente y suena el telefono, ¿quien lo coge?" in paso_2
+    # 5-oct-2026: la pregunta de como atienden ("¿quien lo coge?") se le hacia a la recepcion,
+    # que es quien lo coge: 7 de 12 colgaron justo despues. Ahora, tras el permiso, el motivo
+    # y a donde mandar la demo para quien decide.
+    assert "ofrece mandar la demo con la frase de LA DEMO GRATUITA (paso 6)" in paso_2
+    assert "¿quien lo coge?" not in guion.lower()
     assert "4. Solo si acepta claramente probarlo" in guion
     assert "soy justo lo que os ofrecemos" not in guion, "el gancho de venta, fuera"
     assert "Si quien contesta dice que es otra IA" in guion  # MARSYA, 29-sep
@@ -181,13 +185,16 @@ def test_si_le_interesa_sara_propone_que_le_llame_pablo_con_dos_huecos(captacion
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
     guion = agente["prompt"]["prompt"]
     paso_3 = guion.split("\n3. ", 1)[1].split("\n4. ", 1)[0]
-    assert "¿Es algo que os vendria bien?" in paso_3, "pregunta por el interes, no por la demo"
-    assert "paso 6 (LA DEMO GRATUITA)" in paso_3
-    assert "UNA pregunta mas para entenderlo, solo una" in paso_3
+    # 5-oct-2026: a la recepcion ya no se le pregunta si le vendria bien (no le toca decidir):
+    # cada respuesta vuelve a la demo para quien decide.
+    assert "usa `enviar_informacion` en ESE MISMO turno (paso 6)" in paso_3
+    assert "Si dice que no es ella quien decide: justo por eso es la demo" in paso_3
+    assert "es solo eso: me dices un email y la veis cuando podais" in paso_3, "a quien esta liada, lo minimo"
     # 1-oct (Pablo): el cierre es la demo gratuita por SMS o email, no "¿te llamo Pablo?". Si
     # prefiere que le llamen, entonces si los dos huecos concretos.
     paso_6 = guion.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
-    assert "LA DEMO GRATUITA" in paso_6 and "una pequeña demo gratuita para que pruebes como quedaria" in paso_6
+    assert "LA DEMO GRATUITA" in paso_6 and "una pequeña demo gratuita" in paso_6
+    assert "quien lleve el negocio" in paso_6, "la demo es para quien decide"
     assert "usa `enviar_informacion` en ESE MISMO turno" in paso_6
     assert "Si prefiere que le llamemos" in paso_6 and "{{huecos_pablo}}" in paso_6
     assert "usa `pasar_a_pablo` en ESE MISMO turno" in paso_6
@@ -231,17 +238,26 @@ def test_a_quien_le_interesa_le_llama_pablo_y_el_aviso_lo_dice(captacion, envios
     assert "el jueves por la tarde" in texto and "pierden llamadas" in texto
 
 
-def test_al_llamar_primero_hola_y_la_apertura_cuando_contestan(captacion):  # noqa: F811
-    """Pablo, 30-sep: soltaba la apertura en el segundo 0, encima del "¿digame?". Primero
-    "¿Hola?"; la apertura, cuando contestan. En una entrante coge ella: saludo entero."""
-    agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
-    assert agente["first_message"] == "{{primera}}"
+def test_al_llamar_calla_y_la_apertura_cuando_contestan(captacion):  # noqa: F811
+    """Pablo, 30-sep: soltaba la apertura en el segundo 0, encima del "¿digame?", y se paso a
+    "¿Hola?" primero. 5-oct: ese "¿Hola?" se pisaba con el saludo de la recepcion, le
+    contestaban "hola" y la cortaban: "Hola, soy... Hola, soy Sara... Hola, soy Sara, una IA" en
+    4 de 16 llamadas. Ahora calla hasta que hablan (o SEGUNDOS_ANTES_DE_EMPEZAR), y un "hola"
+    o un "buenos dias" sueltos no la interrumpen. En una entrante coge ella: saludo entero."""
+    config = captacion.agente_de_captacion("https://app.test")["conversation_config"]
+    agente = config["agent"]
+    assert agente["first_message"] == ""
     assert agente["dynamic_variables"]["dynamic_variable_placeholders"]["primera"] == captacion.SALUDO_ENTRANTE
+    assert config["turn"]["initial_wait_time"] == captacion.SEGUNDOS_ANTES_DE_EMPEZAR
+    assert {"hola", "buenos días", "dígame"} <= set(config["turn"]["interruption_ignore_terms"])
+    assert "no" not in config["turn"]["interruption_ignore_terms"], "un no tiene que cortarla"
     hecho = captacion.llamar("911111111", "Pelu Marta", "peluqueria", "", origen="auto", cliente=_Falso())
     variables = captacion._variables(captacion._fila(hecho["llamada"]))
-    assert (variables["primera"], variables["saludo"]) == ("¿Hola?", captacion.APERTURA)
+    # "primera" se sigue mandando, vacia: un agente aun sin sincronizar la exige.
+    assert (variables["primera"], variables["saludo"]) == ("", captacion.APERTURA)
     paso_1 = agente["prompt"]["prompt"].split("\n1. ", 1)[1].split("\n2. ", 1)[0]
-    assert 'Tu primer mensaje fue solo "¿Hola?"' in paso_1 and '"{{saludo}}"' in paso_1
+    assert "No dices nada hasta que contesten" in paso_1 and '"{{saludo}}"' in paso_1
+    assert "no vuelvas a empezar: termina la frase" in paso_1
 
 
 # --- Revision de Astra (29-sep): coherencia del guion y tope de duracion --------------------
@@ -263,8 +279,11 @@ def test_las_salidas_mandan_y_estan_claras(captacion):  # noqa: F811
     assert "ni finjas que le pasas la llamada" in guion
     # Rellamada a quien decide que no esta: sin demo a quien coge.
     assert "sin preguntas ni demostracion a quien te ha cogido" in guion
-    # Menu que exige pulsar una tecla: no se puede navegar.
-    assert "no digas que has pulsado nada y cuelga con `end_call`" in guion
+    # Menu de teclas (5-oct, "para español pulse 1"): solo la opcion de español, recepcion, cita
+    # o una persona, una vez; si vuelve el menu o nada encaja, colgar sin decir nada.
+    assert "pulsa esa tecla UNA sola vez con `play_keypad_touch_tone`" in guion
+    assert "Nunca pulses ninguna otra opcion" in guion
+    assert "Si tras pulsar vuelve el mismo menu, o si ninguna opcion encaja, cuelga" in guion
 
 
 def test_la_llamada_tiene_un_tope_de_duracion(captacion):  # noqa: F811

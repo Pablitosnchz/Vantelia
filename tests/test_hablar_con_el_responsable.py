@@ -30,7 +30,7 @@ MARTES_16_30 = datetime(2026, 9, 29, 14, 30, tzinfo=timezone.utc)  # 16:30 en Ma
 def test_el_guion_pregunta_por_quien_decide_despues_del_gancho(captacion):  # noqa: F811
     agente = captacion.agente_de_captacion("https://app.test")
     guion = agente["conversation_config"]["agent"]["prompt"]["prompt"]
-    assert guion.index("LA PREGUNTA") < guion.index("QUIEN DECIDE"), "quien decide, despues de la pregunta"
+    assert guion.index("LA PETICION") < guion.index("QUIEN DECIDE"), "quien decide, despues de la peticion"
     assert "UNA sola vez" in guion and "No lo preguntes si ya lo ha dicho" in guion
     assert "PRESENTATE ENTERA OTRA VEZ" in guion, "a quien se pone despues hay que decirle que es una IA"
     assert "Nunca pidas el movil personal" in guion
@@ -41,7 +41,7 @@ def test_el_guion_pregunta_por_quien_decide_despues_del_gancho(captacion):  # no
 
 def test_el_saludo_pregunta_por_el_negocio_o_por_quien_decide(captacion):  # noqa: F811
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]
-    assert agente["first_message"] == "{{primera}}"
+    assert agente["first_message"] == ""  # calla hasta que contestan (5-oct-2026)
     variables = agente["dynamic_variables"]["dynamic_variable_placeholders"]
     assert {"a_quien", "responsable", "saludo", "primera"} <= set(variables)
     fila = {"id": "ll_1", "telefono": "+34911111111", "prospecto": "", "negocio": "Pelu Marta", "sector": "peluqueria",

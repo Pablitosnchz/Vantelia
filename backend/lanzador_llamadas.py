@@ -192,6 +192,57 @@ def es_negocio_con_citas(sector: str) -> bool:
     return bool(_SECTORES_CON_CITAS.search(textnorm._strip_accents(str(sector or "")).lower()))
 
 
+# El sector de la captacion es la BUSQUEDA que lo encontro, no lo que es: el 5-oct-2026 Sara
+# llamo a "Centro de tratamiento de adicciones" (un ayuntamiento) y a "Clinica Madrid Vascular"
+# como clinicas veterinarias, y a un laboratorio de protesis como clinica estetica. Si el nombre
+# dice lo que es, manda el nombre; si no, el sector de la captacion.
+_SECTOR_POR_NOMBRE = (
+    (r"dental|dentist|odontolog|ortodonc|implantolog", "clinica dental"),
+    (r"fisio|osteopat|rehabilitac", "fisioterapia"),
+    (r"veterinar|\bvet\b|mascota", "clinica veterinaria"),
+    (r"peluquer|barber|estilist|\bhair\b", "peluqueria"),
+    (r"masaj|massage|\bthai\b", "centro de masajes"),
+    (r"\bspa\b|wellness|balneari", "spa"),
+    (r"estetic|belleza|beauty|laser|depilac|\bnails?\b|\bunas\b", "centro de estetica"),
+    (r"fertilidad|reproduccion asistida|\bfiv\b", "centro fertilidad"),
+    (r"podolog", "podologia"),
+    (r"psicolog", "psicologia"),
+    (r"nutricion|dietist", "nutricion"),
+    (r"\boptic", "optica"),
+    (r"auditiv|audifon", "centro auditivo"),
+    (r"clinic|policlinic|medic|vascular", "clinica"),
+)
+# Negocios que salen en la busqueda pero no dan citas a clientas: no se les llama aunque el
+# sector diga otra cosa (5-oct-2026: un laboratorio de protesis dentales y el plan de drogas de
+# un ayuntamiento).
+_NO_DA_CITAS = re.compile(
+    r"\b(?:laboratori|protesis|ayuntamiento|municipal|adicciones|drogodependen|farmaci|deposito dental|"
+    r"distribuid|suministro|mayorist)")
+
+
+def sector_real(negocio: str, sector: str) -> str:
+    """Lo que es el negocio: por su nombre si lo dice; si no, el sector de la captacion."""
+    nombre = textnorm._strip_accents(str(negocio or "")).lower()
+    sector_llano = textnorm._strip_accents(str(sector or "")).lower()
+    for patron, que_es in _SECTOR_POR_NOMBRE:
+        if re.search(patron, nombre):
+            # "Clinica" a secas no tapa un sector que ya concreta que clinica es ("DST Clinic",
+            # dental); si lo corrige cuando la busqueda la puso de veterinaria sin que el nombre
+            # lo diga ("Clinica Madrid Vascular").
+            if (que_es == "clinica" and "veterinar" not in sector_llano
+                    and re.search(r"clinic|dental|estetic|fisio|fertil|medic|podolog|psicolog", sector_llano)):
+                return str(sector)
+            return que_es
+    return str(sector or "")
+
+
+def da_citas(negocio: str, sector: str) -> bool:
+    """Se le puede llamar con el guion de Sara: trabaja con citas y el nombre no lo desmiente."""
+    if _NO_DA_CITAS.search(textnorm._strip_accents(str(negocio or "")).lower()):
+        return False
+    return es_negocio_con_citas(sector_real(negocio, sector))
+
+
 def _inicio_del_dia(ahora: datetime) -> datetime:
     local = ahora.astimezone(ZONA)
     return datetime.combine(local.date(), time(0, 0), tzinfo=ZONA)
@@ -227,7 +278,7 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
         telefono = captacion_voz.telefono_e164(p["phone"])
         if not telefono or telefono in vistos or telefono in vetados or not es_fijo(telefono):
             continue
-        if not es_negocio_con_citas(p["niche"]):
+        if not da_citas(p["business_name"], p["niche"]):
             continue
         previos = intentos.get(telefono, [])
         if len(previos) >= MAX_INTENTOS:
@@ -239,7 +290,7 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
             continue
         vistos.add(telefono)
         elegidos.append({"telefono": telefono, "negocio": p["business_name"] or "",
-                         "sector": p["niche"] or "", "prospecto": p["email"] or "",
+                         "sector": sector_real(p["business_name"], p["niche"]), "prospecto": p["email"] or "",
                          "intentos": len(previos), "calor": calor.get(p["email"], 0)})
     # Estable: primero los que nunca sonaron; dentro, los que se interesaron por el correo.
     elegidos.sort(key=lambda c: (c["intentos"], -c["calor"]))

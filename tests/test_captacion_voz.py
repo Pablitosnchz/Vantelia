@@ -66,7 +66,8 @@ def test_el_guion_cumple_lo_que_exige_la_ley(captacion):
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
     # La primera frase la calcula el servidor por llamada ({{saludo}}): en las dos aperturas,
     # quien llama, que es una IA y que puede decir que no, desde el principio.
-    assert agente["agent"]["first_message"] == "{{primera}}"  # "¿Hola?" y luego la apertura (30-sep)
+    # Calla hasta que contestan y entonces la apertura (5-oct; antes "¿Hola?", que se pisaba).
+    assert agente["agent"]["first_message"] == ""
     # Desde el 1-oct-2026 (Pablo: "demasiado largo, la gente corta") solo quien y que es una IA:
     # sin Vantelia ni "si no te encaja". La IA, en la PRIMERA frase (Reglamento de IA, art. 50:
     # como tarde en la primera interaccion), tambien al coger el 91.
@@ -102,7 +103,10 @@ def test_tras_el_si_una_sola_pregunta_y_quien_decide_despues(captacion):
     agente = captacion.agente_de_captacion("https://app.test")["conversation_config"]
     guion = agente["agent"]["prompt"]["prompt"]
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
-    assert paso_2.count("?") == 1 and "quien lleva" not in paso_2
+    # 5-oct-2026 (Pablo, tras analizar las llamadas): tras el si, una sola pregunta, y es la
+    # de a donde mandar la demo (la frase del paso 6). Nada de "¿hablo con quien lleva...?".
+    assert "Una sola pregunta: a donde se la mandas" in paso_2 and "quien lleva" not in paso_2
+    assert "¿" not in paso_2, "la unica pregunta del turno es la del paso 6"
     assert guion.index("con los papeles claros") < guion.index("\n5. QUIEN DECIDE")
     assert "nunca des por hecho que te has equivocado de numero" in guion
     # 1-oct-2026 (Pablo): la voz tal cual viene de ElevenLabs, sin los 0,9 / 0,9 de antes, y con
@@ -152,7 +156,7 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
         "canal_envio": "pedir_email", "email_negocio": "",
         # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
         "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA,
-        "sentido": "saliente", "primera": "¿Hola?", "huecos_pablo": captacion.huecos_de_pablo()}
+        "sentido": "saliente", "primera": "", "huecos_pablo": captacion.huecos_de_pablo()}
 
 
 # --- El cierre: no pedir lo que ya sabemos (segunda prueba, 24-sep) ---------
