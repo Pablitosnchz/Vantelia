@@ -1,6 +1,8 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-10-02/05 Europe/Madrid (Claude; todo DESPLEGADO, `main` = `d7cf3f8`)
+## En curso — 2026-10-02/05 Europe/Madrid (Claude; todo DESPLEGADO, `main` = `548087d`)
+
+- **Sara, 5-oct por la tarde (`e101b5b` + `548087d`, OK de Astra, agentes sincronizados a las 14:48):** en la primera llamada de prueba a Pablo se salto la presentacion (cogio con "Si." y fue directa a la oferta: sin decir que es una IA) y ofrecio el correo a un movil. Ahora hay una REGLA PRIMERA al principio del guion (la apertura siempre primero; un "si" antes no es permiso) y la frase de la oferta la pone el servidor (`oferta_de_demo`, variable `{{oferta}}`). Segunda prueba: apertura bien, demo por SMS al decir "vale", despedida y colgar. Oferta acortada a peticion de Pablo (~37 palabras el turno). Pendiente menor: tras un silencio dice "¿Puedo ayudarte con algo?" (suena a llamada entrante); a Pablo "¿Tienes treinta segundos?" le suena a afirmacion (lo deja asi).
 
 - **PC nuevo de Pablo (2-oct):** el repo está en `D:\Vantelia`; las copias nuevas van en `D:\Vantelia-copias\` (las de `E:\` se quedaron en el PC viejo). Tareas «Vantelia sincronia» y «Vantelia revisor» recreadas con el `.venv`; hooks de Codex en `~/.codex/hooks.json` (hay que confiarlos con `/hooks`).
 - **Cap Rocat firmado (2-oct):** Excel aplicado (spa 606, room service 114, check-out y buggies 100; alojamiento, tarjetas regalo y eventos desactivados). Factura 2026-001 de 400 € enviada. Cuota anual de 1.290 € por domiciliación SEPA preparada en Stripe (`scripts/cuota_anual_stripe.py`; nunca `cliente_id` en la metadata: el webhook cambiaría el plan). Pendiente: su día de pruebas (código YLSQ93 en el +1) → conectar su WhatsApp → `suscribir --primer-cobro` a los 10 días.
