@@ -2042,6 +2042,31 @@ def _outreach_presupuesto_gastado(conn: sqlite3.Connection, dia: str) -> int:
     return int(enviados or 0) + int(dudosos or 0)
 
 
+def _outreach_tope_total_del_dia(effective_cap: int) -> int:
+    """Tope diario TOTAL del buzon de captacion (cold + todos los seguimientos): en un dominio
+    de envio nuevo el warm-up debe limitar el VOLUMEN total, no solo el cold. Multiplo del cap de
+    cold (env OUTREACH_TOTAL_DAILY_MULTIPLIER, default 4): dia 1 ~40 con cap 10, hasta ~120 a
+    warm-up pleno (cap 30). Lo comparten el piloto (fu1/fu2/breakup) y el seguimiento tras la demo."""
+    try:
+        multiplier = max(1.0, float(os.getenv("OUTREACH_TOTAL_DAILY_MULTIPLIER", "4") or 4))
+    except Exception:
+        multiplier = 4.0
+    return int(effective_cap * multiplier)
+
+
+def _outreach_enviados_hoy_total(conn: sqlite3.Connection, dia: str) -> int:
+    """Todo lo que ha salido hoy (`dia`, YYYY-MM-DD UTC) por el buzon de captacion, mas los toques
+    del seguimiento tras la demo que quedaron en duda (pudieron salir y no estan en `sends`)."""
+    enviados = conn.execute(
+        "SELECT COUNT(*) FROM sends WHERE mode='send' AND date(sent_at)=?", (dia,)
+    ).fetchone()[0]
+    dudosos = conn.execute(
+        "SELECT COUNT(*) FROM seguimiento_demo_toques WHERE canal='email' AND estado='incierto' "
+        "AND date(momento)=?", (dia,)
+    ).fetchone()[0]
+    return int(enviados or 0) + int(dudosos or 0)
+
+
 def _outreach_cupo_de_cold_agotado(conn: sqlite3.Connection) -> bool:
     """¿Gastado hoy el warm-up del buzon (frios + segundas oportunidades + en duda)?"""
     fila = conn.execute("SELECT daily_cold_cap FROM autopilot_config WHERE id=1").fetchone()
@@ -3012,9 +3037,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
             # Lo que llevan gastado hoy los correos en frio Y las segundas oportunidades tras
             # una llamada de Sara: comparten el warm-up del buzon (un solo contador).
             cold_sent_today = _outreach_presupuesto_gastado(conn, datetime.now(timezone.utc).date().isoformat())
-            sent_today_all = conn.execute(
-                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND date(sent_at)=date('now')"
-            ).fetchone()["c"]
+            sent_today_all = _outreach_enviados_hoy_total(conn, datetime.now(timezone.utc).date().isoformat())
             already_cold = conn.execute(
                 "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold'"
             ).fetchone()["c"]
@@ -3035,15 +3058,8 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
         remaining_today = max(0, effective_cap - int(cold_sent_today or 0))
         # Reparto: no quemar todo el cap en la primera ronda de la manana.
         per_tick_share = min(remaining_today, max(3, (effective_cap + 2) // 3))
-        # Tope diario TOTAL (cold + follow-ups): en un dominio de envio nuevo el
-        # warm-up debe limitar el VOLUMEN total, no solo el cold. Multiplo del cap
-        # de cold (env OUTREACH_TOTAL_DAILY_MULTIPLIER, default 4): dia 1 ~40 con
-        # cap 10, hasta ~120 a warm-up pleno (cap 30).
-        try:
-            total_multiplier = max(1.0, float(os.getenv("OUTREACH_TOTAL_DAILY_MULTIPLIER", "4") or 4))
-        except Exception:
-            total_multiplier = 4.0
-        total_daily_cap = int(effective_cap * total_multiplier)
+        # Tope diario TOTAL (cold + follow-ups + seguimiento tras la demo).
+        total_daily_cap = _outreach_tope_total_del_dia(effective_cap)
         followup_budget_today = max(0, total_daily_cap - int(sent_today_all or 0))
         # Pipeline bajo: discovery primero, el cold sale despues con lo importado (RF-2.4).
         cold_deferred_for_discovery = bool(discovery_enabled and pool_size < 30)

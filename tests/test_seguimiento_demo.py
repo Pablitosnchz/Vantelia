@@ -653,3 +653,77 @@ def test_el_boton_del_panel_no_se_queda_colgado(sd, client, monkeypatch):  # noq
     monkeypatch.setattr(sd, "ronda", lambda **k: llamadas.append(k) or {"enviados": 0})
     r = client.post("/admin/captacion/seguimiento/ronda", headers={"Authorization": "Bearer test-admin-token"})
     assert r.status_code == 200 and r.json()["ronda"] == {"motivo": "en_marcha"}
+
+
+# --- Revision de Astra a c00d68c ---------------------------------------------------------------
+
+def test_el_tope_del_buzon_es_uno_para_todos(sd, monkeypatch):
+    """Con el tope del dia del buzon ya gastado por la captacion, el seguimiento no suma correos
+    encima (solo contaba los suyos). Los SMS no salen por el buzon: siguen."""
+    from backend import outreach
+
+    monkeypatch.setattr(outreach, "_outreach_tope_total_del_dia", lambda efectivo: 1)
+    with closing(outreach._outreach_db()) as conn:
+        conn.execute("INSERT INTO sends (email, stage, subject, sent_at, mode) VALUES (?,?,?,?,?)",
+                     ("otro@x.es", "fu1", "x", MARTES_1030.isoformat(timespec="seconds"), "send"))
+        conn.commit()
+    sd.guardar_config(encendido=True)
+    _negocio()
+    sd.inscribir(origen="llamada", canal="email", destino=EMAIL, prospecto=EMAIL, ahora=LUNES_1200)
+    sd.inscribir(origen="llamada", canal="sms", destino="675802001", ahora=LUNES_1200)
+    hechos, _ = _ronda(sd, MARTES_1030 + timedelta(minutes=5))
+    assert [sd._fila(h[0])["canal"] for h in hechos] == ["sms"]
+    # Y un toque en duda cuenta en el tope de todos (pudo salir), tambien para el piloto.
+    with closing(outreach._outreach_db()) as conn:
+        dia = MARTES_1030.date().isoformat()
+        assert outreach._outreach_enviados_hoy_total(conn, dia) == 1
+        conn.execute("INSERT INTO seguimiento_demo_toques (seguimiento_id, paso, canal, estado, momento) "
+                     "VALUES ('sd_dudoso1', 1, 'email', 'incierto', ?)", (MARTES_1030.isoformat(timespec="seconds"),))
+        conn.commit()
+        assert outreach._outreach_enviados_hoy_total(conn, dia) == 2
+
+
+def test_si_el_buzon_se_pausa_mientras_espera_turno_no_sale(sd, monkeypatch):
+    _negocio()
+    sd.guardar_config(encendido=True)
+    seg_id = sd.inscribir(origen="llamada", canal="email", destino=EMAIL, prospecto=EMAIL, ahora=LUNES_1200)
+    pausa = {"activa": False}
+    monkeypatch.setattr(sd, "_correo_en_pausa", lambda: pausa["activa"])
+    enviados = []
+    sd.ronda(ahora=MARTES_1030, esperar_turno=lambda: pausa.update(activa=True),
+             mandar=lambda fila, plantilla, paso, momento: enviados.append(paso) or ("<x@y>", "a"))
+    assert enviados == []
+    with sd._conexion() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM seguimiento_demo_toques WHERE seguimiento_id=?",
+                            (seg_id,)).fetchone()[0] == 0, "la reserva se suelta: saldra cuando se pueda"
+
+
+def test_una_demo_nueva_tras_caducar_empieza_de_verdad(sd):
+    _negocio()
+    sd.guardar_config(encendido=True)
+    sd.inscribir(origen="llamada", canal="email", destino=EMAIL, prospecto=EMAIL, ahora=LUNES_1200)
+    hace_tiempo = LUNES_1200 + timedelta(days=16)
+    sd.caducar(hace_tiempo)
+    assert _seg(sd)["estado"] == "caducado"
+    sd.inscribir(origen="llamada", canal="email", destino=EMAIL, prospecto=EMAIL, ahora=hace_tiempo)
+    assert _seg(sd)["creado"] == hace_tiempo.isoformat(timespec="seconds")
+    hechos, _ = _ronda(sd, datetime.fromisoformat(_seg(sd)["proximo"]))
+    assert [h[1] for h in hechos] == ["primero"], "antes lo volvia a caducar y nunca salia"
+
+
+# --- El pie de los correos de Pablo ----------------------------------------------------------------
+
+def test_los_correos_de_pablo_llevan_el_pie_profesional(sd):
+    """Pablo, 5-oct-2026, al ver un correo con la firma en texto plano: "pon el que tenemos
+    nosotros profesional" (el de los correos de captacion: logo, cargo, telefono y web)."""
+    from backend import segunda_oportunidad
+    import outreach_templates  # type: ignore
+
+    _negocio()
+    seg_id = sd.inscribir(origen="llamada", canal="email", destino=EMAIL, prospecto=EMAIL, ahora=LUNES_1200)
+    correos = [sd.contenido(sd._fila(seg_id), "primero", MARTES_1030),
+               segunda_oportunidad.correo("Pelu", "peluqueria", "https://demo", "ayer")]
+    for hecho in correos:
+        assert outreach_templates.VANTELIA_SIGNATURE["logo_url"] in hecho["html"]
+        assert "Fundador, Vantelia" in hecho["html"] and "Fundador, Vantelia" in hecho["texto"]
+        assert "Pablo Sánchez · Vantelia" not in hecho["texto"]

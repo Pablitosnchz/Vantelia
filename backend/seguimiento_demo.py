@@ -11,7 +11,7 @@ termino el alta). Diseno y razones: docs/SISTEMA_CAPTACION_FINAL.md.
 QUE HACE
 --------
 1. Inscribe a quien recibe su demo: Sara (`inscribir_tras_la_llamada`), el formulario de la
-   web (`inscribir_demo_web`) o un prospecto del correo que la USA (`procesar_senales`).
+   web (`inscribir_demo_web`) o un prospecto del correo que la USA (`inscribir_a_quien_la_usa`).
 2. Le escribe Pablo 2-3 veces (correo, o SMS a un movil sin correo), en el hilo que ya
    tenia y pidiendo una respuesta (`ronda`). Apagado de serie: interruptor del panel.
 3. Le cualifica cuando dice que si (`cualificar`): el formulario de /interes, una respuesta
@@ -373,15 +373,16 @@ def inscribir(*, origen: str, canal: str, destino: str, prospecto: str = "", neg
         elif fila["estado"] == "caducado" or (fila["estado"] == "activo" and fila["paso"] == 0
                                                and _PESO_ORIGEN[origen] >= _PESO_ORIGEN.get(fila["origen"], 0)):
             # Aun no se le ha escrito nada: lo nuevo manda (una demo pedida por telefono pesa mas
-            # que un uso suelto de la demo de un correo).
+            # que un uso suelto de la demo de un correo). Empieza de nuevo, tambien la fecha: con
+            # la vieja, `caducar` lo volvia a cerrar al momento (revision de Astra a c00d68c).
             seg_id = fila["id"]
             conn.execute(
                 "UPDATE seguimiento_demo SET origen=?, canal=?, destino=?, negocio=COALESCE(NULLIF(?, ''), negocio), "
                 "sector=COALESCE(NULLIF(?, ''), sector), contacto=COALESCE(NULLIF(?, ''), contacto), "
                 "telefono=COALESCE(NULLIF(?, ''), telefono), llamada_id=COALESCE(NULLIF(?, ''), llamada_id), "
-                "hilo=?, asunto_hilo=?, estado='activo', proximo=?, actualizado=? WHERE id=?",
+                "hilo=?, asunto_hilo=?, estado='activo', motivo='', proximo=?, creado=?, actualizado=? WHERE id=?",
                 (origen, canal, destino, datos["negocio"], datos["sector"], datos["contacto"], telefono,
-                 datos["llamada_id"], datos["hilo"], datos["asunto_hilo"], proximo, _iso(ahora), seg_id))
+                 datos["llamada_id"], datos["hilo"], datos["asunto_hilo"], proximo, _iso(ahora), _iso(ahora), seg_id))
         else:
             # En marcha o cerrado: solo se completa lo que faltaba.
             seg_id = fila["id"]
@@ -574,8 +575,14 @@ def inscribir_a_quien_la_usa(ahora: Optional[datetime] = None) -> int:
         filas = conn.execute(
             "SELECT lower(trim(e.email)) AS email, MAX(e.ts) AS ts FROM events e WHERE e.type IN (%s) AND e.ts >= ? "
             "AND NOT EXISTS (SELECT 1 FROM seguimiento_demo s WHERE s.prospecto = lower(trim(e.email))) "
-            "GROUP BY lower(trim(e.email)) LIMIT 100" % ",".join("?" * len(SENALES_DE_USO)),
-            SENALES_DE_USO + (_iso(ahora - timedelta(days=DIAS_DE_USO)),)).fetchall()
+            # Los que nunca entraran (baja, ya respondio, cliente...) fuera ya aqui: si no, se
+            # reintentaban en cada vuelta y podian tapar a los demas.
+            "AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = lower(trim(e.email))) "
+            "AND NOT EXISTS (SELECT 1 FROM prospects p WHERE p.email = lower(trim(e.email)) "
+            "                AND COALESCE(p.status, '') IN (%s)) "
+            "GROUP BY lower(trim(e.email)) LIMIT 100" % (",".join("?" * len(SENALES_DE_USO)),
+                                                       ",".join("?" * len(ESTADOS_PROSPECTO_FUERA))),
+            SENALES_DE_USO + (_iso(ahora - timedelta(days=DIAS_DE_USO)),) + ESTADOS_PROSPECTO_FUERA).fetchall()
     inscritos = 0
     for fila in filas:
         try:
@@ -879,19 +886,27 @@ def la_probo(uso: Dict[str, Any]) -> bool:
 # --- Los textos -----------------------------------------------------------------------------
 
 def _frases_del_sector(sector: str) -> Dict[str, str]:
+    return _plantillas().sector_copy(sector or "")
+
+
+def _plantillas():
     from backend import outreach  # deja scripts/ en el path
     import outreach_templates  # type: ignore
 
     _ = outreach
-    return outreach_templates.sector_copy(sector or "")
+    return outreach_templates
 
 
 def _firma() -> str:
-    from backend import outreach
-    import outreach_templates  # type: ignore
+    return _plantillas().SIGNATURE_TEXT
 
-    _ = outreach
-    return outreach_templates.SIGNATURE_TEXT
+
+def _con_pie(inner_html: str) -> str:
+    """El correo con el pie profesional de Pablo (logo, cargo, telefono, web y direccion), el
+    mismo de los correos de captacion: lo pidio Pablo el 5-oct-2026 al ver uno con la firma en
+    texto plano."""
+    plantillas = _plantillas()
+    return plantillas.html_shell(inner_html + plantillas.signature_html("seguimiento"))
 
 
 def _asunto(fila) -> str:
@@ -968,9 +983,7 @@ def contenido(fila, plantilla: str, ahora: datetime) -> Dict[str, str]:
                                                                            m.group(1)), escape(parrafo, quote=False)))
     firma = "Un saludo,\n\n" + _firma().strip()
     texto = "\n\n".join([saludo] + texto_parrafos + [firma]) + "\n"
-    html = ("<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#222;"
-            "max-width:560px'>" + "".join("<p>%s</p>" % p for p in [escape(saludo)] + html_parrafos)
-            + "<p>%s</p></div>" % escape(firma).replace("\n", "<br>"))
+    html = _con_pie("".join("<p>%s</p>" % p for p in [escape(saludo)] + html_parrafos + ["Un saludo,"]))
     return {"asunto": _asunto(fila), "texto": texto, "html": html}
 
 
@@ -1123,6 +1136,26 @@ def _correo_en_pausa() -> bool:
     return segunda_oportunidad.correo_en_pausa()
 
 
+def _buzon_lleno(momento: datetime) -> str:
+    """"" si queda sitio hoy en el buzon de captacion. Su tope TOTAL del dia (warm-up x multiplo,
+    el mismo que limita los fu1/fu2/breakup del piloto) cuenta todo lo que sale por el, tambien
+    estos toques y los que quedaron en duda (revision de Astra a c00d68c). Los SMS no cuentan."""
+    from backend import outreach
+
+    try:
+        with _conexion() as conn:
+            fila = conn.execute("SELECT daily_cold_cap FROM autopilot_config WHERE id=1").fetchone()
+            efectivo = outreach._outreach_warmup_effective_cap(conn, int((fila[0] if fila else 0) or 20),
+                                                               today=momento)
+            dia = momento.astimezone(timezone.utc).date().isoformat()
+            if outreach._outreach_enviados_hoy_total(conn, dia) >= outreach._outreach_tope_total_del_dia(efectivo):
+                return "tope_del_buzon"
+    except Exception:  # noqa: BLE001 - sin saberlo, no se manda
+        settings.logger.exception("[seguimiento_demo] no se pudo leer el tope del buzon")
+        return "tope_desconocido"
+    return ""
+
+
 def pendientes(ahora: datetime) -> List[Any]:
     with _conexion() as conn:
         return conn.execute("SELECT * FROM seguimiento_demo WHERE estado='activo' AND proximo<>'' AND proximo <= ? "
@@ -1191,6 +1224,10 @@ def _ronda(*, ahora: Optional[datetime], mandar, esperar_turno, reloj) -> Dict[s
                     outreach._outreach_smtp_health().get("ok")))
             if not correo_ok:
                 continue
+            if _buzon_lleno(ahora):
+                # El tope del dia del buzon (warm-up) es uno para todos: hoy ya no salen correos.
+                correo_ok = False
+                continue
         paso = int(fila["paso"]) + 1
         lista = pasos(fila["origen"], canal)
         if paso > len(lista):
@@ -1204,10 +1241,16 @@ def _ronda(*, ahora: Optional[datetime], mandar, esperar_turno, reloj) -> Dict[s
         fila = _fila(fila["id"])
         with _conexion() as conn:
             motivo = _motivo_para_parar(conn, fila, momento) if fila is not None else "borrado"
-        if motivo or not esta_encendido() or not en_ventana(momento, VENTANA_SMS if canal == "sms" else VENTANA):
+        # Esperar el turno puede tardar minutos: entretanto otro emisor pudo activar la pausa del
+        # buzon o llenar el tope del dia (revision de Astra a c00d68c).
+        buzon = canal == "email" and (_correo_en_pausa() or bool(_buzon_lleno(momento)))
+        if motivo or buzon or not esta_encendido() or not en_ventana(
+                momento, VENTANA_SMS if canal == "sms" else VENTANA):
             _soltar(fila["id"] if fila is not None else "", paso)
             if motivo and fila is not None:
                 _cerrar(fila, motivo, momento)
+            if buzon:
+                correo_ok = False
             continue
         try:
             mensaje_id, asunto = mandar(fila, lista[paso - 1][1], paso, momento)
@@ -1417,6 +1460,9 @@ def aviso(datos: Dict[str, Any], *, recordatorio: bool = False) -> Tuple[str, st
         botones.append(("Contestarle (borrador listo)", siguiente["mailto"]))
     if contacto["telefono"]:
         botones.append(("Llamar", "tel:" + contacto["telefono"]))
+        if captacion_voz.es_movil(contacto["telefono"]):
+            # Le escribes tu, a mano, desde tu WhatsApp: nada automatico en productos de Meta.
+            botones.append(("WhatsApp", "https://wa.me/" + contacto["telefono"].lstrip("+")))
     html = ["<div style='font-family:Arial,sans-serif;max-width:600px;color:#1a1a2e;line-height:1.5'>",
             "<h2 style='color:#00a6c7;margin:0 0 8px'>%s %s</h2>" % ("⏰" if recordatorio else "🔥",
                                                                      escape(datos["negocio"])),

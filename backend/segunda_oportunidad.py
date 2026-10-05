@@ -259,20 +259,22 @@ def correo(negocio: str, sector: str, enlace: str, cuando: str, responsable: str
     prueba = ("Y aquí" if audio else "Aquí") + " la puedes probar con vuestro propio negocio:"
     cierre = [
         "Si te encaja, respóndeme a este correo y lo vemos. Y si no, tranquilo: no te volvemos a escribir.",
-        "Un saludo,\nPablo Sánchez · Vantelia",
+        "Un saludo,",
     ]
-    texto = "\n\n".join(parrafos + ([escucha, audio["url"]] if audio else []) + [prueba, enlace] + cierre) + "\n"
-    html = (
-        "<div style='font-family:sans-serif;max-width:560px;color:#1a1a2e;line-height:1.55'>"
-        + "".join("<p>%s</p>" % escape(p) for p in parrafos)
+    # Con el pie profesional de Pablo, el de los correos de captacion (Pablo, 5-oct-2026: "pon
+    # el que tenemos nosotros profesional"). Antes firmaba "Pablo Sánchez · Vantelia" en plano.
+    texto = ("\n\n".join(parrafos + ([escucha, audio["url"]] if audio else []) + [prueba, enlace] + cierre)
+             + "\n\n" + outreach_templates.SIGNATURE_TEXT)
+    html = outreach_templates.html_shell(
+        "".join("<p>%s</p>" % escape(p) for p in parrafos)
         + ("<p>%s <a href='%s'>escuchar la llamada</a></p>" % (escape(escucha), escape(audio["url"], quote=True))
            if audio else "")
         + "<p>%s</p>" % escape(prueba)
         + "<p><a href='%s' style='display:inline-block;padding:11px 20px;border-radius:999px;"
           "background:#00D1FF;color:#04101C;font-weight:700;text-decoration:none'>Probar con %s</a></p>"
         % (escape(enlace, quote=True), escape(negocio))
-        + "".join("<p>%s</p>" % escape(p).replace("\n", "<br>") for p in cierre)
-        + "</div>")
+        + "".join("<p>%s</p>" % escape(p) for p in cierre)
+        + outreach_templates.signature_html(ETAPA))
     asunto = "Lo de la llamada " + ("del " + cuando[3:] if cuando.startswith("el ") else "de " + cuando)
     return {"asunto": asunto, "texto": texto, "html": html}
 

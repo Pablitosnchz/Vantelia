@@ -57,7 +57,10 @@ quien ya tiene un seguimiento terminado por él mismo (cualificado, descartado, 
 Días laborables (lunes a viernes, sin festivos nacionales), a partir de las 10:30 y entre las
 9:00 y las 19:00 de Madrid. Todos los correos son de Pablo, cortos, en el mismo hilo que el
 correo que ya recibieron (el de Sara, el frío o el primero del seguimiento), y piden una
-**respuesta**. Llevan dos enlaces discretos: "elegir cuándo os la enseño" y "ahora no".
+**respuesta**. Llevan dos enlaces discretos: "elegir cuándo os la enseño" y "ahora no", y el pie
+profesional de Pablo (logo, cargo, teléfono, web y dirección), el mismo de los correos de captación
+(Pablo, 5-oct: "pon el que tenemos nosotros profesional"; también lo llevan ya los de segunda
+oportunidad).
 
 | Origen | Toque 1 | Toque 2 | Toque 3 (cierre) |
 | --- | --- | --- | --- |
@@ -67,9 +70,12 @@ correo que ya recibieron (el de Sara, el frío o el primero del seguimiento), y 
 
 Se para solo, antes de cada toque y otra vez justo antes de enviarlo: respuesta, baja, rebote,
 "no me interesa", cualificado, "no me llaméis", estado `replied/client/lost/baja/bounced`,
-interruptor apagado, pausa automática del buzón de captación o SMTP caído. Tope de 20 correos y
-10 SMS al día, con el espaciado global de todos los correos de captación. Un toque se reserva
-antes de enviarlo: si el envío queda en duda no se repite (mejor uno de menos que dos).
+interruptor apagado, pausa automática del buzón de captación (se vuelve a mirar después de esperar
+turno) o SMTP caído. Tope propio de 20 correos y 10 SMS al día y, además, el tope TOTAL del día del
+buzón de captación (warm-up × 4, el mismo que limita los seguimientos del correo frío): cuenta todo
+lo que sale por él, también estos toques y los que quedaron en duda (revisión de Astra). Espaciado
+global entre todos los correos de captación. Un toque se reserva antes de enviarlo: si el envío
+queda en duda no se repite (mejor uno de menos que dos).
 
 Si aún la está usando, el "¿qué te ha parecido?" espera a 3 horas después de la última vez. Antes
 del primer correo con el enlace se adelanta su demo (caducan a los 7 días), para que abra al momento.
