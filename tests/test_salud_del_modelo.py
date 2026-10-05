@@ -55,3 +55,24 @@ def test_el_agente_avisa_cuando_se_queda_sin_saldo(api_module):  # noqa: F811
     assert "_es_fallo_de_cuenta" in fuente, (
         "el agente se come el error y nadie se entera de que esta mudo"
     )
+
+
+def test_si_cae_la_cuenta_se_avisa_a_pablo_una_vez(api_module, monkeypatch):  # noqa: F811
+    """5-oct-2026: sin credito entre las 14:50 y las 16:15 y nadie se entero hasta que fallo el
+    humo de un despliegue; mientras, las demos de los prospectos tampoco contestaban. Ahora llega
+    un correo, y uno solo aunque cada conversacion vuelva a ver la caida."""
+    from backend import outreach, rag
+
+    avisos = []
+    monkeypatch.setattr(outreach, "_outreach_notify_admin", lambda asunto, texto, html="": avisos.append(asunto))
+    monkeypatch.setattr(rag, "_ia_ultimo_aviso", [0.0])
+    rag._ia_marcar(False, "Error code: 429 - insufficient_quota: You have no credits remaining")
+    rag._ia_hilo_aviso[0].join(5)
+    rag._ia_marcar(False, "Error code: 429 - insufficient_quota")
+    assert avisos == ["⚠️ El asistente no responde: falla la cuenta de OpenAI"]
+    # Un tropiezo normal no avisa, ni que falte la clave en un entorno de pruebas.
+    monkeypatch.setattr(rag, "_ia_ultimo_aviso", [0.0])
+    rag._ia_marcar(False, "Request timed out")
+    rag._ia_marcar(False, "sin OPENAI_API_KEY")
+    assert len(avisos) == 1
+    rag._ia_marcar(True)

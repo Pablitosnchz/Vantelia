@@ -14,6 +14,7 @@ import sqlite3
 import threading
 import time
 from datetime import date, datetime, timedelta
+from html import escape
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from typing import Any, Dict, List, Optional, Tuple
@@ -519,13 +520,60 @@ def _ia_marcar(ok: bool, error: str = "") -> None:
     """Lo que sabemos por las llamadas REALES, que es la mejor senyal que hay.
 
     No hace falta preguntar aparte: si una conversacion de verdad fallo por falta
-    de saldo, eso ya es el check.
+    de saldo, eso ya es el check. Y si es la CUENTA (sin saldo, clave mala), se
+    avisa a Pablo por correo (`_ia_avisar_caida`).
     """
     with _ia_health_lock:
         _ia_health_cache.update(
             {"ok": bool(ok), "error": str(error or "")[:300],
              "checked_at": timeutils._utc_now_iso()}
         )
+    if not ok and _es_fallo_de_cuenta(error):
+        _ia_avisar_caida(str(error or ""))
+
+
+# Que se SEPA sin probar el chat a mano. Paso dos veces: el 26-ago y el 5-oct-2026 (sin
+# credito entre las 14:50 y las 16:15; se descubrio porque fallo el humo de un despliegue, y
+# mientras tanto las demos de los prospectos tampoco contestaban). Como mucho un correo cada
+# IA_AVISO_HORAS: la caida dura hasta que alguien recarga, y cada conversacion la vuelve a ver.
+IA_AVISO_HORAS = 6
+_ia_ultimo_aviso: List[float] = [0.0]
+_ia_hilo_aviso: List[Optional[threading.Thread]] = [None]
+
+
+def _ia_avisar_caida(error: str) -> bool:
+    """Correo a Pablo: el asistente no contesta a nadie. True si se lanzo el aviso."""
+    ahora = time.time()
+    with _ia_health_lock:
+        if ahora - _ia_ultimo_aviso[0] < IA_AVISO_HORAS * 3600:
+            return False
+        _ia_ultimo_aviso[0] = ahora
+    sin_saldo = any(p in error.lower() for p in ("insufficient_quota", "credit balance", "no credits", "billing"))
+    motivo = "La cuenta de OpenAI se ha quedado sin credito." if sin_saldo else "OpenAI rechaza la clave o la cuenta."
+
+    def enviar() -> None:
+        try:
+            from backend import outreach  # tarde: outreach importa medio backend
+
+            asunto = "⚠️ El asistente no responde: falla la cuenta de OpenAI"
+            texto = ("%s El chat y el WhatsApp de todos los clientes y las demos de los prospectos no contestan "
+                     "hasta que se arregle.\n\nError: %s\n\nRecargar: "
+                     "https://platform.openai.com/settings/organization/billing/\n(Mejor con la recarga "
+                     "automatica activada.) Como mucho llega un aviso cada %d horas.\n"
+                     % (motivo, error[:300], IA_AVISO_HORAS))
+            html = ("<div style='font-family:Arial,sans-serif;max-width:560px'><h2 style='color:#c0392b'>⚠️ El asistente "
+                    "no responde</h2><p>%s El chat y el WhatsApp de todos los clientes y las demos de los prospectos "
+                    "no contestan hasta que se arregle.</p><p style='color:#667'>%s</p><p><a href='https://platform.openai"
+                    ".com/settings/organization/billing/'>Recargar en OpenAI</a> (mejor con la recarga automática).</p>"
+                    "</div>" % (escape(motivo), escape(error[:300])))
+            outreach._outreach_notify_admin(asunto, texto, html)
+        except Exception:  # noqa: BLE001 - el aviso nunca tumba una conversacion
+            settings.logger.exception("No se pudo avisar de la caida del modelo")
+
+    hilo = threading.Thread(target=enviar, name="vantelia-aviso-ia", daemon=True)
+    _ia_hilo_aviso[0] = hilo
+    hilo.start()
+    return True
 
 
 # Fallos que significan "esto no se arregla reintentando": sin saldo, clave mala,
