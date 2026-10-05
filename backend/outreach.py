@@ -49,6 +49,7 @@ import threading
 import time
 import unicodedata
 import uuid
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
@@ -165,6 +166,17 @@ def _outreach_notify_reply(reply: Dict[str, Any]) -> None:
     email_addr = str(reply.get("email") or "")
     if not email_addr:
         return
+    # Si estaba en el seguimiento tras la demo y contesta con interes, Pablo recibe la ficha
+    # entera en vez de este aviso (backend/seguimiento_demo.py). Nunca se queda sin ninguno.
+    try:
+        from backend import seguimiento_demo
+
+        if seguimiento_demo.al_responder(reply):
+            _autopilot_log("success", "reply_qualified", f"Respuesta con interes de {email_addr}: lead cualificado",
+                           {"email": email_addr, "stage": reply.get("stage", "")})
+            return
+    except Exception:  # noqa: BLE001 - el aviso de siempre sale igual
+        settings.logger.exception("[seguimiento_demo] no se pudo procesar la respuesta de %s", email_addr)
     prospect: Dict[str, Any] = {}
     try:
         with _outreach_db() as conn:
@@ -643,6 +655,54 @@ def _outreach_record_demo_chat_message(cliente_id: str, session_id: str) -> bool
         return False
 
 
+def _outreach_record_demo_voice_call(cliente_id: str) -> bool:
+    """Senal fuerte: alguien ha llamado POR VOZ a la auto-demo (`POST /demo/{id}/voice/session`).
+    La lee el seguimiento tras la demo (backend/seguimiento_demo.py) como "la ha probado". Una
+    por sesion de voz; el endpoint ya limita las sesiones por IP."""
+    cliente_clean = (cliente_id or "").strip()[:80]
+    if (
+        not OUTREACH_AVAILABLE
+        or not cliente_clean.startswith(_DEMO_AUTO_PREFIX)
+        or not settings.CLIENT_ID_PATTERN.match(cliente_clean)
+    ):
+        return False
+    try:
+        from backend import demo_agenda
+
+        if not demo_agenda._demo_is_active_unclaimed(cliente_clean):
+            return False
+        config = clients._get_client_config(cliente_clean)
+    except Exception:  # noqa: BLE001 - demo caducada o inexistente
+        return False
+    email = str(((config.get("contacto") or {}).get("email")) or "").strip().lower()
+    if not email:
+        return False
+    try:
+        with closing(_outreach_db()) as conn:
+            if not conn.execute("SELECT 1 FROM prospects WHERE email=?", (email,)).fetchone():
+                return False
+            stage_row = conn.execute(
+                """SELECT stage FROM sends WHERE email=? AND mode='send'
+                   ORDER BY sent_at DESC, id DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            stage = str(stage_row["stage"] if stage_row else "cold").strip().lower() or "cold"
+            conn.execute(
+                "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?, 'demo_voice', ?, ?, ?, '', '')",
+                (email, stage, "demo-voice:" + cliente_clean, _outreach_now()),
+            )
+            conn.execute(
+                """UPDATE prospects SET status='engaged', updated_at=?
+                   WHERE email=? AND status IN ('new','contacted')""",
+                (_outreach_now(), email),
+            )
+            conn.commit()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.debug("No se pudo registrar llamada de voz a la demo en outreach: %s", exc)
+        return False
+
+
 def _outreach_demo_sector_for_row(row: Dict[str, Any]) -> str:
     try:
         from outreach_templates import Prospect as _P, _demo_sector_for_prospect  # type: ignore
@@ -1097,6 +1157,15 @@ def _outreach_send_eligibility(
         "SELECT 1 FROM segunda_oportunidad WHERE prospecto=? LIMIT 1", (email_clean,)
     ).fetchone():
         result["reason"] = "cerrada_tras_la_llamada"
+        return result
+
+    # En el seguimiento tras la demo le escribe Pablo, en su hilo (backend/seguimiento_demo.py):
+    # un fu1 generico encima de "¿que te ha parecido la demo?" sobra.
+    if conn.execute(
+        "SELECT 1 FROM seguimiento_demo WHERE prospecto=? AND estado<>'caducado' LIMIT 1",
+        (email_clean,),
+    ).fetchone():
+        result["reason"] = "en_seguimiento_de_la_demo"
         return result
 
     if stage_clean == "cold":
@@ -2957,6 +3026,8 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                      -- con segunda oportunidad (tambien en duda) ya no se le escribe: fuera ANTES
                      -- de limitar, o ocupaban el cupo sin salir (revision de Astra, 27-sep)
                      AND email NOT IN (SELECT prospecto FROM segunda_oportunidad)
+                     -- en el seguimiento tras la demo le escribe Pablo (backend/seguimiento_demo.py)
+                     AND email NOT IN (SELECT prospecto FROM seguimiento_demo WHERE estado<>'caducado')
                    ORDER BY score DESC, created_at ASC"""
             ).fetchall()
         cold_emails = [r["email"] for r in cold_rows]

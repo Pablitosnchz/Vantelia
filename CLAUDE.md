@@ -123,7 +123,7 @@ Subida web estatica a Hostinger:
 
 ## Backend API
 
-El backend vive en `backend/` (37 modulos de dominio + `backend/routers/` con 19 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
+El backend vive en `backend/` (modulos de dominio + `backend/routers/` con 20 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
 
 **Si lo que buscas es "quiero cambiar X, que abro": `docs/MAPA_DEL_CODIGO.md`.** Lleva, por flujo (reservar/cancelar/avisos/huecos/catalogo/cobros/asistente), el punto de entrada de cada canal, el nucleo comun al que todos llaman, donde vive cada texto que ve el cliente, y las trampas conocidas (la que borro el catalogo de un cliente real, el techo de 10 filas de las listas de WhatsApp, config.json vs memoria...). Nota: el py_compile de CI/deploy cubre los entrypoints; `python -m pytest` importa todo backend/ (cobertura equivalente).
 
@@ -654,6 +654,31 @@ Contrato de producto en `docs/REQUISITOS_CAPTACION.md`. Tests en `tests/test_cap
 - **Demo instantánea al clic (pre-generación al abrir)**: el CTA del email ya NO va al formulario de `/demo/`; va a `GET /demo/go/{token}` (token HMAC email|stage). Al ABRIR el email (`/track/open`), `outreach._outreach_maybe_pregenerate_demo` genera la demo personalizada en background (solo si el prospect tiene web; flag `OUTREACH_DEMO_PREGEN`, guard in-flight). Al hacer clic: si la demo ya está lista → 302 al asistente vivo (instantáneo); si se está generando → página branded de espera que auto-refresca (`_demo_waiting_page`); sin web → formulario clásico. Fuente ÚNICA de generación: `demo_agenda.build_demo_tenant` (sync, usada por `POST /demo/generate` vía `_to_thread` y por la pre-generación). **Bug arreglado (ago-2026)**: `run_onboarding` no estaba importado en el handler → el scraping de la web fallaba en silencio y las demos salían con texto GENÉRICO del sector, no con la web del prospecto; ahora usa `onboarding_utils.run_onboarding` y de verdad rastrea la web. `demo_go_url` en outreach_templates (fallback al form sin tracking); `apply_tracking` excluye `/demo/go` de la reescritura de clics.
 - **Webhook de rebotes de Brevo**: con SMTP dedicado los NDR NO llegan al buzón IMAP, así que el freno de rebotes quedaba ciego. `POST /webhooks/brevo?key=<OUTREACH_BREVO_WEBHOOK_SECRET>` (público, seguro por secreto) → `outreach._outreach_process_brevo_event`: hard_bounce/blocked/invalid → `bounced`+supresión+`_outreach_check_bounce_rate`; spam/unsubscribe → `baja`. Configurar la URL en Brevo → Transactional → Settings → Webhook.
 - **SMTP dedicado de captación (OBLIGATORIO para cold real)**: env `OUTREACH_SMTP_HOST/PORT/USERNAME/PASSWORD/STARTTLS`; vacío = SMTP global. `_outreach_send_email_object` (envío) y `_outreach_smtp_health` (health del canal de captación, usado por tick y autopilot-config). **Incidente 04-ago-2026**: MailChannels (relay de salida de Hostinger) bloquea los emails de cold con `550 5.7.1 [SDC] Blocked` aunque el transaccional a Gmail sí se entregue — el cold por el buzón Hostinger NO es viable; hace falta dominio+buzón dedicados (p.ej. dominio lookalike + SMTP tolerante) antes de reactivar el autopilot. Los bounces por [SDC] son culpa del EMISOR: si se detectan, revisar antes de dar por muertos a los prospects (aquel día se revirtieron 5 falsos `bounced`).
+
+### Seguimiento tras la demo y leads cualificados (oct 2026)
+
+Lo pidio Pablo el 5-oct-2026: "quiero los leads ya cualificados para ponerme a trabajar con ellos;
+a partir de ahi ya me encargo yo. Prefiero email". Diseno, cadencia y razones en
+`docs/SISTEMA_CAPTACION_FINAL.md`; motor en `backend/seguimiento_demo.py`, paginas y panel en
+`backend/routers/seguimiento_web.py`, tests en `tests/test_seguimiento_demo.py`.
+
+- **Quien entra**: quien recibe su demo de Sara (`captacion_voz._enviar_informacion`; el correo con la
+  demo queda ahora en `sends` con etapa `demo_llamada`, asi el lector IMAP ve las respuestas), quien la
+  genera en la web (`POST /demo/generate`, entra tambien en `prospects` como `engaged`) y el prospecto
+  del correo frio que la USA (chat o voz; un clic suelto no, los antivirus pinchan los enlaces).
+- **Toques**: 2-3 correos cortos de Pablo en el hilo que ya tenia, pidiendo una respuesta (SMS si solo
+  hay movil). Interruptor en el panel (*Llamadas -> Seguimiento tras la demo*), apagado de serie.
+  Mientras alguien esta en seguimiento, el correo frio no le escribe (`_outreach_send_eligibility`,
+  `fetch_candidates`) y Sara no le llama (`lanzador_llamadas`).
+- **Cualificado** = rellena el formulario de `/interes/{token}` o del boton "Me interesa" de su demo
+  (`/interes/demo/{cliente_id}`; abrir la pagina no cuenta, solo enviarla), contesta con interes (lo
+  clasifica la IA; sin clave, todo lo que no sea un "no" claro cuenta), pulsa "Activar", "Tengo una
+  duda" o "WhatsApp" en su demo, o le pide a Sara que le llame Pablo. Entonces: ficha a Pablo al momento
+  (`🔥 Lead cualificado`, con borrador de respuesta), oportunidad en el Plan de escala, prospecto a
+  `replied` y un recordatorio si a las 24 h sigue sin tocar. Los avisos de leads van aunque el
+  interruptor este apagado: solo escriben a Pablo.
+- "Ahora no" en la pagina = baja de correo, `lost` y su telefono en `no_llamar`: se cumple el "no os
+  volveremos a escribir".
 
 ### Comandos CLI utiles (alternativa al panel)
 

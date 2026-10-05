@@ -1078,6 +1078,25 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .ll-turn--persona { justify-self: end; background: var(--accent-soft); }
 .ll-turn__who { color: var(--soft); font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .ll-summary { padding: 10px 12px; border-left: 3px solid var(--accent); color: var(--text-2); font-size: 12px; background: var(--surface-2); border-radius: 8px; }
+/* Seguimiento tras la demo (backend/seguimiento_demo.py). */
+.sd-funnel { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }
+.sd-funnel:empty { display: none; }
+.sd-step { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: grid; gap: 2px; }
+.sd-step strong { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--text); }
+.sd-step span { color: var(--soft); font-size: 11px; }
+.sd-step small { color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sd-step--meta { border-color: var(--accent); background: var(--accent-soft); }
+.sd-badge { display: inline-block; margin: 0 4px 2px 0; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--soft); background: var(--surface-2); white-space: nowrap; }
+.sd-badge--si { color: var(--success); background: var(--success-soft, var(--surface-2)); }
+.sd-closed { margin-top: 12px; color: var(--soft); font-size: 12px; }
+.sd-closed summary { cursor: pointer; }
+.sd-closed ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.sd-ficha { background: #fff; color: #1a1a2e; border-radius: 12px; padding: 16px 18px; }
+.sd-ficha a { color: #0077a3; }
+.sd-preview { display: grid; gap: 12px; }
+.sd-preview article { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.sd-preview h4 { margin: 0 0 6px; font-size: 12px; color: var(--accent); }
+.sd-preview pre { margin: 0; white-space: pre-wrap; font: 12px/1.5 var(--font-sans, inherit); color: var(--text-2); }
 .cap-dialog {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -3816,6 +3835,44 @@ tbody tr:last-child td { border-bottom: none; }
             </dl>
           </section>
 
+          <article class="cap-card" aria-labelledby="sdLeadsTitle">
+            <div class="cap-card__header">
+              <div><span class="cap-card__eyebrow">Ya han dicho que sí</span><h3 id="sdLeadsTitle">Leads cualificados</h3></div>
+              <span class="cap-card__hint">Te llega cada uno por correo en el momento, con su ficha</span>
+            </div>
+            <div class="cap-table-wrap">
+              <table class="cap-table">
+                <thead><tr><th>Desde</th><th>Negocio</th><th>Quiere</th><th>Contacto</th><th>Cómo dijo que sí</th><th>Plan de escala</th><th class="cap-table__action">Ficha</th></tr></thead>
+                <tbody id="sdLeadsBody"><tr><td colspan="7"><div class="cap-state cap-state--loading">Cargando leads…</div></td></tr></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="cap-card" aria-labelledby="sdTitle">
+            <div class="cap-card__header">
+              <div><span class="cap-card__eyebrow">Después de mandar la demo</span><h3 id="sdTitle">Seguimiento tras la demo</h3></div>
+              <span class="cap-card__hint">Correos de Pablo (SMS a móviles) · apagado de serie</span>
+            </div>
+            <form id="sdForm" class="ll-settings">
+              <label class="ll-switch" title="2-3 correos cortos de Pablo a quien recibió su demo, en su mismo hilo, pidiendo una respuesta. Se para solo en cuanto responde, dice que no o se cualifica."><input id="sdActive" type="checkbox"> <span>Escribir a quien recibió su demo <small id="sdQueue"></small></span></label>
+              <div class="ll-settings__actions">
+                <button id="sdPreviewBtn" class="ghost small" type="button">Ver los correos</button>
+                <button id="sdRoundBtn" class="ghost small" type="button">Hacer una vuelta ahora</button>
+              </div>
+            </form>
+            <div id="sdFunnel" class="sd-funnel" aria-label="Embudo de los últimos 30 días"></div>
+            <div class="cap-table-wrap">
+              <table class="cap-table">
+                <thead><tr><th>Desde</th><th>Negocio</th><th>Origen</th><th>Toque</th><th>Siguiente</th><th>Su demo</th><th class="cap-table__action"></th></tr></thead>
+                <tbody id="sdActiveBody"><tr><td colspan="7"><div class="cap-state cap-state--loading">Cargando…</div></td></tr></tbody>
+              </table>
+            </div>
+            <details class="sd-closed">
+              <summary>Cerrados recientemente</summary>
+              <ul id="sdClosedList"></ul>
+            </details>
+          </article>
+
           <article class="cap-card" aria-labelledby="llSettingsTitle">
             <div class="cap-card__header">
               <div><span class="cap-card__eyebrow">Lanzador automático</span><h3 id="llSettingsTitle">Ajustes</h3></div>
@@ -3864,6 +3921,20 @@ tbody tr:last-child td { border-bottom: none; }
               <button id="llDialogClose" class="ghost small" type="button">Cerrar</button>
             </header>
             <div id="llDialogBody" class="cap-dialog__body ll-transcript"></div>
+          </section>
+        </div>
+
+        <div id="sdModal" class="cap-modal" aria-hidden="true">
+          <section class="cap-dialog ll-dialog" role="dialog" aria-modal="true" aria-labelledby="sdDialogTitle" tabindex="-1">
+            <header class="cap-dialog__header">
+              <div>
+                <span id="sdDialogEyebrow" class="cap-eyebrow">Ficha del lead</span>
+                <h3 id="sdDialogTitle">—</h3>
+                <p id="sdDialogSubtitle" class="cap-dialog__subtitle"></p>
+              </div>
+              <button id="sdDialogClose" class="ghost small" type="button">Cerrar</button>
+            </header>
+            <div id="sdDialogBody" class="cap-dialog__body ll-transcript"></div>
           </section>
         </div>
       </section>
@@ -9035,6 +9106,201 @@ tbody tr:last-child td { border-bottom: none; }
       window.__llInit = cargar;
     })();
     // === END LLAMADAS DE SARA ====================================
+
+    // === SEGUIMIENTO TRAS LA DEMO ================================
+    // Backend: backend/seguimiento_demo.py + /admin/captacion/seguimiento*.
+    // Docs: docs/SISTEMA_CAPTACION_FINAL.md. Se carga con la vista de Llamadas.
+    (function() {
+      const SQ = (s) => document.querySelector(s);
+      const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const fecha = (iso) => {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        return isNaN(d) ? iso : d.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      };
+      const ORIGEN = { llamada: "Sara (llamada)", web: "Web (formulario)", correo: "Correo frío", demo: "Su demo" };
+      const POR = {
+        formulario: "Rellenó «Me interesa»", respuesta: "Contestó al correo", llamada_pablo: "A Sara: «que me llame Pablo»",
+        pablo: "Lo marcaste tú", demo_claim: "Pulsó «Activar» en su demo", demo_contact: "Pulsó «Tengo una duda»",
+        demo_whatsapp: "Pulsó «WhatsApp» en su demo",
+      };
+      const ETAPA = {
+        identificada: "Identificada", contactada: "Contactada", conversacion: "Conversación", descubrimiento: "Descubrimiento",
+        demo: "Demo", propuesta: "Propuesta", ganada: "Ganada", perdida: "Perdida", recurrente: "Recurrente",
+      };
+      const CERRADO = { descartado: "No le interesa", respondio: "Respondió", parado: "Parado", terminado: "Sin respuesta", caducado: "Caducado" };
+      let ultimo = null;
+
+      function pintarEmbudo(e) {
+        if (!e) { SQ("#sdFunnel").innerHTML = ""; return; }
+        const paso = (n, texto, extra, meta) => `<div class="sd-step${meta ? " sd-step--meta" : ""}"><strong>${esc(n)}</strong><span>${esc(texto)}</span>${extra ? `<small>${esc(extra)}</small>` : ""}</div>`;
+        SQ("#sdFunnel").innerHTML = [
+          paso(e.llamadas_con_persona, "llamadas con una persona", ""),
+          paso(e.demos_por_sara, "demos que mandó Sara", `${e.demo_por_llamada} % de las llamadas`),
+          paso(e.en_seguimiento, "demos en seguimiento", ""),
+          paso(e.abrieron, "la abrieron", ""),
+          paso(e.probaron, "la probaron", ""),
+          paso(e.cualificados, "leads cualificados", `${e.cualificados_por_demo} % de las demos`),
+          paso(e.leads_por_100_llamadas, "leads por cada 100 llamadas", "últimos 30 días", true),
+          paso(e.clientes, "clientes", ""),
+        ].join("");
+      }
+
+      function pintar(d) {
+        ultimo = d;
+        const form = SQ("#sdForm");
+        if (!form.contains(document.activeElement)) SQ("#sdActive").checked = !!d.encendido;
+        SQ("#sdQueue").textContent = d.pendientes ? `· ${d.pendientes} por enviar` : "";
+        pintarEmbudo(d.embudo);
+        const leads = (d.cualificados || []).map((l) => `<tr>
+            <td>${esc(fecha(l.cualificado_en))}</td>
+            <td><div class="cap-company"><strong>${esc(l.negocio)}</strong><span>${esc(ORIGEN[l.origen] || l.origen)}</span></div></td>
+            <td>${esc([l.como, l.cuando].filter(Boolean).join(" · ") || "—")}</td>
+            <td>${esc(l.contacto || "")}${l.telefono ? `<br><a href="tel:${esc(l.telefono)}">${esc(l.telefono)}</a>` : ""}</td>
+            <td>${esc(POR[l.cualificado_por] || l.por_texto || l.cualificado_por)}</td>
+            <td>${esc(ETAPA[l.oportunidad_etapa] || (l.oportunidad_id ? "—" : "Sin oportunidad"))}</td>
+            <td class="cap-table__action"><button class="ghost small" type="button" data-sd-ficha="${esc(l.id)}">Ver</button></td>
+          </tr>`);
+        SQ("#sdLeadsBody").innerHTML = leads.length ? leads.join("")
+          : `<tr><td colspan="7"><div class="cap-state">Aún no hay leads cualificados. En cuanto alguien diga que sí, aparece aquí y te llega por correo.</div></td></tr>`;
+        const activos = (d.en_seguimiento || []).map((s) => `<tr>
+            <td>${esc(fecha(s.creado))}</td>
+            <td><div class="cap-company"><strong>${esc(s.negocio)}</strong><span>${esc(s.canal === "sms" ? "SMS · " + s.destino : s.destino)}</span></div></td>
+            <td>${esc(ORIGEN[s.origen] || s.origen)}</td>
+            <td>${esc(s.paso)} de ${esc(s.pasos)}</td>
+            <td>${esc(fecha(s.proximo))}</td>
+            <td><span class="sd-badge${s.abrio ? " sd-badge--si" : ""}">${s.abrio ? "La abrió" : "Sin abrir"}</span>${s.probo ? `<span class="sd-badge sd-badge--si">La probó</span>` : ""}</td>
+            <td class="cap-table__action"><button class="ghost small" type="button" data-sd-ficha="${esc(s.id)}">Ficha</button>
+              <button class="ghost small" type="button" data-sd-accion="cualificar" data-sd-id="${esc(s.id)}" title="Pasa a lead (sin correo): ya lo llevas tú">Es un lead</button>
+              <button class="ghost small" type="button" data-sd-accion="parar" data-sd-id="${esc(s.id)}">Parar</button></td>
+          </tr>`);
+        SQ("#sdActiveBody").innerHTML = activos.length ? activos.join("")
+          : `<tr><td colspan="7"><div class="cap-state">Nadie en seguimiento ahora mismo.</div></td></tr>`;
+        SQ("#sdClosedList").innerHTML = (d.cerrados || []).map((c) =>
+          `<li>${esc(fecha(c.creado))} · <strong>${esc(c.negocio)}</strong> · ${esc(CERRADO[c.estado] || c.estado)}${c.motivo ? " — " + esc(c.motivo) : ""}</li>`).join("")
+          || "<li>Nada todavía.</li>";
+      }
+
+      async function cargar() {
+        try {
+          pintar(await api("/admin/captacion/seguimiento"));
+        } catch (error) {
+          SQ("#sdLeadsBody").innerHTML = `<tr><td colspan="7"><div class="cap-state cap-state--error">${esc(error.message)}</div></td></tr>`;
+        }
+      }
+
+      async function interruptor() {
+        const encendido = SQ("#sdActive").checked;
+        if (encendido && !(ultimo && ultimo.encendido)) {
+          const ok = await confirmDialog({
+            title: "¿Encender el seguimiento tras la demo?",
+            bodyHtml: "A quien recibió su demo (por Sara, por la web o usándola desde un correo) le escribirás tú, Pablo: <b>2 o 3 correos cortos</b> en días laborables, o SMS si solo tenemos su móvil. Se para solo en cuanto responde, dice que no o se cualifica.",
+            confirmLabel: "Encender",
+          });
+          if (!ok) { SQ("#sdActive").checked = false; return; }
+        }
+        try {
+          await api("/admin/captacion/seguimiento/config", {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ encendido }),
+          });
+          toast(encendido ? "Seguimiento encendido" : "Seguimiento apagado", "success");
+          cargar();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      }
+
+      function abrir(eyebrow, titulo, subtitulo, html) {
+        SQ("#sdDialogEyebrow").textContent = eyebrow;
+        SQ("#sdDialogTitle").textContent = titulo;
+        SQ("#sdDialogSubtitle").textContent = subtitulo || "";
+        SQ("#sdDialogBody").innerHTML = html;
+        SQ("#sdModal").setAttribute("aria-hidden", "false");
+      }
+      function cerrar() { SQ("#sdModal").setAttribute("aria-hidden", "true"); }
+
+      async function ficha(id) {
+        abrir("Ficha del lead", "Cargando…", "", `<div class="cap-state cap-state--loading">Cargando ficha…</div>`);
+        try {
+          const f = await api(`/admin/captacion/seguimiento/${encodeURIComponent(id)}/ficha`);
+          // El HTML lo genera el servidor (seguimiento_demo.aviso) con todo escapado: es el mismo correo que te llega.
+          abrir("Ficha del lead", f.negocio || "Lead", f.asunto || "", `<div class="sd-ficha">${f.html || ""}</div>`);
+        } catch (error) {
+          SQ("#sdDialogBody").innerHTML = `<div class="cap-state cap-state--error">${esc(error.message)}</div>`;
+        }
+      }
+
+      async function vistaPrevia() {
+        abrir("Así salen", "Los correos del seguimiento", "Con un negocio de ejemplo", `<div class="cap-state cap-state--loading">Cargando…</div>`);
+        try {
+          const r = await api("/admin/captacion/seguimiento/vista-previa");
+          SQ("#sdDialogBody").innerHTML = `<div class="sd-preview">${(r.toques || []).map((t) => `<article>
+              <h4>${esc(ORIGEN[t.origen] || t.origen)} · toque ${esc(t.paso)}${t.asunto ? " · " + esc(t.asunto) : ""}</h4>
+              <pre>${esc(t.texto)}</pre></article>`).join("")}</div>`;
+        } catch (error) {
+          SQ("#sdDialogBody").innerHTML = `<div class="cap-state cap-state--error">${esc(error.message)}</div>`;
+        }
+      }
+
+      async function vuelta() {
+        const boton = SQ("#sdRoundBtn");
+        boton.disabled = true;
+        try {
+          const r = await api("/admin/captacion/seguimiento/ronda", { method: "POST" });
+          const ronda = r.ronda || {};
+          const senales = r.senales || {};
+          toast(`Enviados ${ronda.enviados || 0}${ronda.motivo ? " (" + ronda.motivo + ")" : ""} · leads nuevos ${senales.cualificados || 0}`,
+            ronda.enviados || senales.cualificados ? "success" : "info");
+          cargar();
+        } catch (error) {
+          toast(error.message, "error");
+        } finally {
+          boton.disabled = false;
+        }
+      }
+
+      async function accion(id, que) {
+        const textos = {
+          parar: ["¿Dejar de escribirle?", "No recibirá más correos del seguimiento.", "Parar"],
+          cualificar: ["¿Pasarlo a lead?", "Se para el seguimiento, se apunta en el Plan de escala y lo llevas tú (no te llega correo).", "Es un lead"],
+        };
+        const [title, bodyHtml, confirmLabel] = textos[que];
+        if (!(await confirmDialog({ title, bodyHtml, confirmLabel }))) return;
+        try {
+          await api(`/admin/captacion/seguimiento/${encodeURIComponent(id)}/accion`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: que }),
+          });
+          toast("Hecho", "success");
+          cargar();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      }
+
+      SQ("#sdActive")?.addEventListener("change", interruptor);
+      SQ("#sdForm")?.addEventListener("submit", (event) => event.preventDefault());
+      SQ("#sdPreviewBtn")?.addEventListener("click", vistaPrevia);
+      SQ("#sdRoundBtn")?.addEventListener("click", vuelta);
+      SQ("#sdDialogClose")?.addEventListener("click", cerrar);
+      SQ("#sdModal")?.addEventListener("click", (event) => { if (event.target === SQ("#sdModal")) cerrar(); });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && SQ("#sdModal")?.getAttribute("aria-hidden") === "false") cerrar();
+      });
+      ["#sdLeadsBody", "#sdActiveBody"].forEach((sel) => SQ(sel)?.addEventListener("click", (event) => {
+        const verFicha = event.target.closest("[data-sd-ficha]");
+        if (verFicha) { ficha(verFicha.dataset.sdFicha); return; }
+        const boton = event.target.closest("[data-sd-accion]");
+        if (boton) accion(boton.dataset.sdId, boton.dataset.sdAccion);
+      }));
+
+      const cargarLlamadas = window.__llInit;
+      window.__llInit = function() {
+        if (cargarLlamadas) cargarLlamadas();
+        cargar();
+      };
+    })();
+    // === END SEGUIMIENTO TRAS LA DEMO ============================
   </script>
 
   <div class="vtoast" id="vtoast" role="status" aria-live="polite"></div>

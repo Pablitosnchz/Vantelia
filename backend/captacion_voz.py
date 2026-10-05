@@ -43,6 +43,7 @@ import re
 import secrets
 import smtplib
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any, Dict, Optional
@@ -1143,8 +1144,16 @@ def _mandar_sms(telefono: str, texto: str) -> bool:
     return bool(asyncio.run(messaging._send_twilio_sms(telefono, remitente, texto)))
 
 
-def _mandar_correo(email: str, contenido: Dict[str, str]) -> bool:
-    """Por el MISMO buzon de envio que los correos de captacion, con su pie legal."""
+# La etapa del correo con la demo en `sends` (5-oct-2026): sin apuntarlo, quien contestaba a ese
+# correo no lo veia el lector de respuestas (solo reconoce lo que esta en `sends`), y el
+# seguimiento tras la demo (backend/seguimiento_demo.py) no podia escribir en su hilo.
+ETAPA_DEMO = "demo_llamada"
+
+
+def _mandar_correo(email: str, contenido: Dict[str, str], clave: str = "") -> str:
+    """Por el MISMO buzon de envio que los correos de captacion, con su pie legal. Devuelve
+    su Message-ID (nunca vacio si salio) y lo apunta en `sends` a nombre de `clave` (el
+    negocio en la captacion) o, sin el, del destinatario."""
     from backend import outreach
     import outreach_templates  # type: ignore
 
@@ -1153,7 +1162,16 @@ def _mandar_correo(email: str, contenido: Dict[str, str]) -> bool:
     html = contenido["html"] + outreach_templates.footer_html(str(ajustes.get("unsubscribe_mailto") or ""))
     mensaje = outreach.outreach_build_message(email, contenido["asunto"], texto, html, ajustes)
     outreach._outreach_send_email_object(mensaje)
-    return True
+    mensaje_id = str(mensaje["Message-ID"] or "")
+    try:
+        with closing(_db()) as conn:
+            conn.execute("INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
+                         "VALUES (?,?,?,?,?,?,?,?)", ((clave or email).strip().lower(), ETAPA_DEMO,
+                                                      contenido["asunto"], texto, html, _ahora(), "send", mensaje_id))
+            conn.commit()
+    except Exception:  # noqa: BLE001 - el correo ya salio: no apuntarlo no puede deshacerlo
+        settings.logger.exception("[captacion_voz] no se pudo apuntar el correo con la demo a %s", email)
+    return mensaje_id or "enviado"
 
 
 def _reclamar_envio(llamada_id: str) -> bool:
@@ -1216,7 +1234,7 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
             settings.logger.warning("[captacion_voz] no se pudo adelantar la demo de %s", email_negocio)
     try:
         if destino_email:
-            canal, enviado = "email", _mandar_correo(destino_email, correo(negocio, enlace))
+            canal, enviado = "email", _mandar_correo(destino_email, correo(negocio, enlace), email_negocio)
         else:
             canal, enviado = "sms", _mandar_sms(fila["telefono"], texto_sms(negocio, enlace))
     except Exception as exc:  # noqa: BLE001 - no poder mandarlo no puede perder al interesado
@@ -1231,7 +1249,7 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
             # tienen que decir a donde pudo salir, no el correo que ya sabemos rechazado (Astra).
             destino_email = email_negocio
             try:
-                enviado = _mandar_correo(email_negocio, correo(negocio, enlace))
+                enviado = _mandar_correo(email_negocio, correo(negocio, enlace), email_negocio)
             except Exception:  # noqa: BLE001
                 settings.logger.exception("[captacion_voz] tampoco al correo del negocio de %s", fila["id"])
     notas = textnorm._sanitize_text(str(cuerpo.get("notas") or ""), allow_multiline=True)[:500]
@@ -1243,8 +1261,29 @@ def _enviar_informacion(fila, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
     _avisar_interes(fila, destino_email or fila["telefono"], nombre_contacto, notas, canal, enviado, enlace)
     if not enviado:
         return {"ok": True, "mensaje": "Apuntado. Dile que se lo mandamos en un rato y despidete."}
+    escribira_pablo = _al_seguimiento(fila, canal, destino_email, nombre_contacto,
+                                      enviado if canal == "email" and str(enviado).startswith("<") else "")
     por_donde = "por SMS a este numero" if canal == "sms" else "al correo %s" % email_hablado(destino_email)
+    if escribira_pablo:
+        # Que el correo de Pablo no llegue de la nada (docs/SISTEMA_CAPTACION_FINAL.md).
+        return {"ok": True, "mensaje": "Enviado %s. Diselo en una frase, dile que Pablo, el fundador, le escribira "
+                                       "por si tiene dudas, y despidete." % por_donde}
     return {"ok": True, "mensaje": "Enviado %s. Diselo en una frase y despidete." % por_donde}
+
+
+def _al_seguimiento(fila, canal: str, destino_email: str, nombre: str, mensaje_id: str) -> bool:
+    """Le apunta al seguimiento tras la demo (backend/seguimiento_demo.py). True si Pablo le
+    va a escribir (inscrito y con el interruptor encendido). Nunca tumba la llamada."""
+    try:
+        from backend import seguimiento_demo
+
+        inscrito = seguimiento_demo.inscribir_tras_la_llamada(
+            _fila(fila["id"]) or fila, canal=canal, destino=destino_email or fila["telefono"], contacto=nombre,
+            mensaje_id=mensaje_id, asunto=correo("", "")["asunto"] if mensaje_id else "")
+        return bool(inscrito) and seguimiento_demo.esta_encendido()
+    except Exception:  # noqa: BLE001
+        settings.logger.exception("[captacion_voz] no se pudo apuntar %s al seguimiento", fila["id"])
+        return False
 
 
 MINUTOS_MISMA_ENTRANTE = 30
@@ -1324,6 +1363,14 @@ def herramienta(nombre: str, cuerpo: Dict[str, Any]) -> Dict[str, Any]:
         _actualizar(llamada_id, resultado=RESULTADO_PABLO,
                     notas=("Le llama Pablo. Cuando: %s. %s %s" % (cuando or "-", persona, notas)).strip())
         _avisar_a_pablo(fila, cuando, persona, notas)
+        # Es un lead cualificado: queda en el panel y en el Plan de escala (sin otro correo).
+        try:
+            from backend import seguimiento_demo
+
+            seguimiento_demo.registrar_pasar_a_pablo(_fila(llamada_id) or fila, cuando=cuando, persona=persona,
+                                                     notas=notas)
+        except Exception:  # noqa: BLE001 - el aviso a Pablo ya salio: esto nunca tumba la llamada
+            settings.logger.exception("[captacion_voz] no se pudo apuntar el lead de %s", llamada_id)
         return {"ok": True, "mensaje": "Apuntado: Pablo le llamara. Confirmaselo en una frase (cuando y a este "
                                        "numero) y despidete."}
     if nombre == "no_volver_a_llamar":

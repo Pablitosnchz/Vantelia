@@ -261,6 +261,9 @@ def candidatos(ahora: datetime, limite: int = 60) -> List[Dict[str, Any]]:
             "AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = p.email) "
             "AND NOT EXISTS (SELECT 1 FROM sends e WHERE e.email = p.email AND e.mode = 'send' "
             "                AND e.sent_at >= ?) "
+            # En el seguimiento tras la demo le escribe Pablo: Sara no le llama encima.
+            "AND NOT EXISTS (SELECT 1 FROM seguimiento_demo sd WHERE sd.prospecto = p.email "
+            "                AND sd.estado IN ('activo', 'cualificado')) "
             "ORDER BY p.created_at, p.email" % marcadores,
             ESTADOS_QUE_NO_SE_LLAMAN + (hace_correo,)).fetchall()
         vetados = {f["telefono"] for f in conn.execute("SELECT telefono FROM no_llamar")}
@@ -435,6 +438,9 @@ def rellamadas_dirigidas(ahora: datetime) -> List[Dict[str, Any]]:
             "AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = l.prospecto) "
             "AND NOT EXISTS (SELECT 1 FROM prospects p WHERE p.email = l.prospecto "
             "                AND COALESCE(p.status, '') IN (%s)) "
+            # En el seguimiento tras la demo le escribe Pablo: no se le rellama encima.
+            "AND NOT EXISTS (SELECT 1 FROM seguimiento_demo sd WHERE l.prospecto <> '' "
+            "                AND sd.prospecto = l.prospecto AND sd.estado IN ('activo', 'cualificado')) "
             "ORDER BY l.creada" % marcadores,
             (hace_rato,) + ESTADOS_QUE_NO_SE_LLAMAN).fetchall()
     rechazos = _rechazos_por_la_transcripcion()

@@ -1572,10 +1572,14 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     whatsapp_text = _urlquote(
         f"Hola, he probado la demo de {config['nombre']} y prefiero seguir por WhatsApp."
     )
+    # "Me interesa" (5-oct-2026): lleva al formulario del seguimiento tras la demo, y quien lo
+    # envia le llega a Pablo como lead cualificado (backend/seguimiento_demo.py).
     demo_contact_actions = (
         '<section class="demo-contact-bar" aria-label="Contactar con Vantelia">'
-        '<div class="demo-contact-copy"><strong>¿Quieres comentarlo?</strong>'
-        '<span>Escríbenos por el canal que te resulte más cómodo.</span></div>'
+        '<div class="demo-contact-copy"><strong>¿Te gusta cómo atiende?</strong>'
+        '<span>Te lo enseñamos montado con tu agenda en 15 minutos.</span></div>'
+        f'<a class="demo-contact-link demo-contact-primary" data-demo-interes-cta="1" '
+        f'href="/interes/demo/{cliente_safe}">Me interesa</a>'
         f'<a class="demo-contact-link" data-demo-contact-cta="1" '
         f'href="mailto:info@vantelia.es?subject={contact_subject}&amp;body={contact_body}">Tengo una duda</a>'
         f'<a class="demo-contact-link demo-contact-whatsapp" data-demo-whatsapp-cta="1" '
@@ -1842,6 +1846,12 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       border-color: rgba(37,211,102,0.5);
       background: rgba(37,211,102,0.1);
     }}
+    .demo-contact-primary {{
+      border-color: transparent;
+      background: linear-gradient(135deg, #00D1FF, #00F5D4);
+      color: #04101C;
+    }}
+    .demo-contact-primary:hover {{ color: #04101C; background: linear-gradient(135deg, #00D1FF, #00F5D4); }}
 
     .badge-live .dot {{
       width: 8px; height: 8px; border-radius: 999px;

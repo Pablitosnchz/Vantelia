@@ -150,6 +150,55 @@ CREATE TABLE IF NOT EXISTS segunda_oportunidad (
     momento    TEXT NOT NULL
 );
 
+-- Seguimiento tras la demo (backend/seguimiento_demo.py, docs/SISTEMA_CAPTACION_FINAL.md): una
+-- fila por negocio. Mientras existe (salvo 'caducado'), el correo frio no le escribe.
+CREATE TABLE IF NOT EXISTS seguimiento_demo (
+    id              TEXT PRIMARY KEY,
+    clave           TEXT NOT NULL UNIQUE,
+    prospecto       TEXT NOT NULL DEFAULT '',
+    origen          TEXT NOT NULL,
+    canal           TEXT NOT NULL,
+    destino         TEXT NOT NULL,
+    negocio         TEXT NOT NULL DEFAULT '',
+    sector          TEXT NOT NULL DEFAULT '',
+    contacto        TEXT NOT NULL DEFAULT '',
+    telefono        TEXT NOT NULL DEFAULT '',
+    llamada_id      TEXT NOT NULL DEFAULT '',
+    hilo            TEXT NOT NULL DEFAULT '',
+    asunto_hilo     TEXT NOT NULL DEFAULT '',
+    estado          TEXT NOT NULL DEFAULT 'activo',
+    paso            INTEGER NOT NULL DEFAULT 0,
+    proximo         TEXT NOT NULL DEFAULT '',
+    creado          TEXT NOT NULL,
+    actualizado     TEXT NOT NULL,
+    cualificado_en  TEXT NOT NULL DEFAULT '',
+    cualificado_por TEXT NOT NULL DEFAULT '',
+    preferencias    TEXT NOT NULL DEFAULT '{}',
+    motivo          TEXT NOT NULL DEFAULT '',
+    uso_demo        TEXT NOT NULL DEFAULT '{}',
+    oportunidad_id  TEXT NOT NULL DEFAULT '',
+    recordado_en    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_seguimiento_demo_prospecto ON seguimiento_demo(prospecto);
+CREATE INDEX IF NOT EXISTS idx_seguimiento_demo_estado ON seguimiento_demo(estado, proximo);
+
+-- Cada toque del seguimiento, reservado ANTES de enviarlo: si queda en duda no se repite.
+CREATE TABLE IF NOT EXISTS seguimiento_demo_toques (
+    seguimiento_id TEXT NOT NULL,
+    paso           INTEGER NOT NULL,
+    canal          TEXT NOT NULL,
+    estado         TEXT NOT NULL,
+    momento        TEXT NOT NULL,
+    message_id     TEXT NOT NULL DEFAULT '',
+    detalle        TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (seguimiento_id, paso)
+);
+
+CREATE TABLE IF NOT EXISTS seguimiento_demo_ajustes (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     email   TEXT NOT NULL,
@@ -822,6 +871,11 @@ def revalidate_send_candidate(
         "SELECT 1 FROM segunda_oportunidad WHERE prospecto=? LIMIT 1", (normalized,)
     ).fetchone():
         return None, "cerrada_tras_la_llamada"
+    # En el seguimiento tras la demo le escribe Pablo, en su hilo (backend/seguimiento_demo.py).
+    if conn.execute(
+        "SELECT 1 FROM seguimiento_demo WHERE prospecto=? AND estado<>'caducado' LIMIT 1", (normalized,)
+    ).fetchone():
+        return None, "en_seguimiento_de_la_demo"
 
     if stage == "cold":
         if conn.execute(
@@ -877,6 +931,8 @@ def fetch_candidates(
         WHERE NOT EXISTS (SELECT 1 FROM sends s WHERE s.email = p.email AND s.mode='send')
           -- con segunda oportunidad (tambien en duda) ya no se le escribe
           AND NOT EXISTS (SELECT 1 FROM segunda_oportunidad so1 WHERE so1.prospecto = p.email)
+          -- en el seguimiento tras la demo le escribe Pablo (backend/seguimiento_demo.py)
+          AND NOT EXISTS (SELECT 1 FROM seguimiento_demo sd1 WHERE sd1.prospecto = p.email AND sd1.estado <> 'caducado')
           AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
           AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')
@@ -913,6 +969,7 @@ def fetch_candidates(
             SELECT 1 FROM sends s3 WHERE s3.email = p.email AND s3.stage = 'llamada' AND s3.mode='send'
         )
         AND NOT EXISTS (SELECT 1 FROM segunda_oportunidad so2 WHERE so2.prospecto = p.email)
+        AND NOT EXISTS (SELECT 1 FROM seguimiento_demo sd2 WHERE sd2.prospecto = p.email AND sd2.estado <> 'caducado')
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
         AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
         AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')

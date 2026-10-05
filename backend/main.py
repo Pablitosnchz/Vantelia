@@ -171,6 +171,13 @@ def _start_background_workers() -> None:
     hilo_segunda = segunda_oportunidad.arrancar()
     if hilo_segunda is not None:
         appstate.register_worker("segunda-oportunidad", hilo_segunda)
+    # El seguimiento tras la demo: los avisos de leads a Pablo siempre; los correos y SMS
+    # de seguimiento, solo con su interruptor del panel (docs/SISTEMA_CAPTACION_FINAL.md).
+    from backend import seguimiento_demo
+
+    hilo_seguimiento = seguimiento_demo.arrancar()
+    if hilo_seguimiento is not None:
+        appstate.register_worker("seguimiento-demo", hilo_seguimiento)
 
     if messaging._voice_twilio_configured():
         settings.logger.info("Voice channel enabled (Twilio configurado).")
@@ -188,11 +195,12 @@ def _stop_background_workers() -> None:
     instagram.ig_autopilot_stop.set()
     instagram.ig_campaign_stop.set()
     tiktok.tk_campaign_stop.set()
-    from backend import cuenta_elevenlabs, lanzador_llamadas, segunda_oportunidad
+    from backend import cuenta_elevenlabs, lanzador_llamadas, segunda_oportunidad, seguimiento_demo
 
     lanzador_llamadas.parar.set()
     cuenta_elevenlabs.parar.set()
     segunda_oportunidad.parar.set()
+    seguimiento_demo.parar.set()
 
 
 @asynccontextmanager
@@ -324,4 +332,5 @@ from backend.routers import (  # noqa: E402,F401
     admin_captacion,
     voice_web,
     portal_commerce,
+    seguimiento_web,
 )

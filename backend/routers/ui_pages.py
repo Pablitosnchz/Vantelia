@@ -238,7 +238,13 @@ async def demo_voice_session(cliente_id: str, request: Request) -> Dict[str, Any
     security._check_rate_limit(f"demo_voice:{cliente_id}:{client_ip}", settings.DEMO_VOICE_RATE_LIMIT)
     voice_cfg = config.get("voice") or {}
     max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or settings.DEMO_VOICE_MAX_SECONDS
-    return await voice._mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="demo-voice")
+    sesion = await voice._mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="demo-voice")
+    # Llamar a su demo por voz es usarla de verdad: la senal del seguimiento tras la demo.
+    try:
+        await timeutils._to_thread(outreach._outreach_record_demo_voice_call, cliente_id)
+    except Exception:  # noqa: BLE001 - la llamada sigue aunque no se apunte
+        settings.logger.debug("No se pudo apuntar la llamada de voz a la demo %s", cliente_id, exc_info=True)
+    return sesion
 
 
 @app.post("/demo/{cliente_id}/voice/tool", include_in_schema=False)
@@ -485,6 +491,17 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
                 outreach_conn.commit()
     except Exception as exc:  # noqa: BLE001
         settings.logger.debug("No se pudo registrar demo_generated en outreach: %s", exc)
+
+    # Quien genera su demo en la web entra en el seguimiento tras la demo: Pablo le escribe y,
+    # si dice que le interesa, le llega como lead cualificado (docs/SISTEMA_CAPTACION_FINAL.md).
+    try:
+        if outreach.OUTREACH_AVAILABLE:
+            from backend import seguimiento_demo
+
+            await timeutils._to_thread(seguimiento_demo.inscribir_demo_web, email_lower, empresa_clean,
+                                       sector_clean, data.website_url or "")
+    except Exception as exc:  # noqa: BLE001 - la demo ya esta hecha: esto no la tumba
+        settings.logger.warning("No se pudo apuntar la demo de %s al seguimiento: %s", email_lower, exc)
 
     # Se envia solo al crear una demo nueva. La rama de reutilizacion retorna
     # antes, evitando duplicar esta confirmacion si el usuario repite el formulario.
