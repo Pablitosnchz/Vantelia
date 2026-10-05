@@ -105,8 +105,8 @@ def test_tras_el_si_una_sola_pregunta_y_quien_decide_despues(captacion):
     paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
     # 5-oct-2026 (Pablo, tras analizar las llamadas): tras el si, una sola pregunta, y es la
     # de a donde mandar la demo (la frase del paso 6). Nada de "¿hablo con quien lleva...?".
-    assert "Una sola pregunta: a donde se la mandas" in paso_2 and "quien lleva" not in paso_2
-    assert "¿" not in paso_2, "la unica pregunta del turno es la del paso 6"
+    assert "Una sola pregunta: la de la oferta" in paso_2 and "quien lleva" not in paso_2
+    assert "{{oferta}}" in paso_2 and "¿" not in paso_2, "la unica pregunta del turno es la oferta"
     assert guion.index("con los papeles claros") < guion.index("\n5. QUIEN DECIDE")
     assert "nunca des por hecho que te has equivocado de numero" in guion
     # 1-oct-2026 (Pablo): la voz tal cual viene de ElevenLabs, sin los 0,9 / 0,9 de antes, y con
@@ -153,7 +153,7 @@ def test_si_contesta_una_persona_habla_con_sara(captacion, api_module, monkeypat
     assert cuerpo["agent_id"] == "agent_sara" and cuerpo["direction"] == "outbound"
     assert cuerpo["conversation_initiation_client_data"]["dynamic_variables"] == {
         "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": llamada,
-        "canal_envio": "pedir_email", "email_negocio": "",
+        "canal_envio": "pedir_email", "email_negocio": "", "oferta": captacion.oferta_de_demo("pedir_email"),
         # Sin rellamada dirigida, se pregunta por el negocio (docs/PLAN_HABLAR_CON_EL_RESPONSABLE.md).
         "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": captacion.APERTURA,
         "sentido": "saliente", "primera": "", "huecos_pablo": captacion.huecos_de_pablo()}

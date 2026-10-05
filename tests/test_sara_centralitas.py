@@ -165,7 +165,7 @@ def test_apertura_permiso_y_pregunta_antes_de_ofrecer_nada(captacion):  # noqa: 
     # 5-oct-2026: la pregunta de como atienden ("¿quien lo coge?") se le hacia a la recepcion,
     # que es quien lo coge: 7 de 12 colgaron justo despues. Ahora, tras el permiso, el motivo
     # y a donde mandar la demo para quien decide.
-    assert "ofrece mandar la demo con la frase de LA DEMO GRATUITA (paso 6)" in paso_2
+    assert "{{oferta}}" in paso_2 and "La oferta va TAL CUAL" in paso_2
     assert "¿quien lo coge?" not in guion.lower()
     assert "4. Solo si acepta claramente probarlo" in guion
     assert "soy justo lo que os ofrecemos" not in guion, "el gancho de venta, fuera"
@@ -193,8 +193,10 @@ def test_si_le_interesa_sara_propone_que_le_llame_pablo_con_dos_huecos(captacion
     # 1-oct (Pablo): el cierre es la demo gratuita por SMS o email, no "¿te llamo Pablo?". Si
     # prefiere que le llamen, entonces si los dos huecos concretos.
     paso_6 = guion.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
-    assert "LA DEMO GRATUITA" in paso_6 and "una pequeña demo gratuita" in paso_6
-    assert "quien lleve el negocio" in paso_6, "la demo es para quien decide"
+    assert "LA DEMO GRATUITA" in paso_6 and '"{{oferta}}"' in paso_6
+    for canal in ("sms", "email", "pedir_email"):
+        oferta = captacion.oferta_de_demo(canal, "Pelu Marta", "hola arroba pelu punto es")
+        assert "una pequeña demo gratuita" in oferta and "quien lleve el negocio" in oferta, canal
     assert "usa `enviar_informacion` en ESE MISMO turno" in paso_6
     assert "Si prefiere que le llamemos" in paso_6 and "{{huecos_pablo}}" in paso_6
     assert "usa `pasar_a_pablo` en ESE MISMO turno" in paso_6

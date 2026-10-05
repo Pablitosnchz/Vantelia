@@ -101,7 +101,7 @@ def test_por_sip_marca_elevenlabs_con_las_variables_de_siempre(sip):
         "agent_sara", "phnum_1", "+34911234561")
     assert cuerpo["conversation_initiation_client_data"]["dynamic_variables"] == {
         "negocio": "Peluqueria Elidio", "sector": "peluqueria", "llamada": hecho["llamada"],
-        "canal_envio": "pedir_email", "email_negocio": "",
+        "canal_envio": "pedir_email", "email_negocio": "", "oferta": sip.oferta_de_demo("pedir_email"),
         "a_quien": "Peluqueria Elidio", "responsable": "quien lleva el negocio", "saludo": sip.APERTURA,
         "sentido": "saliente", "primera": "", "huecos_pablo": sip.huecos_de_pablo()}
     fila = sip._fila(hecho["llamada"])

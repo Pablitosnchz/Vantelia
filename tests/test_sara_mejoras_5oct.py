@@ -31,6 +31,36 @@ def test_las_dos_saras_pueden_pulsar_una_tecla(captacion, entrada):  # noqa: F81
     assert "hola" in config["turn"]["interruption_ignore_terms"]
 
 
+# --- Llamada de prueba a Pablo (5-oct, 14:10) -------------------------------------------
+
+def test_la_apertura_va_siempre_primero_aunque_cojan_con_un_si(captacion):  # noqa: F811
+    """Pablo cogio con "Si." y Sara fue directa a "Te cuento...", sin decir que es una IA (sin
+    primer mensaje, el modelo tomo el "si" de coger el telefono por permiso). El Reglamento de
+    IA (art. 50) exige decirlo en la primera frase: es la regla que va antes que todo."""
+    guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
+    regla = guion.index("REGLA PRIMERA, POR ENCIMA DE TODO LO DEMAS")
+    assert regla < guion.index("POR QUE LLAMAS"), "la regla va antes que el resto del guion"
+    assert 'tu primera frase de la llamada es SIEMPRE la apertura, tal cual: "{{saludo}}"' in guion
+    assert 'ANTES de que hayas dicho la apertura NO es permiso para nada' in guion
+    assert '"¿si?"' in guion, "en España se coge el telefono con un ¿si?"
+    paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
+    assert paso_2.startswith("LA PETICION. Si DESPUES de tu apertura te da permiso")
+
+
+def test_a_un_movil_se_le_ofrece_el_sms_y_nunca_un_correo_que_no_existe(captacion):  # noqa: F811
+    """En la misma prueba ofrecio "la demo al correo de Clinica Dental Pablo" a un movil sin
+    correo: elegia ella entre tres frases. Ahora la frase la pone el servidor."""
+    from test_captacion_voz import _Falso
+
+    hecho = captacion.llamar("675802001", "Clínica Dental Pablo", "clinica dental", cliente=_Falso())
+    variables = captacion._variables(captacion._fila(hecho["llamada"]))
+    assert variables["canal_envio"] == "sms"
+    assert "SMS" in variables["oferta"] and "correo" not in variables["oferta"]
+    # A un fijo con correo conocido, ese correo; sin correo, se pide (nunca "el correo de X" vacio).
+    assert "info arroba pelu punto es" in captacion.oferta_de_demo("email", "Pelu", "info arroba pelu punto es")
+    assert "Me dices un email" in captacion.oferta_de_demo("email", "Pelu", "")
+
+
 # --- A quien se llama -----------------------------------------------------------------
 
 @pytest.mark.parametrize("negocio,sector,esperado", [
