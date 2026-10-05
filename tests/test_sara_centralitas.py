@@ -196,7 +196,7 @@ def test_si_le_interesa_sara_propone_que_le_llame_pablo_con_dos_huecos(captacion
     assert "LA DEMO GRATUITA" in paso_6 and '"{{oferta}}"' in paso_6
     for canal in ("sms", "email", "pedir_email"):
         oferta = captacion.oferta_de_demo(canal, "Pelu Marta", "hola arroba pelu punto es")
-        assert "una pequeña demo gratuita" in oferta and "quien lleve el negocio" in oferta, canal
+        assert "una demo gratuita" in oferta and "quien lleve el negocio" in oferta, canal
     assert "usa `enviar_informacion` en ESE MISMO turno" in paso_6
     assert "Si prefiere que le llamemos" in paso_6 and "{{huecos_pablo}}" in paso_6
     assert "usa `pasar_a_pablo` en ESE MISMO turno" in paso_6

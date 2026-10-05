@@ -61,6 +61,19 @@ def test_a_un_movil_se_le_ofrece_el_sms_y_nunca_un_correo_que_no_existe(captacio
     assert "Me dices un email" in captacion.oferta_de_demo("email", "Pelu", "")
 
 
+def test_el_turno_de_la_oferta_es_corto(captacion):  # noqa: F811
+    """Pablo, tras la segunda prueba: "acorta la oferta". El turno (motivo + oferta) duraba
+    unos 50 palabras y pasaban 20 segundos hasta que contestaba."""
+    guion = captacion.agente_de_captacion("https://app.test")["conversation_config"]["agent"]["prompt"]["prompt"]
+    paso_2 = guion.split("\n2. ", 1)[1].split("\n3. ", 1)[0]
+    motivo = paso_2.split('casi tal cual: "', 1)[1].split("{{oferta}}", 1)[0]
+    for canal in ("sms", "email", "pedir_email"):
+        # El correo es un dato (cuenta como una palabra): lo que se mide es el texto fijo.
+        turno = motivo + captacion.oferta_de_demo(canal, "Pelu", "CORREO")
+        assert len(turno.split()) <= 40, (canal, len(turno.split()))
+    assert "ayudamos a negocios como el vuestro con las llamadas" in motivo, "el motivo de la llamada sigue"
+
+
 # --- A quien se llama -----------------------------------------------------------------
 
 @pytest.mark.parametrize("negocio,sector,esperado", [

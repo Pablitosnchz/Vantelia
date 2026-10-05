@@ -161,7 +161,7 @@ Esta llamada es {{sentido}}. Si es "entrante", te han llamado ELLOS al numero de
 
 LO QUE TIENES QUE CONSEGUIR, EN ORDEN (las SALIDAS de abajo mandan sobre estos pasos)
 1. LA APERTURA (cuando llamas tu). No dices nada hasta que contesten. En cuanto hable una persona (su saludo, "digame", el nombre del negocio) o si tras unos segundos nadie dice nada, di la apertura casi tal cual y en un solo turno: "{{saludo}}". Si mientras la dices te contestan solo "hola" o "buenos dias", no vuelvas a empezar: termina la frase. Dice quien eres y que eres una IA: no la cambies ni quites lo de la IA. Si lo que contesta es una grabacion, un menu o un buzon, sigue GRABACIONES, CENTRALITAS Y ESPERAS. Solo si te dicen claramente que te has equivocado de numero o que no es {{negocio}}, discúlpate y despidete. Si no entiendes lo que contestan, o te preguntan quien eres o de parte de quien, contestales corto (de Vantelia) y vuelve a pedir un momento con otras palabras: nunca des por hecho que te has equivocado de numero. Si has preguntado por {{responsable}} y no esta, ve directa al paso 5 ("Si no esta"): pregunta cuando suele estar y despidete, sin preguntas ni demostracion a quien te ha cogido. Si es ella o se pone: pidele treinta segundos y sigue en el paso 2.
-2. LA PETICION. Si DESPUES de tu apertura te da permiso ("vale", "dime", "si"), di el motivo en media frase y, en el MISMO turno, la oferta de la demo, casi tal cual: "Te cuento: ayudamos a negocios como el vuestro con las llamadas; es una asistente como yo, que coge el telefono y el WhatsApp cuando no llegais y da las citas en vuestra agenda. {{oferta}}" La oferta va TAL CUAL, sin cambiar por donde se manda (paso 6). Una sola pregunta: la de la oferta. No le preguntes a quien te ha cogido como atienden, quien coge el telefono ni si le interesa: suele ser la recepcion y no le toca decidir (el 5-oct, en 7 de 12 llamadas colgaron justo despues de una pregunta asi). Un saludo, un "digame" o que confirmen el negocio NO son permiso para la demostracion ni para la peticion: espera a que te lo den.
+2. LA PETICION. Si DESPUES de tu apertura te da permiso ("vale", "dime", "si"), di el motivo en media frase y, en el MISMO turno, la oferta de la demo, casi tal cual: "Te cuento: ayudamos a negocios como el vuestro con las llamadas; una asistente como yo os coge el telefono y el WhatsApp cuando no llegais. {{oferta}}" La oferta va TAL CUAL, sin cambiar por donde se manda (paso 6). Una sola pregunta: la de la oferta. No le preguntes a quien te ha cogido como atienden, quien coge el telefono ni si le interesa: suele ser la recepcion y no le toca decidir (el 5-oct, en 7 de 12 llamadas colgaron justo despues de una pregunta asi). Un saludo, un "digame" o que confirmen el negocio NO son permiso para la demostracion ni para la peticion: espera a que te lo den.
 3. ESCUCHA, Y SEGUN LO QUE CONTESTE:
    - Reacciona primero a lo que ha dicho, con sus mismas palabras. Nada de interrogatorios.
    - Si dice que si, que se lo mandes, o te da un email: usa `enviar_informacion` en ESE MISMO turno (paso 6).
@@ -347,14 +347,13 @@ def oferta_de_demo(canal: str, negocio: str = "", email_dicho: str = "") -> str:
     """La frase con la que Sara ofrece la demo, ya decidida por el canal. Antes elegia ella
     entre tres frases del guion y en la primera prueba (5-oct-2026) ofrecio "el correo de
     Clinica Dental Pablo" a un movil, sin correo ninguno: ahora la frase la pone el servidor."""
+    # Cortas (Pablo, 5-oct, tras oirla: "acorta la oferta"; entre que empezaba a hablar y
+    # contestaba pasaban 20 segundos).
     if canal == "sms":
-        return ("¿Os mando por SMS a este número una pequeña demo gratuita, para que vea quien lleve "
-                "el negocio cómo quedaría?")
+        return "¿Os mando por SMS una demo gratuita para quien lleve el negocio?"
     if canal == "email" and email_dicho:
-        return ("¿Os mando una pequeña demo gratuita al correo de %s, %s, o prefieres que se la mande a "
-                "quien lleve el negocio?" % (negocio or "vuestro negocio", email_dicho))
-    return ("¿Me dices un email y os mando una pequeña demo gratuita, para que vea quien lleve el "
-            "negocio cómo quedaría?")
+        return "¿Os mando una demo gratuita a %s, o a quien lleve el negocio?" % email_dicho
+    return "¿Me dices un email y os mando una demo gratuita para quien lleve el negocio?"
 
 
 # Buzon de voz o contestador: ElevenLabs lo reconoce en la conversacion y cuelga sin
