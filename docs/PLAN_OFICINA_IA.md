@@ -155,10 +155,13 @@ cubre justo ese hueco.
     llama:
     - (a) si el lead pidió que le llamaran, el día y la franja que dijo;
     - (b) si solo hay teléfono;
-    - (c) **opcional, con un interruptor (apagado de serie)**: si no ha contestado a
-      dos correos en tres días laborables y hay un fijo del negocio. Pablo dijo el
-      5/10 "email, no rellamar"; la opción (c) cambia esa decisión, así que la decide
-      él.
+    - (c) **una sola vez**, si no ha contestado a dos correos en tres días laborables,
+      pero solo cuando el interés fue explícito (formulario, "Me interesa", "Activar",
+      respuesta con interés o "pasar a Pablo"; tener la demo no basta). Solo al fijo
+      del negocio, nunca a un móvil que no diera él, y en franja. Si no contesta, no se
+      repite. Pablo lo dejó a criterio de Claude el 7/10 y se enciende con esos
+      límites. Hugo vigila cómo se reciben esas llamadas y, si alguna sienta mal, se
+      apaga con su interruptor.
 
     Son llamadas que el lead ha pedido o que siguen a su "me interesa", no llamadas en
     frío. Se respetan las franjas, `no_llamar` y la lista Robinson igual que hoy.
@@ -188,6 +191,15 @@ cubre justo ese hueco.
   - **Nivel 2:** cuando Pablo haya aprobado sin tocar más del 90 % de sus borradores
     durante tres semanas, las respuestas de agenda sencillas salen solas. Lo decide
     Pablo con un interruptor.
+- **Reagendar (pedido de Pablo el 7/10).** Una cita se puede mover de tres formas:
+  - **Pablo, desde la ficha o la sala**, con el botón "Mover":
+    - Si elige otra hora, la cita se reprograma con el núcleo de siempre
+      (`_update_booking_details`) y el lead recibe el aviso de cambio que ya existe.
+    - Si elige "que elija ella", Marta le escribe con una disculpa breve y dos horas
+      nuevas.
+  - **Pablo, desde la agenda del portal** (tenant `Vantelia`, vista Día): el
+    reprogramar de siempre, con el mismo aviso.
+  - **El lead**, con el enlace de gestión de su confirmación.
 - **Antes y después de la reunión:**
   - **30 minutos antes**, Pablo recibe la ficha (`seguimiento_demo.ficha`): quién es,
     su demo, la transcripción de su llamada con Sara, lo que ha usado de la demo, lo que
@@ -537,7 +549,7 @@ propio bucle.
 
 | Fase | Qué | Esfuerzo | Por qué en este orden |
 |---|---|---|---|
-| **1** | **Marta** por correo: la agenda de Pablo en el tenant `Vantelia`, los botones de reserva con un clic, los recordatorios, la ficha 30 minutos antes y el "¿lo movemos?". Se le pasan los cuatro leads de octubre. Además, el motor, el tablón, la bandeja y una sala sencilla con **los que ya trabajan**, y **Tomás** con los saldos (sin IA). | 3 tardes | Es lo que **trae dinero**: hay cuatro interesados y ninguno tiene reunión. Y los saldos evitan otra caída como la de OpenAI. |
+| **1** | **Marta** por correo: la agenda de Pablo en el tenant `Vantelia`, los botones de reserva con un clic, la invitación al calendario, los recordatorios, el reagendar, la ficha 30 minutos antes y el "¿lo movemos?". Se le pasan los cuatro leads de octubre. Además, el motor, el tablón, la bandeja y una sala sencilla con **los que ya trabajan**, y **Tomás** con los saldos (sin IA). Detalle paso a paso en el apartado 9. | 3-4 tardes | Es lo que **trae dinero**: hay cuatro interesados y ninguno tiene reunión. Y los saldos evitan otra caída como la de OpenAI. |
 | **2** | **Sara en modo setter** (con la revisión de Astra), **Elena** (parte diario) y **Hugo** (llamadas) | 2-3 tardes | Cierra el canal de teléfono para quien lo pidió y ataca el cuello de botella (las llamadas no dan demos). |
 | **2b** | **Lucía** (atención a clientes) | 1 tarde | Proteger a los clientes de pago, con Cap Rocat entrando en vivo. |
 | **3** | **Nora** (correo), **Iker** (web y SEO), **Tomás** semanal y fiscal (tarea del PC) | 2 tardes | Mejoran lo que ya funciona. Iker necesita el acceso a Search Console. |
@@ -551,14 +563,20 @@ estaba previsto.
 
 ## 6. Lo que tiene que dar Pablo
 
-**Para Marta (fase 1) sí hace falta:**
-- **Tu horario para reuniones**: por ejemplo, de lunes a viernes de 10:00 a 13:30 y de
-  16:00 a 18:00. La agenda del tenant `Vantelia` está ahora de 9 a 18 y abre los
-  sábados.
-- **El formato**: llamada de 15 minutos (llamas tú al número del lead, la opción por
-  defecto) o videollamada, en cuyo caso necesito tu enlace fijo de Meet o Zoom.
-- **La opción (c)**: si Sara puede llamar a quien no contesta a dos correos. Por
-  defecto, no.
+**Decidido el 7/10:**
+- Horario de reuniones: de lunes a viernes, de 10:00 a 13:30 y de 16:00 a 18:00. La
+  agenda del tenant `Vantelia` está hoy de 9 a 18 y abre los sábados: se cambia.
+- Pablo tiene que poder **reagendar** (ver apartado 2.2).
+- La opción (c) se enciende con límites (apartado 2.2).
+- Formato: **llamada de 15 minutos que hace Pablo**, la opción por defecto, porque no
+  eligió videollamada. Si algún lead pide vídeo, se le manda el enlace a mano.
+
+**Opcional para la fase 1:**
+- La **dirección secreta en formato iCal de tu Google Calendar** (Ajustes > tu
+  calendario > "Dirección secreta en formato iCal"). Con ella, Marta no ofrece horas en
+  las que ya tienes algo personal. Sin ella, bloqueas a mano desde la agenda.
+- Comprar el paquete de dibujos de la sala (apartado 8), unos pocos euros. Sin él se
+  usa uno gratuito.
 
 Lo demás no es imprescindible para empezar. Sin la clave correspondiente, el agente lo
 dice y sigue con lo demás.
@@ -585,6 +603,87 @@ dice y sigue con lo demás.
 
 ---
 
+## 8. Construir o aprovechar lo que ya existe
+
+Pablo, el 7/10: *"usa esas cosas de GitHub ya hechas y probadas si quieres, mejor que
+desarrollar nosotros"*. Pieza por pieza:
+
+| Pieza | Lo que ya existe fuera | Decisión | Por qué |
+|---|---|---|---|
+| **Orquestador** (turnos, presupuestos, tareas, aprobaciones) | **Paperclip**: MIT, unas 98.000 estrellas, Node 24 + React + PostgreSQL | **No se instala; se copia su diseño** (turnos, presupuesto con aviso al 80 % y parada al 100 %, aprobaciones, tareas con comentarios) | Supone otro servidor, otro lenguaje, otra base de datos y otro login. Está pensado para despertar agentes de IA (Claude Code, Codex), justo lo que encarece, y nuestro portero tiene que decidir *antes* de llamar al modelo. Además, la setter tiene que contestar en segundos, no al siguiente turno, y los datos se duplicarían. El motor propio es una tabla y un bucle sobre lo que ya hay. Se reconsidera si un día hay muchos agentes de Claude Code trabajando a la vez. |
+| **Librerías de agentes** (CrewAI, LangGraph) | Muchas | **No** | Cada agente hace una sola llamada con los datos ya calculados. Una librería añade tokens, dependencias y una capa más que depurar, y Cognition recomienda lo contrario. |
+| **Agenda de la setter** | Cal.com: en la nube, gratis para un usuario; instalarlo en nuestro servidor (AGPL) es pesado | **Nuestro motor de citas** | Ya está hecho y cubierto por tests: huecos, confirmación, recordatorios de 24 h y 2 h, reprogramar con aviso y enlace de gestión. No añade otro proveedor que trate datos. Y Vantelia lo usa como un cliente más, así que lo que se rompa lo ve Pablo el primero. Lo único que Cal.com hacía mejor, sincronizar con Google Calendar, se cubre con la fila siguiente. |
+| **Tu calendario** | **`icalendar`** y **`recurring-ical-events`**, librerías Python maduras | **Sí** | Leen la dirección secreta iCal de tu Google Calendar para no ofrecer horas ocupadas y generan la invitación `.ics` que Gmail añade solo a tu calendario y al del lead. |
+| **Secuencias de correo** | Instantly y lemlist, de pago | **Nuestro motor de correo** | Brevo, hilos, pie profesional, topes compartidos, bajas, lector IMAP y clasificación de respuestas: ya hecho y en producción. |
+| **Entender "el jueves por la tarde"** | `dateparser` | **El intérprete del asistente** | Ya entiende fechas y franjas en español para reservar (`reserva`, `agent`), con su banco de casos. Uno nuevo daría resultados distintos para la misma frase. |
+| **La sala visual** | **Star Office UI**: código MIT, Phaser, 7.300 estrellas. Pixel Agents (solo VS Code). | **Sí al código de Star Office UI como base de la escena** (con atribución), leyendo nuestro `/admin/oficina/estado`. **Dibujos: el paquete "Modern Office" de LimeZu** (unos pocos euros, uso comercial permitido, no se puede redistribuir) **o Kenney (CC0, gratis)**. Si adaptarlo resulta más lioso que hacerlo de cero, se hace en HTML, CSS y SVG. | Los dibujos de Star Office UI no permiten uso comercial, y los vídeos para redes lo son. Phaser se carga desde cdnjs **solo en esa página**: es una excepción consciente a "sin frameworks", porque no es la interfaz del panel sino un dibujo. Pixel Agents se puede instalar gratis en tu VS Code para ver a Claude trabajando, sin tocar nada nuestro. |
+| **Auditoría de la web** | **lychee-action** (enlaces rotos) y **Lighthouse CI o la API de PageSpeed** (rendimiento y SEO), en GitHub Actions | **Sí** | Son gratis y muy usadas, y ya tenemos `uptime.yml` en GitHub Actions. Iker solo lee sus resultados. |
+| **Finanzas** | GhostCFO y cfo.ai (de pago), Firefly III (excesivo) | **Llamadas directas a las APIs** | Son cuatro consultas de saldo y la librería de Stripe, que ya está. El libro registro se lee con `openpyxl`, la misma que lo generó. |
+
+## 9. Fase 1 paso a paso (lo que se hará al dar la orden)
+
+Cada paso termina con sus tests en verde. Al final: suite completa, humo, revisión de
+Astra y despliegue con vuelta atrás automática.
+
+1. **Tu agenda.**
+   - En el tenant `Vantelia`: horario de lunes a viernes de 10:00 a 13:30 y de 16:00 a
+     18:00, sábados y domingos cerrados, y el servicio "Llamada con Pablo · 15 min".
+   - Se hace con los endpoints del portal, como la demo de Noelia, y con copia antes de
+     tocar nada. Ojo a las trampas de `docs/MAPA_DEL_CODIGO.md` sobre el catálogo y
+     sobre `config.json` frente a memoria.
+   - Comprobar que el widget de la web sigue dando citas con ese horario.
+2. **Invitación y calendario.**
+   - Al reservar o mover una cita, invitación `.ics` (`icalendar`) a Pablo y al lead.
+   - Si Pablo da la dirección iCal, sus ocupados bloquean huecos (se lee cada 10
+     minutos, con caché).
+3. **`backend/setter.py` y la tabla `setter_leads`.**
+   - Entradas: `seguimiento_demo.cualificar`, una respuesta con interés
+     (`al_responder`), el "pasar a Pablo" de Sara y `consulta_leads`.
+   - Una entrada por lead, aunque llegue por dos vías.
+4. **El primer correo en menos de 5 minutos**, dentro de la ventana (y si no, a las
+   8:30):
+   - En el hilo, a nombre de Pablo y con el pie profesional.
+   - Dos horas reales como botones de reserva con un clic (`GET /reunion/{token}`,
+     firmado y con caducidad) y "elige otra".
+   - Si el hueco ya está cogido, la página enseña otros.
+5. **La cadencia** (días 0, 3 y 6), los topes compartidos del buzón, la parada al
+   responder o decir que no, y los festivos.
+6. **Respuestas con sus palabras.**
+   - Fecha y franja: el código resuelve el hueco y reserva, o propone dos horas.
+   - Precio, condiciones o quejas: borrador a la bandeja, con aviso a Pablo.
+7. **Recordatorios y reunión.**
+   - Los de 24 h y 2 h del motor, más un SMS 2 horas antes si dio un móvil.
+   - La ficha 30 minutos antes.
+   - "¿Lo movemos?" si no se presenta.
+   - Resultado en un clic (ganado, seguir o perdido), que mueve la oportunidad en el
+     Plan de escala.
+8. **Reagendar.** El botón "Mover" en la ficha y en la sala: otra hora, o "que elija
+   ella", con dos horas nuevas.
+9. **Motor mínimo de la oficina.**
+   - Tablas `oficina_*`, la bandeja y el estado de los que ya trabajan y de Marta.
+   - **Tomás con los saldos**: ElevenLabs y Twilio ya; Stripe; OpenAI por `trazas`.
+     Zadarma y Brevo, cuando estén sus claves.
+   - Un aviso solo si algo se acaba en menos de 7 días.
+10. **Sala, primera versión.** La escena con las zonas (mesa, café, esperando a Pablo,
+    fuera de horario, atascado), tu mesa con las reuniones de hoy y la bandeja, y el
+    calendario en la pared.
+11. **Prueba completa con un lead de prueba** (tu propio correo, origen `manual`, que no
+    cuenta en el embudo):
+    - Se cualifica, recibe el correo, pincha, reserva y le llega la invitación.
+    - Recordatorios.
+    - Mover.
+    - No presentarse.
+    - Resultado.
+    - Después, se borran todos los datos de la prueba.
+12. **Encender con los cuatro leads de octubre:** antes de que salga nada, Pablo ve los
+    cuatro correos y los aprueba. Es la primera vez que la setter escribe a gente real.
+
+**Hecho cuando:** un "me interesa" real recibe el correo en menos de 5 minutos, la cita
+aparece en tu calendario, y en la sala se ven los minutos hasta el primer contacto,
+cuántos cualificados tienen reunión y la asistencia.
+
+---
+
 ## Fuentes
 
 - Paperclip: [glosario](https://docs.paperclip.ing/guides/welcome/glossary),
@@ -605,6 +704,10 @@ dice y sigue con lo demás.
   [Cleverly](https://www.cleverly.co/blog/ai-appointment-setting)
 - Ausencias y recordatorios: [Naoma](https://naoma.ai/blog/article-01-demo-no-shows) y
   [RevenueHero](https://revenuehero.io/blog/ways-to-reduce-no-show-rates-in-sales-calls)
+- Construir o aprovechar: [Paperclip en GitHub](https://github.com/paperclipai/paperclip),
+  [Star Office UI en GitHub](https://github.com/ringhyacinth/Star-Office-UI),
+  [licencia de LimeZu (itch.io)](https://itch.io/post/8040706) y
+  [lychee-action](https://gittrend.io/repo/lycheeverse/lychee-action)
 - CFO con IA: [GhostCFO](https://hunted.space/product/ghostcfo) y
   [cfo.ai Ari (SiliconANGLE)](https://siliconangle.com/?p=837986)
 - APIs de saldo y gasto: [OpenAI Usage/Costs API](https://community.openai.com/t/introducing-the-usage-api-track-api-usage-and-costs-programmatically/1043058),
