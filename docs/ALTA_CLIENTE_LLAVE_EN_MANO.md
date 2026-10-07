@@ -135,6 +135,23 @@ Borrar las citas de prueba al terminar.
 
 ---
 
+## 7 bis. Manual para que conecten su WhatsApp
+
+Para que el cliente conecte él mismo su número (Embedded Signup + Coexistence), se le manda el
+manual en PDF. Lleva capturas REALES del portal (con un negocio de ejemplo) e ilustraciones de las
+pantallas de Meta. Se genera por cliente, con su usuario del portal y, si toca, la página de prueba
+y facturación:
+
+```powershell
+.venv\Scripts\python.exe scripts\manual_whatsapp\generar.py --negocio "Nombre" --usuario cliente@dominio.es `
+    --salida "D:\Vantelia_clientes\Nombre\Manual - Conecta tu WhatsApp.pdf" `
+    --facturacion --factura 2026-00X --importe "400 €, IVA incluido" --cuota "1.290 € al año, IVA incluido"
+```
+
+Sin `--facturacion` sale sin esa página. Si cambia el portal, se rehacen las capturas con
+`scripts\manual_whatsapp\capturas.py`, que levanta un portal local temporal y no toca datos reales.
+El negocio tiene que estar en `WHATSAPP_ES_TENANTS` para ver el botón.
+
 ## 8. Trampas conocidas (todas costaron un rato)
 
 - **`empresa` como dict** → la central imprime el diccionario en el hero.
