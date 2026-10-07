@@ -163,3 +163,19 @@ def test_por_whatsapp_sin_saludo_un_hola_no_saca_la_bienvenida(api_module, clien
         assert enviados and bienvenida not in enviados
     finally:
         _saludo(client, portal_cookies, True)
+
+
+def test_con_frase_fija_no_se_le_empuja_a_negar_lo_que_no_sabe(api_module, client, portal_cookies):  # noqa: F811
+    """7-oct-2026, en produccion: "¿Tienen servicio de niñera?" -> "Cap Rocat no ofrece servicio
+    de niñera", sin saberlo. El bloque del catalogo le decia "no hay; dilo con amabilidad"."""
+    from backend import chat, rag
+
+    sin = chat._contexto_del_catalogo("demo", "¿Tienen servicio de niñera?")
+    assert rag.SIN_DATO not in sin
+    client.put("/auth/app/respuesta-si-no-sabe", cookies=portal_cookies, json={"es": ES, "en": EN})
+    try:
+        con = chat._contexto_del_catalogo("demo", "¿Tienen servicio de niñera?")
+        assert rag.SIN_DATO in con and "NO digas que el negocio no lo tiene" in con
+        assert "dilo con amabilidad" not in con
+    finally:
+        client.put("/auth/app/respuesta-si-no-sabe", cookies=portal_cookies, json={})

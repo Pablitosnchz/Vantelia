@@ -889,6 +889,19 @@ def _contexto_del_catalogo(cliente_id: str, message: str) -> str:
                 familias.append(categoria)
     except Exception:  # noqa: BLE001
         familias = []
+    try:
+        con_frase_fija = bool(rag.respuesta_si_no_sabe(clients._get_client_config(cliente_id)))
+    except Exception:  # noqa: BLE001
+        con_frase_fija = False
+    if con_frase_fija:
+        # El negocio ha elegido su frase para cuando no se sabe algo (Cap Rocat, 7-oct-2026): a
+        # "¿tienen servicio de ninera?" contestaba "Cap Rocat no ofrece servicio de ninera" sin
+        # saberlo, empujado por el "dilo con amabilidad" de abajo. No estar en el catalogo no es
+        # saber que no lo hacen.
+        return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio con esas palabras en el catalogo. Si "
+                "tampoco esta en tu informacion, NO digas que el negocio no lo tiene u ofrece (no lo sabes) "
+                "ni des telefonos para que pregunten: responde solo " + rag.SIN_DATO + ". Si lo que ha escrito "
+                "es un saludo o una muletilla, saluda y preguntale en que puedes ayudarle.")
     if familias:
         return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio con esas palabras. "
                 "Lo que SI ofrece el negocio, por familias: %s. Si preguntaba por algo "
