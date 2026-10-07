@@ -831,8 +831,12 @@ def _apuntar_toque(lead_id: str, clave: str, estado: str, momento: datetime, men
 
 
 def _enviar_correo(lead, hecho: Dict[str, str], clave: str, momento: datetime, *, esperar_turno: bool = True,
-                   ics: Optional[bytes] = None) -> str:
-    """Manda el correo en su hilo. Devuelve el Message-ID. `NoEnviado` = seguro que no salio."""
+                   ics: Optional[bytes] = None, comprobar=None) -> str:
+    """Manda el correo en su hilo. Devuelve el Message-ID. `NoEnviado` = seguro que no salio.
+
+    `comprobar()` se vuelve a mirar DESPUES de esperar el turno global (puede ser minutos): si
+    entretanto el lead ha dicho que no, ha reservado o Pablo le ha parado, devuelve el motivo y
+    no se envia (revision de Astra a 2246e82)."""
     from backend import outreach
 
     if seguimiento_demo._correo_en_pausa():
@@ -847,6 +851,11 @@ def _enviar_correo(lead, hecho: Dict[str, str], clave: str, momento: datetime, *
         raise NoEnviado("no se pudo preparar: %s" % exc) from exc
     if esperar_turno:
         outreach._outreach_wait_send_slot()
+        if seguimiento_demo._correo_en_pausa():
+            raise NoEnviado("el buzon de captacion entro en pausa mientras esperaba")
+    motivo = comprobar() if comprobar else ""
+    if motivo:
+        raise NoEnviado(motivo)
     try:
         outreach._outreach_send_email_object(mensaje)
     except (smtplib.SMTPConnectError, smtplib.SMTPAuthenticationError, smtplib.SMTPHeloError,
@@ -870,15 +879,34 @@ def _enviar_correo(lead, hecho: Dict[str, str], clave: str, momento: datetime, *
     return mensaje_id
 
 
+def _actualizar_si(lead_id: str, esperado: str, ahora: datetime, **campos: Any) -> bool:
+    """Como `_actualizar`, solo si el lead sigue en el estado `esperado`: lo que hizo el lead (o
+    Pablo) mientras tanto no se pisa."""
+    campos["actualizado"] = _iso(ahora)
+    with _conexion() as conn:
+        hecho = conn.execute("UPDATE setter_leads SET %s WHERE id=? AND estado=?" % ", ".join("%s=?" % c for c in campos),
+                             list(campos.values()) + [lead_id, esperado]).rowcount
+        conn.commit()
+    return hecho == 1
+
+
 def ofrecer(lead_id: str, plantilla: str, *, clave: str = "", ahora: Optional[datetime] = None,
             extra: str = "", preferencia: str = "", cuando_antes: Optional[datetime] = None,
-            esperar_turno: bool = True) -> Dict[str, Any]:
+            esperar_turno: bool = True, automatico: bool = True,
+            preferida: Optional[datetime] = None) -> Dict[str, Any]:
     """Escribe al lead con dos horas (o, en el ultimo, solo con el enlace). Avanza la cadencia
-    si es un paso. {"enviado": bool, "motivo": str, "horas": [...]}"""
+    si es un paso. {"enviado": bool, "motivo": str, "horas": [...]}
+
+    `automatico`: lo decide Marta sola (cadencia, respuestas): con el interruptor apagado no sale.
+    Lo que aprueba o pide Pablo desde la oficina va con `automatico=False`.
+    `preferida`: la hora que ha pedido el lead, la primera de las dos (pendiente de que la confirme)."""
     ahora = ahora or timeutils._utc_now()
     lead = _lead(lead_id)
     if lead is None or not lead["email"]:
         return {"enviado": False, "motivo": "sin_correo"}
+    if automatico and not esta_encendida():
+        return {"enviado": False, "motivo": "apagada"}
+    estado_inicial = lead["estado"]
     with _conexion() as conn:
         if _de_baja(conn, lead["email"]):
             _actualizar(lead_id, ahora, estado="descartado", motivo="de baja", proximo="")
@@ -890,6 +918,9 @@ def ofrecer(lead_id: str, plantilla: str, *, clave: str = "", ahora: Optional[da
         dia = lo_que_pide(preferencia, ahora)
         horas = elegir_dos([h for h in libres if not dia["fecha"] or _local(h).date().isoformat() == dia["fecha"]]
                            or libres, preferencia, ahora)
+    if preferida is not None and preferida in libres:
+        resto = [h for h in libres if h != preferida]
+        horas = [preferida] + elegir_dos(resto, preferencia, ahora)[:1]
     if plantilla == "ultimo":
         horas = []  # el ultimo solo lleva el enlace a la agenda
     elif not horas and plantilla != "respuesta":
@@ -898,8 +929,20 @@ def ofrecer(lead_id: str, plantilla: str, *, clave: str = "", ahora: Optional[da
     if not _reservar_toque(lead_id, clave, ahora):
         return {"enviado": False, "motivo": "ya_enviado"}
     hecho = contenido(lead, plantilla, horas, ahora, extra=extra, cuando_antes=cuando_antes)
+
+    def comprobar() -> str:
+        actual = _lead(lead_id)
+        if actual is None or actual["estado"] != estado_inicial:
+            return "el lead ha cambiado (%s)" % (actual["estado"] if actual is not None else "borrado")
+        with _conexion() as conn:
+            if _de_baja(conn, actual["email"]):
+                return "de baja"
+        if automatico and not esta_encendida():
+            return "Marta se ha apagado"
+        return ""
+
     try:
-        mensaje_id = _enviar_correo(lead, hecho, clave, ahora, esperar_turno=esperar_turno)
+        mensaje_id = _enviar_correo(lead, hecho, clave, ahora, esperar_turno=esperar_turno, comprobar=comprobar)
     except NoEnviado as exc:
         _soltar_toque(lead_id, clave)
         settings.logger.warning("[setter] no salio %s a %s: %s", clave, lead_id, exc)
@@ -928,7 +971,7 @@ def ofrecer(lead_id: str, plantilla: str, *, clave: str = "", ahora: Optional[da
         # Un correo fuera de la cadencia (propuesta, mover, respuesta de Pablo): el siguiente
         # recordatorio, a los 3 laborables.
         campos["proximo"] = _iso(seguimiento_demo._a_su_hora(seguimiento_demo._laborable(_local(ahora).date(), 3)))
-    _actualizar(lead_id, ahora, **campos)
+    _actualizar_si(lead_id, estado_inicial, ahora, **campos)
     _anotar_oportunidad(lead_id, "Marta le ofreció: " + ", ".join(dia_y_hora(h) for h in horas) if horas
                         else "Marta le mandó el enlace de la agenda", ahora)
     return {"enviado": True, "motivo": "", "horas": [_iso(h) for h in horas], "message_id": mensaje_id}
@@ -959,6 +1002,10 @@ async def reservar(lead_id: str, inicio: datetime, *, telefono: str = "", por: s
     if inicio not in libres:
         return {"ok": False, "motivo": "ocupado", "alternativas": [_iso(h) for h in elegir_dos(huecos(ahora))]}
     telefono = captacion_voz.telefono_e164(telefono) or lead["telefono"] or ""
+    if not telefono:
+        # "Te llamo" sin numero al que llamar no es una cita (revision de Astra a 2246e82): se le
+        # manda a la pagina, que lo pide.
+        return {"ok": False, "motivo": "sin_telefono"}
     local = _local(inicio)
     try:
         fila = await booking._create_booking_core(
@@ -1164,6 +1211,8 @@ def al_responder(respuesta: Dict[str, Any]) -> bool:
         lead = _por_email(conn, email)
     if lead is None or lead["estado"] not in ESTADOS_VIVOS:
         return False
+    if not esta_encendida():
+        return False  # apagada no actua sola: a Pablo le llega el aviso de siempre
     texto = seguimiento_demo._sin_cita(str(respuesta.get("body_excerpt") or ""))[:1500]
     asunto = str(respuesta.get("subject") or "")
     ahora = timeutils._utc_now()
@@ -1189,15 +1238,47 @@ def al_responder(respuesta: Dict[str, Any]) -> bool:
     return True
 
 
+# "No puedo", "me viene mal", "ya tengo algo": nombrar una hora no es aceptarla (revision de
+# Astra a 2246e82; docs/NORMAS_AGENTE_IA.md: ofrecer, aceptar y ejecutar son hechos distintos).
+_NEGACION = re.compile(
+    r"\bno\s+(?:puedo|podr|podemos|me\s+(?:va|viene|cuadra|encaja|es\s+posible)|nos\s+(?:va|viene)|estar|"
+    r"voy\s+a\s+poder|llego|ser[aá]\s+posible)|\bimposible\b|\b(?:me|nos)\s+viene\s+mal\b|\bmejor\s+no\b|"
+    r"\bocupad|\bya\s+tengo\b|\btengo\s+(?:otra|una)\s+(?:cita|reuni|cosa)|\bcomplicad",
+    re.IGNORECASE)
+# Lo que convierte "el jueves a las 11" en un si a SU hora (si no, se le propone y la confirma).
+_ACEPTA = re.compile(
+    r"\b(?:me|nos)\s+(?:va|viene)\s+(?:bien|genial|perfecto)|\bperfecto\b|\bvale\b|\bde\s+acuerdo\b|\bgenial\b|"
+    r"\bok(?:ey)?\b|\bs[ií]\b|\bconfirm|\breserv|\bap[uú]nt|\bll[aá]m(?:a|e|ad)me\b|\bme\s+encaja\b|"
+    r"\bestupendo\b",
+    re.IGNORECASE)
+
+
 def _agendar_por_texto(lead, texto: str, ahora: datetime) -> bool:
-    """"el jueves a las 11" -> reserva; "el jueves por la tarde" -> le propone dos horas de esa
-    franja; "la de las 10:30" -> una de las que se le ofrecieron. El modelo no interviene: lo
-    que no se entiende va a Pablo."""
+    """Lo que dice con sus palabras. Reserva SOLO si acepta: nombra una de las horas que se le
+    ofrecieron, o dice su hora con un si ("el jueves a las 11 me va bien"). Una hora suya sin
+    un si ("¿y el jueves a las 11?") se le propone para que la confirme; "el viernes por la
+    tarde", dos horas de esa tarde. Un "no puedo" o lo que no se entiende va a Pablo. Sin
+    telefono no se reserva: la propuesta lleva a la pagina, que lo pide. El modelo no
+    interviene."""
+    if _NEGACION.search(texto):
+        return False
     pide = lo_que_pide(texto, ahora)
+    acepta = bool(_ACEPTA.search(texto))
     try:
         ofrecidas = [d for d in (_dt(x) for x in json.loads(lead["ofrecidos"] or "[]")) if d]
     except ValueError:
         ofrecidas = []
+
+    def proponer(preferida: Optional[datetime] = None) -> bool:
+        resultado = ofrecer(lead["id"], "propuesta", clave="propuesta_%s" % secrets.token_hex(3), ahora=ahora,
+                            preferencia=texto, preferida=preferida)
+        return bool(resultado.get("enviado"))
+
+    def reservar_o_proponer(elegida: datetime) -> bool:
+        if lead["telefono"] and reservar_ya(lead["id"], elegida, por="respuesta").get("ok"):
+            return True
+        return proponer(elegida if not lead["telefono"] else None)
+
     if pide["fecha"]:
         try:
             dia = date.fromisoformat(pide["fecha"])
@@ -1205,20 +1286,14 @@ def _agendar_por_texto(lead, texto: str, ahora: datetime) -> bool:
             return False
         del_dia = [h for h in huecos(ahora, solo_dia=dia) if not pide["franja"] or _franja(h) == pide["franja"]]
         elegida = _hora_dicha(texto, del_dia)
-        if elegida is not None:
-            hecho = reservar_ya(lead["id"], elegida, por="respuesta")
-            if hecho.get("ok"):
-                return True
-        resultado = ofrecer(lead["id"], "propuesta", clave="propuesta_%s" % secrets.token_hex(3), ahora=ahora,
-                            preferencia=texto)
-        return bool(resultado.get("enviado"))
+        if elegida is not None and (acepta or elegida in ofrecidas):
+            return reservar_o_proponer(elegida)
+        return proponer(elegida)
     elegida = _hora_dicha(texto, ofrecidas)
     if elegida is not None:
-        return bool(reservar_ya(lead["id"], elegida, por="respuesta").get("ok"))
+        return reservar_o_proponer(elegida)
     if pide["franja"]:
-        resultado = ofrecer(lead["id"], "propuesta", clave="propuesta_%s" % secrets.token_hex(3), ahora=ahora,
-                            preferencia=texto)
-        return bool(resultado.get("enviado"))
+        return proponer()
     return False
 
 
@@ -1271,9 +1346,9 @@ def aprobar(lead_id: str, tipo: str, texto: str = "") -> Dict[str, Any]:
         if lead["estado"] != "revision":
             return {"enviado": False, "motivo": "estado_" + lead["estado"]}
         # Un envio suelto aprobado a mano: sin esperar el espaciado (Pablo esta delante).
-        return ofrecer(lead_id, "huecos", clave="paso1", esperar_turno=False)
+        return ofrecer(lead_id, "huecos", clave="paso1", esperar_turno=False, automatico=False)
     return ofrecer(lead_id, "respuesta", clave="respuesta_%s" % secrets.token_hex(3), extra=texto,
-                   esperar_turno=False)
+                   esperar_turno=False, automatico=False)
 
 
 def rechazar(lead_id: str, tipo: str) -> None:
@@ -1324,7 +1399,7 @@ async def mover(lead_id: str, *, nueva: Optional[datetime] = None, request=None)
         _avisar_a_pablo(_lead(lead_id), "🔁 Llamada anulada: %s" % (lead["negocio"] or lead["email"]),
                         "Le escribo para que elija otra hora.", inicio=antes, metodo="CANCEL")
     resultado = ofrecer(lead_id, "mover", clave="mover_%s" % secrets.token_hex(3), cuando_antes=antes,
-                        esperar_turno=False)
+                        esperar_turno=False, automatico=False)
     return {"ok": True, "enviado": resultado.get("enviado"), "motivo": resultado.get("motivo")}
 
 
@@ -1347,7 +1422,8 @@ def marcar_resultado(lead_id: str, resultado: str) -> Dict[str, Any]:
             _actualizar(lead_id, ahora, estado="cerrado", resultado="no_vino", motivo="No vino dos veces", proximo="")
             return {"ok": True, "enviado": False}
         _actualizar(lead_id, ahora, estado="ofrecido", rescate=1, booking_id="", cita_inicio="", motivo="No vino")
-        envio = ofrecer(lead_id, "no_vino", clave="no_vino", cuando_antes=antes, esperar_turno=False)
+        envio = ofrecer(lead_id, "no_vino", clave="no_vino", cuando_antes=antes, esperar_turno=False,
+                        automatico=False)
         return {"ok": True, "enviado": envio.get("enviado")}
     if resultado not in RESULTADOS:
         return {"ok": False, "motivo": "resultado_desconocido"}

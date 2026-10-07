@@ -442,3 +442,75 @@ def test_a_un_cliente_que_escribe_por_la_web_no_le_vende(st, envios, client):  #
                                           "mensaje": "No me llegan los recordatorios"}).status_code == 200
     st.ciclo(MIERCOLES_1000)
     assert _lead(st, "cliente@salon.es") is None and not _correos_a(envios, "cliente@salon.es")
+
+
+# --- Lo que cazo Astra en 2246e82 ------------------------------------------------------------------
+
+def test_no_puedo_a_esa_hora_no_reserva(st, envios):  # noqa: F811
+    """"El jueves a las 11:00 no puedo" nombra una hora y NO la acepta: va a Pablo."""
+    from backend import oficina
+
+    _primer_enlace(st, envios)
+    assert st.al_responder(_respuesta("El jueves a las 11:00 no puedo, lo siento"))
+    assert not _citas()
+    assert [p["tipo"] for p in oficina.bandeja()] == ["respuesta"]
+
+
+def test_su_hora_sin_un_si_se_le_propone_para_que_la_confirme(st, envios):  # noqa: F811
+    _primer_enlace(st, envios)
+    assert st.al_responder(_respuesta("¿Y el jueves a las 11?"))
+    assert not _citas(), "reservo una hora que solo pregunto"
+    horas = [h for _, h in _enlaces_de_hora(_cuerpo(_correos_a(envios, EMAIL)[-1]))]
+    assert horas[0] == "2026-10-08T11:00" and len(horas) == 2
+
+
+def test_una_de_las_ofrecidas_si_reserva(st, envios):  # noqa: F811
+    _primer_enlace(st, envios)
+    assert st.al_responder(_respuesta("La de las 12:00"))
+    assert [(c["booking_date"], c["booking_time"]) for c in _citas()] == [("2026-10-07", "12:00")]
+
+
+def test_apagada_no_contesta_sola(st, envios):  # noqa: F811
+    _primer_enlace(st, envios)
+    antes = len(_correos_a(envios, EMAIL))
+    st.guardar_config(encendida=False)
+    assert st.al_responder(_respuesta("Perfecto, el jueves a las 11 me va bien")) is False
+    assert not _citas() and len(_correos_a(envios, EMAIL)) == antes
+    st.reloj["ahora"] = _madrid(13, 11)
+    st.ciclo(st.reloj["ahora"])
+    assert len(_correos_a(envios, EMAIL)) == antes, "con Marta apagada salio un recordatorio"
+
+
+def test_lo_que_pasa_mientras_espera_turno_no_se_pisa(st, envios, monkeypatch):  # noqa: F811
+    """Mientras espera el turno global de envio, el lead dice que no: el correo no sale y su
+    "descartado" no se convierte otra vez en "ofrecido"."""
+    from backend import outreach
+
+    _primer_enlace(st, envios)
+    lead_id = _lead(st)["id"]
+
+    def esperar(*a, **k):
+        st._actualizar(lead_id, estado="descartado", motivo="dijo que no mientras", proximo="")
+        return 0.0
+
+    monkeypatch.setattr(outreach, "_outreach_wait_send_slot", esperar)
+    st.reloj["ahora"] = _madrid(12 + 1, 11)
+    st.ciclo(st.reloj["ahora"])
+    assert len(_correos_a(envios, EMAIL)) == 1
+    assert _lead(st)["estado"] == "descartado"
+
+
+def test_sin_telefono_no_se_confirma_una_llamada(st, envios, client):  # noqa: F811
+    assert client.post("/consulta", json={"nombre": "Sin Número", "email": "sintel@fisio.es",
+                                          "mensaje": "Info"}).status_code == 200
+    st.ciclo(MIERCOLES_1000)
+    assert st.al_responder(_respuesta("Perfecto, el jueves a las 11 me va bien", email_="sintel@fisio.es"))
+    assert not _citas(), "confirmo una llamada sin numero al que llamar"
+    ultimo = _cuerpo(_correos_a(envios, "sintel@fisio.es")[-1])
+    token, hora = _enlaces_de_hora(ultimo)[0]
+    assert hora == "2026-10-08T11:00"
+    assert "¿A qué número te llamo?" in client.get("/reunion/%s?h=%s" % (token, hora)).text
+    import asyncio
+
+    assert asyncio.run(st.reservar(token.split(".")[0] if "." in token else token,
+                                   st.hueco_de_url(hora)))["motivo"] == "sin_telefono"

@@ -651,8 +651,9 @@ def escaparate(ahora: Optional[datetime] = None) -> Dict[str, Any]:
     completo = estado(ahora)
     agentes = []
     for a in completo["agentes"]:
-        agentes.append({k: a[k] for k in ("id", "nombre", "rol", "depto", "icono", "estado")}
-                       | {"bocadillo": _sin_datos(a.get("bocadillo", ""))})
+        publico = {k: a[k] for k in ("id", "nombre", "rol", "depto", "icono", "estado")}
+        publico["bocadillo"] = _sin_datos(a.get("bocadillo", ""))  # sin "|": AGENTS.md pide Python 3.8
+        agentes.append(publico)
     return {"ahora": completo["ahora"], "agentes": agentes,
             "contadores": {"reuniones": len(completo["reuniones"]), "por_aprobar": len(completo["bandeja"])}}
 
