@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Oficina · Vantelia</title>
+<style>
+  :root {
+    --suelo: #eef0f5;
+    --papel: #ffffff;
+    --tinta: #0b132b;
+    --tinta-2: #475069;
+    --tinta-3: #7c849b;
+    --linea: #dfe3ec;
+    --acento: #087ea4;
+    --acento-fondo: #dff3fa;
+    --verde: #147a52;    --verde-fondo: #e2f2ea;
+    --amarillo: #8f5c08; --amarillo-fondo: #faefd7;
+    --rojo: #b3342b;     --rojo-fondo: #fae3e0;
+    --gris: #5f6780;     --gris-fondo: #e8eaf0;
+    --sala: #f7f8fb;
+    --cafe: #f6efe6;
+    --mesa: #fff7e0;
+    --sobre-acento: #ffffff;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --suelo: #0b132b; --papel: #111a35; --tinta: #edf0f7; --tinta-2: #b0b8cc; --tinta-3: #7d879f;
+      --linea: #222d4d; --acento: #52c3e3; --acento-fondo: #10314a;
+      --verde: #4cd197; --verde-fondo: #0f2f29; --amarillo: #f2b84b; --amarillo-fondo: #33290f;
+      --rojo: #ff7b6f; --rojo-fondo: #3b1c1e; --gris: #9aa2b8; --gris-fondo: #19223f;
+      --sala: #0f1730; --cafe: #2a2117; --mesa: #2b2612; --sobre-acento: #04101c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --suelo: #0b132b; --papel: #111a35; --tinta: #edf0f7; --tinta-2: #b0b8cc; --tinta-3: #7d879f;
+    --linea: #222d4d; --acento: #52c3e3; --acento-fondo: #10314a;
+    --verde: #4cd197; --verde-fondo: #0f2f29; --amarillo: #f2b84b; --amarillo-fondo: #33290f;
+    --rojo: #ff7b6f; --rojo-fondo: #3b1c1e; --gris: #9aa2b8; --gris-fondo: #19223f;
+    --sala: #0f1730; --cafe: #2a2117; --mesa: #2b2612; --sobre-acento: #04101c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--suelo); color: var(--tinta); font: 15px/1.5 var(--sans);
+         -webkit-font-smoothing: antialiased; }
+  .hoja { max-width: 1180px; margin: 0 auto; padding: 22px 16px 48px; display: grid; gap: 20px; }
+  .cabecera { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .marca { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-3); }
+  .titulo { margin: 2px 0 0; font-size: 26px; line-height: 1.15; }
+  .sub { margin: 4px 0 0; color: var(--tinta-2); }
+  .acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button, .boton { font: inherit; font-size: 13px; color: var(--tinta); background: var(--papel);
+           border: 1px solid var(--linea); border-radius: 8px; padding: 6px 12px; cursor: pointer; text-decoration: none; }
+  button:hover { border-color: var(--tinta-3); }
+  button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid var(--acento); outline-offset: 2px; }
+  button.principal, .boton.principal { background: var(--acento); color: var(--sobre-acento); border-color: transparent; }
+  button.peligro { color: var(--rojo); }
+  button[disabled] { opacity: .5; cursor: default; }
+  .interruptor { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-2); }
+  .interruptor input { width: 34px; height: 18px; accent-color: var(--acento); }
+  .gasto { font-size: 13px; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+
+  /* --- El plano ------------------------------------------------------------------- */
+  .plano { display: grid; gap: 12px; grid-template-columns: 2.1fr 1fr; grid-template-areas:
+           "comercial pablo" "cafe cafe" "mantenimiento finanzas" "ingenieria clientes"; }
+  .sala { background: var(--sala); border: 1px solid var(--linea); border-radius: 16px; padding: 12px 14px 14px;
+          min-height: 150px; position: relative; }
+  .sala h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-3); }
+  .sala.comercial { grid-area: comercial; }
+  .sala.cafeteria { grid-area: cafe; background: var(--cafe); }
+  .sala.pablo { grid-area: pablo; background: var(--mesa); }
+  .sala.mantenimiento { grid-area: mantenimiento; }
+  .sala.finanzas { grid-area: finanzas; }
+  .sala.ingenieria { grid-area: ingenieria; }
+  .sala.clientes { grid-area: clientes; }
+  .mesas { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; min-height: 96px; }
+  .mesas:empty::after { content: "Mesas vacías: están en el café o fuera de horario."; color: var(--tinta-3);
+                        font-size: 13px; align-self: center; }
+  .sala.cafeteria .mesas:empty::after { content: "Nadie en el café: todos tienen trabajo."; }
+  .sala.pablo .mesas:empty::after { content: "Nadie esperándote."; }
+  .pared { margin-top: 12px; border-top: 1px dashed var(--linea); padding-top: 10px; }
+  .pared h3 { margin: 0 0 6px; font-size: 12px; color: var(--tinta-3); font-weight: 600; }
+  .calendario { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .dia-cal { background: var(--papel); border: 1px solid var(--linea); border-radius: 8px; padding: 6px; min-height: 58px;
+             font-size: 12px; }
+  .dia-cal b { display: block; font-size: 11px; color: var(--tinta-3); text-transform: capitalize; }
+  .cita-cal { display: block; margin-top: 3px; background: var(--acento-fondo); color: var(--tinta); border-radius: 5px;
+              padding: 2px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vacia { color: var(--tinta-3); font-size: 13px; margin: 6px 0 0; }
+
+  .persona { width: 128px; display: grid; justify-items: center; gap: 4px; cursor: pointer; background: none; border: 0;
+             padding: 4px; color: inherit; font: inherit; text-align: center; }
+  .avatar { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 25px;
+            background: var(--papel); border: 2px solid var(--linea); position: relative; transition: opacity .3s; }
+  .insignia { position: absolute; right: -6px; bottom: -4px; font-size: 15px; background: var(--papel);
+              border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--linea); }
+  .nombre { font-size: 13px; font-weight: 650; line-height: 1.2; }
+  .rol { font-size: 11px; color: var(--tinta-3); line-height: 1.2; }
+  .bocadillo { font-size: 11.5px; line-height: 1.3; background: var(--papel); border: 1px solid var(--linea);
+               border-radius: 10px; padding: 4px 7px; color: var(--tinta-2); max-width: 128px; overflow-wrap: anywhere; }
+  .persona.trabajando .avatar { border-color: var(--verde); animation: latido 1.6s ease-in-out infinite; }
+  .persona.esperando .avatar { border-color: var(--amarillo); }
+  .persona.atascado .avatar { border-color: var(--rojo); }
+  .persona.atascado .bocadillo { color: var(--rojo); border-color: var(--rojo); }
+  .persona.fuera .avatar, .persona.sin_presupuesto .avatar { opacity: .45; }
+  .persona.fuera .bocadillo, .persona.sin_presupuesto .bocadillo { opacity: .7; }
+  @keyframes latido { 0%, 100% { box-shadow: 0 0 0 0 rgba(20, 122, 82, .35); } 50% { box-shadow: 0 0 0 8px rgba(20, 122, 82, 0); } }
+  .tecleo::after { content: "…"; display: inline-block; animation: tecleo 1.2s steps(4, end) infinite; overflow: hidden;
+                   width: 0; vertical-align: bottom; }
+  @keyframes tecleo { to { width: 1.1em; } }
+  @media (prefers-reduced-motion: reduce) {
+    .persona.trabajando .avatar, .tecleo::after { animation: none; }
+    .persona { transition: none !important; }
+  }
+
+  /* --- Paneles ---------------------------------------------------------------------- */
+  .paneles { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  .panel { background: var(--papel); border: 1px solid var(--linea); border-radius: 14px; padding: 16px; min-width: 0; }
+  .panel h2 { margin: 0 0 4px; font-size: 17px; }
+  .panel .nota { margin: 0 0 12px; color: var(--tinta-3); font-size: 13px; }
+  .ancho { grid-column: 1 / -1; }
+  .lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .tarjeta { border: 1px solid var(--linea); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+  .tarjeta-cab { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between; }
+  .tarjeta-cab strong { font-size: 14px; }
+  .mini { font-size: 12px; color: var(--tinta-3); }
+  .cita { margin: 0; font-size: 13px; background: var(--sala); border-left: 3px solid var(--acento); padding: 6px 10px;
+          border-radius: 4px; white-space: pre-wrap; }
+  pre.previa { margin: 0; font: 12.5px/1.45 var(--sans); white-space: pre-wrap; background: var(--sala); padding: 8px 10px;
+               border-radius: 8px; max-height: 260px; overflow: auto; }
+  textarea { font: inherit; font-size: 13px; width: 100%; min-height: 110px; padding: 8px 10px; border-radius: 8px;
+             border: 1px solid var(--linea); background: var(--papel); color: var(--tinta); resize: vertical; }
+  select, input[type="number"] { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--linea);
+           background: var(--papel); color: var(--tinta); max-width: 100%; }
+  .botones { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .etiqueta { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 8px; background: var(--gris-fondo);
+              color: var(--gris); white-space: nowrap; }
+  .etiqueta.ok { background: var(--verde-fondo); color: var(--verde); }
+  .etiqueta.aviso { background: var(--amarillo-fondo); color: var(--amarillo); }
+  .etiqueta.mal { background: var(--rojo-fondo); color: var(--rojo); }
+  .etiqueta.info { background: var(--acento-fondo); color: var(--acento); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .kpi { background: var(--sala); border-radius: 10px; padding: 8px 10px; }
+  .kpi b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .kpi span { font-size: 12px; color: var(--tinta-3); }
+  .tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tabla th { text-align: left; font-weight: 600; color: var(--tinta-3); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--linea); }
+  .tabla td { padding: 6px; border-bottom: 1px solid var(--linea); vertical-align: top; overflow-wrap: anywhere; }
+  .desliza { overflow-x: auto; }
+  .proveedores { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .proveedor { border: 1px solid var(--linea); border-radius: 10px; padding: 8px 10px; }
+  .proveedor b { display: block; font-size: 13px; }
+  .proveedor .valor { font-size: 18px; font-variant-numeric: tabular-nums; }
+  .estado-red { font-size: 13px; color: var(--tinta-3); }
+  .error-red { color: var(--rojo); }
+
+  dialog { border: 1px solid var(--linea); border-radius: 14px; background: var(--papel); color: var(--tinta);
+           padding: 18px; width: min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(5, 10, 25, .45); }
+  dialog h3 { margin: 0 0 4px; }
+  dl.pares { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 0; font-size: 13px; }
+  dl.pares dt { color: var(--tinta-3); }
+  dl.pares dd { margin: 0; overflow-wrap: anywhere; }
+
+  /* --- Escaparate (para grabar): solo la sala, sin datos ----------------------------- */
+  body.escaparate .paneles, body.escaparate .solo-pablo { display: none; }
+  body.escaparate .hoja { max-width: 1400px; }
+  body.escaparate .titulo { font-size: 34px; }
+  .contadores { display: none; gap: 10px; flex-wrap: wrap; }
+  body.escaparate .contadores { display: flex; }
+  .contador { background: var(--papel); border: 1px solid var(--linea); border-radius: 12px; padding: 8px 14px; font-size: 14px; }
+  .contador b { font-size: 22px; margin-right: 6px; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 860px) {
+    .plano { grid-template-columns: 1fr; grid-template-areas: "comercial" "pablo" "cafe" "mantenimiento" "finanzas"
+             "ingenieria" "clientes"; }
+    .paneles { grid-template-columns: 1fr; }
+    .calendario { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .persona { width: 104px; }
+    .bocadillo { max-width: 104px; }
+  }
+</style>
+</head>
+<body>
+<div class="hoja">
+  <header class="cabecera">
+    <div>
+      <p class="marca">Vantelia</p>
+      <h1 class="titulo">La oficina</h1>
+      <p class="sub" id="resumen">Cargando…</p>
+    </div>
+    <div class="acciones">
+      <span class="gasto solo-pablo" id="gasto"></span>
+      <label class="interruptor solo-pablo"><input type="checkbox" id="martaOn"> Marta encendida</label>
+      <button type="button" id="escaparate">Modo escaparate</button>
+      <span class="estado-red" id="red"></span>
+    </div>
+  </header>
+
+  <div class="contadores" id="contadores"></div>
+
+  <section class="plano" aria-label="Plano de la oficina">
+    <div class="sala comercial"><h2>Comercial</h2><div class="mesas" data-zona="comercial"></div>
+      <div class="pared solo-pablo"><h3>Calendario de Pablo (próximos días)</h3><div class="calendario" id="calendario"></div></div>
+    </div>
+    <div class="sala cafeteria"><h2>☕ Cafetería (sin trabajo, sin gastar)</h2><div class="mesas" data-zona="cafe"></div></div>
+    <div class="sala pablo"><h2>📋 La mesa de Pablo</h2><div class="mesas" data-zona="esperando"></div>
+      <p class="vacia solo-pablo" id="mesaPablo"></p></div>
+    <div class="sala mantenimiento"><h2>Mantenimiento</h2><div class="mesas" data-zona="mantenimiento"></div></div>
+    <div class="sala finanzas"><h2>Finanzas</h2><div class="mesas" data-zona="finanzas"></div></div>
+    <div class="sala ingenieria"><h2>Ingeniería</h2><div class="mesas" data-zona="ingenieria"></div></div>
+    <div class="sala clientes"><h2>Clientes</h2><div class="mesas" data-zona="clientes"></div></div>
+  </section>
+
+  <section class="paneles">
+    <article class="panel">
+      <h2>Tu bandeja</h2>
+      <p class="nota">Lo que un agente necesita que apruebes. Nada de esto ha salido todavía.</p>
+      <ul class="lista" id="bandeja"></ul>
+    </article>
+    <article class="panel">
+      <h2>Llamadas agendadas</h2>
+      <p class="nota">Las agenda Marta en tu agenda. Muévelas o marca cómo fue.</p>
+      <ul class="lista" id="reuniones"></ul>
+    </article>
+    <article class="panel ancho">
+      <h2>Marta, la setter</h2>
+      <p class="nota">De «me interesa» a una llamada contigo: dos horas reales por correo, como mucho tres correos.</p>
+      <div class="kpis" id="kpis"></div>
+      <div class="botones" style="margin-bottom:10px">
+        <button type="button" id="importar">Traer los cualificados de antes (a la bandeja)</button>
+      </div>
+      <div class="desliza"><table class="tabla"><thead><tr><th>Negocio</th><th>Estado</th><th>Ofrecidas</th>
+        <th>Siguiente</th><th></th></tr></thead><tbody id="leads"></tbody></table></div>
+    </article>
+    <article class="panel ancho">
+      <h2>Tomás: saldos</h2>
+      <p class="nota">Los mira cada 6 horas sin IA y te avisa si algo se acaba en menos de 7 días. Nunca recarga nada.</p>
+      <div class="proveedores" id="proveedores"></div>
+      <div class="botones" style="margin-top:10px">
+        <label class="mini">Recargué OpenAI (€) <input type="number" min="1" step="1" id="recarga" style="width:90px"></label>
+        <button type="button" id="apuntar">Apuntar</button>
+        <button type="button" id="mirar">Mirar saldos ahora</button>
+      </div>
+    </article>
+  </section>
+</div>
+
+<dialog id="ficha"><h3 id="fichaNombre"></h3><p class="mini" id="fichaRol"></p><p id="fichaBocadillo"></p>
+  <dl class="pares" id="fichaDatos"></dl><div class="botones" style="margin-top:14px"><button type="button" id="cerrarFicha">Cerrar</button></div></dialog>
+
+<dialog id="mover"><h3>Mover la llamada</h3><p class="mini" id="moverQuien"></p>
+  <label class="mini">A otra hora libre<br><select id="moverHora"></select></label>
+  <div class="botones" style="margin-top:14px">
+    <button type="button" class="principal" id="moverA">Moverla ahí</button>
+    <button type="button" id="moverQueElija">No puedo: que elija otra</button>
+    <button type="button" id="moverCancelar">Cerrar</button>
+  </div></dialog>
+
+<script>
+(function () {
+  'use strict';
+  var ZONAS = { comercial: 'comercial', mantenimiento: 'mantenimiento', finanzas: 'finanzas', ingenieria: 'ingenieria', clientes: 'clientes' };
+  var INSIGNIAS = { trabajando: '💻', cafe: '☕', esperando: '📋', fuera: '🌙', atascado: '⚠️', sin_presupuesto: '💸' };
+  var ESTADOS_LEAD = {
+    pendiente: ['Por escribir', 'info'], revision: ['Espera tu OK', 'aviso'], ofrecido: ['Esperando que elija', 'info'],
+    reservado: ['Agendada', 'ok'], celebrada: ['Marca el resultado', 'aviso'], sin_respuesta: ['Sin respuesta', ''],
+    descartado: ['Dijo que no', ''], parado: ['Parado', ''], cancelada: ['Canceló', 'mal'], cerrado: ['Cerrado', ''],
+    solo_telefono: ['Solo teléfono', 'aviso']
+  };
+  var escaparate = false;
+  var ultimo = null;
+  var personas = {};
+
+  function el(tag, clase, texto) {
+    var n = document.createElement(tag);
+    if (clase) n.className = clase;
+    if (texto !== undefined && texto !== null) n.textContent = texto;
+    return n;
+  }
+  function vaciar(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function fecha(iso, conHora) {
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    var o = { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' };
+    if (conHora !== false) { o.hour = '2-digit'; o.minute = '2-digit'; }
+    return d.toLocaleString('es-ES', o);
+  }
+  function api(metodo, ruta, cuerpo) {
+    return fetch(ruta, {
+      method: metodo, credentials: 'same-origin',
+      headers: cuerpo ? { 'Content-Type': 'application/json' } : {},
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined
+    }).then(function (r) {
+      if (r.status === 401 || r.status === 403) { location.href = '/acceso?next=/oficina'; throw new Error('sesion'); }
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.detail || ('Error ' + r.status)); return j; });
+    });
+  }
+  function etiqueta(texto, tono) { return el('span', 'etiqueta' + (tono ? ' ' + tono : ''), texto); }
+
+  // --- La sala: cada agente en su sitio; al cambiar de sitio "camina" (FLIP) ---------------
+  function zonaDe(a) {
+    if (a.estado === 'cafe') return 'cafe';
+    if (a.estado === 'esperando') return 'esperando';
+    return ZONAS[a.depto] || 'comercial';
+  }
+  function persona(a) {
+    var p = personas[a.id];
+    if (!p) {
+      p = el('button', 'persona');
+      p.type = 'button';
+      p.dataset.id = a.id;
+      var av = el('span', 'avatar');
+      av.appendChild(el('span', null, a.icono));
+      av.appendChild(el('span', 'insignia'));
+      p.appendChild(av);
+      p.appendChild(el('span', 'nombre', a.nombre));
+      p.appendChild(el('span', 'rol', a.rol));
+      p.appendChild(el('span', 'bocadillo'));
+      p.addEventListener('click', function () { abrirFicha(p.dataset.id); });
+      personas[a.id] = p;
+    }
+    p.className = 'persona ' + a.estado;
+    p.querySelector('.insignia').textContent = INSIGNIAS[a.estado] || '';
+    var b = p.querySelector('.bocadillo');
+    b.textContent = a.bocadillo || '';
+    b.classList.toggle('tecleo', a.estado === 'trabajando');
+    p.setAttribute('aria-label', a.nombre + ', ' + a.rol + ': ' + (a.bocadillo || a.estado));
+    return p;
+  }
+  function pintarSala(agentes) {
+    var antes = {};
+    Object.keys(personas).forEach(function (id) { antes[id] = personas[id].getBoundingClientRect(); });
+    agentes.forEach(function (a) {
+      var p = persona(a);
+      var destino = document.querySelector('[data-zona="' + zonaDe(a) + '"]');
+      if (p.parentNode !== destino) destino.appendChild(p);
+    });
+    var quieto = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (quieto) return;
+    agentes.forEach(function (a) {
+      var p = personas[a.id], r0 = antes[a.id];
+      if (!r0 || !r0.width) return;
+      var r1 = p.getBoundingClientRect();
+      var dx = r0.left - r1.left, dy = r0.top - r1.top;
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      p.style.transition = 'none';
+      p.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          p.style.transition = 'transform 1.1s ease-in-out';
+          p.style.transform = '';
+        });
+      });
+    });
+  }
+  function abrirFicha(id) {
+    if (!ultimo) return;
+    var a = (ultimo.agentes || []).filter(function (x) { return x.id === id; })[0];
+    if (!a) return;
+    document.getElementById('fichaNombre').textContent = a.icono + ' ' + a.nombre;
+    document.getElementById('fichaRol').textContent = a.rol;
+    document.getElementById('fichaBocadillo').textContent = a.bocadillo || '';
+    var dl = document.getElementById('fichaDatos');
+    vaciar(dl);
+    var datos = [['Estado', a.estado.replace('_', ' ')]];
+    if (a.gasto_mes !== null && a.gasto_mes !== undefined) datos.push(['Gasto de IA este mes', a.gasto_mes.toFixed(2) + ' €']);
+    Object.keys(a.kpis || {}).forEach(function (k) { datos.push([k.replace(/_/g, ' '), String(a.kpis[k])]); });
+    datos.forEach(function (d) { dl.appendChild(el('dt', null, d[0])); dl.appendChild(el('dd', null, d[1])); });
+    document.getElementById('ficha').showModal();
+  }
+  document.getElementById('cerrarFicha').addEventListener('click', function () { document.getElementById('ficha').close(); });
+
+  function pintarCalendario(reuniones) {
+    var cal = document.getElementById('calendario');
+    vaciar(cal);
+    var dias = [];
+    var d = new Date();
+    while (dias.length < 5) {
+      var dia = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+      var semana = new Date(dia + 'T12:00:00').getDay();
+      if (semana !== 0 && semana !== 6) dias.push(dia);
+      d = new Date(d.getTime() + 86400000);
+    }
+    dias.forEach(function (dia) {
+      var caja = el('div', 'dia-cal');
+      caja.appendChild(el('b', null, new Date(dia + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })));
+      reuniones.filter(function (r) {
+        return r.cita_inicio && new Date(r.cita_inicio).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }) === dia;
+      }).forEach(function (r) {
+        var hora = new Date(r.cita_inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+        caja.appendChild(el('span', 'cita-cal', hora + ' ' + r.negocio));
+      });
+      cal.appendChild(caja);
+    });
+  }
+
+  // --- Paneles ------------------------------------------------------------------------------
+  function pintarBandeja(items) {
+    var ul = document.getElementById('bandeja');
+    vaciar(ul);
+    document.getElementById('mesaPablo').textContent = items.length
+      ? (items.length === 1 ? 'Tienes 1 cosa por aprobar.' : 'Tienes ' + items.length + ' cosas por aprobar.')
+      : 'Nada por aprobar.';
+    if (!items.length) { ul.appendChild(el('li', 'vacia', 'Nada pendiente.')); return; }
+    items.forEach(function (it) {
+      var li = el('li', 'tarjeta');
+      var cab = el('div', 'tarjeta-cab');
+      cab.appendChild(el('strong', null, it.titulo));
+      cab.appendChild(el('span', 'mini', fecha(it.creado)));
+      li.appendChild(cab);
+      if (it.contexto) li.appendChild(el('p', 'cita', it.contexto));
+      var texto = null;
+      if (it.tipo === 'primer_correo' && it.vista_previa && it.vista_previa.texto) {
+        li.appendChild(el('span', 'mini', 'Para ' + (it.vista_previa.para || '') + ' · ' + (it.vista_previa.asunto || '')));
+        li.appendChild(el('pre', 'previa', it.vista_previa.texto));
+      } else if (it.tipo === 'respuesta') {
+        li.appendChild(el('span', 'mini', 'Borrador (edítalo si quieres; debajo irán dos horas para llamarle):'));
+        texto = el('textarea');
+        texto.value = it.borrador || '';
+        li.appendChild(texto);
+      }
+      var bt = el('div', 'botones');
+      var si = el('button', 'principal', it.tipo === 'primer_correo' ? 'Enviar' : 'Aprobar y enviar');
+      si.type = 'button';
+      var no = el('button', null, 'Rechazar');
+      no.type = 'button';
+      var aviso = el('span', 'mini');
+      si.addEventListener('click', function () {
+        si.disabled = no.disabled = true; aviso.textContent = 'Enviando…';
+        api('POST', '/admin/oficina/bandeja/' + encodeURIComponent(it.id), { accion: 'aprobar', texto: texto ? texto.value : '' })
+          .then(function (r) { aviso.textContent = r.ok ? 'Enviado.' : 'No ha salido: ' + (r.motivo || ''); refrescar(); })
+          .catch(function (e) { aviso.textContent = e.message; si.disabled = no.disabled = false; });
+      });
+      no.addEventListener('click', function () {
+        si.disabled = no.disabled = true;
+        api('POST', '/admin/oficina/bandeja/' + encodeURIComponent(it.id), { accion: 'rechazar' })
+          .then(refrescar).catch(function (e) { aviso.textContent = e.message; });
+      });
+      bt.appendChild(si); bt.appendChild(no); bt.appendChild(aviso);
+      li.appendChild(bt);
+      ul.appendChild(li);
+    });
+  }
+
+  function pintarReuniones(reuniones) {
+    var ul = document.getElementById('reuniones');
+    vaciar(ul);
+    if (!reuniones.length) { ul.appendChild(el('li', 'vacia', 'Ninguna llamada agendada todavía.')); return; }
+    reuniones.forEach(function (r) {
+      var li = el('li', 'tarjeta');
+      var cab = el('div', 'tarjeta-cab');
+      cab.appendChild(el('strong', null, r.negocio));
+      cab.appendChild(etiqueta(fecha(r.cita_inicio), r.estado === 'celebrada' ? 'aviso' : 'ok'));
+      li.appendChild(cab);
+      var datos = el('div', 'mini');
+      datos.textContent = [r.nombre, r.telefono, r.email].filter(Boolean).join(' · ');
+      li.appendChild(datos);
+      var bt = el('div', 'botones');
+      if (r.telefono) {
+        var llamar = el('a', 'boton principal', 'Llamar');
+        llamar.href = 'tel:' + r.telefono;
+        bt.appendChild(llamar);
+      }
+      if (r.estado === 'reservado') {
+        var mover = el('button', null, 'Mover');
+        mover.type = 'button';
+        mover.addEventListener('click', function () { abrirMover(r); });
+        bt.appendChild(mover);
+      }
+      [['ganado', 'Ganado'], ['seguir', 'Seguir'], ['perdido', 'Perdido'], ['no_vino', 'No vino']].forEach(function (op) {
+        var b = el('button', op[0] === 'perdido' ? 'peligro' : null, op[1]);
+        b.type = 'button';
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          api('POST', '/admin/oficina/reuniones/' + encodeURIComponent(r.id) + '/resultado', { resultado: op[0] })
+            .then(refrescar).catch(function (e) { alert(e.message); b.disabled = false; });
+        });
+        bt.appendChild(b);
+      });
+      li.appendChild(bt);
+      ul.appendChild(li);
+    });
+  }
+
+  var moviendo = null;
+  function abrirMover(r) {
+    moviendo = r;
+    document.getElementById('moverQuien').textContent = r.negocio + ' · ' + fecha(r.cita_inicio);
+    var sel = document.getElementById('moverHora');
+    vaciar(sel);
+    sel.appendChild(el('option', null, 'Cargando huecos…'));
+    document.getElementById('mover').showModal();
+    api('GET', '/admin/oficina/huecos').then(function (j) {
+      vaciar(sel);
+      (j.huecos || []).forEach(function (h) { var o = el('option', null, h.texto); o.value = h.valor; sel.appendChild(o); });
+    });
+  }
+  function mover(cuerpo) {
+    if (!moviendo) return;
+    api('POST', '/admin/oficina/reuniones/' + encodeURIComponent(moviendo.id) + '/mover', cuerpo)
+      .then(function (r) { if (!r.ok) alert('No se ha podido: ' + (r.motivo || '')); document.getElementById('mover').close(); refrescar(); })
+      .catch(function (e) { alert(e.message); });
+  }
+  document.getElementById('moverA').addEventListener('click', function () { mover({ hora: document.getElementById('moverHora').value }); });
+  document.getElementById('moverQueElija').addEventListener('click', function () { mover({}); });
+  document.getElementById('moverCancelar').addEventListener('click', function () { document.getElementById('mover').close(); });
+
+  function pintarMarta(setter) {
+    var k = setter.kpis || {};
+    var kpis = document.getElementById('kpis');
+    vaciar(kpis);
+    [['minutos_primer_contacto', 'min hasta el primer correo (mediana)', 'objetivo < 5'],
+     ['con_reunion_pct', '% de leads con llamada', 'objetivo ≥ 50 %'],
+     ['asistencia_pct', '% que se presenta', 'objetivo ≥ 80 %'],
+     ['reuniones_semana', 'llamadas en 7 días', ''],
+     ['leads_30d', 'leads en 30 días', '']].forEach(function (d) {
+      var c = el('div', 'kpi');
+      c.appendChild(el('b', null, k[d[0]] === null || k[d[0]] === undefined ? '—' : String(k[d[0]])));
+      c.appendChild(el('span', null, d[1] + (d[2] ? ' · ' + d[2] : '')));
+      kpis.appendChild(c);
+    });
+    document.getElementById('martaOn').checked = !!setter.encendida;
+    var tb = document.getElementById('leads');
+    vaciar(tb);
+    var leads = setter.leads || [];
+    if (!leads.length) {
+      var tr = el('tr'); var td = el('td', 'vacia', 'Todavía no tiene leads.'); td.colSpan = 5; tr.appendChild(td); tb.appendChild(tr);
+      return;
+    }
+    leads.forEach(function (l) {
+      var tr = el('tr');
+      var n = el('td');
+      n.appendChild(el('div', null, l.negocio));
+      n.appendChild(el('div', 'mini', [l.nombre, l.email || l.telefono].filter(Boolean).join(' · ')));
+      tr.appendChild(n);
+      var e = ESTADOS_LEAD[l.estado] || [l.estado, ''];
+      var te = el('td'); te.appendChild(etiqueta(e[0], e[1])); if (l.motivo) te.appendChild(el('div', 'mini', l.motivo)); tr.appendChild(te);
+      tr.appendChild(el('td', 'mini', (l.ofrecidos || []).map(function (h) { return fecha(h); }).join(' / ')));
+      tr.appendChild(el('td', 'mini', l.proximo ? fecha(l.proximo) : ''));
+      var ta = el('td');
+      if (['pendiente', 'ofrecido', 'revision', 'solo_telefono'].indexOf(l.estado) >= 0) {
+        var b = el('button', 'peligro', 'Parar');
+        b.type = 'button';
+        b.addEventListener('click', function () {
+          if (!confirm('¿Que Marta deje de escribir a ' + l.negocio + '?')) return;
+          api('POST', '/admin/oficina/leads/' + encodeURIComponent(l.id) + '/parar').then(refrescar);
+        });
+        ta.appendChild(b);
+      }
+      tr.appendChild(ta);
+      tb.appendChild(tr);
+    });
+  }
+
+  function pintarProveedores(lista) {
+    var cont = document.getElementById('proveedores');
+    vaciar(cont);
+    lista.forEach(function (p) {
+      var c = el('div', 'proveedor');
+      c.appendChild(el('b', null, p.nombre));
+      if (p.valor !== undefined && p.valor !== null) {
+        c.appendChild(el('div', 'valor', (Math.round(p.valor * 100) / 100).toLocaleString('es-ES') + ' ' + (p.unidad || '')));
+        if (p.dias !== undefined && p.dias !== null) c.appendChild(etiqueta('~' + Math.round(p.dias) + ' días', p.dias < 7 ? 'mal' : 'ok'));
+      } else {
+        var txt = { sin_clave: 'Falta su clave de API', sin_recarga: 'Apunta tu última recarga', sin_leer: 'Aún sin mirar', error: 'No contesta' };
+        c.appendChild(etiqueta(txt[p.estado] || p.estado, p.estado === 'error' ? 'mal' : ''));
+      }
+      if (p.detalle) c.appendChild(el('div', 'mini', p.detalle));
+      cont.appendChild(c);
+    });
+  }
+
+  function pintarContadores(datos) {
+    var cont = document.getElementById('contadores');
+    vaciar(cont);
+    var agentes = datos.agentes || [];
+    var trabajando = agentes.filter(function (a) { return a.estado === 'trabajando'; }).length;
+    var cafe = agentes.filter(function (a) { return a.estado === 'cafe'; }).length;
+    [[trabajando, 'trabajando'], [cafe, 'en el café'], [(datos.contadores || {}).reuniones || 0, 'llamadas agendadas']]
+      .forEach(function (c) {
+        var d = el('div', 'contador');
+        d.appendChild(el('b', null, String(c[0])));
+        d.appendChild(document.createTextNode(c[1]));
+        cont.appendChild(d);
+      });
+  }
+
+  function pintar(datos) {
+    ultimo = datos;
+    pintarSala(datos.agentes || []);
+    var trabajando = (datos.agentes || []).filter(function (a) { return a.estado === 'trabajando'; }).length;
+    var cafe = (datos.agentes || []).filter(function (a) { return a.estado === 'cafe'; }).length;
+    document.getElementById('resumen').textContent = trabajando + ' trabajando, ' + cafe + ' en el café · ' +
+      new Date(datos.ahora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+    if (escaparate) { pintarContadores(datos); return; }
+    var g = datos.gasto || {};
+    document.getElementById('gasto').textContent = 'IA este mes: ' + (g.mes || 0).toFixed(2) + ' € de ' + (g.tope || 0) + ' €';
+    pintarCalendario(datos.reuniones || []);
+    pintarBandeja(datos.bandeja || []);
+    pintarReuniones(datos.reuniones || []);
+    pintarMarta(datos.setter || {});
+    pintarProveedores(datos.proveedores || []);
+  }
+
+  function refrescar() {
+    var red = document.getElementById('red');
+    return api('GET', escaparate ? '/admin/oficina/escaparate' : '/admin/oficina/estado')
+      .then(function (d) { red.textContent = ''; red.classList.remove('error-red'); pintar(d); })
+      .catch(function (e) { if (e.message !== 'sesion') { red.textContent = 'Sin conexión'; red.classList.add('error-red'); } });
+  }
+
+  document.getElementById('martaOn').addEventListener('change', function (ev) {
+    var on = ev.target.checked;
+    if (on && !confirm('Marta escribirá a los nuevos interesados con dos horas para llamarles. ¿La enciendo?')) {
+      ev.target.checked = false; return;
+    }
+    api('PUT', '/admin/oficina/setter', { encendida: on }).then(refrescar);
+  });
+  document.getElementById('importar').addEventListener('click', function (ev) {
+    ev.target.disabled = true;
+    api('POST', '/admin/oficina/setter/importar').then(function (r) {
+      alert(r.importados ? 'He dejado ' + r.importados + ' correos en tu bandeja para que los apruebes.' : 'No hay cualificados pendientes.');
+      ev.target.disabled = false; refrescar();
+    });
+  });
+  document.getElementById('apuntar').addEventListener('click', function () {
+    var v = parseFloat(document.getElementById('recarga').value);
+    if (!(v > 0)) return;
+    api('POST', '/admin/oficina/saldo', { proveedor: 'openai', euros: v }).then(function () {
+      document.getElementById('recarga').value = '';
+      return api('POST', '/admin/oficina/saldos/revisar');
+    }).then(refrescar);
+  });
+  document.getElementById('mirar').addEventListener('click', function (ev) {
+    ev.target.disabled = true;
+    api('POST', '/admin/oficina/saldos/revisar').then(function () { ev.target.disabled = false; refrescar(); });
+  });
+  document.getElementById('escaparate').addEventListener('click', function (ev) {
+    escaparate = !escaparate;
+    document.body.classList.toggle('escaparate', escaparate);
+    ev.target.textContent = escaparate ? 'Salir del escaparate' : 'Modo escaparate';
+    if (escaparate && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+    if (!escaparate && document.fullscreenElement) document.exitFullscreen();
+    refrescar();
+  });
+
+  refrescar();
+  setInterval(function () { if (!document.hidden) refrescar(); }, 15000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescar(); });
+})();
+</script>
+</body>
+</html>

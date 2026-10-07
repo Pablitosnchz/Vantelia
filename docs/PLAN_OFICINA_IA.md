@@ -682,6 +682,28 @@ Astra y despliegue con vuelta atrás automática.
 aparece en tu calendario, y en la sala se ven los minutos hasta el primer contacto,
 cuántos cualificados tienen reunión y la asistencia.
 
+### Estado de la fase 1 (7-oct-2026, Claude)
+
+Construida y con tests (`tests/test_setter.py`, `tests/test_oficina.py`). Cambios sobre
+lo planeado, con su motivo:
+
+- **La agenda no es el tenant `vantelia`, sino uno interno, `agenda_pablo`.** El de la web
+  tiene la agenda apagada y un catálogo sacado del texto de la web ("Para quién es",
+  "Planes"…) que usa el chat. Encender su agenda habría hecho que el asistente de
+  vantelia.es ofreciera esos "servicios" como citas. El interno lo crea el propio código
+  al arrancar (`setter.asegurar_agenda`).
+- **Las tablas `oficina_*` y `setter_*` van en la base de captación**, junto a las del
+  seguimiento, y no en la principal: es donde viven los leads.
+- **La sala es v1 en HTML, CSS y JS propios.** Los agentes "caminan" entre su mesa, el café
+  y la mesa de Pablo con animación FLIP. La escena de Star Office UI con dibujos de LimeZu
+  o Kenney queda para la fase 4, junto al dibujo bonito.
+- **"Reserva con un clic" son dos clics:** el botón del correo abre la página con la hora
+  marcada y "Sí, llámame" la reserva. Reservar al abrir el enlace no es seguro, porque
+  los antivirus de correo abren los enlaces (la misma regla que en `/interes`).
+- **El primer correo sale en menos de 2 minutos** (Marta da una vuelta cada minuto y lee
+  las señales de la demo cada minuto). Hay una excepción: las respuestas por correo dependen
+  del lector IMAP, que mira cada `OUTREACH_IMAP_INTERVAL_MINUTES` (10 por defecto).
+
 ---
 
 ## Fuentes

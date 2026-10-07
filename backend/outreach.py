@@ -166,6 +166,17 @@ def _outreach_notify_reply(reply: Dict[str, Any]) -> None:
     email_addr = str(reply.get("email") or "")
     if not email_addr:
         return
+    # Si esta con Marta (la setter), lo gestiona ella: agenda la llamada o deja la respuesta en
+    # la bandeja de Pablo con su aviso (backend/setter.py).
+    try:
+        from backend import setter
+
+        if setter.al_responder(reply):
+            _autopilot_log("success", "reply_setter", f"Respuesta de {email_addr}: la gestiona la setter",
+                           {"email": email_addr, "stage": reply.get("stage", "")})
+            return
+    except Exception:  # noqa: BLE001 - el aviso de siempre sale igual
+        settings.logger.exception("[setter] no se pudo procesar la respuesta de %s", email_addr)
     # Si estaba en el seguimiento tras la demo y contesta con interes, Pablo recibe la ficha
     # entera en vez de este aviso (backend/seguimiento_demo.py). Nunca se queda sin ninguno.
     try:
@@ -177,6 +188,14 @@ def _outreach_notify_reply(reply: Dict[str, Any]) -> None:
             return
     except Exception:  # noqa: BLE001 - el aviso de siempre sale igual
         settings.logger.exception("[seguimiento_demo] no se pudo procesar la respuesta de %s", email_addr)
+    # Una respuesta con interes a un correo frio: Marta propone escribirle con dos horas (con el
+    # OK de Pablo, en la bandeja). El aviso de siempre sale igual.
+    try:
+        from backend import setter
+
+        setter.tras_respuesta_fria(reply)
+    except Exception:  # noqa: BLE001
+        settings.logger.exception("[setter] no se pudo valorar la respuesta fria de %s", email_addr)
     prospect: Dict[str, Any] = {}
     try:
         with _outreach_db() as conn:

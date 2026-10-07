@@ -16,6 +16,9 @@ python-dotenv==1.0.1
 pytest==8.3.3
 requests==2.32.3
 segno==1.6.1
+# La setter: invitaciones .ics y lo ocupado del calendario de Pablo (backend/setter.py).
+icalendar==6.3.2
+recurring-ical-events==3.8.2
 streamlit==1.39.0
 stripe==10.12.0
 uvicorn==0.31.1

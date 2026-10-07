@@ -123,7 +123,7 @@ Subida web estatica a Hostinger:
 
 ## Backend API
 
-El backend vive en `backend/` (modulos de dominio + `backend/routers/` con 20 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
+El backend vive en `backend/` (modulos de dominio + `backend/routers/` con 22 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
 
 **Si lo que buscas es "quiero cambiar X, que abro": `docs/MAPA_DEL_CODIGO.md`.** Lleva, por flujo (reservar/cancelar/avisos/huecos/catalogo/cobros/asistente), el punto de entrada de cada canal, el nucleo comun al que todos llaman, donde vive cada texto que ve el cliente, y las trampas conocidas (la que borro el catalogo de un cliente real, el techo de 10 filas de las listas de WhatsApp, config.json vs memoria...). Nota: el py_compile de CI/deploy cubre los entrypoints; `python -m pytest` importa todo backend/ (cobertura equivalente).
 
@@ -679,6 +679,32 @@ a partir de ahi ya me encargo yo. Prefiero email". Diseno, cadencia y razones en
   interruptor este apagado: solo escriben a Pablo.
 - "Ahora no" en la pagina = baja de correo, `lost` y su telefono en `no_llamar`: se cumple el "no os
   volveremos a escribir".
+
+### Marta, la setter, y la oficina (oct 2026)
+
+Lo pidio Pablo el 7-oct-2026: "quiero un setter de ventas" y una oficina de agentes "visual, que si
+no tienen trabajo vayan a por un cafe sin gastar tokens". Plan, investigacion y fases en
+`docs/PLAN_OFICINA_IA.md`; codigo en `backend/setter.py`, `backend/oficina.py` y los routers
+`setter_web.py` (`/reunion/*`) y `oficina_web.py` (`/oficina`, `/admin/oficina/*`); tests en
+`tests/test_setter.py` y `tests/test_oficina.py`.
+
+- **Marta** convierte cada cualificado (y cada consulta de la web) en una llamada de 15 min en la
+  agenda de Pablo: le escribe en su hilo con DOS horas reales, como mucho tres correos. La agenda es
+  un tenant INTERNO, `agenda_pablo` (lo crea `setter.asegurar_agenda` al arrancar; L-V 10:00-13:30 y
+  16:00-18:00). No es el tenant `vantelia` de la web: ese tiene el catalogo del chat y la agenda apagada.
+- Abrir `/reunion/{token}` no reserva (antivirus); reserva el POST, con el nucleo de siempre
+  (`source='setter'`). Lo que el lead contesta con sus palabras lo resuelve el CODIGO con los huecos
+  reales; precio, condiciones o lo que no entienda va a la **bandeja de Pablo** (`/oficina`) con un
+  borrador. Los cualificados de antes de encenderla, tambien a la bandeja (`importar_cualificados`).
+- Interruptor de Marta en la oficina, apagado de serie. Apagada no escribe a nadie; las reservas que
+  haga un lead desde su enlace siguen funcionando.
+- **La oficina** pinta con que esta cada agente SIN llamar al modelo (lo lee de la base y de los
+  hilos vivos). Cada agente con IA tiene presupuesto al mes (tope de la oficina 6 €). **Tomas** mira
+  saldos sin IA cada 6 h y avisa si algo se acaba en menos de 7 dias; el de OpenAI se calcula con la
+  recarga que apunta Pablo (no hay API de saldo). Claves opcionales: `SETTER_ICAL_URL`,
+  `OPENAI_ADMIN_KEY`, `ZADARMA_API_KEY`/`ZADARMA_API_SECRET`, `BREVO_API_KEY`.
+- Fase 2 (pendiente): Sara en modo setter (llamar a quien lo pidio), Elena (parte diario) y Hugo
+  (analista de llamadas).
 
 ### Comandos CLI utiles (alternativa al panel)
 

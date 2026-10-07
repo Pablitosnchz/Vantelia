@@ -178,6 +178,13 @@ def _start_background_workers() -> None:
     hilo_seguimiento = seguimiento_demo.arrancar()
     if hilo_seguimiento is not None:
         appstate.register_worker("seguimiento-demo", hilo_seguimiento)
+    # Marta, la setter (agenda las llamadas con Pablo), y la oficina (los saldos de Tomas). La
+    # agenda de Pablo se asegura al arrancar; escribir a leads, solo con su interruptor.
+    from backend import setter
+
+    hilo_setter = setter.arrancar()
+    if hilo_setter is not None:
+        appstate.register_worker("setter", hilo_setter)
 
     if messaging._voice_twilio_configured():
         settings.logger.info("Voice channel enabled (Twilio configurado).")
@@ -195,12 +202,13 @@ def _stop_background_workers() -> None:
     instagram.ig_autopilot_stop.set()
     instagram.ig_campaign_stop.set()
     tiktok.tk_campaign_stop.set()
-    from backend import cuenta_elevenlabs, lanzador_llamadas, segunda_oportunidad, seguimiento_demo
+    from backend import cuenta_elevenlabs, lanzador_llamadas, segunda_oportunidad, seguimiento_demo, setter
 
     lanzador_llamadas.parar.set()
     cuenta_elevenlabs.parar.set()
     segunda_oportunidad.parar.set()
     seguimiento_demo.parar.set()
+    setter.parar.set()
 
 
 @asynccontextmanager
@@ -333,4 +341,6 @@ from backend.routers import (  # noqa: E402,F401
     voice_web,
     portal_commerce,
     seguimiento_web,
+    setter_web,
+    oficina_web,
 )

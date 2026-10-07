@@ -199,6 +199,85 @@ CREATE TABLE IF NOT EXISTS seguimiento_demo_ajustes (
     valor TEXT NOT NULL
 );
 
+-- Marta, la setter (backend/setter.py, docs/PLAN_OFICINA_IA.md): del "me interesa" a una
+-- llamada en la agenda de Pablo. Una fila por lead (por email, o por telefono sin email).
+CREATE TABLE IF NOT EXISTS setter_leads (
+    id              TEXT PRIMARY KEY,
+    clave           TEXT NOT NULL UNIQUE,
+    seguimiento_id  TEXT NOT NULL DEFAULT '',
+    origen          TEXT NOT NULL,
+    email           TEXT NOT NULL DEFAULT '',
+    telefono        TEXT NOT NULL DEFAULT '',
+    nombre          TEXT NOT NULL DEFAULT '',
+    negocio         TEXT NOT NULL DEFAULT '',
+    sector          TEXT NOT NULL DEFAULT '',
+    nota            TEXT NOT NULL DEFAULT '',
+    preferencia     TEXT NOT NULL DEFAULT '',
+    hilo            TEXT NOT NULL DEFAULT '',
+    asunto_hilo     TEXT NOT NULL DEFAULT '',
+    estado          TEXT NOT NULL DEFAULT 'pendiente',
+    paso            INTEGER NOT NULL DEFAULT 0,
+    proximo         TEXT NOT NULL DEFAULT '',
+    ofrecidos       TEXT NOT NULL DEFAULT '[]',
+    booking_id      TEXT NOT NULL DEFAULT '',
+    cita_inicio     TEXT NOT NULL DEFAULT '',
+    secuencia       INTEGER NOT NULL DEFAULT 0,
+    rescate         INTEGER NOT NULL DEFAULT 0,
+    sms_en          TEXT NOT NULL DEFAULT '',
+    ficha_en        TEXT NOT NULL DEFAULT '',
+    resultado       TEXT NOT NULL DEFAULT '',
+    motivo          TEXT NOT NULL DEFAULT '',
+    oportunidad_id  TEXT NOT NULL DEFAULT '',
+    primer_contacto TEXT NOT NULL DEFAULT '',
+    creado          TEXT NOT NULL,
+    actualizado     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_setter_leads_estado ON setter_leads(estado, proximo);
+CREATE INDEX IF NOT EXISTS idx_setter_leads_email ON setter_leads(email);
+CREATE INDEX IF NOT EXISTS idx_setter_leads_seguimiento ON setter_leads(seguimiento_id);
+
+-- Cada correo o SMS de la setter, reservado ANTES de enviarlo: si queda en duda no se repite.
+CREATE TABLE IF NOT EXISTS setter_toques (
+    lead_id    TEXT NOT NULL,
+    clave      TEXT NOT NULL,
+    estado     TEXT NOT NULL,
+    momento    TEXT NOT NULL,
+    message_id TEXT NOT NULL DEFAULT '',
+    detalle    TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (lead_id, clave)
+);
+
+-- La oficina (backend/oficina.py): la bandeja de Pablo (lo que un agente propone y el
+-- aprueba), los saldos que mira Tomas y los ajustes.
+CREATE TABLE IF NOT EXISTS oficina_bandeja (
+    id        TEXT PRIMARY KEY,
+    agente    TEXT NOT NULL,
+    tipo      TEXT NOT NULL,
+    ref       TEXT NOT NULL DEFAULT '',
+    titulo    TEXT NOT NULL,
+    contexto  TEXT NOT NULL DEFAULT '',
+    borrador  TEXT NOT NULL DEFAULT '',
+    estado    TEXT NOT NULL DEFAULT 'pendiente',
+    motivo    TEXT NOT NULL DEFAULT '',
+    creado    TEXT NOT NULL,
+    resuelto  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_oficina_bandeja_estado ON oficina_bandeja(estado, creado);
+
+CREATE TABLE IF NOT EXISTS oficina_saldos (
+    proveedor TEXT NOT NULL,
+    momento   TEXT NOT NULL,
+    valor     REAL,
+    unidad    TEXT NOT NULL DEFAULT '',
+    detalle   TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (proveedor, momento)
+);
+
+CREATE TABLE IF NOT EXISTS oficina_ajustes (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     email   TEXT NOT NULL,

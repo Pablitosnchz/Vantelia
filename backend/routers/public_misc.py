@@ -90,6 +90,15 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
             connection.commit()
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("No se pudo persistir consulta_lead de %s: %s", data.email, exc)
+    # Marta (la setter) le escribe en unos minutos con dos horas para que le llame Pablo.
+    try:
+        from backend import setter
+
+        await timeutils._to_thread(
+            setter.al_consultar, nombre=data.nombre, email=str(data.email), telefono=data.telefono or "",
+            empresa=data.empresa or "", mensaje=(data.mensaje or "").strip())
+    except Exception as exc:  # noqa: BLE001 - la consulta queda guardada y avisada igual
+        settings.logger.error("La setter no pudo apuntar la consulta de %s: %s", data.email, exc)
 
     fecha_utc = timeutils._utc_now().strftime('%Y-%m-%d %H:%M UTC')
 
