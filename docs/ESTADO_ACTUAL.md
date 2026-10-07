@@ -1,12 +1,13 @@
 # Estado actual de Vantelia
 
-## En curso — 2026-10-07 Europe/Madrid (Claude)
+## En curso — 2026-10-07 Europe/Madrid (Claude; DESPLEGADO `7a81ce8` a las ~14:00, sin humo: no toca al asistente)
 
 - **La oficina de agentes y Marta, la setter (fase 1 de `docs/PLAN_OFICINA_IA.md`):** Pablo vio una "oficina de IA" en Instagram, pidió la suya ("que si no tienen trabajo vayan a por un café sin gastar tokens, pero que se vea con qué está cada uno") y después "quiero un setter de ventas". Plan investigado y aprobado ("adelante con el plan"). Construido:
   - `backend/setter.py` (Marta): cada cualificado del seguimiento y cada consulta de la web recibe, en su hilo y a nombre de Pablo, dos horas reales para una llamada de 15 min (como mucho tres correos). Se reserva en `/reunion/{token}` (solo el POST) o contestando ("el jueves a las 11"). Si pregunta el precio o algo que no sea agendar, va a la bandeja de Pablo con un borrador. Hay invitación .ics, SMS 2 h antes, ficha a Pablo 30 min antes, "¿lo movemos?" si no vino y el resultado se marca en un clic.
   - La agenda es un tenant interno nuevo, `agenda_pablo` (L-V 10:00-13:30 y 16:00-18:00), que se crea al arrancar.
   - `backend/oficina.py` + `/oficina`: la sala (cada agente en su mesa, en el café o esperando en la mesa de Pablo, sin llamar al modelo), la bandeja, los presupuestos de IA por agente (tope 6 €/mes) y Tomás con los saldos cada 6 h sin IA.
-  - **Interruptor de Marta apagado de serie.** Los cuatro cualificados de octubre, a la bandeja para que Pablo apruebe cada primer correo.
+  - **Interruptor de Marta apagado de serie.** Los cuatro cualificados de octubre (Noelia, Purificación, Navarro, IGIN) están en la bandeja de `/oficina` con su primer correo: hasta que Pablo pulse «Enviar» no sale nada.
+  - Astra revisó tres veces: `2246e82` (5 hallazgos: reservar sin aceptar, interruptor en respuestas, estado pisado tras esperar turno, confirmar sin teléfono, Python 3.8) → `118f384` (1: un «no» con Marta apagada) → `7a81ce8` OK. Las vistas previas reales cazaron además que dos iban en el hilo de la despedida del correo frío (arreglado en `7a81ce8`).
   - Fase 2 pendiente: Sara en modo setter, Elena (parte diario) y Hugo (analista de llamadas).
 
 ## En curso anterior — 2026-10-02/05 Europe/Madrid (Claude; todo DESPLEGADO, `main` = `f5d09eb`, humo 5/5 a las 17:42)
