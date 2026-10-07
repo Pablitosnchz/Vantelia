@@ -9,6 +9,7 @@
   - **Interruptor de Marta apagado de serie.** Los cuatro cualificados de octubre (Noelia, Purificación, Navarro, IGIN) están en la bandeja de `/oficina` con su primer correo: hasta que Pablo pulse «Enviar» no sale nada.
   - Astra revisó tres veces: `2246e82` (5 hallazgos: reservar sin aceptar, interruptor en respuestas, estado pisado tras esperar turno, confirmar sin teléfono, Python 3.8) → `118f384` (1: un «no» con Marta apagada) → `7a81ce8` OK. Las vistas previas reales cazaron además que dos iban en el hilo de la despedida del correo frío (arreglado en `7a81ce8`).
   - Fase 2 pendiente: Sara en modo setter, Elena (parte diario) y Hugo (analista de llamadas).
+- **Cap Rocat, 7-oct (`a24d8c8` + `6bf4d0e`, OK de Astra, humo 5/5):** Bianca pidió tras sus pruebas (1) quitar la bienvenida y (2) que lo que el asistente no entiende o no sabe conteste «marque la extensión 100», en español a los +34 y en inglés al resto. Hecho genérico y opt-in por negocio (`chat_menu.saludo = false`; `respuesta_si_no_sabe` con `idioma_por_prefijo`; ambos en Tune AI) y aplicado a Cap Rocat por los endpoints del portal. Probado en producción con el modelo real ("I want biggie", niñera, Hola/Hello, dirección del hotel); las conversaciones de prueba se borraron. En la primera prueba negaba lo que no sabía ("Cap Rocat no ofrece servicio de niñera"): arreglado en `6bf4d0e`. Falta que Pablo le conteste a Bianca.
 
 ## En curso anterior — 2026-10-02/05 Europe/Madrid (Claude; todo DESPLEGADO, `main` = `f5d09eb`, humo 5/5 a las 17:42)
 
