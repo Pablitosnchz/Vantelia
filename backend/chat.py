@@ -324,6 +324,16 @@ _NO_SABE = re.compile(
     r"derivar(?:te|le|lo|la)? al equipo humano|i (?:do not|don't) have (?:that|this) (?:information|data|detail)|"
     r"(?:that|this) information is not (?:published|available)",
     re.IGNORECASE)
+# Pedir que lo aclare TAMBIEN es no entenderlo. Prueba de Pablo en WhatsApp (7-oct-2026): a "i
+# want biggie" contesto "¿Podría aclarar a qué se refiere con 'biggie'?" en vez de la frase del
+# hotel. Solo cuenta con la frase fija puesta: sin ella, aclarar sigue siendo lo correcto.
+_PIDE_ACLARAR = re.compile(
+    r"\b(?:podr[ií]a|puede|podr[ií]as|puedes)\s+(?:aclarar|especificar|concretar|explicar|precisar|indicar)(?:me|nos)?\s+"
+    r"(?:a\s+qu[eé]|qu[eé]|lo\s+que|un\s+poco|mejor|m[aá]s)|\ba\s+qu[eé]\s+se\s+refiere|\ba\s+qu[eé]\s+te\s+refieres|"
+    r"\bno\s+(?:le|te|lo)\s+(?:he\s+)?entend|\bno\s+entiendo\b|\bno\s+estoy\s+seguro\s+de\s+(?:a\s+)?qu[eé]|"
+    r"\bcould\s+you\s+(?:please\s+)?(?:clarify|specify|explain|elaborate|tell\s+me\s+(?:more|what))|"
+    r"\bwhat\s+do\s+you\s+mean\b|\bi(?:'m|\s+am)\s+not\s+sure\s+what\s+you\s+mean|\bi\s+(?:didn't|did\s+not|don't|do\s+not)\s+understand",
+    re.IGNORECASE)
 
 
 def _idioma_de_la_respuesta_fija(mensaje: str, telefono: str, por_prefijo: bool) -> str:
@@ -344,7 +354,7 @@ def _si_no_sabe(cliente_id: str, texto: str, mensaje: str, telefono: str = "", m
         fija = {}
     if not fija:
         return texto.replace(rag.SIN_DATO, "").strip() if rag.SIN_DATO in (texto or "") else texto
-    if marcado or rag.SIN_DATO in (texto or "") or _NO_SABE.search(texto or ""):
+    if marcado or rag.SIN_DATO in (texto or "") or _NO_SABE.search(texto or "") or _PIDE_ACLARAR.search(texto or ""):
         return fija[_idioma_de_la_respuesta_fija(mensaje, telefono, fija["idioma_por_prefijo"])]
     return texto
 

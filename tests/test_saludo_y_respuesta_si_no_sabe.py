@@ -179,3 +179,25 @@ def test_con_frase_fija_no_se_le_empuja_a_negar_lo_que_no_sabe(api_module, clien
         assert "dilo con amabilidad" not in con
     finally:
         client.put("/auth/app/respuesta-si-no-sabe", cookies=portal_cookies, json={})
+
+
+@pytest.mark.parametrize("aclaracion", [
+    "¿Podría aclarar a qué se refiere con \"biggie\"? Así podré ayudarle mejor con la información de Cap Rocat.",
+    "Disculpe, no le he entendido. ¿Podría explicarme un poco más?",
+    "Could you please clarify what you mean by \"biggie\"?",
+    "I'm not sure what you mean. Could you tell me more?",
+])
+def test_pedir_que_lo_aclare_tambien_es_no_entenderlo(client, motor, fija, aclaracion):  # noqa: F811
+    """Prueba de Pablo por WhatsApp (7-oct-2026): a "i want biggie" pidio una aclaracion."""
+    motor.respuesta = aclaracion
+    assert _chat(client, "i want biggie")["respuesta"] in (ES, EN)
+
+
+def test_sin_frase_fija_aclarar_sigue_siendo_lo_correcto(client, motor):  # noqa: F811
+    motor.respuesta = "¿Podría aclarar a qué se refiere con \"biggie\"?"
+    assert _chat(client, "i want biggie")["respuesta"] == motor.respuesta
+
+
+def test_una_pregunta_normal_del_asistente_no_se_toca(client, motor, fija):  # noqa: F811
+    motor.respuesta = "El check-out es a las 12:00. ¿Necesita algo más para su salida?"
+    assert _chat(client, "¿A qué hora es el check out?")["respuesta"] == motor.respuesta

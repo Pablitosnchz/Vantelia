@@ -237,11 +237,12 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
             "sistema tampoco lo cubre o no entiendes lo que te piden, responde UNICAMENTE con la marca "
             + SIN_DATO + ", sin nada mas: el sistema pondra la respuesta que ha elegido el negocio. Tampoco "
             "digas que el negocio NO tiene u ofrece algo que no consta en tu informacion (no lo sabes): eso "
-            "tambien es " + SIN_DATO + ". Esta regla manda sobre cualquier otra indicacion de derivar o de dar "
+            "tambien es " + SIN_DATO + ". Y si no entiendes el mensaje, NO pidas que lo aclare ni preguntes a que se "
+            "refiere: responde " + SIN_DATO + ". Esta regla manda sobre cualquier otra indicacion de derivar o de dar "
             "telefonos.")
         regla_final = ("\n\nREGLA FINAL, MANDA SOBRE TODO LO ANTERIOR: cuando no tengas la respuesta, no entiendas "
-                       "el mensaje o te pregunten por algo que no consta (no digas que no lo hay), contesta solo "
-                       + SIN_DATO + ".")
+                       "el mensaje (no pidas que lo aclare) o te pregunten por algo que no consta (no digas que no "
+                       "lo hay), contesta solo " + SIN_DATO + ".")
     else:
         regla_sin_dato = (
             "23. Si tras consultar tu base documental sigues sin tener el dato y el bloque de contexto del sistema "
