@@ -506,7 +506,10 @@ def _seguimiento(conn, ahora: datetime) -> Dict[str, Any]:
     hace = _hace(_dt(ultima), ahora)
     if hace is not None and hace < MINUTOS_TRABAJANDO:
         return _estado("trabajando", "Escribiendo tras la demo", kpis=kpis)
-    return _estado("cafe", "%d negocios en seguimiento" % activos if activos else "Nadie esperando", kpis=kpis)
+    if not activos:
+        return _estado("cafe", "Nadie esperando", kpis=kpis)
+    return _estado("cafe", "1 negocio en seguimiento" if activos == 1 else "%d negocios en seguimiento" % activos,
+                   kpis=kpis)
 
 
 def _marta(conn, ahora: datetime) -> Dict[str, Any]:

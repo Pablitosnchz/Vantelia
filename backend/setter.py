@@ -393,6 +393,16 @@ def lo_que_pide(texto: str, ahora: Optional[datetime] = None) -> Dict[str, Any]:
     return {"fecha": fecha, "franja": franja, "texto": crudo}
 
 
+def preferencia_vigente(texto: str, ahora: Optional[datetime] = None) -> bool:
+    """"el jueves por la tarde" vale; "cuando esten disponibles" o un dia ya pasado, no: no se
+    le cita lo que dijo si no es una franja o un dia que aun no ha pasado."""
+    if not str(texto or "").strip():
+        return False
+    pide = lo_que_pide(texto, ahora)
+    hoy = _local(ahora or timeutils._utc_now()).date().isoformat()
+    return bool(pide["franja"] or (pide["fecha"] and pide["fecha"] >= hoy and "(" not in texto))
+
+
 def _hora_dicha(texto: str, candidatos: List[datetime]) -> Optional[datetime]:
     """La hora que dice ("a las 11", "la de las 10:30", "sobre las 5 de la tarde") entre las
     horas libres de ese dia. None si no dice ninguna que exista."""
@@ -576,6 +586,31 @@ def importar_cualificados(ahora: Optional[datetime] = None, *, solo_antes_de: st
                         for f in filas) if i]
 
 
+# Los correos "de persona" en los que tiene sentido seguir el hilo: los de Pablo, el de la demo
+# de Sara, el seguimiento y la propia Marta. Nunca la despedida del correo frio ("no te escribo
+# mas sobre esto", "cierro por aqui"): asi salian dos de los cuatro primeros (7-oct-2026).
+ETAPAS_PERSONALES = ("pablo_manual", "demo_llamada", "llamada")
+ETAPAS_DE_DESPEDIDA = ("breakup",)
+
+
+def _hilo_para(conn, email: str, preferido: str = "", asunto_preferido: str = "") -> Tuple[str, str]:
+    """(Message-ID, asunto) del hilo en el que escribir: el ultimo correo personal; si no hay,
+    el del seguimiento (salvo que fuera una despedida); si no, ninguno (hilo nuevo)."""
+    if email:
+        fila = conn.execute(
+            "SELECT message_id, subject FROM sends WHERE email=? AND mode='send' AND message_id<>'' "
+            "AND (stage IN (%s) OR stage LIKE 'seguimiento_%%' OR stage LIKE 'setter_%%') "
+            "ORDER BY sent_at DESC, id DESC LIMIT 1" % ",".join("?" * len(ETAPAS_PERSONALES)),
+            (email,) + ETAPAS_PERSONALES).fetchone()
+        if fila is not None:
+            return str(fila["message_id"]), str(fila["subject"] or "")
+    if preferido:
+        etapa = conn.execute("SELECT stage FROM sends WHERE message_id=? LIMIT 1", (preferido,)).fetchone()
+        if etapa is None or etapa["stage"] not in ETAPAS_DE_DESPEDIDA:
+            return preferido, asunto_preferido
+    return "", ""
+
+
 def _entrar_desde_seguimiento(fila, *, requiere_ok: bool, ahora: Optional[datetime] = None,
                               origen: str = "seguimiento") -> Optional[str]:
     try:
@@ -586,13 +621,14 @@ def _entrar_desde_seguimiento(fila, *, requiere_ok: bool, ahora: Optional[dateti
     telefono = preferencias.get("telefono") or fila["telefono"] or ""
     nota = preferencias.get("pregunta") or preferencias.get("respuesta") or fila["motivo"] or ""
     with _conexion() as conn:
-        hilo, asunto = seguimiento_demo._hilo_del_ultimo_correo(conn, email) if email else ("", "")
+        hilo, asunto = _hilo_para(conn, email, fila["hilo"] or "", fila["asunto_hilo"] or "")
+    # La preferencia de un lead de antes ("mañana (6-oct)") ya no vale: no se arrastra.
+    preferencia = "" if origen == "seguimiento_previo" else (preferencias.get("cuando") or "")
     return entrar(origen=origen, email=email, telefono=telefono,
                   nombre=preferencias.get("nombre") or fila["contacto"] or "", negocio=fila["negocio"] or "",
-                  sector=fila["sector"] or "", nota=nota, preferencia=preferencias.get("cuando") or "",
-                  seguimiento_id=fila["id"], hilo=hilo or fila["hilo"] or "",
-                  asunto_hilo=asunto or fila["asunto_hilo"] or "", oportunidad_id=fila["oportunidad_id"] or "",
-                  requiere_ok=requiere_ok, ahora=ahora)
+                  sector=fila["sector"] or "", nota=nota, preferencia=preferencia,
+                  seguimiento_id=fila["id"], hilo=hilo, asunto_hilo=asunto,
+                  oportunidad_id=fila["oportunidad_id"] or "", requiere_ok=requiere_ok, ahora=ahora)
 
 
 def recoger_cualificados(ahora: Optional[datetime] = None) -> int:
@@ -723,7 +759,7 @@ def contenido(lead, plantilla: str, horas: List[datetime], ahora: datetime, *,
             parrafos.append("Si te va bien que lo hablemos, elige hora y te llamo:")
     else:
         raise ValueError("plantilla desconocida: %s" % plantilla)
-    if plantilla == "huecos" and lead["preferencia"]:
+    if plantilla == "huecos" and preferencia_vigente(lead["preferencia"], ahora):
         parrafos[-1] += " (me dijiste %s)" % lead["preferencia"]
     cierre = ("Si ninguna te encaja, [elige otra hora aquí]{otra}, o contéstame con el día que mejor te venga."
               if otra else "Si ninguna te encaja, contéstame con el día que mejor te venga.")
@@ -1211,16 +1247,21 @@ def al_responder(respuesta: Dict[str, Any]) -> bool:
         lead = _por_email(conn, email)
     if lead is None or lead["estado"] not in ESTADOS_VIVOS:
         return False
-    if not esta_encendida():
-        return False  # apagada no actua sola: a Pablo le llega el aviso de siempre
     texto = seguimiento_demo._sin_cita(str(respuesta.get("body_excerpt") or ""))[:1500]
     asunto = str(respuesta.get("subject") or "")
     ahora = timeutils._utc_now()
     if seguimiento_demo._AUSENTE.search(texto) or seguimiento_demo._AUSENTE.search(asunto):
         return True  # respuesta automatica: ni se para ni se molesta a Pablo
+    # Un "no" se apunta SIEMPRE, tambien con Marta apagada: si no, al encenderla le volveria a
+    # escribir (revision de Astra a 118f384).
     if seguimiento_demo._NO.search(texto) and lead["estado"] != "reservado":
         _actualizar(lead["id"], ahora, estado="descartado", motivo="Respondió que no: " + texto[:200], proximo="")
         _anotar_oportunidad(lead["id"], "Dijo que no", ahora, etapa="perdida", motivo_perdida=texto[:200])
+        return False
+    if not esta_encendida():
+        # Apagada no actua sola: a Pablo le llega el aviso de siempre. Ha contestado una persona,
+        # asi que su cadencia se para (al encenderla no le llega un recordatorio encima).
+        _actualizar(lead["id"], ahora, proximo="", motivo="Contestó con Marta apagada: " + texto[:160])
         return False
     # Con un lead que aun espera el OK de Pablo (su primer correo esta en la bandeja), Marta no
     # contesta sola: lo que diga va a Pablo.

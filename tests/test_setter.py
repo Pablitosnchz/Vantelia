@@ -514,3 +514,48 @@ def test_sin_telefono_no_se_confirma_una_llamada(st, envios, client):  # noqa: F
 
     assert asyncio.run(st.reservar(token.split(".")[0] if "." in token else token,
                                    st.hueco_de_url(hora)))["motivo"] == "sin_telefono"
+
+
+def test_un_no_con_marta_apagada_tambien_cuenta(st, envios):  # noqa: F811
+    """Revision de Astra a 118f384: apagada no actua sola, pero un "no" se apunta; y quien
+    contesta otra cosa no recibe un recordatorio al encenderla."""
+    _primer_enlace(st, envios)
+    _cualificado(email_="otra@clinica.es", hilo="<otra@test>", telefono="912222222")
+    st.ciclo(MIERCOLES_1000)
+    st.guardar_config(encendida=False)
+    assert st.al_responder(_respuesta("No nos interesa, gracias")) is False
+    assert st.al_responder(_respuesta("Os llamo yo la semana que viene", email_="otra@clinica.es")) is False
+    assert _lead(st)["estado"] == "descartado"
+    st.guardar_config(encendida=True)
+    st.reloj["ahora"] = _madrid(13, 11)
+    st.ciclo(st.reloj["ahora"])
+    assert len(_correos_a(envios, EMAIL)) == 1 and len(_correos_a(envios, "otra@clinica.es")) == 1
+
+
+def test_nunca_escribe_en_el_hilo_de_la_despedida_del_correo_frio(st, envios):  # noqa: F811
+    """7-oct-2026: dos de los cuatro primeros iban a salir como "Re: no te escribo más sobre
+    esto". Se sigue el ultimo correo personal; sin ninguno, hilo nuevo."""
+    from backend import oficina, outreach
+
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
+                     "VALUES (?,?,?,?,?,?,?,?)", (EMAIL, "breakup", "no te escribo más sobre esto", "", "",
+                                                  "2026-08-25T11:00:00+00:00", "send", "<adios@test>"))
+        conn.commit()
+    _cualificado(cualificado_en="2026-09-30T10:00:00+00:00", hilo="<adios@test>", cuando="mañana (6-oct)")
+    st.importar_cualificados()
+    previa = oficina.bandeja()[0]["vista_previa"]
+    assert previa["asunto"] == "Una llamada de 15 minutos sobre Clínica Sonrisa"
+    assert "me dijiste" not in previa["texto"]
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
+                     "VALUES (?,?,?,?,?,?,?,?)", (EMAIL, "pablo_manual", "Tu demo, ya montada", "", "",
+                                                  "2026-10-05T18:00:00+00:00", "send", "<pablo@test>"))
+        conn.commit()
+        assert st._hilo_para(conn, EMAIL, "<adios@test>") == ("<pablo@test>", "Tu demo, ya montada")
+
+
+def test_solo_se_cita_la_preferencia_si_sigue_valiendo(st):
+    assert st.preferencia_vigente("el jueves por la tarde", MIERCOLES_1000)
+    assert not st.preferencia_vigente("cuando esten disponibles", MIERCOLES_1000)
+    assert not st.preferencia_vigente("mañana (6-oct)", MIERCOLES_1000)
