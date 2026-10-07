@@ -196,6 +196,27 @@ def _locations_prompt_block(cliente_id: str) -> str:
     return "\n".join(lines)
 
 
+# Lo que escribe el modelo cuando no sabe la respuesta, si el negocio ha fijado la suya
+# (`config['respuesta_si_no_sabe']`): el codigo la cambia por ese texto (chat._si_no_sabe).
+SIN_DATO = "[[SIN_DATO]]"
+
+
+def respuesta_si_no_sabe(config: Dict[str, Any]) -> Dict[str, Any]:
+    """La respuesta fija del negocio para cuando el asistente no sabe algo, o {} si no hay.
+
+    Peticion de Cap Rocat (7-oct-2026): en vez de "no tengo ese dato publicado... puede
+    contactar en...", que diga siempre "marque la extension 100" (en español a quien
+    escribe desde un +34 y en ingles al resto: `idioma_por_prefijo`)."""
+    seccion = config.get("respuesta_si_no_sabe") or {}
+    if not isinstance(seccion, dict) or seccion.get("enabled") is False:
+        return {}
+    es = str(seccion.get("es") or "").strip()
+    en = str(seccion.get("en") or "").strip()
+    if not (es or en):
+        return {}
+    return {"es": es or en, "en": en or es, "idioma_por_prefijo": bool(seccion.get("idioma_por_prefijo"))}
+
+
 def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     # "nombre" = nombre del bot (campo Apariencia "Nombre del bot"). "empresa" = nombre del
     # negocio (campo Apariencia "Nombre del negocio"); si esta vacio, el negocio toma el del bot
@@ -210,6 +231,20 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
             f"presentes o te pregunten como te llamas, di que te llamas {nombre_bot}.\n"
         )
     prompt_extra = config.get("prompt_extra", "")
+    if respuesta_si_no_sabe(config):
+        regla_sin_dato = (
+            "23. Si tras consultar tu base documental sigues sin tener el dato, el bloque de contexto del "
+            "sistema tampoco lo cubre o no entiendes lo que te piden, responde UNICAMENTE con la marca "
+            + SIN_DATO + ", sin nada mas: el sistema pondra la respuesta que ha elegido el negocio. Esta "
+            "regla manda sobre cualquier otra indicacion de derivar o de dar telefonos.")
+        regla_final = ("\n\nREGLA FINAL, MANDA SOBRE TODO LO ANTERIOR: cuando no tengas la respuesta o no entiendas "
+                       "el mensaje, contesta solo " + SIN_DATO + ".")
+    else:
+        regla_sin_dato = (
+            "23. Si tras consultar tu base documental sigues sin tener el dato y el bloque de contexto del sistema "
+            "tampoco lo cubre, responde literalmente: \"No tengo ese dato publicado todavia, pero puedo derivarte "
+            "al equipo humano para que te lo confirme.\" y, si hay contacto, ofrece telefono o email.")
+        regla_final = ""
     # El tono lo decide el negocio desde su panel, no el prompt de cada cliente.
     bloque_tono = textnorm._tono_prompt_block(config)
     if bloque_tono:
@@ -437,12 +472,12 @@ REGLAS DE SEGURIDAD Y MEMORIA
 22. Si el usuario pregunta "que dije antes" o "resume esta conversacion", hazlo de forma fiel a lo que se ha dicho.
 
 REGLAS DE FALLBACK
-23. Si tras consultar tu base documental sigues sin tener el dato y el bloque de contexto del sistema tampoco lo cubre, responde literalmente: "No tengo ese dato publicado todavia, pero puedo derivarte al equipo humano para que te lo confirme." y, si hay contacto, ofrece telefono o email.
+{regla_sin_dato}
 
 {bloque_menu}
 27. Usa emojis con moderacion (📅 cita, 💬 dudas, 🛍️ productos, ⭐ recomendacion, ⚖️ comparar, 💶 precio). Maximo 1-2 por respuesta.
 28. Mensajes cortos y claros, formato conversacional, listas con "· **Titulo:** ..." cuando enumeres opciones o pasos.
-{"29. En el flujo 'agendar' cita por chat (sin formulario): pregunta UNA cosa por mensaje en orden fecha → hora → nombre. Tras tener los tres, confirma resumen y añade " + settings.BOOKING_SENTINEL + "." if booking_enabled else "29. IMPORTANTE: la reserva online esta DESACTIVADA. Si el usuario menciona citas, reservas o agendar, NO preguntes por fecha ni hora ni nombre, NO inicies ningun flujo de agenda. Responde unicamente que la reserva online no esta disponible y proporciona los datos de contacto del bloque 'Datos de contacto verificados'."}
+{"29. En el flujo 'agendar' cita por chat (sin formulario): pregunta UNA cosa por mensaje en orden fecha → hora → nombre. Tras tener los tres, confirma resumen y añade " + settings.BOOKING_SENTINEL + "." if booking_enabled else "29. IMPORTANTE: la reserva online esta DESACTIVADA. Si el usuario menciona citas, reservas o agendar, NO preguntes por fecha ni hora ni nombre, NO inicies ningun flujo de agenda. Responde unicamente que la reserva online no esta disponible y proporciona los datos de contacto del bloque 'Datos de contacto verificados'."}{regla_final}
 """.strip()
 
 

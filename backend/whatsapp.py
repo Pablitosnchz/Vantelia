@@ -3705,7 +3705,7 @@ async def _handle_whatsapp_message(
 
     # Saludo PURO: responder con menu. Si el saludo trae una intencion ("Hola, quiero
     # cancelar mi cita R-1234"), la intencion manda (misma regla que el chat web).
-    if not flow.flow and chat._message_is_pure_greeting(incoming_text):
+    if not flow.flow and chat._message_is_pure_greeting(incoming_text) and chat._saludo_enabled(cliente_id):
         await _wa_send_main_menu(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             nombre_empresa=nombre_empresa, booking_enabled=booking_enabled, greeting=True,
@@ -5242,6 +5242,11 @@ async def _handle_whatsapp_webhook(
                         # opciones y bienvenida a secas segun `config['chat_menu']`: si no,
                         # un negocio con agenda perdia justo los botones de agendar cita.
                         demo_config = clients._get_client_config(cliente_id)
+                        if not chat._saludo_enabled(cliente_id):
+                            # Sin saludo (Cap Rocat): tras el codigo no se dice nada, igual que en
+                            # su numero de verdad un huesped no recibe nada hasta que pregunta.
+                            processed += 1
+                            continue
                         await _wa_send_main_menu(
                             cliente_id=cliente_id,
                             phone_number_id=phone_number_id,

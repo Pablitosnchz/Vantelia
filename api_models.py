@@ -1170,8 +1170,18 @@ class AppBusinessRulesConfigPayload(BaseModel):
 class AppChatMenuPayload(BaseModel):
     enabled: bool
     # Opciones base que este negocio NO quiere en su menu ("Preguntas frecuentes").
-    # Son una sugerencia nuestra, no una imposicion.
-    ocultas: List[str] = []
+    # Son una sugerencia nuestra, no una imposicion. None = no se tocan.
+    ocultas: Optional[List[str]] = None
+    # False = a un saludo suelto no se le contesta con la bienvenida (lo contesta el
+    # asistente). None = no se toca.
+    saludo: Optional[bool] = None
+
+
+class AppRespuestaSiNoSabePayload(BaseModel):
+    """La respuesta fija para cuando el asistente no sabe algo (vacias = la de siempre)."""
+    es: str = Field(default="", max_length=600)
+    en: str = Field(default="", max_length=600)
+    idioma_por_prefijo: bool = False
 
 
 class AppKnowledgeItem(BaseModel):

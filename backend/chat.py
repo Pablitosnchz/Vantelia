@@ -302,6 +302,53 @@ def _menu_enabled(cliente_id: str) -> bool:
     return bool(section.get("enabled"))
 
 
+def _saludo_enabled(cliente_id: str) -> bool:
+    """¿Contestar a un saludo suelto ("Hola", o el codigo de la demo) con la bienvenida o el
+    menu? Opt-OUT por tenant: `chat_menu.saludo = false`. Peticion de Cap Rocat (7-oct-2026):
+    "quitarlo del todo". Sin ella, el saludo lo contesta el asistente como cualquier mensaje.
+    Sin la clave, como siempre."""
+    try:
+        config = clients._get_client_config(cliente_id)
+    except Exception:  # noqa: BLE001
+        return True
+    section = config.get(MENU_CONFIG_SECTION) or {}
+    if not isinstance(section, dict) or "saludo" not in section:
+        return True
+    return bool(section.get("saludo"))
+
+
+# Lo que dice el modelo cuando no sabe, aunque se salte la marca: si el negocio tiene su
+# respuesta fija, tambien estas frases se cambian por ella.
+_NO_SABE = re.compile(
+    r"no tengo ese dato|no dispongo de (?:ese|esa|esta|este) (?:dato|informaci)|no consta en (?:mi|nuestra) informaci|"
+    r"derivar(?:te|le|lo|la)? al equipo humano|i (?:do not|don't) have (?:that|this) (?:information|data|detail)|"
+    r"(?:that|this) information is not (?:published|available)",
+    re.IGNORECASE)
+
+
+def _idioma_de_la_respuesta_fija(mensaje: str, telefono: str, por_prefijo: bool) -> str:
+    """"es" o "en". Con `por_prefijo` y un telefono (WhatsApp): +34 en español y el resto en
+    ingles, como pidio Cap Rocat. Sin telefono (web), por las palabras del mensaje."""
+    if por_prefijo and telefono:
+        return "es" if re.sub(r"\D", "", str(telefono)).startswith("34") else "en"
+    idioma = keywords.idioma_de(mensaje or "")
+    return "en" if idioma and idioma != "es" else "es"
+
+
+def _si_no_sabe(cliente_id: str, texto: str, mensaje: str, telefono: str = "", marcado: bool = False) -> str:
+    """Si el asistente no sabe la respuesta y el negocio tiene la suya fija, sale esa, entera
+    y sin adornos (`config['respuesta_si_no_sabe']`). Sin ella, la marca no llega nunca a nadie."""
+    try:
+        fija = rag.respuesta_si_no_sabe(clients._get_client_config(cliente_id))
+    except Exception:  # noqa: BLE001
+        fija = {}
+    if not fija:
+        return texto.replace(rag.SIN_DATO, "").strip() if rag.SIN_DATO in (texto or "") else texto
+    if marcado or rag.SIN_DATO in (texto or "") or _NO_SABE.search(texto or ""):
+        return fija[_idioma_de_la_respuesta_fija(mensaje, telefono, fija["idioma_por_prefijo"])]
+    return texto
+
+
 def _simple_greeting_text(config: Dict[str, Any], nombre_empresa: str) -> str:
     """Saludo sin menu: la bienvenida que el negocio ya tiene configurada (respeta
     su tono, incluido el trato de usted), con un fallback neutro."""
@@ -911,7 +958,7 @@ async def _process_chat_message(
     # si esta vacio cae a "nombre" (compat con clientes con un solo campo).
     nombre_empresa = str(client_config.get("empresa") or "").strip() or client_config.get("nombre", "")
 
-    if _message_is_pure_greeting(message) or _message_requests_menu(message):
+    if (_message_is_pure_greeting(message) and _saludo_enabled(cliente_id)) or _message_requests_menu(message):
         menu_on = _menu_enabled(cliente_id)
         menu_text = (
             _build_main_menu_text(
@@ -1261,6 +1308,8 @@ async def _process_chat_message(
     if policy_info:
         mostrar_formulario = False
     clean_text = raw_text.replace(settings.BOOKING_SENTINEL, "").strip()
+    no_lo_sabe = rag.SIN_DATO in clean_text
+    clean_text = clean_text.replace(rag.SIN_DATO, "").strip()
     clean_text = textnorm._normalize_chat_response_text(clean_text)
     clean_text = _emphasize_structured_headings(clean_text)
     if booking_enabled and not mostrar_formulario and booking._message_requests_booking_form(message) and not policy_info:
@@ -1284,6 +1333,8 @@ async def _process_chat_message(
     clean_text = _sin_precios_que_no_se_dan(cliente_id, clean_text, message)
     clean_text = _sin_negar_lo_que_no_sabe(cliente_id, clean_text)
     clean_text = _sin_negar_un_servicio_que_existe(cliente_id, clean_text, message)
+    # La respuesta fija del negocio para cuando no sabe, la ULTIMA: manda sobre lo anterior.
+    clean_text = _si_no_sabe(cliente_id, clean_text, message, trusted_phone, marcado=no_lo_sabe)
 
     chat_response = RespuestaChat(
         respuesta=clean_text or "No tengo una respuesta valida en este momento.",

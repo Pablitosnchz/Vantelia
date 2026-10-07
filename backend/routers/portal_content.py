@@ -12,7 +12,7 @@ import json
 import re
 import secrets
 import sqlite3
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import (
     Depends,
@@ -627,9 +627,10 @@ async def app_business_rule_delete(
 
 @app.get("/auth/app/chat-menu")
 async def app_chat_menu_get(
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
-) -> Dict[str, bool]:
-    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+) -> Dict[str, Any]:
+    cliente_id = portal._portal_client_id_or_403(user, cliente_id)
     return _menu_estado(cliente_id)
 
 
@@ -640,6 +641,7 @@ def _menu_estado(cliente_id: str) -> Dict[str, Any]:
     ocultas = [str(x) for x in (seccion.get("ocultas") or [])]
     return {
         "enabled": chat._menu_enabled(cliente_id),
+        "saludo": chat._saludo_enabled(cliente_id),
         "ocultas": ocultas,
         # Las que puede quitar, para que el portal las pinte sin adivinarlas.
         "opciones_base": [b["text"] for b in settings.BASE_STARTERS],
@@ -649,28 +651,77 @@ def _menu_estado(cliente_id: str) -> Dict[str, Any]:
 @app.put("/auth/app/chat-menu")
 async def app_chat_menu_put(
     data: AppChatMenuPayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
     """Enciende/apaga el menu de opciones al saludar. manager+ (configuracion)."""
     security._require_portal_min_role(user, "manager")
-    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    cliente_id = portal._portal_client_id_or_403(user, cliente_id)
     with appstate.state_lock:
         next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         section = dict(cfg.get(chat.MENU_CONFIG_SECTION, {}) or {})
         section["enabled"] = bool(data.enabled)
+        if data.saludo is not None:
+            section["saludo"] = bool(data.saludo)
         # Solo se admiten las base: aqui no se esconden las sugerencias propias del
         # negocio, que esas se quitan borrandolas de "Preguntas sugeridas".
-        validas = {b["text"].strip().lower() for b in settings.BASE_STARTERS}
-        section["ocultas"] = [
-            str(x).strip() for x in (data.ocultas or [])
-            if str(x).strip().lower() in validas
-        ]
+        if data.ocultas is not None:
+            validas = {b["text"].strip().lower() for b in settings.BASE_STARTERS}
+            section["ocultas"] = [
+                str(x).strip() for x in data.ocultas
+                if str(x).strip().lower() in validas
+            ]
         cfg[chat.MENU_CONFIG_SECTION] = section
         next_configs[cliente_id] = cfg
         clients._update_runtime_configs(next_configs)
     clients._persist_configs_to_disk(next_configs)
     return _menu_estado(cliente_id)
+
+
+# --- Respuesta fija para cuando el asistente no sabe algo (opt-in) ----------
+
+
+def _respuesta_si_no_sabe_estado(cliente_id: str) -> Dict[str, Any]:
+    seccion = clients._get_client_config(cliente_id).get("respuesta_si_no_sabe") or {}
+    seccion = seccion if isinstance(seccion, dict) else {}
+    return {"es": str(seccion.get("es") or ""), "en": str(seccion.get("en") or ""),
+            "idioma_por_prefijo": bool(seccion.get("idioma_por_prefijo")),
+            "activa": bool(rag.respuesta_si_no_sabe(clients._get_client_config(cliente_id)))}
+
+
+@app.get("/auth/app/respuesta-si-no-sabe")
+async def app_respuesta_si_no_sabe_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    return _respuesta_si_no_sabe_estado(portal._portal_client_id_or_403(user, cliente_id))
+
+
+@app.put("/auth/app/respuesta-si-no-sabe")
+async def app_respuesta_si_no_sabe_put(
+    data: AppRespuestaSiNoSabePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """La frase fija cuando el asistente no sabe la respuesta (en español y en ingles). Vacias =
+    la de siempre ("no tengo ese dato... puede contactar en..."). manager+."""
+    security._require_portal_min_role(user, "manager")
+    cliente_id = portal._portal_client_id_or_403(user, cliente_id)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        cfg["respuesta_si_no_sabe"] = {
+            "es": textnorm._sanitize_text(data.es, allow_multiline=True)[:600],
+            "en": textnorm._sanitize_text(data.en, allow_multiline=True)[:600],
+            "idioma_por_prefijo": bool(data.idioma_por_prefijo),
+        }
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    # El prompt del asistente cambia (regla 23): los motores ya creados se rehacen.
+    rag._invalidate_client_runtime(cliente_id)
+    return _respuesta_si_no_sabe_estado(cliente_id)
 
 
 # --- Sem 4: Knowledge (text snippets + URLs) -----------------------------

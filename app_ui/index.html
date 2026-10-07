@@ -2406,6 +2406,23 @@
         <span><b>Mostrar el menú de opciones al saludar</b> · si lo desactivas, cuando alguien escriba "hola" el asistente responde solo con tu mensaje de bienvenida, sin lista de opciones. Aplica al chat de la web y a WhatsApp.</span>
       </label>
       <div id="tnMenuBase" style="margin-top:12px; padding-left:26px;"></div>
+      <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-top:10px;" data-perm="catalog.manage">
+        <input type="checkbox" id="tnSaludo" checked />
+        <span><b>Responder al saludo con la bienvenida</b> · si lo desactivas, un "hola" suelto (o el código de la demo de WhatsApp) no recibe el mensaje de bienvenida: lo contesta el asistente como cualquier otro mensaje.</span>
+      </label>
+      <div style="margin-top:16px; padding:14px; border:1px solid rgba(255,255,255,0.09); border-radius:12px;" data-perm="catalog.manage">
+        <h3 style="margin:0 0 4px;">Cuando el asistente no sabe la respuesta</h3>
+        <p class="panel-sub" style="margin:0 0 10px;">Si lo dejas vacío, dirá que no tiene ese dato y ofrecerá tu teléfono o email. Si escribes tu frase, dirá exactamente eso.</p>
+        <div class="field"><label for="tnNoSabeEs">En español</label>
+          <textarea id="tnNoSabeEs" rows="2" maxlength="600" placeholder="Por favor, marque la extensión 100 y nuestro equipo le ayudará enseguida."></textarea></div>
+        <div class="field" style="margin-top:8px;"><label for="tnNoSabeEn">En inglés (para el resto de idiomas)</label>
+          <textarea id="tnNoSabeEn" rows="2" maxlength="600" placeholder="Please dial extension 100 and our team will assist you right away."></textarea></div>
+        <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-top:8px;">
+          <input type="checkbox" id="tnNoSabePrefijo" />
+          <span>En WhatsApp, elegir el idioma por el número: español a los +34 y inglés al resto (si no, por el idioma en que escriben)</span>
+        </label>
+        <button type="button" class="btn" id="tnNoSabeGuardar" style="margin-top:10px;">Guardar</button>
+      </div>
       <div id="tnStarterMount" style="margin-top:16px;"></div>
 
       <div style="margin-top:22px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.09);" data-perm="catalog.manage">
@@ -6015,9 +6032,40 @@ async function loadTune() {
   try {
     const data = await api('/auth/app/chat-menu');
     document.getElementById('tnMenuEnabled').checked = !!data.enabled;
+    document.getElementById('tnSaludo').checked = data.saludo !== false;
     pintarOpcionesBase(data);
   } catch { /* si falla, el interruptor se queda como esta */ }
+  try {
+    const fija = await api('/auth/app/respuesta-si-no-sabe');
+    document.getElementById('tnNoSabeEs').value = fija.es || '';
+    document.getElementById('tnNoSabeEn').value = fija.en || '';
+    document.getElementById('tnNoSabePrefijo').checked = !!fija.idioma_por_prefijo;
+  } catch { /* se queda vacio: la respuesta de siempre */ }
 }
+document.getElementById('tnSaludo')?.addEventListener('change', async (ev) => {
+  try {
+    await api('/auth/app/chat-menu', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: document.getElementById('tnMenuEnabled').checked, saludo: ev.target.checked }),
+    });
+    toast(ev.target.checked ? 'Al saludar responderá con la bienvenida' : 'Sin bienvenida: el saludo lo contesta el asistente', 'success');
+  } catch (err) { toast(err.message, 'error'); ev.target.checked = !ev.target.checked; }
+});
+document.getElementById('tnNoSabeGuardar')?.addEventListener('click', async () => {
+  try {
+    const fija = await api('/auth/app/respuesta-si-no-sabe', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        es: document.getElementById('tnNoSabeEs').value.trim(),
+        en: document.getElementById('tnNoSabeEn').value.trim(),
+        idioma_por_prefijo: document.getElementById('tnNoSabePrefijo').checked,
+      }),
+    });
+    toast(fija.activa ? 'Guardado: cuando no sepa algo dirá tu frase' : 'Guardado: usará la respuesta de siempre', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+});
 document.getElementById('tnMenuEnabled')?.addEventListener('change', async (ev) => {
   try {
     await api('/auth/app/chat-menu', {
