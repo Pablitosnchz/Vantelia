@@ -6,13 +6,23 @@ necesitaríamos con lo que es viable y barato, uno que gestione la parte económ
 que si alguno no tiene nada que hacer vaya a por un café y no gaste tokens, pero que
 sea visual para saber con qué está cada uno"*.
 
-Lo que **no** es: una empresa de agentes charlando entre ellos sin parar. Esa versión
-falla mucho y cuesta caro (apartado 1). Lo que **sí** es: siete puestos nuevos que
-despiertan a su hora, miran si tienen trabajo, lo hacen, dejan el informe en un tablón
-y se duermen. Y una sala en el panel donde se ve, en directo, con qué está cada uno.
+Ampliado el mismo día: *"¿no faltaría también Sara, que haga llamadas? Quiero que
+hagan también el contacto al cliente, a lo mejor Sara llamando y otra enviando correos.
+Quiero un setter de ventas"*. Ver el apartado 2.2.
 
-Nada de esto toca a los clientes ni escribe a nadie de fuera: **los agentes proponen y
-Pablo aprueba**.
+Lo que **no** es: una empresa de agentes charlando entre ellos sin parar. Esa versión
+falla mucho y cuesta caro (apartado 1). Lo que **sí** es:
+- **Un departamento comercial que contacta.** Sara llama, el Cartero manda correos, el
+  Seguimiento escribe tras la demo y **Marta, la setter (nueva), convierte cada "me
+  interesa" en una reunión en la agenda de Pablo**. Pablo cierra.
+- **Siete puestos de apoyo** que despiertan a su hora, miran si tienen trabajo, lo
+  hacen, dejan el informe en un tablón y se duermen.
+- **Una sala en el panel** donde se ve, en directo, con qué está cada uno.
+
+Los puestos de apoyo no escriben a nadie de fuera: **proponen y Pablo aprueba**. Los
+comerciales sí contactan, como ya hacen hoy, con sus topes, sus horarios y sus listas
+de bajas. Lo que se salga de una plantilla (precio, condiciones, quejas) pasa por
+Pablo.
 
 ---
 
@@ -37,6 +47,9 @@ Las oficinas que se ven en redes tienen siempre **dos capas que no se mezclan**:
 | **Arquitectura de tablón** ("blackboard", estudios de 2025) | Los agentes no se hablan: **leen y escriben en un tablón compartido**. Los estudios lo miden con menos tokens que los agentes que conversan entre sí, y todo queda escrito. | Que un modelo "supervisor" decida quién trabaja en cada momento: aquí lo decide un horario fijo. |
 | **CFO con IA** (GhostCFO, Ari de cfo.ai) | Conectar Stripe y los proveedores, calcular cuántos meses de caja quedan y avisar cuando un gasto se dispara. | Pagar una herramienta: Tomás (apartado 3) es la versión casera, por céntimos. |
 | **Fracasos documentados** (MAST: 14 formas de fallar y ChatDev con un 33 % de acierto; Project Vend; AI Village) | **Un jefe con informes y una persona que aprueba.** Project Vend solo dio beneficio cuando le pusieron un "CEO" por encima y más control. | Agentes autónomos con acceso a dinero o a clientes. |
+| **Setters y SDR con IA** (11x, Artisan; balance de 2026) | Lo que les ha quedado: **la IA pone la velocidad y la persona revisa** lo delicado. La regla de 2026 es revisión humana en cualquier primera respuesta que hable de precio, seguridad, integraciones o competencia. | Sustituir al comercial. La IA de 11x felicitó a un cliente por una ronda de financiación que nunca existió. Clientes de Artisan mandaron entre 1.000 y 1.400 correos sin una sola respuesta, y la mayoría de empresas ha vuelto a equipos mixtos. |
+| **Velocidad de respuesta** (estudio del MIT e InsideSales sobre 15.000 leads, publicado en Harvard Business Review) | **Contestar en menos de 5 minutos**: frente a 30 minutos, multiplica por 100 la probabilidad de hablar con el lead y por 21 la de cualificarlo. | Que un "me interesa" espere a que Pablo mire el correo. |
+| **Ausencias en reuniones de venta** (datos de 2026) | Reservar al momento (un 92 % se presenta), poner la reunión cerca (al día siguiente, un 9,6 % de ausencias; a más de 8 días, un 23 %) y **un SMS de recordatorio**, que baja las ausencias un 38 %. | Proponer reuniones a dos semanas vista o sin recordatorio. |
 
 **Las siete reglas de esta oficina** (salen de lo anterior):
 
@@ -50,6 +63,9 @@ Las oficinas que se ven en redes tienen siempre **dos capas que no se mezclan**:
 4. **Proponen, no ejecutan.** Lo que sale de casa (un cambio en el guion de Sara, un
    artículo, un correo, un gasto) entra en la **bandeja de Pablo**. Lo aprobado lo hace
    el código de siempre o un encargo a Claude, con la revisión de Astra si es código.
+   **La excepción es el departamento comercial**, que contacta solo porque es su
+   trabajo y la velocidad cuenta. Lo hace con plantillas revisadas, topes y bajas, y lo
+   que se salga de la plantilla también va a la bandeja (apartado 2.2).
 5. **El código cuenta y el modelo redacta.** Las cifras (llamadas, euros, porcentajes)
    salen de una consulta y al modelo se le dan hechas. No puede inventarse un número,
    que es la misma regla del asistente: lo que el modelo puede hacer mal, lo impide el
@@ -64,22 +80,143 @@ Las oficinas que se ven en redes tienen siempre **dos capas que no se mezclan**:
 
 ## 2. La plantilla
 
-### 2.1 Los que ya trabajan (no cambian; solo se les pone cara)
+### 2.1 Los que ya trabajan
 
 Ya hacen su trabajo con código determinista o con su propia IA. En la sala aparecen con
-su estado real, leído de la base de datos, sin gastar tokens.
+su estado real, leído de la base de datos, sin gastar tokens. **Sara, el Cartero y el
+Seguimiento ya contactan a los negocios**: no son nuevos porque llevan semanas
+trabajando.
 
-| Puesto | Qué hace hoy | De dónde sale su estado |
-|---|---|---|
-| **Sara** (llamadas) | Llama a negocios en las franjas, manda demos y pasa leads | `llamadas_*` y la lista de hilos (`appstate.worker_status`) |
-| **El Cartero** (correo frío) | Busca negocios, manda el correo frío y los seguimientos, con calentamiento y pausas | `sends` y `autopilot_config` (en pausa, tope del día) |
-| **Seguimiento** | Escribe a quien recibió su demo y cualifica leads | `seguimiento_demo` |
-| **El Buzón** (lector de respuestas) | Lee info@, detecta respuestas y rebotes y te avisa | `events` de tipo `reply` y `bounce` |
-| **El Vigilante** | Salud de la web, del correo y de OpenAI; uptime cada 15 minutos | `/health`, `/admin/ia-health`, `/admin/email-health` |
-| **Calidad** | Repaso diario, gratuito y determinista, de las conversaciones de cada cliente (`calidad.py`) | Las conversaciones que marca |
-| **Claude** (programa y despliega) y **Astra** (revisa) | Encargos y revisiones por el buzón de la sincronía | La foto de la sincronía (incluido "Astra sin cuota hasta las 18:00") |
+| Puesto | Departamento | Qué hace hoy | De dónde sale su estado |
+|---|---|---|---|
+| **Sara** (llamadas) | Comercial | Llama a negocios en las franjas, manda demos y pasa leads. **Nuevo: también llama de setter** (apartado 2.2). | `llamadas_*` y la lista de hilos (`appstate.worker_status`) |
+| **El Cartero** (correo frío) | Comercial | Busca negocios, manda el correo frío y los seguimientos, con calentamiento y pausas | `sends` y `autopilot_config` (en pausa, tope del día) |
+| **Seguimiento** | Comercial | Escribe a quien recibió su demo y cualifica leads | `seguimiento_demo` |
+| **El Buzón** (lector de respuestas) | Mantenimiento | Lee info@, detecta respuestas y rebotes y te avisa | `events` de tipo `reply` y `bounce` |
+| **El Vigilante** | Mantenimiento | Salud de la web, del correo y de OpenAI; uptime cada 15 minutos | `/health`, `/admin/ia-health`, `/admin/email-health` |
+| **Calidad** | Clientes | Repaso diario, gratuito y determinista, de las conversaciones de cada cliente (`calidad.py`) | Las conversaciones que marca |
+| **Claude** (programa y despliega) y **Astra** (revisa) | Ingeniería | Encargos y revisiones por el buzón de la sincronía | La foto de la sincronía (incluido "Astra sin cuota hasta las 18:00") |
 
-### 2.2 Los siete nuevos (piensan con IA, por turnos)
+**Por qué no se ponen tres Saras ni tres Carteros:**
+- Más llamadas no arreglan que las llamadas no conviertan: en 30 días, 76
+  conversaciones y ninguna demo en las automáticas. De eso se ocupa Hugo.
+- El buzón de captación tiene un tope diario por el calentamiento, y tres remitentes lo
+  quemarían antes.
+
+Lo que faltaba de verdad en el embudo es el último tramo: **del "me interesa" a una
+reunión con Pablo**.
+
+### 2.2 El departamento comercial: de "me interesa" a una reunión contigo
+
+```text
+ Sara (llama) ─┐
+ Cartero (correo frío) ─┼─> Seguimiento (tras la demo) ─> "me interesa" ─> MARTA (setter) ─> reunión en tu agenda ─> PABLO cierra
+ Web / 91 / formulario ─┘                                                    │
+                                                         Sara en modo setter (si pidió llamada)
+```
+
+Hoy, cuando alguien se cualifica, a Pablo le llega su ficha y un borrador, y ahí se
+para todo hasta que Pablo escribe. Los cuatro leads de octubre lo muestran:
+Purificación pidió que la llamaran el 6/10 y Navarro y Noelia esperan respuesta. Marta
+cubre justo ese hueco.
+
+#### Marta — Setter de ventas (nueva)
+
+- **Misión:** que cada interesado tenga **una cita en tu agenda en menos de 24 horas y
+  que se presente.** Marta no vende ni negocia: agenda. Vender es lo de Pablo.
+- **Cuándo entra un lead en su lista:**
+  - Cuando el Seguimiento lo cualifica: el formulario de `/interes`, el botón "Me
+    interesa" de su demo, "Activar" o una respuesta con interés.
+  - Cuando una llamada de Sara acaba en "pasar a Pablo".
+  - Cuando alguien contesta con interés al correo frío (lo detecta el Buzón).
+  - Cuando llama al 91 pidiendo información o deja una consulta en la web
+    (`consulta_leads`).
+  - Al encenderla, se le pasan los cuatro leads de octubre.
+- **Velocidad:** el primer contacto sale **en menos de 5 minutos** si es entre las 8:00
+  y las 21:00 de un día laborable. Si no, a las 8:30 del siguiente.
+- **La agenda de Pablo es Vantelia.** El tenant `Vantelia` ya tiene la agenda interna
+  encendida, la misma que da las citas de la web. Se le añaden dos servicios:
+  - "Llamada con Pablo", de 15 minutos: Pablo llama al número del lead.
+  - "Puesta en marcha", de 30 minutos: se le deja su asistente funcionando.
+
+  Con eso se reutiliza todo lo que ya existe: los huecos reales, la confirmación, los
+  **recordatorios de 24 h y de 2 h**, el enlace para cambiar o cancelar y el registro
+  de cada cita. Es el mismo motor que vendemos, y si algo falla, Pablo se entera el
+  primero.
+- **Canales:**
+  - **Correo, el principal.** Va en el mismo hilo, a nombre de Pablo y con el pie
+    profesional. Ofrece **dos horas concretas** de tu agenda real y cada una es un
+    botón que **reserva con un clic**, firmado y sin formulario. Debajo, "¿ninguna te
+    va bien? elige otra", que lleva a la página de reserva.
+  - **Llamada: Sara en modo setter.** Esta vez no presenta el producto, solo cierra el
+    hueco: "Hola, soy Sara, de Vantelia. Pidió que la llamáramos por la recepcionista
+    de su salón. Pablo puede llamarla el jueves a las 11 o el viernes a las 10, ¿cuál le
+    viene mejor?". Reserva con una herramienta que mira la agenda de verdad. Solo
+    llama:
+    - (a) si el lead pidió que le llamaran, el día y la franja que dijo;
+    - (b) si solo hay teléfono;
+    - (c) **opcional, con un interruptor (apagado de serie)**: si no ha contestado a
+      dos correos en tres días laborables y hay un fijo del negocio. Pablo dijo el
+      5/10 "email, no rellamar"; la opción (c) cambia esa decisión, así que la decide
+      él.
+
+    Son llamadas que el lead ha pedido o que siguen a su "me interesa", no llamadas en
+    frío. Se respetan las franjas, `no_llamar` y la lista Robinson igual que hoy.
+  - **SMS, solo como recordatorio**, 2 horas antes y al número que dio (un SMS baja las
+    ausencias un 38 %). **Nada de WhatsApp a prospectos**, para no arriesgar la cuenta
+    de Meta.
+- **Cadencia: cuatro contactos como mucho, y se para en cuanto contesta o dice que no.**
+
+  | Cuándo | Qué |
+  |---|---|
+  | Minuto 0-5 | Correo con dos horas. Si pidió llamada, Sara llama en la franja que dijo. |
+  | Día 1 | Si no ha reservado y pidió llamada o solo hay teléfono, Sara (un intento). |
+  | Día 3 | Correo corto: "¿Te viene mejor otra hora?", con dos horas nuevas. |
+  | Día 6 | El último: "Lo dejo aquí; cuando quieras, aquí tienes mi agenda". Vuelve a Pablo marcado "sin respuesta". |
+- **Cuando contesta con sus palabras:**
+  - **"Mejor el jueves por la tarde":** el modelo **extrae** el día y la franja y el
+    **código decide** con los huecos reales, igual que `catalog_pick`. Si la hora está
+    libre y no hay duda, reserva y confirma sola. Si hay duda, propone dos horas de esa
+    franja.
+  - **Precio, condiciones, integraciones, competencia o una queja:** Marta redacta la
+    respuesta y la deja en la **bandeja de Pablo**, que la aprueba con un clic desde el
+    parte o desde el propio aviso. Es la regla de 2026 de los SDR con IA.
+- **Autonomía por niveles:**
+  - **Nivel 1, al arrancar:** sale sola solo la plantilla (el primer correo con horas,
+    las confirmaciones, los recordatorios y el "¿lo movemos?"). Lo que redacte la IA,
+    a la bandeja.
+  - **Nivel 2:** cuando Pablo haya aprobado sin tocar más del 90 % de sus borradores
+    durante tres semanas, las respuestas de agenda sencillas salen solas. Lo decide
+    Pablo con un interruptor.
+- **Antes y después de la reunión:**
+  - **30 minutos antes**, Pablo recibe la ficha (`seguimiento_demo.ficha`): quién es,
+    su demo, la transcripción de su llamada con Sara, lo que ha usado de la demo, lo que
+    ha preguntado, la oferta (diez días de prueba) y una sugerencia de cierre.
+  - **Si no se presenta**, un correo automático "¿lo movemos?" con dos horas, una sola
+    vez.
+  - **Después**, Pablo marca en un clic "ganado", "seguir" o "perdido" y la oportunidad
+    avanza en el Plan de escala (`growth_opportunities`).
+- **No puede:**
+  - Hablar de precios, prometer descuentos ni condiciones.
+  - Contactar a quien dijo que no o está en bajas o en `no_llamar`.
+  - Pasar de cuatro contactos.
+  - Escribir fuera de 8:00-21:00.
+  - Usar WhatsApp.
+  - Inventarse un hueco: solo ofrece lo que la agenda devuelve.
+- **Indicadores:**
+  - Minutos hasta el primer contacto (objetivo: menos de 5).
+  - Porcentaje de cualificados con reunión (objetivo: 50 % o más).
+  - Asistencia (objetivo: 80 % o más).
+  - Reuniones a la semana.
+- **Coste:**
+  - Los correos de plantilla y los recordatorios: 0 €.
+  - Entender las respuestas: céntimos.
+  - Las llamadas de Sara de setter, a lo que cuesta cada minuto de voz. Son pocas a la
+    semana.
+  - **Menos de 1 € al mes de IA.** Presupuesto: 1 € de IA (la voz va aparte, con el
+    tope de Sara).
+
+### 2.3 Los siete de apoyo (piensan con IA, por turnos)
 
 Los nombres son solo para la sala y se pueden cambiar. Modelo por defecto:
 `gpt-4.1-mini`, el mismo del producto (0,40 € por millón de tokens de entrada y 1,60 €
@@ -252,12 +389,13 @@ por millón de salida, según `trazas.PRECIO_POR_MILLON`).
 - **Indicadores:** ideas aprobadas que llegan a mover un número.
 - **Coste:** **unos 0,05 € al mes**. Presupuesto: 0,50 €.
 
-### 2.3 Lo que cuesta todo
+### 2.4 Lo que cuesta todo
 
 | | Al mes |
 |---|---|
-| Los siete agentes, por la estimación de arriba | **~2 €** |
-| Topes de presupuesto (si todos lo agotan) | 7 € (tope general de la oficina: 5 €) |
+| Marta y los siete de apoyo, por la estimación de arriba | **~2,50 € de IA** |
+| Topes de presupuesto (si todos lo agotan) | 8 € (tope general de la oficina: 6 €) |
+| Llamadas de Sara de setter | Lo que cuesta cada minuto de voz, dentro del tope de Sara (pocas a la semana) |
 | La sala (solo lee estados de la base de datos) | 0 € |
 | Servidor | 0 € (el VPS que ya hay) |
 | APIs de saldos y Search Console | 0 € |
@@ -287,17 +425,22 @@ tabla.**
 | 💸 **Sin presupuesto** | Sentado con la pantalla apagada | "Tope del mes alcanzado (2,00 €)" |
 
 Los que ya trabajaban tienen sus propios estados:
-- Sara: "📞 al teléfono, 23 llamadas hoy" o "fuera de franja".
+- Sara: "📞 al teléfono, 23 llamadas hoy", "📞 llamando a una interesada (setter)" o
+  "fuera de franja".
 - El Cartero: "✉ 12 de 30 enviados" o "en pausa hasta el lunes".
 - Astra: "☕ sin créditos hasta las 18:00".
+
+**La zona comercial** tiene en la pared **el calendario de Pablo** con las reuniones de
+la semana. Marta, en su mesa: "Esperando a que Noelia elija hora (enviado hace 3 min)",
+"2 reuniones mañana" o "☕ ningún interesado nuevo".
 
 ### En cada puesto
 
 Al pinchar en un agente: el último informe, el siguiente turno, lo gastado en el mes
 frente a su tope, sus indicadores y un interruptor.
 
-**Tu mesa es la bandeja:** las propuestas pendientes, con **Aprobar / Rechazar /
-Comentar**. Las rechazadas guardan el motivo, y el agente lo lee en su siguiente turno
+**Tu mesa es la bandeja y la agenda del día:** las reuniones de hoy, con su ficha, y las
+propuestas pendientes, con **Aprobar / Rechazar / Comentar**. Las rechazadas guardan el motivo, y el agente lo lee en su siguiente turno
 para no repetir la misma propuesta.
 
 ### Modo escaparate (para Instagram o LinkedIn)
@@ -347,6 +490,26 @@ propio bucle.
   - `POST /admin/oficina/fiscal`: lo que sube la tarea del PC, con un token propio, como
     `SINCRONIA_TOKEN`.
 - **Página:** `admin_ui/oficina.html`.
+- **La setter (`backend/setter.py`):**
+  - Toma el relevo del Seguimiento cuando un lead pasa a `cualificado` y del Buzón con
+    las respuestas con interés. Tabla `setter_leads`: lead, origen, canal, contactos,
+    próximo, estado (`ofrecido`, `reservado`, `celebrada`, `no_vino`, `sin_respuesta`
+    o `descartado`) e id de la cita.
+  - Los huecos salen de `agenda` sobre el tenant `Vantelia`. La cita se crea con
+    `booking._create_booking_core(..., source='setter')`: es el mismo núcleo de
+    siempre, sin un camino propio.
+  - Botones de reserva con un clic: `GET /reunion/{token}` firmado (HMAC, lead + hueco
+    + caducidad). Si el hueco ya está cogido, enseña otros.
+  - Sara en modo setter: una herramienta nueva, `reservar_con_pablo`, en
+    `captacion_voz`, con su propio mensaje de apertura. Las llamadas las lanza
+    `lanzador_llamadas` como las rellamadas dirigidas, en la franja que dijo el lead.
+    **Cambio en Sara, así que pasa por la revisión de Astra.**
+  - Lo que contesta con sus palabras va por `seguimiento_demo.al_responder`, que ya lo
+    clasifica. El modelo extrae día y franja, el código resuelve el hueco, y lo
+    delicado va a `oficina_bandeja`.
+  - Los cuatro contactos, los topes de buzón compartidos con el correo frío y el
+    seguimiento (`_outreach_tope_total_del_dia`), la ventana horaria y los festivos se
+    reutilizan del seguimiento.
 - **Ejecutar lo aprobado:**
   - Lo que ya tiene botón en el panel (una Q&A, una prueba A/B) lo hace el código de
     siempre.
@@ -374,8 +537,9 @@ propio bucle.
 
 | Fase | Qué | Esfuerzo | Por qué en este orden |
 |---|---|---|---|
-| **1** | Motor, tablón, bandeja, presupuestos y la sala con **los que ya trabajan** (sin IA nueva). **Tomás**, solo saldos y alertas (sin IA). **Elena**, parte diario. | 2 tardes | Lo más útil desde el primer día: no volver a caerse por saldo y un solo correo por la mañana. Casi no gasta. |
-| **2** | **Hugo** (llamadas) y **Lucía** (atención a clientes) | 2 tardes | El cuello de botella (las llamadas no dan demos) y proteger a los clientes de pago con Cap Rocat entrando en vivo. |
+| **1** | **Marta** por correo: la agenda de Pablo en el tenant `Vantelia`, los botones de reserva con un clic, los recordatorios, la ficha 30 minutos antes y el "¿lo movemos?". Se le pasan los cuatro leads de octubre. Además, el motor, el tablón, la bandeja y una sala sencilla con **los que ya trabajan**, y **Tomás** con los saldos (sin IA). | 3 tardes | Es lo que **trae dinero**: hay cuatro interesados y ninguno tiene reunión. Y los saldos evitan otra caída como la de OpenAI. |
+| **2** | **Sara en modo setter** (con la revisión de Astra), **Elena** (parte diario) y **Hugo** (llamadas) | 2-3 tardes | Cierra el canal de teléfono para quien lo pidió y ataca el cuello de botella (las llamadas no dan demos). |
+| **2b** | **Lucía** (atención a clientes) | 1 tarde | Proteger a los clientes de pago, con Cap Rocat entrando en vivo. |
 | **3** | **Nora** (correo), **Iker** (web y SEO), **Tomás** semanal y fiscal (tarea del PC) | 2 tardes | Mejoran lo que ya funciona. Iker necesita el acceso a Search Console. |
 | **4** | **Bruno** (ideas), modo escaparate y dibujo bonito | 1-2 tardes | Cuando los demás ya tengan un mes de informes que leer, y para tener contenido para redes. |
 
@@ -387,8 +551,17 @@ estaba previsto.
 
 ## 6. Lo que tiene que dar Pablo
 
-Nada de esto es imprescindible para la fase 1. Sin la clave correspondiente, el agente
-lo dice y sigue con lo demás.
+**Para Marta (fase 1) sí hace falta:**
+- **Tu horario para reuniones**: por ejemplo, de lunes a viernes de 10:00 a 13:30 y de
+  16:00 a 18:00. La agenda del tenant `Vantelia` está ahora de 9 a 18 y abre los
+  sábados.
+- **El formato**: llamada de 15 minutos (llamas tú al número del lead, la opción por
+  defecto) o videollamada, en cuyo caso necesito tu enlace fijo de Meet o Zoom.
+- **La opción (c)**: si Sara puede llamar a quien no contesta a dos correos. Por
+  defecto, no.
+
+Lo demás no es imprescindible para empezar. Sin la clave correspondiente, el agente lo
+dice y sigue con lo demás.
 
 - Clave de la **API de Zadarma** (la que hay ahora es solo la del SIP).
 - Clave de la **API de Brevo** (ahora solo hay SMTP y el secreto del webhook).
@@ -401,7 +574,9 @@ lo dice y sigue con lo demás.
 
 | Riesgo | Freno |
 |---|---|
-| Más ruido en el correo | Un solo correo al día (el de Elena). Lo demás se queda en la sala. |
+| Más ruido en el correo | Un solo parte al día (el de Elena). Aparte solo llega lo que pide actuar: un lead nuevo y la ficha antes de cada reunión. Lo demás se queda en la sala. |
+| Que la setter moleste o suene a robot | Cuatro contactos como mucho, se para al primer "no", horas reales en vez de frases hechas, y precio o condiciones siempre por Pablo. Sara solo llama a quien lo pidió (salvo la opción c). |
+| Que Marta reserve mal | Solo ofrece huecos que devuelve la agenda. La cita se crea con el núcleo de siempre (409 si el hueco se ha ocupado) y el lead recibe el enlace para cambiarla. |
 | Que se invente cifras | Las cifras las calcula el código. Toda propuesta lleva su evidencia enlazada. |
 | Que el gasto se dispare | El portero, el tope por agente, el tope general y un máximo de tokens por turno. |
 | Que se cuele un cambio malo | Nada sale sin Pablo. El código pasa por la revisión de Astra y el despliegue tiene vuelta atrás automática. |
@@ -423,6 +598,13 @@ lo dice y sigue con lo demás.
   [arXiv 2510.01285](https://arxiv.org/html/2510.01285v1)
 - [Por qué fallan los sistemas multiagente (MAST)](https://arxiv.org/html/2503.13657v2) y
   [el sistema multiagente de Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system)
+- Velocidad de respuesta: [estudio del MIT e InsideSales (PDF)](https://www.mortech.com/hs-fs/hub/25649/file-13535879-pdf/docs/mit_study.pdf) y
+  [resumen de los estudios (2026)](https://ainora.lt/blog/lead-response-time-statistics-every-study-2026)
+- Setters con IA, lo aprendido: [Laxis](https://www.laxis.com/blog/ai-sdr-augments-human-sdrs-openai-anthropic-2026/),
+  [Naoma](https://naoma.ai/articles/ai-sdr-dying-2026) y
+  [Cleverly](https://www.cleverly.co/blog/ai-appointment-setting)
+- Ausencias y recordatorios: [Naoma](https://naoma.ai/blog/article-01-demo-no-shows) y
+  [RevenueHero](https://revenuehero.io/blog/ways-to-reduce-no-show-rates-in-sales-calls)
 - CFO con IA: [GhostCFO](https://hunted.space/product/ghostcfo) y
   [cfo.ai Ari (SiliconANGLE)](https://siliconangle.com/?p=837986)
 - APIs de saldo y gasto: [OpenAI Usage/Costs API](https://community.openai.com/t/introducing-the-usage-api-track-api-usage-and-costs-programmatically/1043058),
