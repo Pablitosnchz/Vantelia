@@ -203,6 +203,13 @@ def test_sin_frase_fija_aclarar_sigue_siendo_lo_correcto(client, motor):  # noqa
     assert _chat(client, "i want biggie")["respuesta"] == motor.respuesta
 
 
-def test_una_pregunta_normal_del_asistente_no_se_toca(client, motor, fija):  # noqa: F811
-    motor.respuesta = "El check-out es a las 12:00. ¿Necesita algo más para su salida?"
-    assert _chat(client, "¿A qué hora es el check out?")["respuesta"] == motor.respuesta
+@pytest.mark.parametrize("pregunta", [
+    "El check-out es a las 12:00. ¿Necesita algo más para su salida?",
+    # Pedir un dato que falta no es no entender (revision de Astra a 9670322).
+    "Could you please specify which location you would like to book?",
+    "¿Podría indicarme para qué día lo necesita?",
+    "¿Podría especificar cuántas personas serán?",
+])
+def test_pedir_un_dato_que_falta_no_se_toca(client, motor, fija, pregunta):  # noqa: F811
+    motor.respuesta = pregunta
+    assert _chat(client, "Una consulta sobre el restaurante del hotel")["respuesta"] == pregunta
