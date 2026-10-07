@@ -2,12 +2,10 @@
 
 Reutilizable: la plantilla (plantilla.html) es la misma para todos y las capturas del portal
 son reales (img/, las saca capturas.py con un negocio de ejemplo). Por cliente cambian el
-nombre, su usuario del portal, el ejemplo de conversacion de la portada y, si se pide, la
-pagina de prueba y facturacion.
+nombre, su usuario del portal y, si se pide, la pagina de prueba y facturacion.
 
     .venv/Scripts/python.exe scripts/manual_whatsapp/generar.py --negocio "Cap Rocat" \\
         --usuario reservas@caprocat.com --salida "D:/Vantelia_clientes/Cap Rocat/Manual.pdf" \\
-        --pregunta "¿Me pueden mandar un buggy?" --respuesta "Marque la extensión 100..." \\
         --facturacion --factura 2026-001 --importe "400 €, IVA incluido" --cuota "1.290 € al año, IVA incluido"
 
 Sin --facturacion sale sin esa pagina (para un cliente que paga de otra forma o ya pago).
@@ -74,7 +72,7 @@ def _pagina_facturacion(args, negocio: str, logo: str) -> str:
       cuenta. No se cobra nada antes.</p></div>
   </div>
   $ayuda
-  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 6</span></div>
+  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 5</span></div>
 </section>''').substitute(dias=dias, factura=escape(args.factura), importe=escape(args.importe),
                           cuota=escape(args.cuota), ayuda=_ayuda(True), logo=logo, negocio=negocio)
 
@@ -86,8 +84,7 @@ def generar(args) -> Path:
     negocio = escape(args.negocio)
     logo = _uri(LOGO)
     html = Template((AQUI / "plantilla.html").read_text(encoding="utf-8")).substitute(
-        negocio=negocio, usuario=escape(args.usuario), pregunta=escape(args.pregunta),
-        respuesta=escape(args.respuesta), fecha="%s de %d" % (MESES[hoy.month - 1].capitalize(), hoy.year),
+        negocio=negocio, usuario=escape(args.usuario), fecha="%s de %d" % (MESES[hoy.month - 1].capitalize(), hoy.year),
         logo=logo, qr=_qr(), img_acceso=_uri(AQUI / "img" / "01_acceso.png"),
         img_whatsapp=_uri(AQUI / "img" / "02_whatsapp.png"), img_conectado=_uri(AQUI / "img" / "03_conectado.png"),
         bloque_ayuda_corto="" if args.facturacion else _ayuda(False),
@@ -112,8 +109,6 @@ def main() -> None:
     parser.add_argument("--negocio", required=True, help="Nombre del negocio tal como lo conoce el cliente")
     parser.add_argument("--usuario", required=True, help="Su usuario del portal (email)")
     parser.add_argument("--salida", required=True, help="Ruta del PDF")
-    parser.add_argument("--pregunta", default="Hola, ¿a qué hora abrís mañana?")
-    parser.add_argument("--respuesta", default="¡Hola! Mañana abrimos de 10:00 a 20:00. ¿Quieres que te reserve una cita?")
     parser.add_argument("--facturacion", action="store_true", help="Añade la página de prueba y facturación")
     parser.add_argument("--dias", default="10", help="Días de prueba")
     parser.add_argument("--factura", default="", help="Número de la factura de puesta en marcha")

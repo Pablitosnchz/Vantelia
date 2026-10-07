@@ -26,43 +26,31 @@
   .lead { font-size: 11.5pt; color: var(--gris); margin-bottom: 16px; }
   b { color: var(--navy); }
 
-  /* ---- Portada ---- */
-  .portada { background: radial-gradient(120% 80% at 100% 0%, #10345a 0%, #0B132B 55%) ; color: #fff; }
-  .portada .pie { color: rgba(255,255,255,.55); border-top-color: rgba(255,255,255,.15); }
-  .portada .marca { color: #fff; }
-  .portada h1 { font-size: 36pt; line-height: 1.08; margin: 22mm 0 6mm; letter-spacing: -.01em; }
-  .portada h1 span { color: #19E3D6; }
-  .portada .cuerpo-portada { display: grid; grid-template-columns: 1fr 72mm; gap: 12mm; align-items: center; margin-top: 4mm; }
-  .portada .para { font-size: 13pt; color: rgba(255,255,255,.75); margin: 0 0 12mm; }
-  .portada .para b { color: #fff; }
-  .claves { display: grid; gap: 12px; }
-  .clave { display: flex; gap: 12px; align-items: center; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
-           border-radius: 14px; padding: 10px 14px; font-size: 11pt; }
-  .clave .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 17px;
-                background: linear-gradient(135deg, #00D1FF, #00F5D4); flex: none; }
-  .movil { width: 72mm; height: 136mm; border-radius: 34px; background: #0f1a33;
-           border: 6px solid #22324f; box-shadow: 0 30px 60px rgba(0,0,0,.45); padding: 16px 12px; }
-  .movil .cab { display: flex; align-items: center; gap: 8px; color: #fff; font-size: 9.5pt; padding-bottom: 10px;
-                border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; }
-  .movil .cab .av { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg,#00D1FF,#00F5D4); }
-  .burbuja { max-width: 85%; padding: 8px 11px; border-radius: 14px; font-size: 9pt; line-height: 1.4; margin-bottom: 8px; }
-  .yo { margin-left: auto; background: #1f8f6f; color: #fff; border-bottom-right-radius: 4px; }
-  .el { background: #1e2a45; color: #e8edf7; border-bottom-left-radius: 4px; }
-  .el small, .yo small { display: block; font-size: 7pt; opacity: .6; margin-top: 3px; text-align: right; }
+  /* ---- Portada: blanca, tipografia grande y los datos del documento abajo (como las guias de
+     Stripe o Google) ---- */
+  .portada { padding: 0; background: #fff; }
+  .portada .banda { position: absolute; left: 0; top: 0; bottom: 0; width: 9mm;
+                    background: linear-gradient(180deg, #00D1FF 0%, #00F5D4 100%); }
+  .portada .contenido { position: absolute; left: 30mm; right: 24mm; top: 0; bottom: 0; }
+  .portada .marca { position: absolute; top: 24mm; left: 0; font-size: 13pt; gap: 10px; }
+  .portada .marca img { width: 34px; height: 34px; }
+  .portada .bloque-titulo { position: absolute; top: 92mm; left: 0; right: 0; }
+  .portada .antetitulo { font-size: 9pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #0a9fc4;
+                         margin: 0 0 7mm; }
+  .portada h1 { font-size: 40pt; line-height: 1.05; margin: 0 0 7mm; color: var(--navy); letter-spacing: -.02em; font-weight: 800; }
+  .portada .subtitulo { font-size: 14pt; line-height: 1.45; color: var(--gris); max-width: 120mm; margin: 0; }
+  .portada .datos { position: absolute; left: 0; right: 0; bottom: 26mm; display: grid; grid-template-columns: repeat(3, auto);
+                    justify-content: start; gap: 0 16mm; border-top: 1px solid var(--linea); padding-top: 7mm; }
+  .portada .datos span { display: block; font-size: 7.5pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+                         color: var(--suave); margin-bottom: 2mm; }
+  .portada .datos b { font-size: 11pt; font-weight: 600; }
+  .portada .web { position: absolute; left: 0; bottom: 14mm; font-size: 8pt; color: var(--suave); }
 
   /* ---- Bloques ---- */
-  .flujo { display: grid; grid-template-columns: 1fr 26px 1fr 26px 1fr; align-items: center; margin: 6mm 0 8mm; }
-  .nodo { background: var(--fondo); border: 1px solid var(--linea); border-radius: 16px; padding: 14px; text-align: center; min-height: 112px; }
-  .nodo .ico { font-size: 24px; margin-bottom: 6px; }
-  .nodo b { display: block; margin-bottom: 3px; }
-  .nodo span { font-size: 9pt; color: var(--gris); }
-  .flecha { text-align: center; font-size: 18px; color: var(--cian); font-weight: 800; }
-  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .check { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--linea); border-radius: 14px; padding: 12px 14px; }
-  .check .ico { flex: none; width: 34px; height: 34px; border-radius: 10px; background: #e2f6fb; display: grid; place-items: center; font-size: 17px; }
-  .check p { margin: 0; font-size: 9.6pt; color: var(--gris); }
-  .aviso { margin-top: 10px; border-radius: 14px; padding: 12px 14px; background: #fff6e8; border: 1px solid #f6d7a3; font-size: 9.6pt; }
-  .aviso b { color: #8a5300; }
+  .antes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 8mm; }
+  .antes div { border: 1px solid var(--linea); border-radius: 12px; padding: 9px 11px; font-size: 8.8pt; color: var(--gris);
+               background: var(--fondo); }
+  .antes b { display: block; font-size: 9.4pt; margin-bottom: 2px; }
 
   .paso { display: grid; grid-template-columns: 40px 1fr; gap: 14px; margin-bottom: 7mm; break-inside: avoid; }
   .num { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #00D1FF, #00F5D4); color: #04101C;
@@ -122,49 +110,23 @@
 </head>
 <body>
 
-<!-- 1. Portada -->
+<!-- Portada -->
 <section class="pagina portada">
-  <div class="marca"><img src="$logo" alt="">Vantelia</div>
-  <h1>Conecta tu <span>WhatsApp</span><br>al asistente</h1>
-  <p class="para">Guía paso a paso para <b>$negocio</b></p>
-  <div class="cuerpo-portada">
-  <div class="claves">
-    <div class="clave"><div class="ico">⏱</div><div><b style="color:#fff">Unos 10 minutos</b><br>desde el ordenador y con el móvil a mano</div></div>
-    <div class="clave"><div class="ico">📱</div><div><b style="color:#fff">Tu número de siempre</b><br>sigues usando la app WhatsApp Business</div></div>
-    <div class="clave"><div class="ico">🤝</div><div><b style="color:#fff">Tú mandas</b><br>si contestas tú, el asistente se aparta</div></div>
+  <div class="banda"></div>
+  <div class="contenido">
+    <div class="marca"><img src="$logo" alt="">Vantelia</div>
+    <div class="bloque-titulo">
+      <p class="antetitulo">Guía de puesta en marcha</p>
+      <h1>Conecta tu WhatsApp<br>al asistente</h1>
+      <p class="subtitulo">Paso a paso, en unos 10 minutos. Sigues usando tu número y tu app de WhatsApp Business como hasta ahora.</p>
+    </div>
+    <div class="datos">
+      <div><span>Preparado para</span><b>$negocio</b></div>
+      <div><span>Fecha</span><b>$fecha</b></div>
+      <div><span>Versión</span><b>1.0</b></div>
+    </div>
+    <div class="web">vantelia.es</div>
   </div>
-  <div class="movil">
-    <div class="cab"><div class="av"></div><div><b style="color:#fff">$negocio</b><br><span style="opacity:.6;font-size:8pt">en línea</span></div></div>
-    <div class="burbuja yo">$pregunta<small>10:24</small></div>
-    <div class="burbuja el">$respuesta<small>10:24 · asistente</small></div>
-  </div>
-  </div>
-  <div class="pie"><span>vantelia.es</span><span>$fecha</span></div>
-</section>
-
-<!-- 2. Como funciona + antes de empezar -->
-<section class="pagina">
-  <span class="etiqueta">Cómo funciona</span>
-  <h2>Tu WhatsApp, atendido a cualquier hora</h2>
-  <p class="lead">El asistente contesta en tu número de WhatsApp lo que ya sabe de tu negocio. Tu equipo sigue teniendo la última palabra.</p>
-  <div class="flujo">
-    <div class="nodo"><div class="ico">💬</div><b>Te escriben</b><span>al WhatsApp de $negocio, como siempre</span></div>
-    <div class="flecha">→</div>
-    <div class="nodo"><div class="ico">⚡</div><b>El asistente responde</b><span>al momento, en el idioma en que le escriben</span></div>
-    <div class="flecha">→</div>
-    <div class="nodo"><div class="ico">🙋</div><b>Tu equipo, cuando quiera</b><span>contesta desde el móvil y el asistente se aparta</span></div>
-  </div>
-
-  <span class="etiqueta">Antes de empezar</span>
-  <h2>Ten esto a mano</h2>
-  <div class="checks">
-    <div class="check"><div class="ico">📲</div><div><b>La app WhatsApp Business</b><p>En el móvil con el número del negocio (la del icono con la «B»), actualizada.</p></div></div>
-    <div class="check"><div class="ico">🗓</div><div><b>7 días en WhatsApp Business</b><p>Meta exige que el número lleve al menos una semana usándose en la app.</p></div></div>
-    <div class="check"><div class="ico">👤</div><div><b>Una cuenta de Facebook</b><p>La de quien lo conecte. Meta la usa para crear o elegir tu empresa; esa persona queda como administradora.</p></div></div>
-    <div class="check"><div class="ico">💻</div><div><b>Ordenador y móvil</b><p>El portal se abre en el ordenador; el móvil sirve para escanear un código QR.</p></div></div>
-  </div>
-  <div class="aviso"><b>¿Tu número está en el WhatsApp normal, no en el Business?</b> Avísanos antes de empezar: hay que pasarlo a WhatsApp Business (conserva los chats) y esperar esos 7 días.</div>
-  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 2</span></div>
 </section>
 
 <!-- 3. Pasos 1 y 2 (capturas reales) -->
@@ -172,6 +134,12 @@
   <span class="etiqueta">Paso a paso · en el portal</span>
   <h2>Entra y pulsa «Conectar mi WhatsApp»</h2>
   <p class="lead">Las pantallas son las del portal de Vantelia, con un negocio de ejemplo.</p>
+  <div class="antes">
+    <div><b>📲 WhatsApp Business</b>El número del negocio en la app WhatsApp Business del móvil, actualizada.</div>
+    <div><b>🗓 Al menos 7 días</b>Meta exige que el número lleve una semana en la app. Si está en el WhatsApp normal, avísanos.</div>
+    <div><b>👤 Cuenta de Facebook</b>La de quien lo conecte: queda como administradora de la empresa en Meta.</div>
+    <div><b>💻 Ordenador y móvil</b>El portal en el ordenador; el móvil para escanear un código QR.</div>
+  </div>
   <div class="paso">
     <div class="num">1</div>
     <div class="lado">
@@ -192,7 +160,7 @@
       <div class="captura"><img src="$img_whatsapp" alt="Pestaña WhatsApp con el botón Conectar mi WhatsApp"></div>
     </div>
   </div>
-  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 3</span></div>
+  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 2</span></div>
 </section>
 
 <!-- 4. Pasos 3 a 6 (ventana de Meta) -->
@@ -236,7 +204,7 @@
     </div>
   </div>
   <p class="nota-ilu">Ilustraciones de las pantallas de Meta: los textos y el diseño exactos pueden variar un poco.</p>
-  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 4</span></div>
+  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 3</span></div>
 </section>
 
 <!-- 5. Paso 7 + despues -->
@@ -254,7 +222,7 @@
     <div class="tarjeta"><div class="ico">📆</div><b>Abre la app cada 14 días</b><p>Meta pide abrir WhatsApp Business al menos una vez cada 14 días para mantener la conexión.</p></div>
   </div>
   $bloque_ayuda_corto
-  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 5</span></div>
+  <div class="pie"><span class="marca"><img src="$logo" alt="">Vantelia</span><span>Conecta tu WhatsApp · $negocio · 4</span></div>
 </section>
 
 $pagina_facturacion
