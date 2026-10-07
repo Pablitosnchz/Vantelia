@@ -191,6 +191,7 @@ def test_con_frase_fija_no_se_le_empuja_a_negar_lo_que_no_sabe(api_module, clien
     "Disculpe, no le he entendido. ¿Podría explicarme un poco más?",
     "Could you please clarify what you mean by \"biggie\"?",
     "I'm not sure what you mean. Could you tell me more?",
+    "Sorry, I'm not sure what you're referring to.",
 ])
 def test_pedir_que_lo_aclare_tambien_es_no_entenderlo(client, motor, fija, aclaracion):  # noqa: F811
     """Prueba de Pablo por WhatsApp (7-oct-2026): a "i want biggie" pidio una aclaracion."""
@@ -209,6 +210,9 @@ def test_sin_frase_fija_aclarar_sigue_siendo_lo_correcto(client, motor):  # noqa
     "Could you please specify which location you would like to book?",
     "¿Podría indicarme para qué día lo necesita?",
     "¿Podría especificar cuántas personas serán?",
+    # Ni una duda sobre lo que prefiere (revision de Astra a 5348148).
+    "I'm not sure what you would prefer. Would you like a table indoors or on the terrace?",
+    "No estoy segura de qué prefiere: ¿mesa dentro o en la terraza?",
 ])
 def test_pedir_un_dato_que_falta_no_se_toca(client, motor, fija, pregunta):  # noqa: F811
     motor.respuesta = pregunta

@@ -331,8 +331,8 @@ _NO_SABE = re.compile(
 # frase fija puesta: sin ella, aclarar sigue siendo lo correcto.
 _NO_LO_ENTIENDE = re.compile(
     r"\ba\s+qu[eé]\s+se\s+refiere|\ba\s+qu[eé]\s+te\s+refieres|\bqu[eé]\s+quiere(?:s)?\s+decir|"
-    r"\bno\s+(?:le|te|lo)\s+(?:he\s+)?entend|\bno\s+entiendo\b|\bno\s+estoy\s+segur[oa]\s+de\s+(?:a\s+)?qu[eé]|"
-    r"\bwhat\s+(?:do\s+)?you\s+mean\b|\bwhat\s+you\s+(?:are|re)\s+referring|\bnot\s+sure\s+what\s+you\b|"
+    r"\bno\s+(?:le|te|lo)\s+(?:he\s+)?entend|\bno\s+entiendo\b|"
+    r"\bwhat\s+(?:do\s+)?you\s+mean\b|\bwhat\s+you(?:'re|\s+are)\s+(?:referring|asking)|"
     r"\bi\s+(?:didn't|did\s+not|don't|do\s+not)\s+understand",
     re.IGNORECASE)
 
