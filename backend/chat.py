@@ -337,12 +337,17 @@ _PIDE_ACLARAR = re.compile(
 
 
 def _idioma_de_la_respuesta_fija(mensaje: str, telefono: str, por_prefijo: bool) -> str:
-    """"es" o "en". Con `por_prefijo` y un telefono (WhatsApp): +34 en español y el resto en
-    ingles, como pidio Cap Rocat. Sin telefono (web), por las palabras del mensaje."""
+    """"es" o "en". Manda el idioma en que escribe: quien escribe en ingles (u otro idioma) la
+    recibe en ingles aunque su numero sea español (Pablo, 7-oct-2026, tras probarlo: "i want
+    biggie" desde un +34 le llegaba en español). Solo si el mensaje no lo deja claro ("biggie",
+    "spa?") decide el numero con `por_prefijo`, como pidio Cap Rocat: +34 en español y el resto
+    en ingles. Sin nada con que decidir, español."""
+    idioma = keywords.idioma_de(mensaje or "")
+    if idioma:
+        return "es" if idioma == "es" else "en"
     if por_prefijo and telefono:
         return "es" if re.sub(r"\D", "", str(telefono)).startswith("34") else "en"
-    idioma = keywords.idioma_de(mensaje or "")
-    return "en" if idioma and idioma != "es" else "es"
+    return "es"
 
 
 def _si_no_sabe(cliente_id: str, texto: str, mensaje: str, telefono: str = "", marcado: bool = False) -> str:

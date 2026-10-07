@@ -103,16 +103,21 @@ def test_sin_respuesta_fija_la_marca_nunca_llega_a_nadie(client, motor):  # noqa
     assert "SIN_DATO" not in _chat(client, "¿Tenéis parking?")["respuesta"]
 
 
-def test_por_whatsapp_el_idioma_lo_decide_el_prefijo(api_module, client, portal_cookies):  # noqa: F811
+def test_manda_el_idioma_del_mensaje_y_si_no_se_sabe_el_prefijo(api_module, client, portal_cookies):  # noqa: F811
+    """Pablo, 7-oct-2026, tras probarlo: "i want biggie" desde su +34 le llegaba en español;
+    quien escribe en ingles la quiere en ingles. El prefijo (+34 español, resto ingles, lo que
+    pidio el hotel) decide solo cuando el mensaje no deja claro el idioma."""
     from backend import chat
 
     client.put("/auth/app/respuesta-si-no-sabe", cookies=portal_cookies,
                json={"es": ES, "en": EN, "idioma_por_prefijo": True})
     try:
-        # Un +34 que escribe en ingles recibe el español (asi lo pidio el hotel); el resto, ingles.
-        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "I want biggie", "34600111222") == ES
-        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "Quiero un buggy", "447700900123") == EN
-        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "Quiero un buggy", "+49 151 2345678") == EN
+        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "i want biggie", "34600111222") == EN
+        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "wann ist das Frühstück", "34600111222") == EN
+        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "tienen niñeras?", "447700900123") == ES
+        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "biggie", "34600111222") == ES
+        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "biggie", "447700900123") == EN
+        assert chat._si_no_sabe("demo", "[[SIN_DATO]]", "spa?", "+49 151 2345678") == EN
     finally:
         client.put("/auth/app/respuesta-si-no-sabe", cookies=portal_cookies, json={})
 
